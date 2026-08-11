@@ -181,3 +181,27 @@ Continuing the ADR-0014 spine; shipped on `baseline/pi-v0.84.1`
 - **Verified**: 17 new tests (52 total in the ledger suite), 100%
   coverage on all four ledger files, full suite + `npm run check` green.
 - **Next**: memory tool (#7), profiles (#8), projects + root guard (#9).
+
+---
+
+## Addendum: port #7 — the memory tool (2026-08-11)
+
+Continuing the ADR-0014 spine; shipped on `baseline/pi-v0.84.1`
+(commit 600dc34ba):
+
+- **What**: the axiom-memory extension gives the agent a memory pi does not
+  have: a `memory` tool (add/remove/list durable facts, user or agent
+  scope) and a `before_agent_start` hook that appends the delimited memory
+  block to the assembled system prompt — memory survives the window by
+  riding the prompt.
+- **How**: faithful port of the from-scratch store: per-scope JSON files
+  with atomic writes (temp + rename), strictly monotonic timestamps (LRU
+  determinism), ADR-0008's per-scope LRU eviction on add. Default cap 50
+  per scope (memory context costs tokens every turn); unbounded opt-out.
+- **Seam learned**: `before_agent_start` carries the fully assembled
+  `systemPrompt` and results chain — the memory hook is one append, and
+  other extensions' replacements compose.
+- **Verified**: 25 tests, 100% coverage on both new files, full suite +
+  `npm run check` green.
+- **Next**: profiles (#8), projects + root guard (#9) — per-project memory
+  scoping rides the store's injected dir when projects land.
