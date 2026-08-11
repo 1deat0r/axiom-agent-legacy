@@ -18,7 +18,7 @@ covers them.
 
 | # | Capability | Source spec | What pi lacks | Notes |
 |---|---|---|---|---|
-| 8 | **Profiles** — Hermes-model separate homes: SOUL.md + config + keys + memory + skills + sessions per profile; `--profile` boot; never two processes on one home | ADR-0014 | no profiles | profile SOUL.md rides the system prompt; implicit default profile |
+| 8 | **Profiles** — Hermes-model separate homes: SOUL.md + config + keys + memory + skills + sessions per profile; `--profile` boot; never two processes on one home | ADR-0014 | no profiles | **SHIPPED** (2026-08-11, b942a5c): `--profile` sets PI_CODING_AGENT_DIR + AXIOM_HOME to the profile home; `profile create` scaffolds SOUL.md; SOUL rides the system prompt; ledger/memory follow AXIOM_HOME; never-two-processes rule documented |
 | 9 | **Projects + root guard** — named workspace binding a root dir; per-project sessions/memory/ledger/cap; zero-dep root guard on bash/read/write with plain-English escape approval | ADR-0014 | implicit cwd grouping only, no named projects, no built-in root guard | pi's sandbox extension example proves the tool-replacement seam; OS sandbox = strict tier |
 
 ## The skin (assembly layer, after the spine)

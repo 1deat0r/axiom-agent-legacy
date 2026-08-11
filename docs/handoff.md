@@ -205,3 +205,30 @@ Continuing the ADR-0014 spine; shipped on `baseline/pi-v0.84.1`
   `npm run check` green.
 - **Next**: profiles (#8), projects + root guard (#9) — per-project memory
   scoping rides the store's injected dir when projects land.
+
+---
+
+## Addendum: port #8 — profiles (2026-08-11)
+
+Continuing the ADR-0014 spine; shipped on `baseline/pi-v0.84.1`
+(commit b942a5cea):
+
+- **What**: `--profile <name>` boots the process with `PI_CODING_AGENT_DIR`
+  and `AXIOM_HOME` both pointing at `~/.axiom/profiles/<name>/` — pi state
+  (sessions/skills/settings) and axiom state (ledger, memory) isolate per
+  identity, Hermes-style. The default profile is implicit (`~/.axiom`, pi
+  defaults untouched) so beginners never see the concept.
+- **Surfaces**: `pi profile create <name>` scaffolds the home with a starter
+  SOUL.md (identity); `pi profile list`; the axiom-profile extension rides
+  SOUL.md on the assembled system prompt via `before_agent_start`
+  (chained with other extensions). Ledger + memory defaults now derive from
+  `AXIOM_HOME`, so named profiles isolate cost + memory automatically.
+- **Seams learned**: the agent dir is env-driven (`PI_CODING_AGENT_DIR`,
+  read early in main()) — a raw-arg pre-scan for `--profile` before any
+  config resolution is the reliable boot seam, not parseArgs (which runs
+  later). Hermes' never-two-processes-on-one-home rule is documented, not
+  enforced (no locks — future work if profiles get shared).
+- **Verified**: 25 tests, 100% lines/stmts/funcs on new files (branch 96%
+  is a v8 false-negative on default-parameter property reads — behavior
+  proven by on-disk assertions); full suite + `npm run check` green.
+- **Next**: port #9 — projects + the root guard (the anti-drift tool layer).
