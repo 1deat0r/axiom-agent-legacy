@@ -24,6 +24,8 @@ export interface Args {
 	noSession?: boolean;
 	fork?: string;
 	sessionDir?: string;
+	/** Axiom profile name (ADR-0014): boot in the profile's own home. */
+	profile?: string;
 	models?: string[];
 	tools?: string[];
 	noTools?: boolean;
@@ -147,6 +149,12 @@ export function parseArgs(args: string[]): Args {
 			result.fork = args[++i];
 		} else if (arg === "--session-dir" && i + 1 < args.length) {
 			result.sessionDir = args[++i];
+		} else if (arg === "--profile") {
+			if (i + 1 < args.length) {
+				result.profile = args[++i];
+			} else {
+				result.diagnostics.push({ type: "error", message: "--profile requires a name" });
+			}
 		} else if (arg === "--models" && i + 1 < args.length) {
 			result.models = args[++i].split(",").map((s) => s.trim());
 		} else if (arg === "--no-tools" || arg === "-nt") {

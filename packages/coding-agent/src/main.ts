@@ -26,6 +26,7 @@ import { processFileArguments } from "./cli/file-processor.js";
 import { buildInitialMessage } from "./cli/initial-message.js";
 import { listModels } from "./cli/list-models.js";
 import { installOwnedSessionRecoveryTracking, isOwnedSessionWorkerProcess } from "./cli/owned-session-worker.js";
+import { handleProfileCommand } from "./cli/profile-command.js";
 import { handlePublicCommand } from "./cli/public-command.js";
 import {
 	looksLikeSessionPath,
@@ -33,7 +34,7 @@ import {
 	SessionSelectorError,
 	SessionSelectorNotFoundError,
 } from "./cli/session-resolver.js";
-import { APP_NAME, expandTildePath, getAgentDir, getSessionDirEnvOverride, VERSION } from "./config.js";
+import { APP_NAME, ENV_AGENT_DIR, expandTildePath, getAgentDir, getSessionDirEnvOverride, VERSION } from "./config.js";
 import {
 	type AgentExecutionMode,
 	type AgentSessionRuntimeConfig,
@@ -72,6 +73,8 @@ import { SessionManager } from "./core/session-manager.js";
 import { SettingsManager } from "./core/settings-manager.js";
 import { isTelemetryEnabled } from "./core/telemetry.js";
 import { printTimings, resetTimings, time } from "./core/timings.js";
+import { builtInExtensions } from "./extensions/index.js";
+import { AXIOM_HOME_ENV, resolveProfile } from "./extensions/profile/registry.js";
 import { runMigrations, showDeprecationWarnings } from "./migrations.js";
 import { isDaemonCatalogProcess, runDaemonCatalogProcess } from "./modes/daemon/daemon-catalog-process.js";
 import { deserializeDaemonError } from "./modes/daemon/daemon-errors.js";
@@ -1030,8 +1033,35 @@ export interface MainOptions {
 	extensionFactories?: ExtensionFactory[];
 }
 
+/**
+ * Read `--profile <name>` from raw args (the boot pre-scan). The profile must
+ * be applied before any config resolution, because it redirects the agent dir
+ * and the axiom home; parseArgs runs later, so a plain scan is the reliable seam.
+ * Exported so the restart's boot-seam regression test can pin it (ADR-0014).
+ */
+export function readProfileFlag(args: string[]): string | undefined {
+	for (let i = 0; i < args.length; i++) {
+		if (args[i] === "--profile") {
+			const value = args[i + 1];
+			if (value === undefined || value.startsWith("-")) {
+				console.error(chalk.red("Error: --profile requires a name"));
+				process.exit(1);
+			}
+			return value;
+		}
+	}
+	return undefined;
+}
+
 export async function main(args: string[], options?: MainOptions) {
 	resetTimings();
+	const profileName = readProfileFlag(args);
+	if (profileName !== undefined) {
+		const { axiomHome: profileHome, agentDir } = resolveProfile(profileName);
+		process.env[AXIOM_HOME_ENV] = profileHome;
+		if (agentDir !== undefined) process.env[ENV_AGENT_DIR] = agentDir;
+	}
+	const extensionFactories = [...builtInExtensions, ...(options?.extensionFactories ?? [])];
 	if (isDaemonWorkerProcess()) {
 		waitForDaemonWorkerStartupGate();
 	}
@@ -1055,6 +1085,10 @@ export async function main(args: string[], options?: MainOptions) {
 	args = publicCommand.args;
 
 	if (await handleConfigCommand(args)) {
+		return;
+	}
+
+	if (await handleProfileCommand(args)) {
 		return;
 	}
 
@@ -1143,7 +1177,7 @@ export async function main(args: string[], options?: MainOptions) {
 		process.exit(1);
 	}
 	// Programmatic factories are process-local functions and cannot be serialized to a daemon worker.
-	const hasProcessLocalExtensionFactories = (options?.extensionFactories?.length ?? 0) > 0;
+	const hasProcessLocalExtensionFactories = extensionFactories.length > 0;
 	const useDaemonClient = shouldUseDaemonClientRuntime({
 		appMode,
 		startupBenchmark,
@@ -1273,7 +1307,7 @@ export async function main(args: string[], options?: MainOptions) {
 			cwd,
 			agentDir,
 			sessionManager,
-			extensionFactories: options?.extensionFactories,
+			extensionFactories,
 			sessionOptionsOverride: runtimeSessionOptions,
 		});
 		const { services, sessionOptions, diagnostics } = prepared;
@@ -1338,7 +1372,7 @@ export async function main(args: string[], options?: MainOptions) {
 			cwd: sessionManager.getCwd(),
 			agentDir,
 			sessionManager,
-			extensionFactories: options?.extensionFactories,
+			extensionFactories,
 		});
 		const { services, scopedModels } = prepared;
 		const { settingsManager } = services;
@@ -1400,7 +1434,7 @@ export async function main(args: string[], options?: MainOptions) {
 						cwd: attachedSessionManager.getCwd(),
 						agentDir,
 						sessionManager: attachedSessionManager,
-						extensionFactories: options?.extensionFactories,
+						extensionFactories,
 					});
 					return createInteractiveModeUiServicesFromServices({
 						services: attachedPrepared.services,
