@@ -232,3 +232,37 @@ Continuing the ADR-0014 spine; shipped on `baseline/pi-v0.84.1`
   is a v8 false-negative on default-parameter property reads — behavior
   proven by on-disk assertions); full suite + `npm run check` green.
 - **Next**: port #9 — projects + the root guard (the anti-drift tool layer).
+
+---
+
+## Addendum: synthetic-user QA cycle (8 steps, complete) — 2026-08-11
+
+The full 8-step cycle ran on the shipped axiom layer (profiles + ledger +
+cap + memory) and shipped as 4b3ad1345 (round 1 + fixes) + the round-2
+commit:
+
+1. **Exhaustive synthetic-user tests** — five personas (Mira, Tom, Priya,
+   Dana, Kai) drive the REAL surface through fake pi + real fs/env
+   (`test/acceptance/personas-round1.test.ts`).
+2. **Human-like reviews** — docs/acceptance/round1.md.
+3. **Synthesis** — five findings (no /cap surface; silent eviction; /cost
+   totals only; cap-stop without next steps; no profile onboarding hint /
+   active-profile visibility).
+4. **Plan v1** — five fixes.
+5. **Independent expert review** — a separate subagent DENIED v1 with six
+   required changes (5b footer status; both-toast next steps; /cap
+   specifics incl. atomic write + validation; store-sourced eviction
+   counts; /cost overflow note + cap-only line; the named Kai regression
+   flip). v2 re-submitted → APPROVED.
+6. **Implementation** — all fixes red-first; dead plural-eviction branch
+   pruned (per-add eviction is at most 1).
+7. **Tested** — 122 unit/acceptance tests, 100% lines/stmts/funcs on the
+   axiom files (branch 99.06%: two v8 attribution false-negatives, proven
+   by on-disk assertions); full suite + check green.
+8. **New users re-test** — three NEW personas (Nadia, Sam, Lena) verify
+   every finding closed; no new findings (personas-round2.test.ts +
+   docs/acceptance/round2.md).
+
+One flake observed: agent-session-concurrent.test.ts failed once under
+full-suite load, passed in isolation and on re-run — pre-existing, not
+touched by the axiom layer.
