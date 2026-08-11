@@ -78,7 +78,20 @@ capabilities pi did not have."
 
 ## Tracker
 
-- New issue: the pi-baseline adoption + port queue (see `gh issue list`).
+- Issue **#13** (needs-triage): pi baseline adoption — port queue + master
+  re-point, with the owner decisions (master re-point, port order, branding).
+  Filed via `gh` against `mustbearnold/axiom-agent` (note: `gh` resolves the
+  pi `upstream` remote unless `-R mustbearnold/axiom-agent` is given).
+
+## Commit story (honest note)
+
+The ritual layer (ADR-0013, SOUL/CONTEXT/AGENTS, ADRs 0001-0012, ports.md,
+handoff) and the three test-pin fixes landed in one commit (bc3f2106) because
+pi's husky pre-commit gate (`npm run check`, incl. tsgo) blocks until the
+whole tree type-checks, and the tag's stale pins were exactly what failed it.
+The ADR itself documents the shift; the commit message tells the fix story.
+Accepted as-is on the fresh branch; a rewrite would need a force-push for no
+functional gain.
 
 ## Gotchas
 
