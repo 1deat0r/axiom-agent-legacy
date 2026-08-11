@@ -104,3 +104,26 @@ functional gain.
 - The ai model data is generated; never hand-edit `models.generated.ts`.
 - The fullscreen WIP test from the from-scratch era is known-broken and
   superseded — do not resurrect it; pi-tui owns the TUI now.
+
+---
+
+## Addendum: design session — profiles, projects, anti-drift (2026-08-11)
+
+Owner brainstorm converged and approved (ADR-0014, this session):
+
+- **Profiles** = Hermes-model separate homes (SOUL.md per profile, config,
+  keys, memory, skills, sessions); `--profile <name>` boots the identity;
+  process-level isolation; implicit default profile for beginners.
+- **Projects** = named workspaces inside a profile, binding a root dir,
+  owning scoped sessions/memory/ledger/cap/sandbox rules.
+- **No agent drift** is the core requirement: the anti-drift ladder
+  (identity → context → root guard → process) + visibility (per-project
+  change summary). Root guard = block-by-default with plain-English escape
+  approval.
+- Parallel model: one window, project tabs; processes for hard isolation.
+- Sequencing: ledger (#1) → cap (#2) → memory tool (#7, new — pi has none)
+  → profiles (#8) → projects + root guard (#9) → skin (deferred).
+- Verified substrate: Hermes profiles docs; pi sandbox extension example +
+  containerization path; pi's cwd-scoped sessions/skills.
+- Recorded: ADR-0014, ports.md expanded, CONTEXT.md vocabulary (Profile,
+  Project, Root guard, Drift).
