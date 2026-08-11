@@ -29,10 +29,19 @@ import { resolveCredentialForPrint } from "./cli/credential-print.ts";
 import { processFileArguments } from "./cli/file-processor.ts";
 import { buildInitialMessage } from "./cli/initial-message.ts";
 import { listModels } from "./cli/list-models.ts";
+import { handleProfileCommand } from "./cli/profile-command.ts";
 import { createProjectTrustContext } from "./cli/project-trust.ts";
 import { selectSession } from "./cli/session-picker.ts";
 import { shouldRunFirstTimeSetup, showFirstTimeSetup, showStartupSelector } from "./cli/startup-ui.ts";
-import { APP_NAME, ENV_SESSION_DIR, expandTildePath, getAgentDir, getPackageDir, VERSION } from "./config.ts";
+import {
+	APP_NAME,
+	ENV_AGENT_DIR,
+	ENV_SESSION_DIR,
+	expandTildePath,
+	getAgentDir,
+	getPackageDir,
+	VERSION,
+} from "./config.ts";
 import { type CreateAgentSessionRuntimeFactory, createAgentSessionRuntime } from "./core/agent-session-runtime.ts";
 import {
 	type AgentSessionRuntimeDiagnostic,
@@ -60,6 +69,7 @@ import { SettingsManager } from "./core/settings-manager.ts";
 import { printTimings, resetTimings, time } from "./core/timings.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "./core/trust-manager.ts";
 import { builtInExtensions } from "./extensions/index.ts";
+import { AXIOM_HOME_ENV, resolveProfile } from "./extensions/profile/registry.ts";
 import { runMigrations, showDeprecationWarnings } from "./migrations.ts";
 import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index.ts";
 import { initTheme, stopThemeWatcher } from "./modes/interactive/theme/theme.ts";
@@ -566,8 +576,36 @@ export interface MainOptions {
 	extensionFactories?: InlineExtension[];
 }
 
+/**
+ * Read `--profile <name>` from raw args (the boot pre-scan). The profile
+ * must be applied before any config resolution, because it redirects the
+ * agent dir; parseArgs runs later, so a plain scan is the reliable seam.
+ */
+function readProfileFlag(args: string[]): string | undefined {
+	for (let i = 0; i < args.length; i++) {
+		if (args[i] === "--profile") {
+			const value = args[i + 1];
+			if (value === undefined || value.startsWith("-")) {
+				console.error(chalk.red("Error: --profile requires a name"));
+				process.exit(1);
+			}
+			return value;
+		}
+	}
+	return undefined;
+}
+
 export async function main(args: string[], options?: MainOptions) {
 	resetTimings();
+	// Axiom profiles (ADR-0014): boot the process inside the profile's own
+	// home — pi state (PI_CODING_AGENT_DIR) and axiom state (AXIOM_HOME)
+	// both resolve there, before any config is read.
+	const profileName = readProfileFlag(args);
+	if (profileName !== undefined) {
+		const { axiomHome: profileHome, agentDir } = resolveProfile(profileName);
+		process.env[AXIOM_HOME_ENV] = profileHome;
+		if (agentDir !== undefined) process.env[ENV_AGENT_DIR] = agentDir;
+	}
 	const extensionFactories = [...builtInExtensions, ...(options?.extensionFactories ?? [])];
 	const offlineMode = args.includes("--offline") || isTruthyEnvFlag(process.env.PI_OFFLINE);
 	if (offlineMode) {
@@ -603,6 +641,10 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	if (await handleConfigCommand(args, { extensionFactories })) {
+		return;
+	}
+
+	if (await handleProfileCommand(args)) {
 		return;
 	}
 

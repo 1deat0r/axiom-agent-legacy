@@ -12,7 +12,6 @@
  * Dependencies are injectable for tests; defaults read pi's real stores.
  */
 
-import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "../../core/extensions/types.ts";
 import {
@@ -21,6 +20,7 @@ import {
 	type SessionInfo,
 	SessionManager,
 } from "../../core/session-manager.ts";
+import { axiomHome } from "../profile/registry.ts";
 import {
 	aggregateUsage,
 	applyOverrides,
@@ -42,7 +42,10 @@ export interface LedgerDeps {
 	loadEntries(path: string): SessionEntry[];
 }
 
-const DEFAULT_OVERRIDES_PATH = join(homedir(), ".axiom", "ledger.json");
+/** The active home's ledger file (AXIOM_HOME, default ~/.axiom). */
+function defaultOverridesPath(): string {
+	return join(axiomHome(), "ledger.json");
+}
 
 /** Narrow a session file's entries to session entries (drop the header). */
 function loadSessionEntries(path: string): SessionEntry[] {
@@ -52,7 +55,7 @@ function loadSessionEntries(path: string): SessionEntry[] {
 /** The real-store defaults, exported so tests can exercise them without IO. */
 export function defaultLedgerDeps(): LedgerDeps {
 	return {
-		overridesPath: DEFAULT_OVERRIDES_PATH,
+		overridesPath: defaultOverridesPath(),
 		loadConfig: defaultLoadConfig,
 		listAllSessions: () => SessionManager.listAll(),
 		loadEntries: (path) => loadSessionEntries(path),

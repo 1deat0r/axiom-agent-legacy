@@ -12,13 +12,12 @@
  * bounded; pass `maxEntriesPerScope: undefined` for unbounded).
  */
 
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { type Static, Type } from "typebox";
 import type { ExtensionAPI } from "../../core/extensions/types.ts";
+import { axiomHome } from "../profile/registry.ts";
 import { FileMemoryStore, type MemoryScope, type MemoryStore, memoryContextBlock } from "./store.ts";
 
-const DEFAULT_MEMORY_DIR = join(homedir(), ".axiom", "memory");
 const DEFAULT_MAX_ENTRIES_PER_SCOPE = 50;
 
 export interface MemoryDeps {
@@ -44,7 +43,7 @@ export function defaultMemoryStore(dir: string, cap: number | undefined): Memory
 
 export function createMemoryExtension(deps?: Partial<MemoryDeps>): (pi: ExtensionAPI) => void {
 	const resolved: MemoryDeps = {
-		memoryDir: deps?.memoryDir ?? DEFAULT_MEMORY_DIR,
+		memoryDir: deps?.memoryDir ?? join(axiomHome(), "memory"),
 		maxEntriesPerScope: deps?.maxEntriesPerScope ?? DEFAULT_MAX_ENTRIES_PER_SCOPE,
 		store: deps?.store ?? defaultMemoryStore,
 	};
