@@ -63,7 +63,7 @@ describe("FileMemoryStore", () => {
 		const dir = await tempDir();
 		try {
 			const store = new FileMemoryStore(dir);
-			const entry = await store.add({ scope: "user", content: "old" });
+			const { entry } = await store.add({ scope: "user", content: "old" });
 			const updated = await store.update(entry.id, "new");
 			expect(updated.content).toBe("new");
 			expect(updated.updatedAt).toBeGreaterThanOrEqual(entry.updatedAt);
@@ -87,8 +87,8 @@ describe("FileMemoryStore", () => {
 		const dir = await tempDir();
 		try {
 			const store = new FileMemoryStore(dir);
-			const a = await store.add({ scope: "user", content: "a" });
-			const b = await store.add({ scope: "user", content: "b" });
+			const a = (await store.add({ scope: "user", content: "a" })).entry;
+			const b = (await store.add({ scope: "user", content: "b" })).entry;
 			await store.remove(a.id);
 			expect((await store.list()).map((e) => e.content)).toEqual(["b"]);
 			await store.remove(b.id);
@@ -102,12 +102,12 @@ describe("FileMemoryStore", () => {
 		const dir = await tempDir();
 		try {
 			const store = new FileMemoryStore(dir, { maxEntriesPerScope: 2 });
-			const a = await store.add({ scope: "user", content: "a" });
+			const a = (await store.add({ scope: "user", content: "a" })).entry;
 			await store.add({ scope: "user", content: "b" });
 			await store.add({ scope: "user", content: "c" });
 			expect((await store.list("user")).map((e) => e.content)).toEqual(["c", "b"]);
 			// Touching a surviving entry makes it beat the next eviction.
-			const d = await store.add({ scope: "user", content: "d" });
+			const d = (await store.add({ scope: "user", content: "d" })).entry;
 			await store.update(d.id, "d2");
 			await store.add({ scope: "user", content: "e" });
 			expect((await store.list("user")).map((e) => e.content)).toEqual(["e", "d2"]);
@@ -147,9 +147,9 @@ describe("FileMemoryStore", () => {
 		const dir = await tempDir();
 		try {
 			const store = new FileMemoryStore(dir);
-			const a = await store.add({ scope: "user", content: "a" });
-			const b = await store.add({ scope: "user", content: "b" });
-			const c = await store.add({ scope: "user", content: "c" });
+			const a = (await store.add({ scope: "user", content: "a" })).entry;
+			const b = (await store.add({ scope: "user", content: "b" })).entry;
+			const c = (await store.add({ scope: "user", content: "c" })).entry;
 			expect(a.updatedAt).toBeLessThan(b.updatedAt);
 			expect(b.updatedAt).toBeLessThan(c.updatedAt);
 		} finally {
@@ -174,7 +174,7 @@ describe("FileMemoryStore", () => {
 		const dir = await tempDir();
 		try {
 			const store = new FileMemoryStore(dir);
-			const a = await store.add({ scope: "agent", content: "agent note" });
+			const a = (await store.add({ scope: "agent", content: "agent note" })).entry;
 			await store.add({ scope: "user", content: "user note" });
 			await store.remove(a.id);
 			expect(await store.list("agent")).toEqual([]);
@@ -201,13 +201,27 @@ describe("FileMemoryStore", () => {
 describe("InMemoryMemoryStore", () => {
 	it("supports add, list (newest-first), update and remove", async () => {
 		const store = new InMemoryMemoryStore();
-		const entry = await store.add({ scope: "user", content: "fact" });
+		const { entry } = await store.add({ scope: "user", content: "fact" });
 		await store.add({ scope: "user", content: "fact 2" });
 		expect((await store.list()).map((e) => e.content)).toEqual(["fact 2", "fact"]);
 		await store.update(entry.id, "fact 1");
 		expect((await store.list("user"))[0]!.content).toBe("fact 1");
 		await store.remove(entry.id);
 		expect((await store.list()).map((e) => e.content)).toEqual(["fact 2"]);
+	});
+
+	it("reports how many entries an add evicted", async () => {
+		const store = new FileMemoryStore(await tempDir(), { maxEntriesPerScope: 2 });
+		expect((await store.add({ scope: "user", content: "a" })).evicted).toBe(0);
+		expect((await store.add({ scope: "user", content: "b" })).evicted).toBe(0);
+		expect((await store.add({ scope: "user", content: "c" })).evicted).toBe(1);
+		expect((await store.add({ scope: "user", content: "d" })).evicted).toBe(1);
+	});
+
+	it("the in-memory store reports evictions the same way", async () => {
+		const store = new InMemoryMemoryStore({ maxEntriesPerScope: 1 });
+		expect((await store.add({ scope: "user", content: "a" })).evicted).toBe(0);
+		expect((await store.add({ scope: "user", content: "b" })).evicted).toBe(1);
 	});
 
 	it("throws on updating an unknown id", async () => {
@@ -310,6 +324,7 @@ describe("createMemoryExtension", () => {
 			content: Array<{ type: string; text: string }>;
 		};
 		expect(added.content[0]!.text).toContain("Remembered [user]");
+		expect(added.content[0]!.text).not.toContain("evicted");
 		const listed = (await tool.execute!("c2", { action: "list" })) as {
 			content: Array<{ type: string; text: string }>;
 		};
@@ -319,6 +334,37 @@ describe("createMemoryExtension", () => {
 		};
 		expect(removed.content[0]!.text).toContain("Forgot");
 		expect(await store.list()).toEqual([]);
+	});
+
+	it("every over-cap add names the eviction", async () => {
+		const { pi, tools } = fakePi();
+		const store = new InMemoryMemoryStore({ maxEntriesPerScope: 1 });
+		createMemoryExtension({ memoryDir: "/tmp/memory", maxEntriesPerScope: 1, store: () => store })(pi);
+		const tool = tools.find((t) => t.name === "memory")!;
+		await tool.execute!("c1", { action: "add", content: "a", scope: "user" });
+		await tool.execute!("c2", { action: "add", content: "b", scope: "user" });
+		// Each over-cap add evicts exactly one stale entry (per-add eviction <= 1).
+		const third = (await tool.execute!("c3", { action: "add", content: "c", scope: "user" })) as {
+			content: Array<{ type: string; text: string }>;
+		};
+		expect(third.content[0]!.text).toContain("evicted 1 stale entry");
+		const fourth = (await tool.execute!("c4", { action: "add", content: "d", scope: "user" })) as {
+			content: Array<{ type: string; text: string }>;
+		};
+		expect(fourth.content[0]!.text).toContain("evicted 1 stale entry");
+	});
+
+	it("the add result names evicted entries under the cap", async () => {
+		const { pi, tools } = fakePi();
+		const store = new InMemoryMemoryStore({ maxEntriesPerScope: 2 });
+		createMemoryExtension({ memoryDir: "/tmp/memory", maxEntriesPerScope: 2, store: () => store })(pi);
+		const tool = tools.find((t) => t.name === "memory")!;
+		await tool.execute!("c1", { action: "add", content: "a", scope: "user" });
+		await tool.execute!("c2", { action: "add", content: "b", scope: "user" });
+		const third = (await tool.execute!("c3", { action: "add", content: "c", scope: "user" })) as {
+			content: Array<{ type: string; text: string }>;
+		};
+		expect(third.content[0]!.text).toContain("evicted 1 stale");
 	});
 
 	it("defaults to the user scope and rejects bad input", async () => {

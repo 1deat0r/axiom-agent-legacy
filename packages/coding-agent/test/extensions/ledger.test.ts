@@ -318,6 +318,39 @@ describe("buildCostReport", () => {
 		expect(report).toContain("lifetime $0.0831");
 		expect(report).toContain("p/m repriced at override rates");
 	});
+
+	it("adds a cap line only when a cap is set", () => {
+		const session: LedgerTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0.0042 };
+		const lifetime: LedgerTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0.0831 };
+		const withCap = buildCostReport(session, lifetime, [], { capUsd: 0.5 });
+		expect(withCap).toContain("cap $0.50");
+		const without = buildCostReport(session, lifetime, []);
+		expect(without).not.toContain("cap");
+	});
+
+	it("adds per-model rows with an overflow note", () => {
+		const session: LedgerTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0.51 };
+		const lifetime: LedgerTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0.51 };
+		const buckets = [
+			{ key: "deepseek/deepseek-chat", cost: 0.01 },
+			{ key: "openai/gpt-5.6", cost: 0.5 },
+		];
+		const report = buildCostReport(session, lifetime, [], { buckets });
+		expect(report).toContain("deepseek/deepseek-chat $0.0100");
+		expect(report).toContain("openai/gpt-5.6 $0.5000");
+	});
+
+	it("truncates rows with an explicit overflow note", () => {
+		const session: LedgerTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 4 };
+		const lifetime: LedgerTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 4 };
+		const buckets = [1, 2, 3, 4, 5].map((n) => ({ key: `model-${n}`, cost: n }));
+		const report = buildCostReport(session, lifetime, [], { buckets });
+		expect(report).toContain("model-5 $5.00");
+		expect(report).toContain("model-4 $4.00");
+		expect(report).toContain("model-3 $3.00");
+		expect(report).not.toContain("model-2 $");
+		expect(report).toContain("+2 more models");
+	});
 });
 
 describe("loadOverrides", () => {

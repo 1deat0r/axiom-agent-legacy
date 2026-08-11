@@ -65,7 +65,10 @@ export async function handleProfileCommand(args: string[], io: ProfileCommandIO 
 		}
 		await mkdirp(dir);
 		await write(soulPath, starterSoul(name));
-		out(`Profile '${name}' created at ${dir} — edit SOUL.md to shape its identity.`);
+		out(
+			`Profile '${name}' created at ${dir} — edit SOUL.md to shape its identity.\n` +
+				`Next: run '--profile ${name}', then /login to connect a provider (fresh profiles have no keys).`,
+		);
 		return true;
 	}
 	if (sub === "list") {

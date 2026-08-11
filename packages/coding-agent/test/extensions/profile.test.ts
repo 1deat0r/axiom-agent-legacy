@@ -13,6 +13,7 @@ import {
 	axiomHome,
 	isValidProfileName,
 	profileDir,
+	profileLabel,
 	resolveProfile,
 } from "../../src/extensions/profile/registry.ts";
 
@@ -94,6 +95,27 @@ describe("soul block", () => {
 		expect(result.systemPrompt).toContain("I am coder.");
 	});
 
+	it("sets the active-profile footer status at agent_start", async () => {
+		const events = new Map<string, (e: unknown, c: unknown) => Promise<unknown>>();
+		const pi = {
+			on: (event: string, h: (e: unknown, c: unknown) => Promise<unknown>) => events.set(event, h),
+		} as unknown as ExtensionAPI;
+		const statuses: Array<[string, string | undefined]> = [];
+		createProfileExtension({
+			axiomHomeDir: () => "/custom/home/profiles/client-alpha",
+			readText: async () => null,
+		})(pi);
+		await events.get("agent_start")!(null, {
+			ui: { setStatus: (key: string, text: string | undefined) => statuses.push([key, text]) },
+		});
+		expect(statuses).toContainEqual(["axiom.profile", "client-alpha"]);
+	});
+
+	it("labels the default home as default", () => {
+		expect(profileLabel("/home/u/.axiom")).toBe("default");
+		expect(profileLabel("/home/u/.axiom/profiles/coder")).toBe("coder");
+	});
+
 	it("leaves the system prompt alone when SOUL.md is missing", async () => {
 		const events = new Map<string, (e: unknown, c: unknown) => Promise<unknown>>();
 		const pi = {
@@ -148,6 +170,8 @@ describe("handleProfileCommand", () => {
 			expect(handled).toBe(true);
 			expect(written.some((p) => p.endsWith(join("profiles", "coder", "SOUL.md")))).toBe(true);
 			expect(out.join(" ")).toContain("coder");
+			expect(out.join(" ")).toMatch(/--profile coder/);
+			expect(out.join(" ")).toMatch(/\/login/);
 		} finally {
 			await rm(dir, { recursive: true, force: true });
 		}

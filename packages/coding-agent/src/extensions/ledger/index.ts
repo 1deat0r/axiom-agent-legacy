@@ -33,7 +33,7 @@ import {
 	shouldBlockRun,
 } from "./ledger.ts";
 import type { LedgerConfig } from "./storage.ts";
-import { loadLedgerConfig as defaultLoadConfig } from "./storage.ts";
+import { loadLedgerConfig as defaultLoadConfig, parseCapArg, writeLedgerConfig } from "./storage.ts";
 
 export interface LedgerDeps {
 	overridesPath: string;
@@ -74,13 +74,51 @@ export function createLedgerExtension(deps?: Partial<LedgerDeps>): (pi: Extensio
 		pi.registerCommand("cost", {
 			description: "Show session and lifetime spend",
 			handler: async (_args, ctx) => {
-				const { overrides } = await resolved.loadConfig(resolved.overridesPath);
-				const session = applyOverrides(aggregateUsage(ctx.sessionManager.getEntries()), overrides);
+				const config = await resolved.loadConfig(resolved.overridesPath);
+				const session = applyOverrides(aggregateUsage(ctx.sessionManager.getEntries()), config.overrides);
 				const sessions = await resolved.listAllSessions();
 				const bundles = sessions.map((s) => ({ path: s.path, entries: resolved.loadEntries(s.path) }));
-				const lifetime = computeLifetime(bundles, overrides);
-				const report = buildCostReport(session.totals, lifetime.totals, [...session.notes, ...lifetime.notes]);
+				const lifetime = computeLifetime(bundles, config.overrides);
+				const report = buildCostReport(session.totals, lifetime.totals, [...session.notes, ...lifetime.notes], {
+					buckets: session.rows,
+					capUsd: config.maxRunCostUsd,
+				});
 				ctx.ui.notify(report);
+			},
+		});
+		pi.registerCommand("cap", {
+			description: "Show or set the per-run spend cap (/cap <usd> | none)",
+			handler: async (args, ctx) => {
+				const parsed = parseCapArg(args);
+				if (parsed.kind === "error") {
+					ctx.ui.notify(parsed.message, "error");
+					return;
+				}
+				const config = await resolved.loadConfig(resolved.overridesPath);
+				if (parsed.kind === "set") {
+					await writeLedgerConfig(resolved.overridesPath, { ...config, maxRunCostUsd: parsed.usd });
+					ctx.ui.notify(
+						parsed.usd === 0
+							? "cap set to $0.0000 — LLM calls disabled (run /cap none to re-enable)"
+							: `cap set to ${formatUsd(parsed.usd)}`,
+					);
+					return;
+				}
+				if (parsed.kind === "clear") {
+					const next: LedgerConfig = { overrides: config.overrides };
+					await writeLedgerConfig(resolved.overridesPath, next);
+					ctx.ui.notify("cap cleared — runs are uncapped");
+					return;
+				}
+				// show: cap + session + lifetime headroom
+				const session = applyOverrides(aggregateUsage(ctx.sessionManager.getEntries()), config.overrides);
+				const sessions = await resolved.listAllSessions();
+				const bundles = sessions.map((s) => ({ path: s.path, entries: resolved.loadEntries(s.path) }));
+				const lifetime = computeLifetime(bundles, config.overrides);
+				const capText = config.maxRunCostUsd !== undefined ? `cap ${formatUsd(config.maxRunCostUsd)}` : "no cap";
+				ctx.ui.notify(
+					`${capText} · session ${formatUsd(session.totals.cost)} · lifetime ${formatUsd(lifetime.totals.cost)}`,
+				);
 			},
 		});
 		pi.on("agent_settled", async (_event, ctx) => {
@@ -108,10 +146,11 @@ export function createLedgerExtension(deps?: Partial<LedgerDeps>): (pi: Extensio
 			const { totals } = applyOverrides(mergeBuckets(runBuckets), config.overrides);
 			if (!shouldBlockRun(config.maxRunCostUsd, totals.cost)) return;
 			if (config.maxRunCostUsd <= 0) {
-				ctx.ui.notify("cost cap is 0 — LLM calls disabled", "warning");
+				ctx.ui.notify("cost cap is 0 — LLM calls disabled (run /cap none to re-enable)", "warning");
 			} else {
 				ctx.ui.notify(
-					`cost cap ${formatUsd(config.maxRunCostUsd)} reached (${formatUsd(totals.cost)}) — run stopped`,
+					`cost cap ${formatUsd(config.maxRunCostUsd)} reached (${formatUsd(totals.cost)}) — run stopped. ` +
+						`Run /cost to review, /cap to adjust.`,
 					"warning",
 				);
 			}

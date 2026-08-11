@@ -31,6 +31,12 @@ export function isValidProfileName(name: string): boolean {
 	return /^[a-z0-9][a-z0-9-]*$/.test(name);
 }
 
+/** The profile's display label: the name when inside profiles/, else "default". */
+export function profileLabel(home: string): string {
+	const parent = home.split(/[/]/).filter(Boolean).at(-2);
+	return parent === "profiles" ? (home.split(/[/]/).filter(Boolean).at(-1) ?? "default") : "default";
+}
+
 /** What booting under a profile means: its own axiom home + its own agent dir. */
 export function resolveProfile(
 	name: string | undefined,

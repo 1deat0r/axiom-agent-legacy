@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { ExtensionAPI } from "../../src/core/extensions/types.ts";
 import { createLedgerExtension } from "../../src/extensions/ledger/index.ts";
 import { bucketFromAssistantMessage, type OverrideRates, shouldBlockRun } from "../../src/extensions/ledger/ledger.ts";
-import { loadLedgerConfig } from "../../src/extensions/ledger/storage.ts";
+import { loadLedgerConfig, parseCapArg, writeLedgerConfig } from "../../src/extensions/ledger/storage.ts";
 
 function usage(over: Partial<Usage> = {}): Usage {
 	return {
@@ -146,6 +146,62 @@ describe("loadLedgerConfig", () => {
 	});
 });
 
+describe("parseCapArg", () => {
+	it("parses a finite non-negative number", () => {
+		expect(parseCapArg("0.5")).toEqual({ kind: "set", usd: 0.5 });
+		expect(parseCapArg("0")).toEqual({ kind: "set", usd: 0 });
+		expect(parseCapArg("100")).toEqual({ kind: "set", usd: 100 });
+	});
+	it("parses none as clear", () => {
+		expect(parseCapArg("none")).toEqual({ kind: "clear" });
+	});
+	it("rejects negatives and garbage", () => {
+		expect(parseCapArg("-1").kind).toBe("error");
+		expect(parseCapArg("abc").kind).toBe("error");
+		expect(parseCapArg("NaN").kind).toBe("error");
+	});
+
+	it("treats no argument as show", () => {
+		expect(parseCapArg("")).toEqual({ kind: "show" });
+	});
+});
+
+describe("writeLedgerConfig", () => {
+	it("writes the cap and preserves overrides", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-cap-"));
+		try {
+			const path = join(dir, "ledger.json");
+			await writeLedgerConfig(path, {
+				overrides: new Map([["p/m", { input: 1, output: 2, cacheRead: 0.5, cacheWrite: 1 }]]),
+				maxRunCostUsd: 0.5,
+			});
+			const config = await loadLedgerConfig(path);
+			expect(config.maxRunCostUsd).toBe(0.5);
+			expect(config.overrides.get("p/m")).toEqual({ input: 1, output: 2, cacheRead: 0.5, cacheWrite: 1 });
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+	it("clearing the cap keeps overrides", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-cap-"));
+		try {
+			const path = join(dir, "ledger.json");
+			await writeLedgerConfig(path, {
+				overrides: new Map([["p/m", { input: 1, output: 2, cacheRead: 0.5, cacheWrite: 1 }]]),
+				maxRunCostUsd: 0.5,
+			});
+			await writeLedgerConfig(path, {
+				overrides: new Map([["p/m", { input: 1, output: 2, cacheRead: 0.5, cacheWrite: 1 }]]),
+			});
+			const config = await loadLedgerConfig(path);
+			expect(config.maxRunCostUsd).toBeUndefined();
+			expect(config.overrides.get("p/m")).toEqual({ input: 1, output: 2, cacheRead: 0.5, cacheWrite: 1 });
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+});
+
 describe("spend cap in the extension", () => {
 	function fakePi() {
 		const commands = new Map<string, { handler: (a: string, c: unknown) => Promise<void> }>();
@@ -213,6 +269,9 @@ describe("spend cap in the extension", () => {
 		await events.get("turn_start")!(turnStart(2), ctx as never);
 		expect(aborted).toEqual(["abort"]);
 		expect(notified.some((n) => n.includes("cost cap") && n.includes("run stopped"))).toBe(true);
+		expect(
+			notified.some((n) => n.toLowerCase().includes("run /cost to review") && n.includes("/cap to adjust")),
+		).toBe(true);
 	});
 
 	it("resets run spend on agent_start", async () => {
@@ -240,6 +299,7 @@ describe("spend cap in the extension", () => {
 		await events.get("turn_start")!(turnStart(0), ctx as never);
 		expect(aborted).toEqual(["abort"]);
 		expect(notified.some((n) => n.includes("disabled"))).toBe(true);
+		expect(notified.some((n) => n.includes("/cap none to re-enable"))).toBe(true);
 	});
 
 	it("applies override repricing to the cap decision", async () => {
@@ -276,6 +336,126 @@ describe("spend cap in the extension", () => {
 		await events.get("turn_end")!(turnEnd(usageLess), ctx as never);
 		await events.get("turn_start")!(turnStart(1), ctx as never);
 		expect(aborted).toEqual([]);
+	});
+
+	it("registers the /cap command", () => {
+		const { pi, commands } = fakePi();
+		createLedgerExtension(depsWith(undefined))(pi);
+		expect(commands.has("cap")).toBe(true);
+	});
+
+	it("the /cap command shows the cap with session and lifetime headroom", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-cap-"));
+		try {
+			await writeFile(join(dir, "ledger.json"), JSON.stringify({ maxRunCostUsd: 0.5 }));
+			const { pi, commands } = fakePi();
+			const { ctx, notified } = fakeCtx();
+			const entry = {
+				type: "message" as const,
+				id: "m1",
+				parentId: null,
+				timestamp: "2026-08-11T00:00:00.000Z",
+				message: {
+					role: "assistant" as const,
+					content: [],
+					api: "openai-completions",
+					provider: "p",
+					model: "m",
+					usage: usage({
+						input: 100_000,
+						cost: { input: 0.1, output: 0, cacheRead: 0, cacheWrite: 0, total: 0.1 },
+					}),
+					stopReason: "stop",
+					timestamp: 1,
+				},
+			} as unknown as import("../../src/core/session-manager.ts").SessionEntry;
+			const deps = {
+				overridesPath: join(dir, "ledger.json"),
+				loadConfig: async () => loadLedgerConfig(join(dir, "ledger.json")),
+				listAllSessions: async () => [{ path: join(dir, "s.jsonl") }],
+				loadEntries: () => [entry],
+			};
+			createLedgerExtension(deps)(pi);
+			await commands.get("cap")!.handler("", ctx as never);
+			expect(notified.join(" ")).toContain("cap $0.50");
+			// Session reads the ctx's entries (none here); lifetime scans the bundles.
+			expect(notified.join(" ")).toContain("session $0.0000");
+			expect(notified.join(" ")).toContain("lifetime $0.1000");
+			// Without a cap the show line says so.
+			await writeFile(join(dir, "ledger.json"), JSON.stringify({}));
+			notified.length = 0;
+			await commands.get("cap")!.handler("", ctx as never);
+			expect(notified.join(" ")).toContain("no cap");
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("the /cap command sets and clears the cap through the config file", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-cap-"));
+		try {
+			const path = join(dir, "ledger.json");
+			const { pi, commands } = fakePi();
+			const { ctx, notified } = fakeCtx();
+			const deps = {
+				overridesPath: path,
+				loadConfig: async () => loadLedgerConfig(path),
+				listAllSessions: async () => [],
+				loadEntries: () => [],
+			};
+			createLedgerExtension(deps)(pi);
+			await commands.get("cap")!.handler("1.25", ctx as never);
+			expect((await loadLedgerConfig(path)).maxRunCostUsd).toBe(1.25);
+			expect(notified.at(-1)).toContain("cap set to $1.25");
+			await commands.get("cap")!.handler("none", ctx as never);
+			expect((await loadLedgerConfig(path)).maxRunCostUsd).toBeUndefined();
+			expect(notified.at(-1)).toContain("cap cleared");
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("the /cap command treats zero as disable with a way out", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-cap-"));
+		try {
+			const path = join(dir, "ledger.json");
+			const { pi, commands } = fakePi();
+			const { ctx, notified } = fakeCtx();
+			const deps = {
+				overridesPath: path,
+				loadConfig: async () => loadLedgerConfig(path),
+				listAllSessions: async () => [],
+				loadEntries: () => [],
+			};
+			createLedgerExtension(deps)(pi);
+			await commands.get("cap")!.handler("0", ctx as never);
+			expect((await loadLedgerConfig(path)).maxRunCostUsd).toBe(0);
+			expect(notified.at(-1)).toContain("LLM calls disabled");
+			expect(notified.at(-1)).toContain("/cap none to re-enable");
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("the /cap command rejects invalid input", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-cap-"));
+		try {
+			const path = join(dir, "ledger.json");
+			const { pi, commands } = fakePi();
+			const { ctx, notified } = fakeCtx();
+			const deps = {
+				overridesPath: path,
+				loadConfig: async () => loadLedgerConfig(path),
+				listAllSessions: async () => [],
+				loadEntries: () => [],
+			};
+			createLedgerExtension(deps)(pi);
+			await commands.get("cap")!.handler("-1", ctx as never);
+			expect(notified.at(-1)).toMatch(/invalid|cap/i);
+			expect((await loadLedgerConfig(path)).maxRunCostUsd).toBeUndefined();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
 	});
 
 	it("never blocks when no cap is configured", async () => {

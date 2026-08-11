@@ -9,7 +9,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ExtensionAPI } from "../../core/extensions/types.ts";
-import { axiomHome } from "./registry.ts";
+import { axiomHome, profileLabel } from "./registry.ts";
 
 /** The delimited identity block appended to the system prompt. */
 export function soulBlock(soul: string): string {
@@ -38,6 +38,9 @@ export function createProfileExtension(deps?: Partial<ProfileDeps>): (pi: Extens
 	if (deps?.readText !== undefined) readText = deps.readText;
 	const resolved: ProfileDeps = { axiomHomeDir, readText };
 	return (pi: ExtensionAPI) => {
+		pi.on("agent_start", (_event, ctx) => {
+			ctx.ui.setStatus("axiom.profile", profileLabel(resolved.axiomHomeDir()));
+		});
 		pi.on("before_agent_start", async (event, _ctx) => {
 			const soul = await resolved.readText(join(resolved.axiomHomeDir(), "SOUL.md"));
 			if (soul === null) return;

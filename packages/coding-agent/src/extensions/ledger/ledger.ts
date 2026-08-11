@@ -149,9 +149,10 @@ export function priceUsage(usage: Usage, rates: OverrideRates): Usage["cost"] {
 export function applyOverrides(
 	buckets: CostBucket[],
 	overrides: ReadonlyMap<string, OverrideRates>,
-): { totals: LedgerTotals; notes: string[] } {
+): { totals: LedgerTotals; notes: string[]; rows: Array<{ key: string; cost: number }> } {
 	const totals = emptyTotals();
 	const notes: string[] = [];
+	const rows: Array<{ key: string; cost: number }> = [];
 	for (const bucket of buckets) {
 		totals.input += bucket.usage.input;
 		totals.output += bucket.usage.output;
@@ -159,16 +160,19 @@ export function applyOverrides(
 		totals.cacheWrite += bucket.usage.cacheWrite;
 		const override = overrides.get(bucket.key);
 		if (override) {
-			totals.cost += priceUsage(bucket.usage, override).total;
+			const cost = priceUsage(bucket.usage, override).total;
+			totals.cost += cost;
+			rows.push({ key: bucket.key, cost });
 			notes.push(`${bucket.key} repriced at override rates`);
 		} else {
 			totals.cost += bucket.recordedCost;
+			rows.push({ key: bucket.key, cost: bucket.recordedCost });
 			if (bucket.recordedCost === 0 && hasTokens(bucket.usage)) {
 				notes.push(`${bucket.key}: no catalog price (recorded ${formatUsd(0)})`);
 			}
 		}
 	}
-	return { totals, notes };
+	return { totals, notes, rows };
 }
 
 /** Lifetime totals across session bundles, overrides applied once per model. */
@@ -219,9 +223,36 @@ export function formatUsd(usd: number): string {
 	return `$${usd.toPrecision(3).replace(/\.?0+$/, "")}`;
 }
 
-/** The one-line /cost report: session, lifetime, and any pricing notes. */
-export function buildCostReport(session: LedgerTotals, lifetime: LedgerTotals, notes: string[]): string {
+/** Optional detail for the /cost report (additive — the 3-arg call still works). */
+export interface CostReportOptions {
+	/** Per-model rows for the top buckets (bounded with an explicit overflow note). */
+	buckets?: Array<{ key: string; cost: number }>;
+	/** Render the cap line only when a cap is actually set. */
+	capUsd?: number;
+}
+
+const MAX_MODEL_ROWS = 3;
+
+/** The one-line /cost report: session, lifetime, cap (when set), notes, and
+ * the top per-model rows — never silently truncated, so an overflow is
+ * named. */
+export function buildCostReport(
+	session: LedgerTotals,
+	lifetime: LedgerTotals,
+	notes: string[],
+	opts: CostReportOptions = {},
+): string {
 	const parts = [`session ${formatUsd(session.cost)}`, `lifetime ${formatUsd(lifetime.cost)}`];
+	if (opts.capUsd !== undefined) parts.push(`cap ${formatUsd(opts.capUsd)}`);
 	if (notes.length > 0) parts.push(notes.join("; "));
+	if (opts.buckets && opts.buckets.length > 0) {
+		const rows = [...opts.buckets].sort((a, b) => b.cost - a.cost);
+		const shown = rows.slice(0, MAX_MODEL_ROWS);
+		for (const bucket of shown) {
+			parts.push(`${bucket.key} ${formatUsd(bucket.cost)}`);
+		}
+		const hidden = rows.length - shown.length;
+		if (hidden > 0) parts.push(`+${hidden} more models`);
+	}
 	return `cost · ${parts.join(" · ")}`;
 }

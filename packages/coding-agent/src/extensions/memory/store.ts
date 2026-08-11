@@ -31,8 +31,11 @@ export interface MemoryEntry {
 export interface MemoryStore {
 	/** All entries, optionally filtered by scope. Newest first. */
 	list(scope?: MemoryScope): Promise<MemoryEntry[]>;
-	/** Add a new entry; returns the persisted entry with id + timestamps. */
-	add(entry: { scope: MemoryScope; content: string }): Promise<MemoryEntry>;
+	/**
+	 * Add a new entry; returns the persisted entry (id + timestamps) and the
+	 * number of stale entries this add evicted (0 when no cap or under it).
+	 */
+	add(entry: { scope: MemoryScope; content: string }): Promise<{ entry: MemoryEntry; evicted: number }>;
 	/** Replace an entry's content; returns the updated entry. */
 	update(id: string, content: string): Promise<MemoryEntry>;
 	/** Delete an entry by id. */
@@ -106,7 +109,7 @@ export class FileMemoryStore implements MemoryStore {
 		return out.sort((a, b) => b.updatedAt - a.updatedAt);
 	}
 
-	async add(entry: { scope: MemoryScope; content: string }): Promise<MemoryEntry> {
+	async add(entry: { scope: MemoryScope; content: string }): Promise<{ entry: MemoryEntry; evicted: number }> {
 		const now = nextTimestamp();
 		const full: MemoryEntry = {
 			id: randomUUID(),
@@ -116,9 +119,11 @@ export class FileMemoryStore implements MemoryStore {
 			updatedAt: now,
 		};
 		const entries = await this.readScope(entry.scope);
+		const before = entries.length;
 		entries.push(full);
-		await this.writeScope(entry.scope, enforceCap(entries, this.maxEntriesPerScope));
-		return full;
+		const surviving = enforceCap(entries, this.maxEntriesPerScope);
+		await this.writeScope(entry.scope, surviving);
+		return { entry: full, evicted: before + 1 - surviving.length };
 	}
 
 	async update(id: string, content: string): Promise<MemoryEntry> {
@@ -163,7 +168,7 @@ export class InMemoryMemoryStore implements MemoryStore {
 		return filtered.sort((a, b) => b.updatedAt - a.updatedAt);
 	}
 
-	async add(entry: { scope: MemoryScope; content: string }): Promise<MemoryEntry> {
+	async add(entry: { scope: MemoryScope; content: string }): Promise<{ entry: MemoryEntry; evicted: number }> {
 		const now = nextTimestamp();
 		const full: MemoryEntry = {
 			id: randomUUID(),
@@ -172,15 +177,18 @@ export class InMemoryMemoryStore implements MemoryStore {
 			createdAt: now,
 			updatedAt: now,
 		};
+		const before = this.entries.size;
 		this.entries.set(full.id, full);
+		let evicted = 0;
 		if (this.maxEntriesPerScope !== undefined) {
 			const scopeEntries = Array.from(this.entries.values()).filter((e) => e.scope === full.scope);
 			const survivorIds = new Set(enforceCap(scopeEntries, this.maxEntriesPerScope).map((e) => e.id));
 			for (const e of scopeEntries) {
 				if (!survivorIds.has(e.id)) this.entries.delete(e.id);
 			}
+			evicted = before + 1 - this.entries.size;
 		}
-		return full;
+		return { entry: full, evicted };
 	}
 
 	async update(id: string, content: string): Promise<MemoryEntry> {

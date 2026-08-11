@@ -67,8 +67,12 @@ export function createMemoryExtension(deps?: Partial<MemoryDeps>): (pi: Extensio
 						const content = (params.content ?? "").trim();
 						if (!content) throw new Error("action=add requires a non-empty content");
 						const scope: MemoryScope = params.scope === "agent" ? "agent" : "user";
-						const entry = await memory.add({ scope, content });
+						const { entry, evicted } = await memory.add({ scope, content });
 						text = `Remembered [${entry.scope}] "${content}" (id: ${entry.id})`;
+						if (evicted > 0) {
+							// Per-add eviction is at most one entry (before <= cap).
+							text += " — evicted 1 stale entry to stay under the cap";
+						}
 						break;
 					}
 					case "remove": {

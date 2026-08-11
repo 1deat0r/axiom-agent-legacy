@@ -8,7 +8,7 @@
  * empty override map (recorded costs stand).
  */
 
-import { readFile } from "node:fs/promises";
+import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import type { OverrideRates } from "./ledger.ts";
 
 /** The parsed `~/.axiom/ledger.json` configuration. */
@@ -57,4 +57,46 @@ export async function loadLedgerConfig(path: string): Promise<LedgerConfig> {
 /** Override rates only (kept for callers that do not need the cap). */
 export async function loadOverrides(path: string): Promise<Map<string, OverrideRates>> {
 	return (await loadLedgerConfig(path)).overrides;
+}
+
+/** The parsed outcome of a `/cap` argument. */
+export type CapArgResult =
+	| { kind: "show" }
+	| { kind: "set"; usd: number }
+	| { kind: "clear" }
+	| { kind: "error"; message: string };
+
+/**
+ * Parse the `/cap` command argument. Accepts a finite non-negative number
+ * (0 disables LLM calls), `none` (clear the cap), or nothing (show).
+ * Negatives and garbage are rejected — `shouldBlockRun` treats any cap
+ * `<= 0` as "disable all LLM calls", so `/cap -1` must not silently disable.
+ */
+export function parseCapArg(arg: string): CapArgResult {
+	const trimmed = arg.trim();
+	if (trimmed === "") return { kind: "show" };
+	if (trimmed === "none") return { kind: "clear" };
+	const usd = Number(trimmed);
+	if (!Number.isFinite(usd) || usd < 0) {
+		return { kind: "error", message: `invalid cap '${trimmed}' — use a non-negative number, 'none', or nothing` };
+	}
+	return { kind: "set", usd };
+}
+
+/**
+ * Write the ledger config atomically (tmp + rename, the FileMemoryStore
+ * discipline) so a crash mid-write cannot corrupt hand-edited overrides.
+ */
+export async function writeLedgerConfig(path: string, config: LedgerConfig): Promise<void> {
+	const payload: Record<string, unknown> = {};
+	if (config.maxRunCostUsd !== undefined) {
+		payload.maxRunCostUsd = config.maxRunCostUsd;
+	}
+	if (config.overrides.size > 0) {
+		payload.overrides = Object.fromEntries(config.overrides);
+	}
+	const tmp = `${path}.tmp`;
+	await writeFile(tmp, JSON.stringify(payload, null, 2), "utf8");
+	await rm(path, { force: true });
+	await rename(tmp, path);
 }
