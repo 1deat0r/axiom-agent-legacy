@@ -63,3 +63,12 @@ new baseline (ADR-0015), replacing the pi v0.84.1 fork (ADR-0013).
 - Data cutover (ADR-0015): `~/.axiom` ledger config + memory carry over;
   lifetime spend resets at zero. If the owner prefers a fresh axiom home
   instead, that is a one-line `AXIOM_HOME` default change, not a port change.
+
+## Follow-ups (non-blocking, from external implementation review — 100/100)
+
+- **Live `agent_end` dispatch confirm:** the ledger/cap handler registration and
+  the event shapes are pinned by unit tests, but a live interactive boot (one
+  `/cost`, one capped run) would close the last integration gap. Blocked in this
+  sandbox by no TTY / no provider key; run `axiom`, then `/cost` to confirm.
+- **Lifetime `/cost` is an O(n) session-file scan**; fine for interactive use,
+  add a cache only if the ledger lands on an autonomous path.
