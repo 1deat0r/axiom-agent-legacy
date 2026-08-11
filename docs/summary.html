@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>axiom-agent restart on prime-agent v0.7.2 — summary</title>
+<style>
+:root { --accent:#0a7d5c; --ink:#1b1f23; --dim:#5a6470; --line:#e2e6ea; --bg:#fbfcfd; }
+* { box-sizing:border-box; }
+body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+        color:var(--ink); background:var(--bg); line-height:1.5; }
+.wrap { max-width:760px; margin:0 auto; padding:16px; }
+header { border-bottom:3px solid var(--accent); padding:12px 0; margin-bottom:20px; }
+h1 { font-size:1.35rem; margin:0 0 4px; }
+h1 code { color:var(--accent); }
+.meta { font-size:.8rem; color:var(--dim); }
+h2 { font-size:1.05rem; margin:28px 0 8px; color:var(--accent); border-bottom:1px solid var(--line); padding-bottom:4px; }
+h3 { font-size:.95rem; margin:16px 0 6px; }
+p,li { font-size:.92rem; }
+code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.85rem;
+        background:#eef1f4; padding:1px 4px; border-radius:3px; }
+ul { margin:6px 0; padding-left:20px; }
+li { margin:4px 0; }
+.scores { font-family:ui-monospace,monospace; font-size:.85rem; }
+.verdict { font-weight:600; }
+.approve { color:var(--accent); }
+.deny { color:#b3261e; }
+table { border-collapse:collapse; width:100%; font-size:.85rem; margin:8px 0; }
+th,td { border:1px solid var(--line); padding:5px 8px; text-align:left; }
+th { background:#f0f3f5; }
+.final { background:#eefaf5; border:1px solid var(--accent); padding:10px 12px; border-radius:6px; margin-top:8px; }
+@media print { body { background:#fff; } a { color:inherit; } .wrap { max-width:none; } }
+</style>
+</head>
+<body><div class="wrap">
+<header>
+  <h1>axiom-agent &rarr; prime-agent <code>v0.7.2</code> baseline</h1>
+  <div class="meta">Timestamp: 2026-08-12 08:40 (UTC) &middot; Model: Claude Fable 5 (top-level coding agent) &middot; Process: Feature Implementation Loop v2</div>
+</header>
+
+<h2>Goal &amp; assumptions</h2>
+<p>Completely restart <b>axiom-agent</b> on <b>prime-agent v0.7.2</b> (pi's successor, same author) as the new fork baseline; re-port the four axiom capabilities (cost ledger, spend cap, memory tool, profiles); archive the pi line; re-document the rituals.</p>
+<p><b>Success criterion:</b> <code>baseline/prime-v0.7.2</code> = v0.7.2 + axiom layer; <code>npm run check</code> + non-e2e suite green; pi branch &rarr; <code>archive/pi-v0.84.1</code>; docs + default branch updated; summary page from the running log only.</p>
+<ul>
+<li>Restart = new fork branch; old lines archived, never deleted.</li>
+<li>Package names stay upstream; fork identity = repo + <code>axiom</code> bin + docs.</li>
+<li>All four capabilities remain axiom-only on v0.7.2 (<code>/usage</code> is display-only; <code>/goal</code> is a token budget, not a USD cap; no memory tool; no <code>--profile</code>).</li>
+<li>Data cutover: axiom-owned data (ledger.json overrides/cap, memory facts) carries over via <code>AXIOM_HOME</code>; lifetime spend restarts at zero (derived from the new agent dir); pi-era sessions unmigrated. No migration code.</li>
+</ul>
+
+<h2>Plan as executed</h2>
+<ol>
+<li>Repo mechanics &rarr; remotes (<code>upstream</code>=prime-agent, <code>upstream-pi</code>=pi), branch at tag, pi branch renamed to <code>archive/pi-v0.84.1</code>, gh default-branch.</li>
+<li><code>npm install</code> + new floor &rarr; <code>npm run check</code> + coding-agent suite green (modulo sandbox-only daemon EXDEV).</li>
+<li>Port extension sources (&rarr; <code>src/extensions/&#123;ledger,memory,profile&#125;</code>) &rarr; <code>tsgo --noEmit</code> green.</li>
+<li>CLI seams + <code>package.json</code> (name, <code>axiom</code> bin) &rarr; <code>npm run build</code>; <code>axiom --version</code></li>
+<li>Port + new tests (+ persona acceptance re-port) &rarr; <code>vitest --run test/extensions/</code> green.</li>
+<li>Full floor &rarr; <code>./test.sh</code> + <code>npm run check</code> green.</li>
+<li>Docs &rarr; ADR-0015, CONTEXT/SOUL/AGENTS, ports/handoff, docs/agents; vocabulary review.</li>
+<li>Push origin; gh default-branch &rarr; verified via <code>git ls-remote</code>.</li>
+<li><code>summary.html</code> from the running log only.</li>
+</ol>
+
+<h2>Key decisions</h2>
+<ul>
+<li><b>Baseline = prime-agent v0.7.2</b> (ADR-0015), superseding ADR-0013's pi baseline; full ADR history 0001&ndash;0014 carried to the new trunk.</li>
+<li><b>Four capabilities stay axiom-only</b>, re-ported as always-on built-in <code>ExtensionFactory</code>s (<code>axiom-ledger</code> carries ledger + cap, <code>axiom-memory</code>, <code>axiom-profile</code>).</li>
+<li><b>Event swap:</b> v0.7.2 removed <code>agent_settled</code> &rarr; footer status rides <code>agent_end</code>.</li>
+<li><b>Env rename:</b> <code>PI_CODING_AGENT_DIR</code> &rarr; <code>PRIME_AGENT_CODING_AGENT_DIR</code>; <code>--profile</code> pre-scan sets <code>AXIOM_HOME</code> + <code>ENV_AGENT_DIR</code> before config; pinned by <code>profile-boot.test.ts</code>.</li>
+<li><b>Ledger adapted</b> to v0.7.2 <code>Usage</code>: no <code>cacheWrite1h</code>; cacheWrite at its own rate; usage on assistant messages only (toolResult/summary no longer carry usage).</li>
+<li><b>Always-on extensions &rarr; sessions process-local</b> (baseline daemon-client off) — documented fork tradeoff.</li>
+<li><b>Data cutover:</b> axiom config/memory carry over; lifetime resets to zero; no migration code.</li>
+</ul>
+
+<h2>Verification evidence</h2>
+<h3>Green (re-verified by the external reviewer)</h3>
+<ul>
+<li><code>tsgo --noEmit</code>, <code>npm run check</code> (biome + installer + browser-smoke), <code>npm run build</code>.</li>
+<li><code>axiom --version</code> &rarr; 0.7.2; <code>axiom --help</code> lists <code>--profile</code>.</li>
+<li><b>136 tests:</b> <code>test/extensions/</code> 6 files / 128 tests + <code>test/acceptance/</code> 8 persona journeys, all green.</li>
+<li>Two new pinning tests <b>mutation-proved</b> to fail without the behavior: <code>ledger-session-format.test.ts</code> (real v0.7.2 session file &times; ledger) and <code>profile-boot.test.ts</code> (pre-scan + env-name rename).</li>
+</ul>
+<h3>Known-fails (sandbox-environment only)</h3>
+<ul>
+<li><code>4603</code>/<code>4685</code> (13 tests): deterministic <code>EXDEV</code> hard-linking <code>/usr/bin/node</code> across btrfs subvolumes; no writable same-subvolume dir in this sandbox. Pass on normal filesystems / upstream CI.</li>
+<li><code>4600</code>/<code>4606</code>/<code>daemon-supervisor-process</code>: pass in isolation, flicker under full-suite parallel load.</li>
+<li>Zero baseline defects; <code>test.sh</code> now scrubs <code>PRIME_AGENT_INTERNAL_*</code> + <code>RLM_*</code> env so the suite runs neutral.</li>
+</ul>
+
+<h2>Review history</h2>
+<table>
+<tr><th>Round</th><th>Stage</th><th class="scores">Scores (C/F/T/R/Cl)</th><th>Verdict</th></tr>
+<tr><td>Plan r1</td><td>external</td><td class="scores">4/5/4/4/4 = 84</td><td class="deny verdict">DENIED</td></tr>
+<tr><td>Plan r2</td><td>external</td><td class="scores">5/5/5/5/4 = 96</td><td class="approve verdict">APPROVED</td></tr>
+<tr><td>Impl r1</td><td>external</td><td class="scores">5/5/5/5/5 = 100</td><td class="approve verdict">APPROVED</td></tr>
+</table>
+<p><b>Plan r1 denied</b> &mdash; fixed: (1) data-cutover disposition stated (carry axiom data, lifetime resets to zero); (2) env rename named + pinned by <code>profile-boot.test.ts</code>; (3) event swap pinned (harness dispatches <code>agent_end</code>); minor: branch-rename remote sequence + test.sh merge semantics.</p>
+<p><b>Plan r2 approved 96</b> &mdash; non-blocking (refresh stale <code>PI_CODING_AGENT_DIR</code> comments; test.sh merge line) folded into the port.</p>
+<p><b>Impl r1 approved 100</b> &mdash; every plan item mapped to diff evidence; mutation-proved tests; repo mechanics exactly as planned. Non-blocking follow-ups recorded in the handoff (live <code>agent_end</code> dispatch confirm; <code>/cost</code> O(n) scan).</p>
+
+<h2>Final state</h2>
+<div class="final">
+<p>Restart complete. The fork trunk is <code>baseline/prime-v0.7.2</code> = prime-agent v0.7.2 + the four axiom capabilities re-ported and pinned by 136 green tests; the pi line is preserved on <code>archive/pi-v0.84.1</code>; the GitHub default branch is the restart line; ADR-0015 + ritual docs committed; pushed to origin.</p>
+</div>
+<p class="meta" style="margin-top:20px">Built only from the running log &middot; one accent color &middot; monospace for code &middot; self-contained (no external fonts/CDN/JS) &middot; print-friendly.</p>
+</div></body></html>
