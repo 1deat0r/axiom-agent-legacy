@@ -95,6 +95,10 @@ functional gain.
 
 ## Gotchas
 
+- **gh repo default fixed:** `gh repo set-default mustbearnold/axiom-agent`
+  + branch upstream tracking set — gh now resolves to the axiom repo, not
+  pi's (the `upstream` remote was winning the fallback). Note in
+  `docs/agents/issue-tracker.md`; re-run set-default in fresh checkouts.
 - `./test.sh` is the suite gate (isolated HOME, no keys). Never `npm test`
   directly (e2e).
 - The ai model data is generated; never hand-edit `models.generated.ts`.

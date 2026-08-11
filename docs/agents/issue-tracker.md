@@ -2,6 +2,14 @@
 
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 
+> **gh repo default (2026-08-11):** this repo has an `upstream` remote
+> (earendil-works/pi, ADR-0013). `gh` resolves the repo from the branch's
+> upstream, then falls back to remotes — a branch with no tracking upstream
+> resolves to `upstream` (the pi repo). Fixed in this checkout via
+> `gh repo set-default mustbearnold/axiom-agent` and per-branch upstream
+> tracking. If a fresh checkout misbehaves, re-run
+> `gh repo set-default mustbearnold/axiom-agent` (or pass `-R` explicitly).
+
 ## Conventions
 
 - **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
