@@ -419,7 +419,7 @@ describe("createLedgerExtension", () => {
 		const { ctx, notified } = fakeCtx(entries);
 		const deps = {
 			overridesPath: "/tmp/ledger.json",
-			loadOverrides: async () => new Map<string, OverrideRates>(),
+			loadConfig: async () => ({ overrides: new Map<string, OverrideRates>(), maxRunCostUsd: undefined }),
 			listAllSessions: async () => [{ path: "/tmp/s1.jsonl" }, { path: "/tmp/s2.jsonl" }],
 			loadEntries: () => entries,
 		};
@@ -436,7 +436,7 @@ describe("createLedgerExtension", () => {
 		const { ctx, statuses } = fakeCtx(entries);
 		const deps = {
 			overridesPath: "/tmp/ledger.json",
-			loadOverrides: async () => new Map<string, OverrideRates>(),
+			loadConfig: async () => ({ overrides: new Map<string, OverrideRates>(), maxRunCostUsd: undefined }),
 			listAllSessions: async () => [],
 			loadEntries: () => [],
 		};
@@ -450,7 +450,7 @@ describe("defaultLedgerDeps", () => {
 	it("points at the axiom ledger file and real stores", () => {
 		const deps = defaultLedgerDeps();
 		expect(deps.overridesPath.endsWith(".axiom/ledger.json")).toBe(true);
-		expect(typeof deps.loadOverrides).toBe("function");
+		expect(typeof deps.loadConfig).toBe("function");
 		expect(typeof deps.listAllSessions).toBe("function");
 		expect(typeof deps.loadEntries).toBe("function");
 	});
@@ -463,7 +463,8 @@ describe("defaultLedgerDeps", () => {
 				path,
 				JSON.stringify({ overrides: { "p/m": { input: 1, output: 2, cacheRead: 0.5, cacheWrite: 1 } } }),
 			);
-			const map = await defaultLedgerDeps().loadOverrides(path);
+			const config = await defaultLedgerDeps().loadConfig(path);
+			const map = config.overrides;
 			expect(map.get("p/m")).toEqual({ input: 1, output: 2, cacheRead: 0.5, cacheWrite: 1 });
 		} finally {
 			await rm(dir, { recursive: true, force: true });

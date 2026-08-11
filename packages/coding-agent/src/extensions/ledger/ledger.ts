@@ -8,7 +8,7 @@
  * recorded tokens, and says so when a model has no catalog price.
  */
 
-import type { Usage } from "@earendil-works/pi-ai";
+import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
 import type { SessionEntry } from "../../core/session-manager.ts";
 
 /** Per-1M-token USD rates for one model (the override shape). */
@@ -181,6 +181,30 @@ export function computeLifetime(
 		all.push(...aggregateUsage(bundle.entries));
 	}
 	return applyOverrides(mergeBuckets(all), overrides);
+}
+
+/**
+ * The spend-cap decision (ADR-0011): whether the next LLM call must be
+ * blocked. `undefined` cap never blocks; `0` (or negative) disables LLM
+ * calls entirely; a positive cap blocks once the run's recorded spend
+ * reaches it. A zero-cost run never trips a positive cap — only
+ * usage-reporting providers can trip it.
+ */
+export function shouldBlockRun(capUsd: number | undefined, runCostUsd: number): boolean {
+	if (capUsd === undefined) return false;
+	if (capUsd <= 0) return true;
+	return runCostUsd >= capUsd;
+}
+
+/** One assistant response as a ledger bucket (the per-run accumulation unit). */
+export function bucketFromAssistantMessage(
+	message: Pick<AssistantMessage, "provider" | "model" | "responseModel" | "usage">,
+): CostBucket {
+	return {
+		key: `${message.provider}/${message.responseModel ?? message.model}`,
+		usage: message.usage,
+		recordedCost: message.usage.cost.total,
+	};
 }
 
 /**

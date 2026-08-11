@@ -1,9 +1,13 @@
 /**
- * The axiom ledger extension (port #1, ADR-0010 on the pi baseline).
+ * The axiom ledger extension (ports #1 and #2, ADR-0010/0011 on the pi
+ * baseline).
  *
  * Surfaces the pure ledger core on the extension API:
  *  - `/cost` — session + lifetime spend, override repricing, honest notes.
  *  - `agent_settled` — the footer status shows the live session cost.
+ *  - the spend cap — run spend accumulates per turn; `turn_start` (which
+ *    fires before every provider call) aborts the run once the cap is hit,
+ *    so the loop stops before the next LLM call.
  *
  * Dependencies are injectable for tests; defaults read pi's real stores.
  */
@@ -20,16 +24,20 @@ import {
 import {
 	aggregateUsage,
 	applyOverrides,
+	bucketFromAssistantMessage,
 	buildCostReport,
+	type CostBucket,
 	computeLifetime,
 	formatUsd,
-	type OverrideRates,
+	mergeBuckets,
+	shouldBlockRun,
 } from "./ledger.ts";
-import { loadOverrides as defaultLoadOverrides } from "./storage.ts";
+import type { LedgerConfig } from "./storage.ts";
+import { loadLedgerConfig as defaultLoadConfig } from "./storage.ts";
 
 export interface LedgerDeps {
 	overridesPath: string;
-	loadOverrides(path: string): Promise<Map<string, OverrideRates>>;
+	loadConfig(path: string): Promise<LedgerConfig>;
 	listAllSessions(): Promise<Pick<SessionInfo, "path">[]>;
 	loadEntries(path: string): SessionEntry[];
 }
@@ -45,7 +53,7 @@ function loadSessionEntries(path: string): SessionEntry[] {
 export function defaultLedgerDeps(): LedgerDeps {
 	return {
 		overridesPath: DEFAULT_OVERRIDES_PATH,
-		loadOverrides: defaultLoadOverrides,
+		loadConfig: defaultLoadConfig,
 		listAllSessions: () => SessionManager.listAll(),
 		loadEntries: (path) => loadSessionEntries(path),
 	};
@@ -55,7 +63,7 @@ export function createLedgerExtension(deps?: Partial<LedgerDeps>): (pi: Extensio
 	const defaults = defaultLedgerDeps();
 	const resolved: LedgerDeps = {
 		overridesPath: deps?.overridesPath ?? defaults.overridesPath,
-		loadOverrides: deps?.loadOverrides ?? defaults.loadOverrides,
+		loadConfig: deps?.loadConfig ?? defaults.loadConfig,
 		listAllSessions: deps?.listAllSessions ?? defaults.listAllSessions,
 		loadEntries: deps?.loadEntries ?? defaults.loadEntries,
 	};
@@ -63,7 +71,7 @@ export function createLedgerExtension(deps?: Partial<LedgerDeps>): (pi: Extensio
 		pi.registerCommand("cost", {
 			description: "Show session and lifetime spend",
 			handler: async (_args, ctx) => {
-				const overrides = await resolved.loadOverrides(resolved.overridesPath);
+				const { overrides } = await resolved.loadConfig(resolved.overridesPath);
 				const session = applyOverrides(aggregateUsage(ctx.sessionManager.getEntries()), overrides);
 				const sessions = await resolved.listAllSessions();
 				const bundles = sessions.map((s) => ({ path: s.path, entries: resolved.loadEntries(s.path) }));
@@ -73,9 +81,38 @@ export function createLedgerExtension(deps?: Partial<LedgerDeps>): (pi: Extensio
 			},
 		});
 		pi.on("agent_settled", async (_event, ctx) => {
-			const overrides = await resolved.loadOverrides(resolved.overridesPath);
+			const { overrides } = await resolved.loadConfig(resolved.overridesPath);
 			const { totals } = applyOverrides(aggregateUsage(ctx.sessionManager.getEntries()), overrides);
 			ctx.ui.setStatus("axiom.cost", formatUsd(totals.cost));
+		});
+
+		// The spend cap (ADR-0011): per-run spend accumulates from turn_end
+		// (each assistant response carries its usage); turn_start fires
+		// before every provider call, so aborting there stops the loop
+		// before the next LLM call.
+		let runBuckets: CostBucket[] = [];
+		pi.on("agent_start", () => {
+			runBuckets = [];
+		});
+		pi.on("turn_end", (event, _ctx) => {
+			const message = event.message;
+			if (message.role !== "assistant" || !message.usage) return;
+			runBuckets = mergeBuckets([...runBuckets, bucketFromAssistantMessage(message)]);
+		});
+		pi.on("turn_start", async (_event, ctx) => {
+			const config = await resolved.loadConfig(resolved.overridesPath);
+			if (config.maxRunCostUsd === undefined) return;
+			const { totals } = applyOverrides(mergeBuckets(runBuckets), config.overrides);
+			if (!shouldBlockRun(config.maxRunCostUsd, totals.cost)) return;
+			if (config.maxRunCostUsd <= 0) {
+				ctx.ui.notify("cost cap is 0 — LLM calls disabled", "warning");
+			} else {
+				ctx.ui.notify(
+					`cost cap ${formatUsd(config.maxRunCostUsd)} reached (${formatUsd(totals.cost)}) — run stopped`,
+					"warning",
+				);
+			}
+			ctx.abort();
 		});
 	};
 }
