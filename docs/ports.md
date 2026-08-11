@@ -11,7 +11,7 @@ covers them.
 | # | Capability | Source spec | What pi lacks | Notes |
 |---|---|---|---|---|
 | 1 | **Cost ledger** — per-session + lifetime spend, catalog pricing table with entry overrides, never-invented-spend, `/cost` | ADR-0010 | pi displays usage totals but has no restart-surviving session ledger or catalog-table pricing with overrides | **SHIPPED** (2026-08-11, eef66f0): `axiom-ledger` extension, `/cost` + footer status, overrides via `~/.axiom/ledger.json`; 35 tests, 100% coverage |
-| 2 | **Spend cap** — `maxRunCostUsd`, hard pre-call guard, `finishReason: 'cost_limit'` | ADR-0011 | no spend cap at all | touches the agent loop; the highest-stakes port; the per-project envelope builds on it (ADR-0014) |
+| 2 | **Spend cap** — `maxRunCostUsd`, hard pre-call guard, `finishReason: 'cost_limit'` | ADR-0011 | no spend cap at all | **SHIPPED** (2026-08-11, b355ca5): per-run guard via turn_start + abort (pi has no `cost_limit` finish reason — the run stops as aborted with a warning); cap rides `~/.axiom/ledger.json`; per-project envelope builds on it (ADR-0014) |
 | 7 | **Memory tool** — per-project memory store with eviction (pi has no memory tool at all) | ADR-0008 + from-scratch `core/memory.ts` | no memory tool | the "asks twice" fix; scopes per project (ADR-0014) |
 
 ## Profiles + projects (ports 8-9) — August (ADR-0014)

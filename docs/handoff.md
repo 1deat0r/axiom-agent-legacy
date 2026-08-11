@@ -154,3 +154,30 @@ Owner said "go" on the ADR-0014 spine. Port #1 shipped on
   locks/browser-smoke).
 - **Next**: port #2 (spend cap, ADR-0011) reads the ledger's totals; then
   the memory tool (#7), profiles (#8), projects + root guard (#9).
+
+---
+
+## Addendum: port #2 — the spend cap (2026-08-11)
+
+Continuing the ADR-0014 spine; shipped on `baseline/pi-v0.84.1`
+(commit b355ca579):
+
+- **What**: the axiom-ledger extension now guards every run. `turn_end`
+  accumulates each assistant response's usage into per-run buckets; the
+  `turn_start` handler (which pi fires before every provider call) checks
+  the run spend against the cap and aborts the run when hit — the loop
+  stops before the next LLM call.
+- **Config**: `~/.axiom/ledger.json` gains `maxRunCostUsd` (absent = no
+  cap, `0` = LLM calls disabled, positive = block once run spend reaches
+  it). Override repricing from port #1 applies to the decision; zero-cost
+  runs never trip a positive cap.
+- **Honest deviation**: pi has no `finishReason: 'cost_limit'` wire
+  concept (that was from-scratch axiom's own loop). The cap stops the run
+  as *aborted* with a warning toast (`cost cap $0.50 reached ($0.50) —
+  run stopped`). Recorded in the commit + CONTEXT.md note stands.
+- **Seam learned**: pi fires `turn_start` before every provider call and
+  extension `ctx.abort()` reaches the session's abort controller — the
+  hard pre-call guard needs no core edits.
+- **Verified**: 17 new tests (52 total in the ledger suite), 100%
+  coverage on all four ledger files, full suite + `npm run check` green.
+- **Next**: memory tool (#7), profiles (#8), projects + root guard (#9).
