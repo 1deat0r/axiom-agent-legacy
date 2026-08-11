@@ -127,3 +127,30 @@ Owner brainstorm converged and approved (ADR-0014, this session):
   containerization path; pi's cwd-scoped sessions/skills.
 - Recorded: ADR-0014, ports.md expanded, CONTEXT.md vocabulary (Profile,
   Project, Root guard, Drift).
+
+---
+
+## Addendum: port #1 — the cost ledger (2026-08-11)
+
+Owner said "go" on the ADR-0014 spine. Port #1 shipped on
+`baseline/pi-v0.84.1` (commit eef66f038):
+
+- **What**: built-in `axiom-ledger` extension. `/cost` notifies session +
+  lifetime spend; `agent_settled` sets a live footer status (`axiom.cost`).
+- **How**: the pure core (`extensions/ledger/ledger.ts`) derives spend from
+  pi's recorded session entries (the stored session is the truth), applies
+  the axiom precedence — override rates from `~/.axiom/ledger.json`, else
+  the catalog cost pi recorded at request time — and never invents spend:
+  notes surface repriced models and zero-priced models without catalog
+  rates. `priceUsage` mirrors pi's `calculateCost` semantics (per-1M math,
+  1h cache writes at 2x input). `formatUsd` keeps significant digits below
+  $0.0001.
+- **Seam learned**: pi's extension API (`registerCommand`, `on`, `ui.notify`/
+  `setStatus`, `builtInExtensions` in `src/extensions/index.ts`) is the
+  clean port seam — no core edits needed for the ledger. `SessionManager.
+  listAll()` + `loadEntriesFromFile()` give the lifetime scan.
+- **Verified**: 35 tests, 100% coverage on all three new files, full suite
+  green (1936 coding-agent tests), `npm run check` green (biome/tsgo/
+  locks/browser-smoke).
+- **Next**: port #2 (spend cap, ADR-0011) reads the ledger's totals; then
+  the memory tool (#7), profiles (#8), projects + root guard (#9).
