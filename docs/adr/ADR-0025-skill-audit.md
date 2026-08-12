@@ -1,13 +1,13 @@
-# ADR-0021: Skill security audit (skills_audit / skills_guard)
+# ADR-0025: Skill security audit (skills_audit / skills_guard)
 
 **Status:** accepted
 **Date:** 2026-08-12
-**Extends:** ADR-0020 (skill capture, procedural-memory skills)
+**Extends:** ADR-0024 (skill capture, procedural-memory skills)
 **Implements:** the AST-level security audit half of the "skills that learn procedural memory" capability
 
 ## Context
 
-ADR-0020 added the *capture* half of procedural-memory skills: turning a
+ADR-0024 added the *capture* half of procedural-memory skills: turning a
 flagged-reusable task into a validated SKILL.md. Once skills are captured and
 shared (and, later, installed from a hub), Axiom must keep its safety ethic
 intact when *running a skill that did not come from a trusted first-party

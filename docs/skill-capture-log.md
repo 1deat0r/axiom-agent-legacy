@@ -30,7 +30,7 @@ skills hub/sync (agentskills.io) are LATER steps of the feature. "Flag as reusab
 - `packages/coding-agent/src/cli/skill-capture-command.ts` — parseSkillCaptureArgs (pure) + handleSkillCaptureCommand (reads steps JSON/JSONL, builds provenance, writes, verifies, prints offer).
 - `packages/coding-agent/src/main.ts` — wire `handleSkillCaptureCommand` (return-early, like gateway).
 - `packages/coding-agent/test/skill-capture.test.ts` — vitest coverage.
-- `docs/adr/ADR-0020-skill-capture.md` — ADR for the capability.
+- `docs/adr/ADR-0024-skill-capture.md` — ADR for the capability.
 - `docs/handoff.md` — autonomous-run handoff (what/verified/how).
 - `CONTEXT.md` — add vocabulary term.
 
@@ -88,9 +88,9 @@ Total: 100/100 — APPROVED. Proceeding to implementation.
 - [x] 24/24 skill-capture tests green; related suites (skills/builtin-skills/frontmatter/refinement/sdk-skills) 148/148 green.
 - [x] Full `./test.sh`: only pre-existing sandbox known-fails (4603/4685 EXDEV + daemon-serialized-refine, identical on pristine baseline) + one ipython-bootstrap timing flake (passes on re-run + on baseline). No new failures from this change.
 - [x] biome clean, tsgo clean. End-to-end demo captured a real, verifiable skill.
-- [x] Docs: ADR-0020, CONTEXT.md term, handoff-skill-capture.md (named, per convention; shared handoff.md left untouched).
+- [x] Docs: ADR-0024, CONTEXT.md term, handoff-skill-capture.md (named, per convention; shared handoff.md left untouched).
 ## 5. Self-review of implementation (re-read diff cold)
-- Plan items all present: core module, CLI+main wiring, tests, ADR-0020, CONTEXT term, handoff (named).
+- Plan items all present: core module, CLI+main wiring, tests, ADR-0024, CONTEXT term, handoff (named).
 - Tests: 25/25 pass; new tests assert real behavior (zero-diagnostics via real loader; no-overwrite; steps-edge).
 - No TODOs/debug prints (io.log is intentional). No `any`. NodeNext `.js` imports.
 - Fix found: `capture.steps.map` threw on an omitted steps list — added `steps ?? []` guard + test (commit 43dc36b03).
@@ -130,10 +130,10 @@ Total 100/100 — approved.
 - [x] audit + capture tests 37/37 green; biome clean; tsgo clean.
 - [x] End-to-end: evil→BLOCK, benign→ALLOW, real websearch skill→BLOCK (network egress, conservative; documented).
 
-## 9. Step 3 — automatic flagging (ADR-0022)
+## 9. Step 3 — automatic flagging (ADR-0026)
 
 ### Plan / implement
-- Goal: after a completed task, decide automatically whether it is reusable and only then capture it through the ADR-0020 pipeline.
+- Goal: after a completed task, decide automatically whether it is reusable and only then capture it through the ADR-0024 pipeline.
 - [x] evaluate.ts — evaluateTaskForCapture(trace): deterministic, tunable (complexity capped at 6 steps, reusable-signal +0.3, one-off -0.35, completion ±, thin penalty), threshold 0.55; exported constants/signals.
 - [x] cli skill-capture-auto <trace.json> [--out] [--force] [--json]; provenance source "auto"; reuses capture+verify; deriveName moved into core/document.ts (removed core->cli layering).
 - [x] test/skill-capture-evaluate.test.ts — 11 tests (heuristic, boundaries, parse, readTrace, command capture/skip/force).
@@ -148,7 +148,7 @@ Total 100/100 — approved.
 - [x] Full test.sh: only pre-existing sandbox known-fails; no new failures.
 - [x] End-to-end: 6-step reusable→flagged+captured; thin one-off→skipped w/ reasons; --force→override; provenance source "auto".
 
-## 10. Step 4 — fully-unattended runtime hook (ADR-0023)
+## 10. Step 4 — fully-unattended runtime hook (ADR-0027)
 
 ### Plan / implement
 - Goal: wire evaluateTaskForCapture at the end of a session so reusable tasks are auto-captured/offered with no caller.

@@ -1,13 +1,13 @@
-# ADR-0022: Automatic flagging for skill capture
+# ADR-0026: Automatic flagging for skill capture
 
 **Status:** accepted
 **Date:** 2026-08-12
-**Extends:** ADR-0020 (skill capture) + ADR-0021 (skill security audit)
+**Extends:** ADR-0024 (skill capture) + ADR-0025 (skill security audit)
 **Implements:** step 3 (automatic flagging) of the procedural-memory skills feature
 
 ## Context
 
-ADR-0020 captures a *flagged-reusable* task into a skill, but the flag was
+ADR-0024 captures a *flagged-reusable* task into a skill, but the flag was
 explicit — a caller had to say "capture this." The feature's promise is that
 Axiom turns hard-won task sequences into skills on its own. This ADR adds the
 judgment: after a task completes, decide whether it is reusable enough to
@@ -27,7 +27,7 @@ An **automatic flagging step** layered on the capture pipeline:
   exported constants so operator feedback can tune sensitivity without refactor.
 - **`axiom skill-capture-auto <trace.json> [--out] [--force] [--json]`** — CLI
   that reads a trace, runs the heuristic, and only when flagged (or with
-  `--force`) builds/persists/verifies/offers the skill via the ADR-0020
+  `--force`) builds/persists/verifies/offers the skill via the ADR-0024
   pipeline. Un-flagged tasks report the reasons and suggest `--force`.
 - **Provenance** is set to `source: "auto"` so a captured skill records that it
   came from automatic flagging rather than a manual request.

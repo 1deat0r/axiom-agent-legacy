@@ -82,18 +82,18 @@ leaves the project root, returning a plain-English reason surfaced to the
 model (ADR-0018). Freeform bash/ipython confinement is the OS-sandbox tier,
 recorded as a follow-up.
 **Skill capture**:
-The procedural-memory skill pipeline (ADR-0020, step 1): turning a completed
+The procedural-memory skill pipeline (ADR-0024, step 1): turning a completed
 task that was flagged reusable into a durable `SKILL.md` that bundles the task
 prompt + its ordered steps + provenance (`metadata.provenance`), verified to
 load via the real skill loader before it is offered. The agent supplies the
 steps; capture only materializes a skill directory. Automatic flagging
-(ADR-0022) scores a completed task trace (`evaluateTaskForCapture`) and
-captures only when reusable; a builtin `agent_end` extension (ADR-0023) runs
+(ADR-0026) scores a completed task trace (`evaluateTaskForCapture`) and
+captures only when reusable; a builtin `agent_end` extension (ADR-0027) runs
 it unattended (inert unless AXIOM_SKILL_CAPTURE_AUTO=1). Hub/sync over
 agentskills.io remains.
 
 **Skill audit**:
-The security half (ADR-0021, step 2): statically inspecting a skill directory
+The security half (ADR-0025, step 2): statically inspecting a skill directory
 before a third-party skill is run/installed. Python is parsed at the AST level
 (subprocess `python3` `ast`), JS/shell/markdown structurally; a conservative
 verdict (BLOCK / WARN / ALLOW) is derived. Bundled first-party skills are

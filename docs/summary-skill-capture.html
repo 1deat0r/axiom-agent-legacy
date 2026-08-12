@@ -41,7 +41,7 @@
 <main>
   <header>
     <h1>Skills that learn procedural memory — steps 1–4: capture + security audit + auto-flag + unattended hook</h1>
-    <div class="meta">Timestamp: 2026-08-12 &nbsp;·&nbsp; Model: Axiom coding-agent (feat/skill-capture worktree) &nbsp;·&nbsp; ADR-0020</div>
+    <div class="meta">Timestamp: 2026-08-12 &nbsp;·&nbsp; Model: Axiom coding-agent (feat/skill-capture worktree) &nbsp;·&nbsp; ADR-0024</div>
   </header>
 
   <h2>Goal &amp; assumptions</h2>
@@ -60,7 +60,7 @@
   <ul>
     <li>Step 1 (capture): types + <code>document.ts</code> + <code>capture.ts</code> (no-overwrite, real-loader verify) + CLI + main wiring &rarr; vitest</li>
     <li>Step 2 (audit): <code>python-ast.ts</code> + <code>rules.ts</code> + <code>audit.ts</code> + CLI + main wiring &rarr; vitest</li>
-    <li>Docs: ADR-0020/0021, CONTEXT terms, named handoff &rarr; full <code>test.sh</code></li>
+    <li>Docs: ADR-0024/0021, CONTEXT terms, named handoff &rarr; full <code>test.sh</code></li>
   </ul>
 
   <h2>Key decisions</h2>
@@ -74,7 +74,7 @@
     </ul>
   </div>
 
-  <h2>Step 4 &mdash; unattended runtime hook (ADR-0023)</h2>
+  <h2>Step 4 &mdash; unattended runtime hook (ADR-0027)</h2>
   <div class="card">
     <ul>
       <li>Builtin <code>agent_end</code> extension: <code>buildTaskTraceFromMessages</code> (prompt + tool-call steps + completion) &rarr; <code>evaluateTaskForCapture</code> &rarr; materialize + verify + offer, no caller.</li>
@@ -83,7 +83,7 @@
     </ul>
   </div>
 
-  <h2>Step 3 &mdash; automatic flagging (ADR-0022)</h2>
+  <h2>Step 3 &mdash; automatic flagging (ADR-0026)</h2>
   <div class="card">
     <ul>
       <li><code>evaluateTaskForCapture(trace)</code> &mdash; deterministic, tunable heuristic (complexity + reusable/one-off signals + completion), exported weights/signals/threshold.</li>
@@ -92,7 +92,7 @@
     </ul>
   </div>
 
-  <h2>Step 2 &mdash; security audit (ADR-0021)</h2>
+  <h2>Step 2 &mdash; security audit (ADR-0025)</h2>
   <div class="card">
     <ul>
       <li><strong>Real Python AST</strong> via subprocess <code>python3</code> + <code>ast</code> walk; graceful structural fallback with a note when python is absent.</li>
@@ -143,7 +143,7 @@
       <li><code>src/extensions/skill-capture/index.ts</code> (builtin agent_end hook)</li>
       <li><code>src/cli/skill-capture-command.ts</code>, <code>src/cli/skill-audit-command.ts</code> + <code>main.ts</code> wiring</li>
       <li><code>test/skill-capture.test.ts</code> (25) + <code>test/skill-audit.test.ts</code> (12)</li>
-      <li><code>docs/adr/ADR-0020</code>–<code>ADR-0023</code>, CONTEXT terms, <code>handoff-skill-capture.md</code></li>
+      <li><code>docs/adr/ADR-0024</code>–<code>ADR-0027</code>, CONTEXT terms, <code>handoff-skill-capture.md</code></li>
     </ul>
     <p>Branch <code>feat/skill-capture</code> (5 step-1 commits + step-2 commits).</p>
   </div>

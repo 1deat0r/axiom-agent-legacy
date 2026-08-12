@@ -1,4 +1,4 @@
-# ADR-0020: Skill capture (procedural-memory skills, step 1)
+# ADR-0024: Skill capture (procedural-memory skills, step 1)
 
 **Status:** accepted
 **Date:** 2026-08-12

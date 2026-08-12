@@ -5,7 +5,7 @@
 
 ## What was done
 
-Implemented step 1 of the feature (ADR-0020): capturing a completed task that
+Implemented step 1 of the feature (ADR-0024): capturing a completed task that
 is flagged reusable into a validated, provenance-bearing markdown skill that
 bundles the task prompt + ordered steps, persisting it without overwriting
 existing skills, verifying it loads via the real skill loader, and offering the
@@ -21,7 +21,7 @@ result.
   `validateDescription`, `MAX_NAME_LENGTH` (single source of truth) — only
   three `export` additions, no behavior change.
 - `packages/coding-agent/test/skill-capture.test.ts` — 24 vitest tests.
-- `docs/adr/ADR-0020`–`ADR-0023`, `CONTEXT.md`,
+- `docs/adr/ADR-0024`–`ADR-0027`, `CONTEXT.md`,
   `docs/handoff-skill-capture.md`, `docs/skill-capture-log.md`.
 
 ## What was verified, and how
@@ -40,7 +40,7 @@ result.
 - **End-to-end** real run: captured `fix-regression-test-first` SKILL.md,
   verified 0 loader diagnostics, printed the offer.
 
-## Step 4 — Fully-unattended runtime hook (ADR-0023)
+## Step 4 — Fully-unattended runtime hook (ADR-0027)
 
 Closed the loop: the agent captures/offers reusable tasks on its own at
 `agent_end`, no caller required.
@@ -55,7 +55,7 @@ Closed the loop: the agent captures/offers reusable tasks on its own at
   extension = 53/53 green; biome + tsgo clean; full test.sh only pre-existing
   sandbox known-fails.
 
-## Step 3 — Automatic flagging (ADR-0022)
+## Step 3 — Automatic flagging (ADR-0026)
 
 Closed the "agent flags a task as reusable" loop: a completed task trace is
 scored and only captured when reusable.
@@ -64,7 +64,7 @@ scored and only captured when reusable.
   (complexity + reusable/one-off signals + completion), tunable exported
   weights/signals/threshold.
 - `axiom skill-capture-auto <trace.json> [--out] [--force] [--json]` CLI +
-  `main.ts` wiring; reused the ADR-0020 capture+verify pipeline; provenance
+  `main.ts` wiring; reused the ADR-0024 capture+verify pipeline; provenance
   `source: "auto"`.
 - `test/skill-capture-evaluate.test.ts` — 11 tests; capture+evaluate+audit
   suites 48/48 green; biome + tsgo clean; full test.sh only pre-existing
@@ -72,7 +72,7 @@ scored and only captured when reusable.
 - End-to-end: reusable 6-step task flagged+captured; thin one-off skipped with
   reasons; `--force` override works.
 
-## Step 2 — AST-level security audit (ADR-0021)
+## Step 2 — AST-level security audit (ADR-0025)
 
 Added the security half (mirrors Hermes `skills_ast_audit` + `skills_guard`):
 statically screen a skill before running/installing a third-party one.
