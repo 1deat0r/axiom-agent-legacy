@@ -158,16 +158,21 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 	const completion = new CliCompletionRunner({ projectRoot });
 	const transport = buildTransport(opts, root);
 	const config = loadGatewayConfig(root);
+	// One shared ledger records every outbound delivery — interactive replies,
+	// /announce fan-out, and scheduled cron-run deliveries alike (ADR-0022).
+	const ledger = new FileDeliveryLedger(join(root, "gateway", "ledger.jsonl"));
 	// Profile-scoped cron store: reuse the baseline AgentCronJobStore format at
 	// the profile home (default profile = the axiom root). The manager's
 	// scheduler fires /cron jobs and delivers their output to the job's channel
-	// via the same transport used for interactive replies.
+	// via the same transport used for interactive replies, recorded in `ledger`.
 	const cron = new GatewayCron({
 		storePath: getCronJobsPath(projectHome),
 		completion,
 		transport,
 		profile,
 		projectHome,
+		ledger,
+		transportName: opts.transport,
 	});
 	const gateway = new Gateway({
 		transport,
@@ -178,7 +183,7 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 		projectHome,
 		senders: config.senders,
 		cron,
-		ledger: new FileDeliveryLedger(join(root, "gateway", "ledger.jsonl")),
+		ledger,
 		transportName: opts.transport,
 	});
 	await gateway.start();

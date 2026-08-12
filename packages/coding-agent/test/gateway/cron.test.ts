@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { AgentCronJob } from "../../src/core/cron-jobs.js";
 import { sessionIdForChannel } from "../../src/gateway/completion.js";
 import { GatewayCron } from "../../src/gateway/cron.js";
+import { MemoryDeliveryLedger } from "../../src/gateway/delivery-ledger.js";
 import type { CompletionRunner, GatewayTransport } from "../../src/gateway/types.js";
 
 /** Records completions and sends; configured per test for error paths. */
@@ -168,6 +169,66 @@ describe("gateway cron manager", () => {
 			const stored = cron.listJobs().find((j) => j.id === added.id);
 			expect(stored?.status).toBe("completed");
 			expect(stored?.runCount).toBe(1);
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("gateway cron delivery records to the ledger (ADR-0022)", () => {
+	it("records a scheduled-run delivery, labelled with the transport name", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-cron-lg-"));
+		try {
+			const h = harness();
+			const ledger = new MemoryDeliveryLedger();
+			const cron = new GatewayCron({
+				storePath: join(dir, "cron-jobs.json"),
+				completion: h.completion,
+				transport: h.transport,
+				profile: "default",
+				projectHome: dir,
+				ledger,
+				transportName: "slack",
+			});
+			await cron.runJob(job({ channelId: "C-100" }));
+			expect(h.sends).toHaveLength(1);
+			expect(h.sends[0]!.channelId).toBe("C-100");
+			const entries = ledger.recent(10);
+			expect(entries).toHaveLength(1);
+			expect(entries[0]!.channel).toBe("C-100");
+			expect(entries[0]!.transport).toBe("slack");
+			expect(entries[0]!.ok).toBe(true);
+			expect(entries[0]!.chars).toBeGreaterThan(0);
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("records ok:false when the scheduled delivery send fails", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-cron-lg-"));
+		try {
+			const h = harness();
+			const transport: GatewayTransport = {
+				...h.transport,
+				async send() {
+					throw new Error("channel archived");
+				},
+			};
+			const ledger = new MemoryDeliveryLedger();
+			const cron = new GatewayCron({
+				storePath: join(dir, "cron-jobs.json"),
+				completion: h.completion,
+				transport,
+				profile: "default",
+				projectHome: dir,
+				ledger,
+				transportName: "discord",
+			});
+			await cron.runJob(job({ channelId: "C-9" }));
+			const entries = ledger.recent(10);
+			expect(entries).toHaveLength(1);
+			expect(entries[0]!.ok).toBe(false);
+			expect(entries[0]!.error).toContain("channel archived");
 		} finally {
 			await rm(dir, { recursive: true, force: true });
 		}
