@@ -232,10 +232,10 @@ export function renderMermaidArt(graph: MermaidGraph, options: MermaidArtOptions
 				? "label"
 				: row.includes("edge")
 					? "edge"
-					: row.includes("border")
-						? "border"
-						: row.includes("title")
-							? "title"
+					: row.includes("title")
+						? "title"
+						: row.includes("border")
+							? "border"
 							: "text",
 	);
 	return { lines, roles: roleLines, width: totalWidth, warnings: graph.warnings };
@@ -460,6 +460,16 @@ function drawSubgraphFrame(
 	while (grid.length < needed) {
 		grid.push(new Array<string>(grid[0]?.length ?? 1).fill(" "));
 		roles.push(new Array<ArtRole>(roles[0]?.length ?? 1).fill("text"));
+	}
+	// Grow columns for the right border.
+	const neededCols = maxX + 1;
+	if ((grid[0]?.length ?? 0) < neededCols) {
+		for (const row of grid) {
+			while (row.length < neededCols) row.push(" ");
+		}
+		for (const row of roles) {
+			while (row.length < neededCols) row.push("text");
+		}
 	}
 	const title = sub.title || sub.id;
 	set(minX, topY, "┌", "border", true);
