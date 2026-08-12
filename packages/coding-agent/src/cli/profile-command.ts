@@ -37,9 +37,19 @@ function starterSoul(name: string): string {
  * command must list/validate against the base, not the nested profile home —
  * mirroring the gateway, which reads the base AXIOM_HOME for /profiles.
  */
-function baseHome(home: string): string {
+export function profileBaseHome(home: string): string {
 	const parent = dirname(home);
 	return basename(parent) === "profiles" ? dirname(parent) : home;
+}
+
+/** Sorted profile names under the base home (mirror of listProjectNames). */
+export async function listProfileNames(home: string): Promise<string[]> {
+	const profilesDir = join(home, "profiles");
+	try {
+		return (await readdir(profilesDir)).filter((n) => isValidProfileName(n)).sort();
+	} catch {
+		return [];
+	}
 }
 
 export async function handleProfileCommand(args: string[], io: ProfileCommandIO = {}): Promise<boolean> {
@@ -102,7 +112,7 @@ export async function handleProfileCommand(args: string[], io: ProfileCommandIO 
 	}
 	if (sub === "switch") {
 		const name = args[2] ?? "";
-		const base = baseHome(home);
+		const base = profileBaseHome(home);
 		const profilesDir = join(base, "profiles");
 		let names: string[] = [];
 		try {

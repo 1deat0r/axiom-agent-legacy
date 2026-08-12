@@ -53,8 +53,8 @@ import {
 	launchDaemonUpdateRestartCoordinator,
 	resolveDaemonUpdateRestartSocketPath,
 } from "../../cli/daemon-update-restart.js";
-import { handleProfileCommand } from "../../cli/profile-command.js";
-import { handleProjectsCommand } from "../../cli/projects-command.js";
+import { handleProfileCommand, listProfileNames, profileBaseHome } from "../../cli/profile-command.js";
+import { handleProjectsCommand, listProjectNames } from "../../cli/projects-command.js";
 import {
 	APP_NAME,
 	APP_TITLE,
@@ -132,6 +132,7 @@ import {
 	type TelemetryOnboardingOutcome,
 } from "../../core/telemetry.js";
 import { type TruncationResult, truncateTail } from "../../core/tools/truncate.js";
+import { AXIOM_HOME_ENV, axiomHome, profileLabel } from "../../extensions/profile/registry.js";
 import { AXIOM_LOGO } from "../../themes/axiom-logo.js";
 import { getChangelogPath, parseChangelog } from "../../utils/changelog.js";
 import { copyToClipboard } from "../../utils/clipboard.js";
@@ -226,6 +227,12 @@ import {
 import { TreeSelectorComponent } from "./components/tree-selector.js";
 import { UserMessageComponent } from "./components/user-message.js";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.js";
+import {
+	buildSwitchRelaunchArgs,
+	shouldOpenWorkspaceMenu,
+	WorkspaceSelectorComponent,
+	type WorkspaceSelectorOptions,
+} from "./components/workspace-selector.js";
 import { FeatureHintDeck } from "./feature-hints.js";
 import { scopeHeartbeatsToSession } from "./heartbeat-scope.js";
 import {
@@ -9472,11 +9479,104 @@ export class InteractiveMode {
 	 * gateway's /profiles//projects. Operates on the active axiom home.
 	 */
 	private async handleProfilesSlashCommand(args: string): Promise<void> {
-		await this.runProfileSurfaceCommand(handleProfileCommand, ["profile"], args);
+		if (!shouldOpenWorkspaceMenu(args)) {
+			await this.runProfileSurfaceCommand(handleProfileCommand, ["profile"], args);
+			return;
+		}
+		const current = profileLabel(axiomHome());
+		await this.openWorkspaceSelector({
+			title: "profiles",
+			hint: "↑/↓ choose · Enter switch (relaunch under the profile) · Esc close",
+			options: (await listProfileNames(profileBaseHome(axiomHome()))).map((name) => ({
+				value: name,
+				label: name,
+				current: name === current,
+			})),
+			onSelect: (name) => {
+				if (name !== current) void this.switchWorkspace({ profile: name });
+			},
+		});
 	}
 
 	private async handleProjectsSlashCommand(args: string): Promise<void> {
-		await this.runProfileSurfaceCommand(handleProjectsCommand, ["projects"], args);
+		if (!shouldOpenWorkspaceMenu(args)) {
+			await this.runProfileSurfaceCommand(handleProjectsCommand, ["projects"], args);
+			return;
+		}
+		const projectHome = axiomHome();
+		const current = this.currentProjectName();
+		await this.openWorkspaceSelector({
+			title: `projects · profile '${profileLabel(projectHome)}'`,
+			hint: "↑/↓ choose · Enter switch (relaunch in the project) · Esc close",
+			options: (await listProjectNames(projectHome)).map((name) => ({
+				value: name,
+				label: name,
+				current: name === current,
+			})),
+			onSelect: (name) => {
+				if (name !== current) void this.switchWorkspace({ project: name });
+			},
+		});
+	}
+
+	/** The session's project when its cwd sits inside <home>/projects/<name>. */
+	private currentProjectName(): string | undefined {
+		const cwd = this.getCurrentCwd();
+		const projectsRoot = path.join(axiomHome(), "projects");
+		if (!cwd.startsWith(projectsRoot + path.sep)) return undefined;
+		return path.basename(cwd);
+	}
+
+	/** Show a boxed workspace menu on top of the chat; resolves on select or cancel. */
+	private openWorkspaceSelector(options: WorkspaceSelectorOptions): Promise<void> {
+		return new Promise((resolve) => {
+			let handle: OverlayHandle | undefined;
+			let settled = false;
+			const component = new WorkspaceSelectorComponent({
+				...options,
+				onSelect: (value) => {
+					if (settled) return;
+					settled = true;
+					handle?.hide();
+					this.ui.requestRender();
+					resolve();
+					options.onSelect(value);
+				},
+				onCancel: () => {
+					if (settled) return;
+					settled = true;
+					handle?.hide();
+					this.ui.requestRender();
+					resolve();
+				},
+			});
+			handle = this.showFullPaneOverlay(component, 60);
+		});
+	}
+
+	/**
+	 * Switch workspace (profile and/or project): a boot-scoped change, so the
+	 * session tears down and relaunches the client under the new flags — the
+	 * same stop/dispose/spawn pattern the /update relaunch uses. A profile
+	 * switch also drops AXIOM_HOME so the child resolves its own home.
+	 */
+	private async switchWorkspace(opts: { profile?: string; project?: string }): Promise<void> {
+		const relaunchArgs = buildSwitchRelaunchArgs(process.argv.slice(2), opts);
+		this.stop();
+		await this.agentConnection.dispose().catch(() => undefined);
+		try {
+			await this.options.onShutdown?.();
+		} catch {
+			// The workspace switch still proceeds on teardown failure.
+		}
+		const env = opts.profile ? { ...process.env } : process.env;
+		if (opts.profile) delete env[AXIOM_HOME_ENV];
+		const child = spawn(process.execPath, [...process.execArgv, process.argv[1]!, ...relaunchArgs], {
+			stdio: "inherit",
+			env,
+		});
+		child.unref();
+		process.exit(0);
 	}
 
 	private async runProfileSurfaceCommand(
