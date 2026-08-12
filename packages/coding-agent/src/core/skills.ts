@@ -12,7 +12,7 @@ import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.js";
 const log = getLogger("coding-agent.skills");
 
 /** Max name length per spec */
-const MAX_NAME_LENGTH = 64;
+export const MAX_NAME_LENGTH = 64;
 
 /** Max description length per spec */
 const MAX_DESCRIPTION_LENGTH = 1024;
@@ -119,7 +119,7 @@ export interface LoadSkillsResult {
  * Validate skill name per Agent Skills spec.
  * Returns array of validation error messages (empty if valid).
  */
-function validateName(name: string, parentDirName: string): string[] {
+export function validateName(name: string, parentDirName: string): string[] {
 	const errors: string[] = [];
 
 	if (name !== parentDirName) {
@@ -148,7 +148,7 @@ function validateName(name: string, parentDirName: string): string[] {
 /**
  * Validate description per Agent Skills spec.
  */
-function validateDescription(description: string | undefined): string[] {
+export function validateDescription(description: string | undefined): string[] {
 	const errors: string[] = [];
 
 	if (!description || description.trim() === "") {
