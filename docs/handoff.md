@@ -432,3 +432,42 @@ confinement (OS tier) and an escape allowlist are documented follow-ups.
   FORCE_COLOR-stderr 4685, daemon-refine); biome + tsgo + installer +
   browser-smoke green. Still no live round-trip of an anchored run (no
   operator step run this session); boundary verified at the unit level.
+
+# Handoff addendum — OS-tier confinement for anchored runs (ADR-0019, strict tier)
+
+**Date:** 2026-08-12. **Loop:** Feature Implementation Loop v2 (fifth feature).
+
+Closes the last ADR-0018 gap: anchored gateway runs (`axiom gateway --project`)
+now spawn the entire completion child inside a bubblewrap sandbox (host
+read-only, project + AXIOM_HOME + ~/.prime writable, /tmp /run /var and the
+secret home dirs shadowed), so freeform `bash` and the persistent ipython
+kernel inherit one kernel-enforced boundary. Fail-closed without bwrap.
+Article: ADR-0019, CONTEXT vocabulary, this addendum, summary.html.
+
+## What was verified, and how
+
+- Sandbox mount builder (unit, 10): ro-bind /, writable binds, scratch + secret
+  tmpfs, chdir, marker env, bwrap PATH/override resolution.
+- Runner wiring (unit, 10): anchored child gets AXIOM_CONFINED=1 + `[sandbox-`
+  `confined]` reply; fail-closed error (bwrap absent) refuses an unconfined run.
+- Real-bwrap integration (unit-style, 5): fixture child inside the sandbox —
+  inside-project write persists; operator-home and /etc writes are REFUSED at
+  the OS level with no host artifact; a ~/.ssh sentinel is unreadable.
+- Floor: ./test.sh coding-agent 325 passed / 8 skipped / 4 known-environmental
+  (4603 EXDEV, 4685 FORCE_COLOR, refine, kernel-heartbeat) — identical to
+  baseline; my 3 new test files all pass; biome + tsgo clean; build exit 0.
+
+## Honest boundary
+
+- Host stays READABLE (only secret dirs shadowed); a read-minimal allowlist is
+  a documented follow-up.
+- Network inherited (no unshare-net); isolation is a documented follow-up.
+- Not operator-live with a real model completion (no provider key here); the
+  OS boundary is proven by the real-bwrap integration test.
+- Requires bwrap + unprivileged userns on the operator host (present here).
+
+## Operator follow-ups
+
+- On a machine with bwrap + a provider key: `axiom gateway --project <name>`,
+  ask a bash/ipython write-escape; confirm the reply opens `[sandbox-confined]`
+  and no host artifact appears. (LIVE, not yet done — no provider key this run.)

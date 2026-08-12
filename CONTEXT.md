@@ -87,3 +87,15 @@ files, wrong memory, wrong ledger. Prevented by the anti-drift ladder
 (identity → context → root guard → process), never by prompting alone.
 _Avoid_: Confusion, contamination (contamination is the mechanism, not the
 category)
+
+**Sandbox (confinement)**:
+The ADR-0019 OS-tier strict tier: an anchored gateway run (projectRoot set)
+spawns the whole completion child inside a bubblewrap sandbox — host mounted
+read-only except the project root and the persistent stores (AXIOM_HOME,
+~/.prime) bound writable; /tmp /run /var and the secret home dirs (~/.ssh,
+~/.aws, ...) shadowed as tmpfs. Freeform bash and the ipython kernel inherit the
+mount namespace, so one kernel boundary confines them; the child is marked
+AXIOM_CONFINED=1 and replies open with [sandbox-confined]. Fail-closed when
+bwrap is absent. Follow-ups (honest): read-minimal allowlist, network
+isolation (--unshare-net).
+_Avoid_: Jail, container (not a full container; a mount-ns confinement)

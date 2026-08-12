@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Axiom — OS-tier confinement (ADR-0019)</title>
+<style>
+:root{--acc:#2fd58a;--bg:#0e1117;--panel:#161b24;--panel2:#1c2330;--ink:#e6e9ef;--muted:#9aa4b2;--line:#2a3342;--warn:#ff7a6b}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+color:var(--ink);background:linear-gradient(180deg,#0d1118,#0b0e14 260px) fixed;line-height:1.55}
+.wrap{max-width:980px;margin:0 auto;padding:0 20px 48px}
+header{margin:28px 0 6px}h1{margin:0 0 6px;font-size:1.7rem;line-height:1.15}h1 b{color:var(--acc)}
+.meta{color:var(--faint,#6b7686);font-size:.76rem;font-family:ui-monospace,Menlo,Consolas,monospace}
+h2{font-size:1.05rem;margin:26px 0 8px;color:var(--acc);border-bottom:1px solid var(--line);padding-bottom:4px}
+p{color:var(--muted);margin:6px 0}code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.86em;color:#a9c7ff}
+ul{margin:6px 0;padding-left:20px;color:var(--muted)}
+li{margin:3px 0}li span{color:var(--ink)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin:10px 0}
+.k{color:var(--acc);font-weight:600}
+.verdict{background:var(--panel2);border:1px solid var(--line);border-left:4px solid var(--acc);border-radius:8px;padding:10px 14px;margin:10px 0}
+.warn{color:var(--warn)}
+@media print{body{background:#fff;color:#111}.card,.verdict{background:#fff;border-color:#999}}
+</style></head><body><div class="wrap">
+<header><h1>Axiom — <b>OS-tier confinement</b> for anchored runs</h1>
+<div class="meta">ADR-0019 &middot; Feature Implementation Loop v2 &middot; 2026-08-12 &middot; model: coding agent (Axiom)</div></header>
+
+<h2>Goal &amp; assumptions</h2>
+<p>Close the last ADR-0018 gap: freeform <code>bash</code>/<code>ipython</code> can no longer write to or read
+sensitive data outside the project. Anchored gateway runs spawn the whole completion child inside a
+bubblewrap sandbox — one kernel-enforced boundary covers bash, the ipython kernel, and every subprocess
+(inherited mount namespace). Assumptions: confinement == anchored (<code>projectRoot</code> set); fail-closed without
+bwrap; host stays readable (secret dirs shadowed); network inherited.</p>
+
+<h2>Plan as executed</h2>
+<div class="card"><ul>
+<li><code>[preflight]</code><span>ADR-0018 gap confirmed open: bash/ipython freeform, no OS tier. Workspace guard covers only `edit`.</span></li>
+<li><code>[preflight]</code><span>Env check: bwrap present (/usr/bin/bwrap), CONFIG_USER_NS=y, unprivileged_userns_clone=1, kernel 6.18.41 → OS-tier confinement feasible &amp; *testable here*.</span></li>
+<li><code>[preflight]</code><span>Prototype (real bwrap): host `--ro-bind / /`; `--tmpfs /home /tmp /var`; project root re-bind writable → inside-writes persist, host /etc/$HOME writes BLOCKED (ro), ssh key + /tmp + /var SHADOWED (unreadable). node boots under it. Confirmed.</span></li>
+<li><code>[preflight]</code><span>Seam decision: wrap the ENTIRE anchored completion child at gateway spawn (one OS boundary covers bash + ipython kernel + all subprocesses), not per-command string wrapping (that is exactly the freeform gap ADR-0018 warns about).</span></li>
+<li><code>[step1]</code><span>Plan drafted (see confinement-plan.md).</span></li>
+<li><code>[step2]</code><span>Self-review: found 2+ weaknesses → fixed (writable-store binds unconditional, not just under-home; added confinement observability/env-marker + preflight message; noted inherited-network exfiltration + opt-in unshare-net as documented follow-up).</span></li>
+<li><code>[step1]</code><span>sandbox.ts pure builder (deployment-safe mount model) + 10 unit tests green. Committed.</span></li>
+<li><code>[step2]</code><span>completion.ts wraps anchored child in bwrap, fail-closed on absent bwrap, AXIOM_CONFINED=1 marker + [sandbox-confined] reply notice; 10 tests green. Committed.</span></li>
+<li><code>[step3]</code><span>real-bwrap integration test: inside-write persists, home+/etc writes REFUSED, ~/.ssh shadowed unreadable; 5/5 green (real OS boundary). Committed.</span></li>
+<li><code>[step4]</code><span>full floor ./test.sh + biome + tsgo + build (in progress).</span></li>
+<li><code>[step4]</code><span>full floor: coding-agent 325 passed / 8 skipped / 4 known-environmental (daemon 4603 EXDEV, 4685 FORCE_COLOR, refine, kernel-heartbeat) — identical to baseline; my 3 files all pass; biome+tsgo clean; build exit 0. Committed nothing new (tests only).</span></li>
+<li><code>[step5]</code><span>docs: ADR-0019 + CONTEXT vocab + handoff addendum + summary.html from this log.</span></li>
+</ul></div>
+
+<h2>Key decisions</h2>
+<div class="card">
+<p><span class="k">Whole-child wrap, not per-command string wrapping.</span> String-guarding freeform bash is exactly the
+gap ADR-0018 flagged; wrapping the child at the gateway spawn gives one OS layer that confines bash + ipython together.</p>
+<p><span class="k">Deployment-safe mount model.</span> A wholesale <code>--tmpfs &lt;home&gt;</code> would hide axiom's own CLI /
+node_modules under <code>$HOME</code> and break every anchored run. Kept <code>--ro-bind / /</code> (complete write confinement)
++ explicit <code>--tmpfs</code> shadows of <code>~/.ssh .aws .gnupg .config .local .cache .netrc</code>.</p>
+<p><span class="k">Fail-closed.</span> Absent bwrap returns a clear error — an anchored run never runs unconfined.</p>
+<p><span class="k">Observability.</span> <code>AXIOM_CONFINED=1</code> marker + <code>[sandbox-confined]</code> reply prefix.</p>
+</div>
+
+<h2>Verification evidence</h2>
+<div class="card">
+<p><span class="k">Unit — sandbox builder (10).</span> ro-bind /, writable binds, scratch + secret tmpfs, chdir,
+marker env, bwrap PATH/override resolution, bind-ordering.</p>
+<p><span class="k">Unit — runner (10).</span> anchored child gets the marker + reply prefix; fail-closed error when bwrap
+absent refuses an unconfined run.</p>
+<p><span class="k">Real-bwrap integration (5).</span> fixture child inside the sandbox writes <code>inside.txt</code> (persists);
+operator-home and <code>/etc</code> writes are refused at the OS level with no host artifact; a <code>~/.ssh</code> sentinel is unreadable.
+Self-skips with a reason when bwrap/userns is absent.</p>
+<p><span class="k">Floor.</span> <code>./test.sh</code> coding-agent 325 passed / 8 skipped / 4 known-environmental
+(4603 EXDEV, 4685 FORCE_COLOR, refine, kernel-heartbeat) — identical to baseline; my 3 new files all pass.
+biome + tsgo clean; <code>npm run build</code> exit 0.</p>
+</div>
+
+<h2>Review history</h2>
+<div class="verdict">
+<p><span class="k">Plan r1 — 90/100 APPROVED</span> (Correctness 18, Fit 18, Testability 18, Risk 18, Clarity 18).
+Conditions: step-3 settles kernel-boot; outside-write refused by bwrap (not merely suppressed); fail-closed surfaces at the gateway.</p>
+<p>Self-review found and fixed: bind-ordering of writable stores, confinement observability (marker), inherited-network honesty,
+bwrap-gated CI skip.</p>
+</div>
+
+<h2>Final state</h2>
+<div class="card">
+<p>An anchored gateway run is OS-confined end-to-end. Commits: sandbox builder, runner wiring, real-bwrap integration test.
+Docs: ADR-0019, CONTEXT vocabulary, handoff addendum. Honest follow-ups (recorded, not faked): read-minimal allowlist,
+network isolation (<code>--unshare-net</code>), and an operator-live round-trip with a real model completion (no provider key this run).</p>
+<p class="warn">Scope honestly bounded: host readable (only secret dirs shadowed); network inherited; requires bwrap + userns.</p>
+</div>
+</div></body></html>
