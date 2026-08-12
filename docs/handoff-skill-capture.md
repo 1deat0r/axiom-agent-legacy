@@ -1,4 +1,4 @@
-# Handoff — Skills that learn procedural memory (step 1: skill capture)
+# Handoff — Skills that learn procedural memory (steps 1–2: capture + security audit)
 
 **Branch:** `feat/skill-capture` (isolated worktree at `.worktrees/skill-capture`)
 **Base:** baseline 68a3f31ae (prime-agent v0.7.2 fork)
@@ -21,8 +21,8 @@ result.
   `validateDescription`, `MAX_NAME_LENGTH` (single source of truth) — only
   three `export` additions, no behavior change.
 - `packages/coding-agent/test/skill-capture.test.ts` — 24 vitest tests.
-- `docs/adr/ADR-0020-skill-capture.md`, `CONTEXT.md` (new term),
-  `docs/handoff-skill-capture.md`, `docs/skill-capture-log.md`.
+- `docs/adr/ADR-0020-skill-capture.md` + `ADR-0021-skill-audit.md`,
+  `CONTEXT.md` (new terms), `docs/handoff-skill-capture.md`, `docs/skill-capture-log.md`.
 
 ## What was verified, and how
 
@@ -40,8 +40,27 @@ result.
 - **End-to-end** real run: captured `fix-regression-test-first` SKILL.md,
   verified 0 loader diagnostics, printed the offer.
 
-## What is deliberately NOT in this step (later steps)
+## Step 2 — AST-level security audit (ADR-0021)
 
-Automatic flagging ("agent detects a task was reusable"), the AST-level
-security audit of third-party skills before running them, and the skills
-hub/sync over agentskills.io. All extend `core/skill-capture` and are deferred.
+Added the security half (mirrors Hermes `skills_ast_audit` + `skills_guard`):
+statically screen a skill before running/installing a third-party one.
+
+- `packages/coding-agent/src/core/skill-audit/` — `types.ts`, `python-ast.ts`
+  (subprocess `python3` + real `ast` walker), `rules.ts` (JS/shell/markdown
+  structural scanners), `audit.ts` (walk + dispatch + `chooseVerdict`),
+  `index.ts`.
+- `axiom skill-audit <dir> [--json]` CLI + `main.ts` wiring.
+- Python AST flags dynamic code, subprocess/dangerous calls, network egress
+  (sends block, reads warn), file mutation, secret reads, sensitive imports;
+  JS/shell/markdown scans cover pipe-to-shell, destructive commands, reverse
+  shells, privilege, eval. Conservative verdict: BLOCK / WARN / ALLOW.
+- `test/skill-audit.test.ts` — 12 tests; audit+capture suites 37/37 green;
+  biome + tsgo clean.
+- Verified end-to-end: evil→BLOCK, benign→ALLOW, real bundled `websearch`→BLOCK
+  (network egress, conservative default — first-party skills are operator
+  allowlisted).
+
+## What is deliberately NOT in this feature yet (later steps)
+
+Automatic flagging ("agent detects a task was reusable"), and the skills
+hub/sync over agentskills.io. Both extend what is built here and are deferred.

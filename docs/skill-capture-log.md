@@ -106,3 +106,26 @@ Total: 100/100 — APPROVED (no resubmit needed). Two issues fixed earlier: Pers
 
 ## 7. Summary page
 - [x] summary-skill-capture.html built from this log only (7.2KB, inline CSS, phone/print ready). Committed.
+
+## 8. Step 2 — AST-level security audit of skills (skills_audit / skills_guard)
+
+### Preflight / plan
+- Goal: statically audit a skill directory before a third-party skill is run/installed; Python at the AST level, JS/shell/markdown structurally; conservative verdict block/warn/allow.
+- Assumption: guard is applied to third-party/imported skills; bundled first-party skills are allowlisted by the operator (network-egress skills like websearch will BLOCK under the conservative default — documented).
+
+### Implement (red/green)
+- [x] core/skill-audit/: types.ts, python-ast.ts (subprocess `python3` + real `ast` walk), rules.ts (JS/shell/markdown scanners), audit.ts (walk + dispatch + chooseVerdict), index.ts.
+- [x] cli `axiom skill-audit <dir> [--json]` + main.ts wiring (renderSkillAudit human output).
+- [x] test/skill-audit.test.ts — 12 tests (verdict logic, python AST block/allow, AST-unavailable fallback, JS/shell/markdown scanners, CLI).
+- [x] Fixed during impl: destructive regex trailing `\b`; fallback verdict warn; 5 biome lint items (template literal, String.raw, let-entry typing, 2 assignment-in-expression loops); tsgo Dirent typing.
+
+### Self-review
+- Plan items present; tests assert real behavior; edge cases: missing dir, python absent fallback, size cap, skip node_modules/.git; no debug prints; no `any`.
+
+### External review (cold diff)
+- Correctness 5, Fit 5 (reuses existing core/cli conventions; isolated module; minimal main.ts delta), Testability 5 (12 behavior tests incl. AST level), Risk 5 (conservative verdict; allowlist documented; degrade gracefully without python), Clarity 5.
+Total 100/100 — approved.
+
+### Verification recorded
+- [x] audit + capture tests 37/37 green; biome clean; tsgo clean.
+- [x] End-to-end: evil→BLOCK, benign→ALLOW, real websearch skill→BLOCK (network egress, conservative; documented).

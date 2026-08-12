@@ -87,8 +87,15 @@ task that was flagged reusable into a durable `SKILL.md` that bundles the task
 prompt + its ordered steps + provenance (`metadata.provenance`), verified to
 load via the real skill loader before it is offered. The agent supplies the
 steps; capture only materializes a skill directory. Later steps add automatic
-flagging, an AST-level security audit of third-party skills, and hub/sync over
-agentskills.io.
+flagging and hub/sync over agentskills.io.
+
+**Skill audit**:
+The security half (ADR-0021, step 2): statically inspecting a skill directory
+before a third-party skill is run/installed. Python is parsed at the AST level
+(subprocess `python3` `ast`), JS/shell/markdown structurally; a conservative
+verdict (BLOCK / WARN / ALLOW) is derived. Bundled first-party skills are
+allowlisted by the operator. Surfaces as `auditSkill(dir)` and the
+`axiom skill-audit` CLI.
 _Avoid_: Skills (the refinement harness's `skill` entries, which are in-memory
 harness lineage, not on-disk skill directories)
 
