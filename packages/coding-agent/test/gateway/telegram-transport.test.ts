@@ -8,6 +8,7 @@ import {
 	chunkTelegramText,
 	FileTelegramOffsetStore,
 	HttpTelegramClient,
+	TELEGRAM_LONG_POLL_MAX_SECONDS,
 	type TelegramClient,
 	TelegramTransport,
 	type TelegramUpdate,
@@ -17,6 +18,7 @@ import {
 function fakeClient(initial: TelegramUpdate[] = []) {
 	const sent: Array<{ chatId: string; text: string }> = [];
 	const offsets: number[] = [];
+	const timeouts: Array<number | undefined> = [];
 	const queue: TelegramUpdate[] = [...initial];
 	let failNext = 0;
 	let fatal: Error | undefined;
@@ -26,6 +28,7 @@ function fakeClient(initial: TelegramUpdate[] = []) {
 		},
 		async getUpdates(input) {
 			if (input.offset !== undefined) offsets.push(input.offset);
+			timeouts.push(input.timeout);
 			if (fatal) throw fatal;
 			if (failNext > 0) {
 				failNext--;
@@ -42,6 +45,7 @@ function fakeClient(initial: TelegramUpdate[] = []) {
 		client,
 		sent,
 		offsets,
+		timeouts,
 		queue,
 		setFailNext(n: number) {
 			failNext = n;
@@ -228,6 +232,88 @@ describe("TelegramTransport", () => {
 		expect(aborted).toBe(true);
 		expect(t.isRunning()).toBe(false);
 	});
+
+	it("passes the long-poll timeout to getUpdates in seconds, clamped to the API max", async () => {
+		const f = fakeClient();
+		const t = new TelegramTransport(f.client, { pollIntervalMs: 1, pollTimeoutMs: 30_000 });
+		t.onMessage(() => {});
+		await t.connect();
+		await settle(30);
+		// 30000 ms -> 30 s on the wire (the API max is 50 s, a raw 30000 is out of contract).
+		expect(f.timeouts[0]).toBe(30);
+		await t.disconnect();
+
+		// An over-max ms option is clamped, never sent out of contract.
+		const g = fakeClient();
+		const t2 = new TelegramTransport(g.client, { pollIntervalMs: 1, pollTimeoutMs: 120_000 });
+		t2.onMessage(() => {});
+		await t2.connect();
+		await settle(30);
+		expect(g.timeouts[0]).toBe(TELEGRAM_LONG_POLL_MAX_SECONDS);
+		await t2.disconnect();
+	});
+
+	it("logs a throttled transient error and keeps polling", async () => {
+		const f = fakeClient();
+		f.setFailNext(3); // three consecutive transient failures, then success
+		f.queue.push(update(1, 7, "recovered"));
+		const logs: string[] = [];
+		const t = new TelegramTransport(f.client, { pollIntervalMs: 1, backoffMs: 1, logger: (l) => logs.push(l) });
+		const handler = vi.fn();
+		t.onMessage(handler);
+		await t.connect();
+		await settle(60);
+		expect(handler).toHaveBeenCalledWith(expect.objectContaining({ channelId: "7", text: "recovered" }));
+		expect(logs.filter((l) => l.includes("transient")).length).toBe(1); // throttled, not 1-per-retry
+		await t.disconnect();
+	});
+
+	it("surfaces a failing chunk send and stops the batch (never silent drop)", async () => {
+		const f = fakeClient();
+		// Make sendMessage fail on the SECOND call only.
+		let sendCalls = 0;
+		const flaky: TelegramClient = {
+			...f.client,
+			async sendMessage(input) {
+				sendCalls++;
+				if (sendCalls === 2) throw new Error("chat deactivated");
+				f.sent.push({ chatId: input.chatId, text: input.text });
+			},
+		};
+		const logs: string[] = [];
+		const t = new TelegramTransport(flaky, { logger: (l) => logs.push(l) });
+		await t.send({ channelId: "123", recipient: "123" }, `${"x".repeat(5000)} ${"y".repeat(5000)}`);
+		expect(f.sent.length).toBe(1); // first chunk landed
+		expect(logs.some((l) => l.includes("telegram send failed") && l.includes("123"))).toBe(true);
+		expect(logs.some((l) => l.includes("chat deactivated"))).toBe(true);
+		await t.disconnect();
+	});
+
+	it("warns and keeps polling when the offset write fails (not fatal, never silent)", async () => {
+		const f = fakeClient();
+		f.queue.push(update(1, 1, "hello"));
+		const logs: string[] = [];
+		const failingStore = {
+			load: () => 0,
+			save: () => {
+				throw new Error("disk full");
+			},
+		};
+		const t = new TelegramTransport(f.client, {
+			pollIntervalMs: 1,
+			logger: (l) => logs.push(l),
+			offsetStore: failingStore,
+		});
+		const handler = vi.fn();
+		t.onMessage(handler);
+		await t.connect();
+		await settle(40);
+		// The message is still delivered and polling continues (the failure is surfaced).
+		expect(handler).toHaveBeenCalledWith(expect.objectContaining({ text: "hello" }));
+		expect(logs.some((l) => l.includes("telegram offset write failed"))).toBe(true);
+		expect(t.isRunning()).toBe(true);
+		await t.disconnect();
+	});
 });
 
 describe("FileTelegramOffsetStore", () => {
@@ -287,6 +373,35 @@ describe("HttpTelegramClient (local server boundary)", () => {
 			const up = requests.find((r) => r.url.includes("getUpdates"))!;
 			expect(up.body).toEqual({ offset: 3, timeout: 5 });
 			expect(updates).toEqual([{ update_id: 9, message: { chat: { id: 42, type: "private" }, text: "hi" } }]);
+		} finally {
+			if (server) server.close();
+		}
+	});
+
+	it("surfaces the Bot API error_code (401 bad token) as fatal so the loop stops", async () => {
+		let server: Server | undefined;
+		const port = await new Promise<number>((resolve, reject) => {
+			server = createServer((_req, res) => {
+				res.writeHead(200, { "content-type": "application/json" });
+				// An ok:false body with a real error_code — the fatal path.
+				res.end(JSON.stringify({ ok: false, error_code: 401, description: "Unauthorized" }));
+			});
+			server.on("error", reject);
+			server.listen(0, "127.0.0.1", () => resolve((server!.address() as { port: number }).port));
+		});
+		try {
+			const client = new HttpTelegramClient({
+				token: "BADTOKEN",
+				baseUrl: `http://127.0.0.1:${port}`,
+			});
+			const logs: string[] = [];
+			const t = new TelegramTransport(client, { pollIntervalMs: 1, logger: (l) => logs.push(l) });
+			await t.connect();
+			await settle(60);
+			// The real client throws status 401 -> isFatalTelegramError stops the loop.
+			expect(t.isRunning()).toBe(false);
+			expect(logs.some((l) => l.includes("fatal"))).toBe(true);
+			await t.disconnect();
 		} finally {
 			if (server) server.close();
 		}

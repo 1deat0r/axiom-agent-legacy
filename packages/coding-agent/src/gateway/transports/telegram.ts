@@ -20,6 +20,9 @@ import type { GatewayMessage, GatewayRecipient, GatewayTransport } from "../type
 /** The Telegram Bot API outbound chunk-size cap (sendMessage rejects >4096). */
 export const TELEGRAM_TEXT_LIMIT = 4096;
 
+/** The Bot API getUpdates long-poll 'timeout' parameter cap, in seconds. */
+export const TELEGRAM_LONG_POLL_MAX_SECONDS = 50;
+
 /** One update from getUpdates (the fields the transport consumes). */
 export interface TelegramUpdate {
 	update_id: number;
@@ -34,6 +37,10 @@ export interface TelegramUpdate {
 /** The Telegram Bot API boundary (a real client talks HTTPS; tests fake this). */
 export interface TelegramClient {
 	sendMessage(input: { chatId: string; text: string }): Promise<void>;
+	/**
+	 * Long-poll getUpdates. `timeout` is in SECONDS (the Bot API parameter, max
+	 * 50) — the transport converts its ms option at this boundary.
+	 */
 	getUpdates(input: { offset?: number; timeout?: number; signal?: AbortSignal }): Promise<TelegramUpdate[]>;
 }
 
@@ -131,6 +138,7 @@ export class TelegramTransport implements GatewayTransport {
 	private stopped = false;
 	private controller: AbortController | undefined;
 	private running = false;
+	private lastTransientLogged: string | undefined;
 
 	constructor(client: TelegramClient, options: TelegramTransportOptions = {}) {
 		this.client = client;
@@ -197,7 +205,14 @@ export class TelegramTransport implements GatewayTransport {
 					this.running = false;
 					break;
 				}
-				// Transient (network/5xx): keep polling from the same offset after a backoff.
+				// Transient (network/5xx): keep polling from the same offset after a
+				// backoff. Emit a throttled line so a stuck network / 5xx storm is
+				// visible to the operator without spamming one line per backoff.
+				const message = error instanceof Error ? error.message : String(error);
+				if (message !== this.lastTransientLogged) {
+					this.lastTransientLogged = message;
+					this.logger(`telegram polling transient: ${message}`);
+				}
 				await new Promise((r) => setTimeout(r, this.backoffMs));
 				continue;
 			}
@@ -206,14 +221,30 @@ export class TelegramTransport implements GatewayTransport {
 	}
 
 	private async pollOnce(signal?: AbortSignal): Promise<void> {
-		const updates = await this.client.getUpdates({ offset: this.nextOffset, timeout: this.timeoutMs, signal });
+		// The Bot API getUpdates 'timeout' parameter is seconds (max
+		// TELEGRAM_LONG_POLL_MAX_SECONDS); the transport option is ms, so convert
+		// at the boundary and clamp so an out-of-contract value never goes on the
+		// wire (an over-max 400 would otherwise loop silently as a transient).
+		const timeoutSeconds = Math.min(TELEGRAM_LONG_POLL_MAX_SECONDS, Math.ceil(this.timeoutMs / 1000));
+		const updates = await this.client.getUpdates({
+			offset: this.nextOffset,
+			timeout: timeoutSeconds,
+			signal,
+		});
 		let maxId = this.nextOffset;
 		for (const u of updates) {
 			if (u.update_id >= maxId) maxId = u.update_id + 1;
 			this.deliver(u);
 		}
 		this.nextOffset = maxId;
-		this.offsetStore.save(maxId);
+		try {
+			this.offsetStore.save(maxId);
+		} catch (error) {
+			// A failed offset write would replay duplicate agent runs after a
+			// restart — surface it, never silently degrade into transient-retry.
+			const message = error instanceof Error ? error.message : String(error);
+			this.logger(`telegram offset write failed: ${message}`);
+		}
 	}
 
 	private deliver(u: TelegramUpdate): void {
@@ -265,7 +296,7 @@ export class HttpTelegramClient implements TelegramClient {
 		method: string,
 		body: Record<string, unknown>,
 		signal?: AbortSignal,
-	): Promise<{ ok: boolean; result?: unknown; description?: string }> {
+	): Promise<{ ok: boolean; result?: unknown; description?: string; error_code?: number }> {
 		const res = await this.fetchFn(this.url(method), {
 			method: "POST",
 			headers: { "content-type": "application/json" },
@@ -275,11 +306,20 @@ export class HttpTelegramClient implements TelegramClient {
 		if (!res.ok) {
 			throw Object.assign(new Error(`telegram ${method} HTTP ${res.status}`), { status: res.status });
 		}
-		const data = (await res.json()) as { ok: boolean; result?: unknown; description?: string };
+		const data = (await res.json()) as {
+			ok: boolean;
+			result?: unknown;
+			description?: string;
+			error_code?: number;
+		};
 		if (data.ok !== true) {
-			throw Object.assign(new Error(`telegram ${method} rejected: ${data.description ?? "unknown"}`), {
-				status: 400,
-			});
+			// Use the Bot API error_code (401 bad token / 409 conflicting poll are
+			// FATAL, not transient) so isFatalTelegramError can classify correctly.
+			const status = data.error_code ?? 400;
+			throw Object.assign(
+				new Error(`telegram ${method} rejected: ${data.description ?? data.error_code ?? "unknown"}`),
+				{ status },
+			);
 		}
 		return data;
 	}

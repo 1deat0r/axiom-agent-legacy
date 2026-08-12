@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Telegram gateway — summary</title>
+<style>
+:root{--accent:#0a7d5c;--ink:#1b1f23;--dim:#5a6470;--line:#e2e6ea;--bg:#fbfcfd;}
+*{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.5}
+.wrap{max-width:760px;margin:0 auto;padding:16px}
+header{border-bottom:3px solid var(--accent);padding:12px 0;margin-bottom:20px}
+h1{font-size:1.35rem;margin:0 0 4px} h1 code{color:var(--accent)}
+.meta{font-size:.8rem;color:var(--dim)}
+h2{font-size:1.05rem;margin:28px 0 8px;color:var(--accent);border-bottom:1px solid var(--line);padding-bottom:4px}
+p,li{font-size:.92rem} code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85rem;background:#eef1f4;padding:1px 4px;border-radius:3px}
+ul{margin:6px 0;padding-left:20px} li{margin:4px 0}
+.approve{color:var(--accent);font-weight:600} .deny{color:#b3261e;font-weight:600}
+table{border-collapse:collapse;width:100%;font-size:.85rem;margin:8px 0}
+th,td{border:1px solid var(--line);padding:5px 8px;text-align:left}
+th{background:#f0f3f5}
+.final{background:#eefaf5;border:1px solid var(--accent);padding:10px 12px;border-radius:6px;margin-top:8px}
+@media print{body{background:#fff} .wrap{max-width:none}}
+</style></head><body><div class="wrap">
+<header><h1>Telegram gateway &middot; second transport</h1>
+<div class="meta">feature summary &middot; 2026-08-12 (UTC) &middot; Feature Implementation Loop v2 &middot; deepseek-v4-flash</div></header>
+
+<h2>Goal &amp; assumptions</h2>
+<p>Second transport on the <code>axiom gateway</code> surface, mirroring the Signal gateway (ADR-0016) module-for-module: the agent, riding a profile's SOUL.md, is reachable over <b>Telegram</b> (Bot API over HTTPS — no linked daemon). One chat = one session; same router, completion runner, channel index, commands, allowlist.</p>
+<p><b>Success criterion:</b> <code>axiom gateway --transport telegram --profile &lt;name&gt;</code> boots over Telegram, long-polls getUpdates with offset ack + persistence (no-replay on restart), routes to agent replies or gateway commands, chunks outbound at the 4096-char cap, and denies unknown/group chats by default — tests + <code>npm run check</code>+<code>tsgo</code>+<code>build</code> green; live bot pass token-gated and open.</p>
+<ul>
+<li>Transport selection becomes <b>real</b> (<code>--transport signal|telegram</code>) — this fixes the inert <code>--transport signal</code> flag the Signal feature left un-plumbed.</li>
+<li><code>TelegramClient</code> boundary (<code>sendMessage</code> + long-poll <code>getUpdates</code>), real <code>HttpTelegramClient</code> over fetch exercised against a local server, fake injected in tests — nothing fabricated.</li>
+<li>channelId = sender = <code>String(chat.id)</code>; private chats allowlisted by the owner's id, group chats (negative id) denied by the existing allowlist unless listed.</li>
+<li>Outbound chunking at the 4096-char sendMessage cap + send-failure surfacing; fatal (401/409) vs transient (retry) poll errors.</li>
+</ul>
+
+<h2>Plan as executed</h2>
+<ol>
+<li>Telegram client + transport module: offset ack + persistence, String(chat.id) delivery, &gt;4096 chunking + hard-split fallback, skip-none, transient-keeps-polling, fatal-stops, disconnect-aborts, timeout-in-seconds.</li>
+<li>Router-level Telegram path tests (allowlist deny, group deny by negative id, command vs agent, session index over chat.id) — router reused, minimal/no prod change.</li>
+<li>CLI wiring: <code>--transport telegram</code> + <code>--telegram-token</code>/<code>AXIOM_TELEGRAM_BOT_TOKEN</code>; unknown transport errors out, missing token fails fast; <code>buildTransport</code> picks the transport.</li>
+<li>Floor: <code>npm run check</code>, <code>npm run build</code>, gateway suite 53 green; full coding-agent vitest green modulo documented sandbox EXDEV daemon fails.</li>
+<li>Docs/rituals: ADR-0017, handoff addendum, this summary.</li>
+</ol>
+
+<h2>Key decisions</h2>
+<ul>
+<li><b>Real transport selection</b> — <code>--transport signal|telegram</code> actually routes; default keeps Signal's exact prior behavior.</li>
+<li><b>Offset persistence</b> — <code>&lt;AXIOM_HOME&gt;/gateway/telegram-offset.json</code>; at-most-once batch ack (crash-between-return-and-deliver loses a batch, deliberately traded for no-replay).</li>
+<li><b>Fatal vs transient</b> — the client surfaces the real <code>error_code</code> (401 bad token / 409 conflicting poll stop the loop; network/5xx retry after backoff). Offset-write failure logs, never silent.</li>
+<li><b>4096 chunking</b> — split at last whitespace &le;4096, hard-split fallback for a giant unbroken token; a failing chunk logs and stops the batch.</li>
+<li><b>Group denial</b> — negative chat.id never matches a positive-id allowlist, so groups are denied by the existing deny-before-model gate unless allowlisted.</li>
+</ul>
+
+<h2>Verification</h2>
+<ul>
+<li><b>30 new gateway tests</b> (17 transport: offset ack + persistence no-replay, String(chat.id), chunking + hard-split, skip-none, transient, real-code fatal via 401 error_code, disconnect-abort, timeout-in-seconds, send-failure, offset-write-failure; 4 router-over-Telegram; 9 CLI selection/build/error-path).</li>
+<li>Gateway suite <b>53 green</b>; <code>npm run check</code> (biome + tsgo + installer + browser-smoke) green; <code>npm run build</code> green; CLI <code>--help</code> shows <code>--transport signal|telegram</code>; missing-token and unknown-transport fail fast.</li>
+<li>Honest: <code>HttpTelegramClient</code> tested against a local <code>node:http</code> server only; the live bot pass is operator-token-gated, recorded as open, never faked.</li>
+</ul>
+
+<h2>Review history</h2>
+<table>
+<tr><th>Round</th><th>Stage</th><th>Scores (C/F/T/R/Cl)</th><th>Verdict</th></tr>
+<tr><td>Plan r1</td><td>external</td><td>—</td><td class="deny">DENIED</td></tr>
+<tr><td>Plan r2</td><td>external</td><td>—</td><td class="approve">APPROVED</td></tr>
+<tr><td>Impl r1</td><td>external</td><td>—</td><td class="deny">REJECTED</td></tr>
+<tr><td>Impl r2</td><td>external</td><td>—</td><td class="approve">APPROVED</td></tr>
+</table>
+<p><b>Plan r1 denied</b> — plan was a bracket; fixed with explicit contracts (sendMessage 4096 policy, timeout units, offset persistence, CLI error paths) and exact paths. <b>Plan r2 approved</b>, 0 blockers (non-blocking acted on: AbortSignal, hard-split fallback, CLI failure tests, at-most-once record).</p>
+<p><b>Impl r1 rejected</b>, 3 blockers — (1) <code>HttpTelegramClient</code> flattened <code>ok:false</code> <code>error_code</code> to 400 so fatal never fired (bad token = silent infinite retry); fixed by surfacing <code>error_code</code> + a real-path fatal test. (2) getUpdates timeout sent as ms instead of Bot API seconds; fixed with a boundary conversion + units test. (3) ADR/handoff/summary docs missing from the landed commit; fixed here. Non-blocking acted on: offset-write failure now logs (not silent transient-retry); send-failure path pinned by a test. <b>Impl r2 approved.</b> Round-2 polish also acted on: long-poll timeout clamped to the Bot API 50s max (an over-max value would loop silently as a transient 400), and transient poll errors emit a throttled stderr line (one per distinct error) so a stuck network / 5xx storm is visible without spamming.</p>
+
+<h2>Final state</h2>
+<div class="final">
+<p><code>axiom gateway --transport telegram [--profile &lt;name&gt;] [--telegram-token &lt;token&gt;]</code> ships on <code>baseline/prime-v0.7.2</code> (ADR-0017): the agent-over-Telegram surface with project-manager commands, one-chat-one-session, deny-by-default allowlist (incl. group chats), offset persistence, and 4096-safe outbound sends. Committed and pushed. The live pass (real bot token + owner's chat id in the allowlist + provider) is the operator follow-up.</p>
+</div>
+<p class="meta" style="margin-top:20px">Built only from the running log &middot; one accent color &middot; monospace for code &middot; self-contained (no external fonts/CDN/JS) &middot; print-friendly.</p>
+</div></body></html>

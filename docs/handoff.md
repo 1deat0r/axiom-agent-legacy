@@ -128,3 +128,65 @@ adapter that reuses the headless print-mode seam (`axiom -p ... --profile
   action (a gateway runs under one `--profile`), rather than overstating an
   in-process switch; the channel-index write is documented as rm+copy (single
   writer under the profile home), not a hard atomic rename.
+
+---
+
+# Handoff addendum — Telegram gateway (ADR-0017)
+
+**Date:** 2026-08-12. **Loop:** Feature Implementation Loop v2 (third feature).
+
+## What was done
+
+Second transport on the `axiom gateway` surface, mirroring the Signal gateway
+(ADR-0016) module-for-module. `axiom gateway --transport telegram --profile
+<name>` boots the agent over the Telegram Bot API. Modules: TelegramTransport
+(long-poll getUpdates, offset ack + persistence, 4096-char outbound chunking,
+fatal-vs-transient error handling), the TelegramClient boundary
+(HttpTelegramClient over fetch + fake injected in tests), and real CLI transport
+selection (`--transport signal|telegram` + `--telegram-token` /
+`AXIOM_TELEGRAM_BOT_TOKEN`) — this fixes the inert `--transport signal` flag the
+Signal feature left un-plumbed.
+
+## What was verified, and how
+
+- Gateway behavior (unit tests, 30 new): URL-only = 17 transport (offset ack +
+  persistence no-replay, String(chat.id) delivery, >4096 chunking + hard-split
+  fallback, skip-none, transient-keeps-polling, fatal-stops via real error_code,
+  disconnect-aborts, timeout in seconds, send-failure surfacing, offset-write
+  failure), 4 router-over-Telegram paths (allowlist deny, group-deny by negative
+  id, command-vs-agent, session index over chat.id), 9 CLI selection/build/
+  error-path.
+- Floor: `npm run check` (biome + tsgo + installer + browser-smoke) green,
+  `npm run build` green, gateway suite 53 tests green; full coding-agent vitest
+  green modulo the documented sandbox EXDEV daemon fails (4603 + daemon-
+  serialized-refine) — none in gateway code.
+
+## Plan review (independent)
+
+- Plan r1 DENIED (plan was a bracket, not a spec — reviewer: add executable
+  Contracts). Fixed: explicit contracts (sendMessage 4096 cap policy, timeout
+  units, offset persistence, CLI error paths), exact monorepo paths.
+- Plan r2 APPROVED, 0 blockers (all non-blocking acted on: AbortSignal on
+  getUpdates, hard-split fallback, CLI failure-mode tests, offset at-most-once
+  trade-off recorded).
+
+## Implementation review (independent)
+
+- Impl r1 REJECTED — 3 blockers: (1) HttpTelegramClient flattened `ok:false`
+  error_code to 400 so fatal classification never fired (bad token = silent
+  infinite retry); fixed by surfacing `error_code` + a real-path fatal test;
+  (2) timeout sent as ms instead of Bot API seconds; fixed with a boundary
+  conversion + units test; (3) docs (ADR-0017/handoff/summary) missing from the
+  landed commit; fixed here. Non-blocking acted on: offset-write failure now
+  logs instead of entering transient-retry; send-failure path pinned by a test.
+- Impl r2: (pending — see date; re-gate after blockers closed).
+
+## Operator follow-ups (live/operator-gated)
+
+- Create a bot with @BotFather; put the token in `AXIOM_TELEGRAM_BOT_TOKEN` (or
+  `--telegram-token`); add the owner's personal chat id to
+  `<AXIOM_HOME>/gateway/config.json` senders; point the completion runner at a
+  working provider; send a message to confirm the live reply + send.
+- Note: a public bot username + a permissive allowlist is a live-exposure risk;
+  allowlist only the owner's personal chat id. Group chats (negative chat.id)
+  are denied unless the group id is allowlisted.
