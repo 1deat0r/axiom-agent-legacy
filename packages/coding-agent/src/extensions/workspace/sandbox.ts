@@ -23,6 +23,7 @@
  * documented follow-ups. If bubblewrap is absent the caller FAILS CLOSED; this
  * module never falls back to an unconfined run.
  */
+import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
@@ -131,4 +132,18 @@ export function resolveBwrap(env: NodeJS.ProcessEnv = process.env): string | und
 		if (existsSync(c) && c.length > 0) return c;
 	}
 	return undefined;
+}
+
+/**
+ * True when the resolved bubblewrap can actually create a namespace in this
+ * environment. A runner may ship a bwrap binary yet forbid unprivileged user
+ * namespaces (e.g. GitHub-hosted CI), in which case OS-tier confinement cannot
+ * function. Used to gate the real-bwrap integration tests: skip (a recorded
+ * known-fail) where the OS cannot confine, keep them green on capable hosts.
+ */
+export function bwrapCreatesNamespace(env: NodeJS.ProcessEnv = process.env, timeoutMs = 5000): boolean {
+	const bwrap = resolveBwrap(env);
+	if (!bwrap) return false;
+	const result = spawnSync(bwrap, ["--ro-bind", "/", "/", "/bin/true"], { env, timeout: timeoutMs });
+	return result.status === 0;
 }
