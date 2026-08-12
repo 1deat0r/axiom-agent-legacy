@@ -166,6 +166,20 @@ describe("cron command", () => {
 		};
 		expect(dispatchCommand("/cron rm aaaaaaaa", c)).toContain("matches 2 jobs");
 	});
+	it("parses the other advertised schedule forms into the right split", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-croncmd-"));
+		try {
+			const c = cronCtx(dir);
+			dispatchCommand("/cron add @hourly ping", c);
+			dispatchCommand("/cron add 0 3 * * * daily digest", c);
+			const bySchedule = Object.fromEntries(c.cron!.listJobs().map((j) => [j.schedule.expression, j]));
+			expect(bySchedule["0 * * * *"]?.prompt).toBe("ping");
+			expect(bySchedule["0 3 * * *"]?.prompt).toBe("daily digest");
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
 	it("reports when cron is not wired on the gateway", () => {
 		expect(dispatchCommand("/cron list", ctx("/tmp"))).toContain("not wired");
 		expect(dispatchCommand("/cron add every 5m x", ctx("/tmp"))).toContain("not wired");
