@@ -6,8 +6,8 @@ import { appendRotatingLog, getAgentTracesLogPath, getSessionsDir, VERSION } fro
 import { readFirstLineSync } from "../utils/file-lines.js";
 import type { AuthStorage } from "./auth-storage.js";
 import {
+	AXIOM_TRACES_PROVIDER_ID,
 	loadPrimeCliConfig,
-	PRIME_AGENT_TRACES_PROVIDER_ID,
 	PRIME_INFERENCE_PROVIDER_ID,
 	resolvePrimeAgentTracesBaseUrl,
 } from "./prime-inference-auth.js";
@@ -636,18 +636,18 @@ export async function getPrimeAgentTraceCredential(
 	authStorage: AuthStorage,
 	options: { reloadAuth?: boolean; configPath?: string } = {},
 ): Promise<AgentTraceCredential | undefined> {
-	const traceEnvKey = stringEnv("PRIME_AGENT_TRACES_API_KEY");
+	const traceEnvKey = stringEnv("AXIOM_TRACES_API_KEY");
 	if (traceEnvKey) {
-		return { apiKey: traceEnvKey, source: "environment", label: "PRIME_AGENT_TRACES_API_KEY" };
+		return { apiKey: traceEnvKey, source: "environment", label: "AXIOM_TRACES_API_KEY" };
 	}
 
 	if (options.reloadAuth !== false) {
 		authStorage.reload();
 	}
 
-	const traceKey = await authStorage.getApiKey(PRIME_AGENT_TRACES_PROVIDER_ID, { includeFallback: false });
+	const traceKey = await authStorage.getApiKey(AXIOM_TRACES_PROVIDER_ID, { includeFallback: false });
 	if (traceKey) {
-		return { apiKey: traceKey, source: "stored", label: "Prime Agent Traces credential" };
+		return { apiKey: traceKey, source: "stored", label: "Axiom Traces credential" };
 	}
 
 	const primeEnvKey = stringEnv("PRIME_API_KEY");

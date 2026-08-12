@@ -1,17 +1,25 @@
 import type { GatewayCommand, GatewayCommandContext } from "../types.js";
+import { announceCommand } from "./announce.js";
 import { cronCommand } from "./cron.js";
 import { helpCommand } from "./help.js";
+import { ledgerCommand } from "./ledger.js";
 import { profilesCommand } from "./profiles.js";
 import { projectsCommand } from "./projects.js";
+import { searchCommand } from "./search.js";
+import { sessionsCommand } from "./sessions.js";
 import { soulCommand } from "./soul.js";
 
 /** All gateway-local commands; they never reach the model. */
 export const gatewayCommands: GatewayCommand[] = [
 	helpCommand,
+	searchCommand,
+	sessionsCommand,
 	cronCommand,
 	profilesCommand,
 	projectsCommand,
 	soulCommand,
+	announceCommand,
+	ledgerCommand,
 ];
 
 export function commandByName(name: string): GatewayCommand | undefined {

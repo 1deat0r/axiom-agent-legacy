@@ -2388,7 +2388,7 @@ export class AgentsViewMode implements Component, Focusable {
 		}
 		this.daemonShutdownReceived = true;
 		this.reconnectTimedOut = false;
-		this.setStatusMessage(`Prime Agent daemon shut down. Restart Prime Agent to reconnect. ${error.message}`, {
+		this.setStatusMessage(`Axiom daemon shut down. Restart Axiom to reconnect. ${error.message}`, {
 			tone: "error",
 			sticky: true,
 		});

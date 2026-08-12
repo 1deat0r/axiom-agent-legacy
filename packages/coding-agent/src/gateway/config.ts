@@ -9,7 +9,7 @@ import type { GatewayConfig } from "./types.js";
 export const GATEWAY_CONFIG_FILE = "config.json";
 
 export function defaultGatewayConfig(): GatewayConfig {
-	return { senders: [] };
+	return { senders: [], deliverTo: [] };
 }
 
 export function gatewayConfigPath(axiomHomeDir: string): string {
@@ -20,8 +20,14 @@ export function gatewayConfigPath(axiomHomeDir: string): string {
 export function loadGatewayConfig(axiomHomeDir: string): GatewayConfig {
 	try {
 		const raw = JSON.parse(readFileSync(gatewayConfigPath(axiomHomeDir), "utf8")) as Partial<GatewayConfig>;
-		if (Array.isArray(raw.senders)) return { senders: raw.senders.filter((s): s is string => typeof s === "string") };
-		return defaultGatewayConfig();
+		const senders = Array.isArray(raw.senders) ? raw.senders.filter((s): s is string => typeof s === "string") : [];
+		const deliverTo = Array.isArray(raw.deliverTo)
+			? (raw.deliverTo as Array<{ transport?: unknown; channel?: unknown }>).filter(
+					(t): t is { transport?: string; channel: string } =>
+						typeof t?.channel === "string" && (t.transport === undefined || typeof t.transport === "string"),
+				)
+			: [];
+		return { senders, deliverTo };
 	} catch {
 		return defaultGatewayConfig();
 	}

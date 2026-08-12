@@ -36,7 +36,7 @@ out.html
 packages/coding-agent/binaries/
 todo.md
 plans/
-.prime/agent/
+.axiom/agent/
 collect.sh
 .kernel-venv/
 .worktrees/

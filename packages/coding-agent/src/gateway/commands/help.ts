@@ -16,6 +16,10 @@ export const helpCommand: GatewayCommand = {
 			"  /projects rm <n>      remove a project",
 			"  /soul [name]          view a profile's SOUL.md",
 			"  /soul <name> <text>   set a profile's SOUL.md",
+			"  /announce <text>       send a message to every deliverTo channel",
+			"  /ledger [n]            show the last n delivery-ledger entries",
+			"  /search <q>           search past sessions [--all] [--limit N] [--offset N]",
+			"  /sessions             browse recent past sessions [--all] [--limit N]",
 		].join("\n");
 	},
 };

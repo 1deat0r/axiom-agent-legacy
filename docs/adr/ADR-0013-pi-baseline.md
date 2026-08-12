@@ -40,7 +40,7 @@ Facts verified 2026-08-11:
 
 ## Decision
 
-1. **The axiom-agent repo becomes a hard fork of pi v0.84.1** (Prime Agent's
+1. **The axiom-agent repo becomes a hard fork of pi v0.84.1** (Axiom's
    fork of pi-mono is the precedent). The pi tree, with its history, is the
    baseline; the fork lives on `baseline/pi-v0.84.1`, and upstream merges are
    routine (`git fetch upstream` + merge).

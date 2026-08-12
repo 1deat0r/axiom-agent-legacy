@@ -1,8 +1,9 @@
 /**
  * Gateway types (the axiom messaging gateway, ADR-0001/0004/0006, first port
- * onto the prime-agent v0.7.2 baseline). One sender channels to one session.
+ * onto the axiom v0.7.2 baseline). One sender channels to one session.
  */
 import type { AgentCronJob } from "../core/cron-jobs.js";
+import type { DeliveryLedger } from "./delivery-ledger.js";
 
 /** A normalized, platform-agnostic inbound or outbound message. */
 export interface GatewayMessage {
@@ -59,10 +60,19 @@ export interface GatewayCommandContext {
 	profile: string;
 	axiomHomeDir: string;
 	projectHome: string;
-	/** The channel the inbound command arrived on (cron delivery target). */
+	/** Sessions archive directory for cross-session recall (/search). */
+	sessionsDir?: string;
+	/** Persistent sqlite FTS index file for cross-session recall. */
+	searchIndexPath?: string;
+	/** Anchored project root; /search scopes to it unless --all is given. */
+	projectRoot?: string /** The channel the inbound command arrived on (cron delivery target). */;
 	channelId?: string;
 	/** The gateway's cron manager, when wired (drives /cron). */
 	cron?: GatewayCronCommandApi;
+	/** Delivery ledger (ADR-0022) for the /ledger audit command. */
+	ledger?: DeliveryLedger;
+	/** Fan one message out to every configured deliverTo channel (ADR-0022). */
+	deliverToAll?(text: string): Promise<{ channels: number }>;
 }
 
 /** The resolved command reply for one inbound command message. */
@@ -74,4 +84,10 @@ export interface CommandResult {
 export interface GatewayConfig {
 	/** Allowlisted senders — only these may reach the model/commands. */
 	senders: string[];
+	/**
+	 * Fan-out targets for /announce (ADR-0022/0023). Each may name a `transport`
+	 * (default: the active transport) so one run can reach channels across
+	 * platforms.
+	 */
+	deliverTo?: Array<{ transport?: string; channel: string }>;
 }

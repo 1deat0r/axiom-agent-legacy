@@ -228,7 +228,7 @@ describe("parseArgs", () => {
 			expect(result.messages).toEqual([]);
 			expect(result.diagnostics).toContainEqual({
 				type: "error",
-				message: '--export was removed. Use "prime-agent session export <file> [output]".',
+				message: '--export was removed. Use "axiom session export <file> [output]".',
 			});
 		});
 
@@ -243,7 +243,7 @@ describe("parseArgs", () => {
 			expect(result.messages).toEqual([]);
 			expect(result.diagnostics).toContainEqual({
 				type: "error",
-				message: '--list-models was removed. Use "prime-agent model list [search]".',
+				message: '--list-models was removed. Use "axiom model list [search]".',
 			});
 		});
 

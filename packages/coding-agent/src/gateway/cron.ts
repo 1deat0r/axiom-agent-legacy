@@ -19,6 +19,7 @@ import {
 	AgentCronScheduler,
 } from "../core/cron-jobs.js";
 import { sessionIdForChannel } from "./completion.js";
+import type { DeliveryLedger } from "./delivery-ledger.js";
 import type { CompletionRunner, GatewayTransport } from "./types.js";
 
 export interface GatewayCronOptions {
@@ -31,6 +32,10 @@ export interface GatewayCronOptions {
 	projectHome: string;
 	/** Injectable clock for the scheduler (tests). */
 	now?: () => Date;
+	/** Delivery ledger (ADR-0022) so scheduled-run deliveries are recorded. */
+	ledger?: DeliveryLedger;
+	/** The active transport's name, recorded on each ledger entry. */
+	transportName?: string;
 }
 
 /** The gateway's cron manager: store + scheduler + delivery. */
@@ -41,6 +46,8 @@ export class GatewayCron {
 	private readonly transport: GatewayTransport;
 	private readonly profile: string;
 	private readonly projectHome: string;
+	private readonly ledger: DeliveryLedger | undefined;
+	private readonly transportName: string;
 	private started = false;
 
 	constructor(options: GatewayCronOptions) {
@@ -49,6 +56,8 @@ export class GatewayCron {
 		this.transport = options.transport;
 		this.profile = options.profile;
 		this.projectHome = options.projectHome;
+		this.ledger = options.ledger;
+		this.transportName = options.transportName ?? "cron";
 		this.scheduler = new AgentCronScheduler(this.store, {
 			now: options.now,
 			runJob: (job) => this.runJob(job),
@@ -139,7 +148,26 @@ export class GatewayCron {
 			: result.reply.length > 0
 				? result.reply
 				: "(no reply)";
-		await this.transport.send({ channelId: job.channelId, recipient: job.channelId }, body);
+		const recipient = { channelId: job.channelId, recipient: job.channelId };
+		let ok = true;
+		let error: string | undefined;
+		try {
+			await this.transport.send(recipient, body);
+		} catch (cause) {
+			ok = false;
+			error = cause instanceof Error ? cause.message : String(cause);
+		}
+		// Scheduled-run delivery is recorded in the ledger like an interactive
+		// reply, so the automation spine's output is continuous and auditable.
+		this.ledger?.record({
+			ts: Date.now(),
+			transport: this.transportName,
+			channel: job.channelId,
+			recipient: job.channelId,
+			chars: body.length,
+			ok,
+			error,
+		});
 		return "ran";
 	}
 }

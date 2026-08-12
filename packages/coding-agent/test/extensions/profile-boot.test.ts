@@ -1,9 +1,9 @@
 /**
- * Axiom profile boot-seam regression test (ADR-0014 on the prime-agent v0.7.2
+ * Axiom profile boot-seam regression test (ADR-0014 on the axiom v0.7.2
  * baseline). Pins the two restart-specific risks the external review called out:
  *  - the CLI pre-scan `readProfileFlag` (the `--profile` boot seam that must
  *    run before config resolution),
- *  - the env-var rename PI_CODING_AGENT_DIR -> PRIME_AGENT_CODING_AGENT_DIR,
+ *  - the env-var rename PI_CODING_AGENT_DIR -> AXIOM_CODING_AGENT_DIR,
  *    so profile isolation cannot silently break (a var the baseline never reads).
  */
 import { homedir } from "node:os";
@@ -34,11 +34,11 @@ describe("profile boot pre-scan (readProfileFlag)", () => {
 });
 
 describe("env-var contract (the v0.7.2 rename)", () => {
-	it("the legend and code agree that the agent-dir env var is PRIME_AGENT_*", () => {
+	it("the legend and code agree that the agent-dir env var is AXIOM_*", () => {
 		// The boot seam sets process.env[ENV_AGENT_DIR]; the baseline derives it
 		// from the package config name. If it ever regressed to PI_CODING_AGENT_DIR,
 		// profiles would silently all share the default home.
-		expect(ENV_AGENT_DIR).toBe("PRIME_AGENT_CODING_AGENT_DIR");
+		expect(ENV_AGENT_DIR).toBe("AXIOM_CODING_AGENT_DIR");
 	});
 
 	it("resolveProfile homes a named profile and points the agent dir there", () => {

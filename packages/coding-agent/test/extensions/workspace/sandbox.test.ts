@@ -13,9 +13,9 @@ import {
 const HOME = "/home/op";
 const projectRoot = "/home/op/code/proj";
 const axiomHome = "/home/op/.axiom";
-const primeHome = "/home/op/.prime";
+const agentHome = "/home/op/.axiom/agent";
 const shadow = ["/home/op/.ssh", "/home/op/.aws"];
-const base: SandboxMountOptions = { home: HOME, projectRoot, axiomHome, primeHome, shadowDirs: shadow };
+const base: SandboxMountOptions = { home: HOME, projectRoot, axiomHome, agentHome, shadowDirs: shadow };
 
 function indexOf(arr: string[], value: string, after = 0): number {
 	return arr.indexOf(value, after);
@@ -33,7 +33,7 @@ describe("buildSandboxMountArgs", () => {
 		// stores 2x each (bind src+dst)
 		expect(args.filter((a) => a === projectRoot).length).toBe(3);
 		expect(args.filter((a) => a === axiomHome).length).toBe(2);
-		expect(args.filter((a) => a === primeHome).length).toBe(2);
+		expect(args.filter((a) => a === agentHome).length).toBe(2);
 		// secret shadows — each shadowed dir appears once (tmpfs takes one path)
 		for (const s of shadow) expect(args.filter((a) => a === s).length).toBe(1);
 		// fresh proc/dev + chdir
@@ -45,13 +45,13 @@ describe("buildSandboxMountArgs", () => {
 	it("binds + shadows come after the read-only host so they win (ordering)", () => {
 		const args = buildSandboxMountArgs(base);
 		const roIdx = indexOf(args, "--ro-bind");
-		for (const v of [projectRoot, axiomHome, primeHome, shadow[0], shadow[1], "/proc", "/tmp"]) {
+		for (const v of [projectRoot, axiomHome, agentHome, shadow[0], shadow[1], "/proc", "/tmp"]) {
 			expect(indexOf(args, v, roIdx)).toBeGreaterThan(roIdx);
 		}
 	});
 
 	it("emits no shadow tmpfs when none are supplied", () => {
-		const args = buildSandboxMountArgs({ home: HOME, projectRoot, axiomHome, primeHome });
+		const args = buildSandboxMountArgs({ home: HOME, projectRoot, axiomHome, agentHome });
 		expect(args.filter((a) => a === "--tmpfs").length).toBe(3); // /tmp /run /var only
 	});
 });
@@ -68,16 +68,16 @@ describe("assembleProgramArgv", () => {
 });
 
 describe("resolveConfinementPaths", () => {
-	it("defaults to ~/.axiom and ~/.prime under home", () => {
+	it("defaults to ~/.axiom (gateway) and ~/.axiom/agent (agent) under home", () => {
 		expect(resolveConfinementPaths(HOME, {})).toEqual({
 			axiomHome: "/home/op/.axiom",
-			primeHome: "/home/op/.prime",
+			agentHome: "/home/op/.axiom/agent",
 		});
 	});
 	it("honors an AXIOM_HOME override", () => {
 		expect(resolveConfinementPaths(HOME, { AXIOM_HOME: "/srv/axiom" })).toEqual({
 			axiomHome: "/srv/axiom",
-			primeHome: "/home/op/.prime",
+			agentHome: "/home/op/.axiom/agent",
 		});
 	});
 });

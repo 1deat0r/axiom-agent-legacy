@@ -71,15 +71,15 @@ describe("Prime Inference auth", () => {
 		tempDir = join(tmpdir(), `pi-prime-auth-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		mkdirSync(tempDir, { recursive: true });
 		configPath = join(tempDir, "config.json");
-		originalTraceBaseUrl = process.env.PRIME_AGENT_TRACES_BASE_URL;
-		delete process.env.PRIME_AGENT_TRACES_BASE_URL;
+		originalTraceBaseUrl = process.env.AXIOM_TRACES_BASE_URL;
+		delete process.env.AXIOM_TRACES_BASE_URL;
 	});
 
 	afterEach(() => {
 		if (originalTraceBaseUrl === undefined) {
-			delete process.env.PRIME_AGENT_TRACES_BASE_URL;
+			delete process.env.AXIOM_TRACES_BASE_URL;
 		} else {
-			process.env.PRIME_AGENT_TRACES_BASE_URL = originalTraceBaseUrl;
+			process.env.AXIOM_TRACES_BASE_URL = originalTraceBaseUrl;
 		}
 		if (existsSync(tempDir)) {
 			rmSync(tempDir, { recursive: true });
@@ -197,7 +197,7 @@ describe("Prime Inference auth", () => {
 		expect(fetchMock).toHaveBeenCalledOnce();
 	});
 
-	it("checks Prime Agent trace access with Prime whoami permissions", async () => {
+	it("checks Axiom trace access with Prime whoami permissions", async () => {
 		const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
 			expect(getUrl(input)).toBe("https://prime-api.example/api/v1/user/whoami");
 			expect(init?.method).toBe("GET");
@@ -236,8 +236,8 @@ describe("Prime Inference auth", () => {
 		expect(fetchMock).toHaveBeenCalledOnce();
 	});
 
-	it("validates imported Prime CLI trace credentials against PRIME_AGENT_TRACES_BASE_URL", async () => {
-		process.env.PRIME_AGENT_TRACES_BASE_URL = "https://trace-api.example/api/v1";
+	it("validates imported Prime CLI trace credentials against AXIOM_TRACES_BASE_URL", async () => {
+		process.env.AXIOM_TRACES_BASE_URL = "https://trace-api.example/api/v1";
 		writeFileSync(
 			configPath,
 			JSON.stringify({
@@ -365,8 +365,8 @@ describe("Prime Inference auth", () => {
 		expect(progress.join("\n")).toContain("Existing Prime CLI key cannot access Prime Inference");
 	});
 
-	it("requests agent trace scope during Prime Agent trace browser login", async () => {
-		process.env.PRIME_AGENT_TRACES_BASE_URL = "https://prime-api.example/api/v1";
+	it("requests agent trace scope during Axiom trace browser login", async () => {
+		process.env.AXIOM_TRACES_BASE_URL = "https://prime-api.example/api/v1";
 		writeFileSync(
 			configPath,
 			JSON.stringify({

@@ -53,7 +53,7 @@ describe("package commands", () => {
 		originalCwd = process.cwd();
 		originalAgentDir = process.env[ENV_AGENT_DIR];
 		originalPiPackageDir = process.env.PI_PACKAGE_DIR;
-		originalPrimeAgentDownloadBaseUrl = process.env.PRIME_AGENT_DOWNLOAD_BASE_URL;
+		originalPrimeAgentDownloadBaseUrl = process.env.AXIOM_DOWNLOAD_BASE_URL;
 		originalTmpDir = process.env.TMPDIR;
 		originalExitCode = process.exitCode;
 		originalExecPath = process.execPath;
@@ -69,7 +69,7 @@ describe("package commands", () => {
 		process.exitCode = originalExitCode;
 		restoreEnv(ENV_AGENT_DIR, originalAgentDir);
 		restoreEnv("PI_PACKAGE_DIR", originalPiPackageDir);
-		restoreEnv("PRIME_AGENT_DOWNLOAD_BASE_URL", originalPrimeAgentDownloadBaseUrl);
+		restoreEnv("AXIOM_DOWNLOAD_BASE_URL", originalPrimeAgentDownloadBaseUrl);
 		restoreEnv("TMPDIR", originalTmpDir);
 		Object.defineProperty(process, "execPath", { value: originalExecPath, configurable: true });
 		rmSync(tempDir, { recursive: true, force: true });
@@ -187,9 +187,9 @@ describe("package commands", () => {
 		const selfPackageDir = join(globalPrefix, "lib", "node_modules", "@earendil-works", "pi-coding-agent");
 		const fakeNpmPath = join(tempDir, "fake-npm.cjs");
 		const recordPath = join(tempDir, "self-update.json");
-		const tarballUrl = "https://downloads.example.test/prime-agent/prime-agent-current.tgz";
+		const tarballUrl = "https://downloads.example.test/axiom/axiom-current.tgz";
 		mkdirSync(selfPackageDir, { recursive: true });
-		mkdirSync(join(projectDir, ".prime", "agent"), { recursive: true });
+		mkdirSync(join(projectDir, ".axiom", "agent"), { recursive: true });
 		writeFileSync(
 			fakeNpmPath,
 			`const fs=require("node:fs"),path=require("node:path"),args=process.argv.slice(2),prefix=args[args.indexOf("--prefix")+1];
@@ -202,7 +202,7 @@ else fs.writeFileSync(${JSON.stringify(recordPath)},JSON.stringify(args));
 			JSON.stringify({ npmCommand: [originalExecPath, fakeNpmPath, "--prefix", globalPrefix] }, null, 2),
 		);
 		writeFileSync(
-			join(projectDir, ".prime", "agent", "settings.json"),
+			join(projectDir, ".axiom", "agent", "settings.json"),
 			JSON.stringify({ npmCommand: [originalExecPath, fakeNpmPath, "--prefix", projectPrefix] }, null, 2),
 		);
 		process.env.PI_PACKAGE_DIR = selfPackageDir;
@@ -325,13 +325,13 @@ else {
 		}
 	});
 
-	it("installs the Prime Agent tarball from the update manifest during self-update", async () => {
+	it("installs the Axiom tarball from the update manifest during self-update", async () => {
 		const globalPrefix = join(tempDir, "global-prefix");
 		const selfPackageDir = join(globalPrefix, "lib", "node_modules", "@earendil-works", "pi-coding-agent");
 		const fakeNpmPath = join(tempDir, "fake-npm.cjs");
 		const recordPath = join(tempDir, "self-update.json");
-		const baseUrl = "https://downloads.example.test/prime-agent";
-		const tarballPath = "releases/v0.73.0/prime-agent-0.73.0.tgz";
+		const baseUrl = "https://downloads.example.test/axiom";
+		const tarballPath = "releases/v0.73.0/axiom-0.73.0.tgz";
 		mkdirSync(selfPackageDir, { recursive: true });
 		writeFileSync(
 			fakeNpmPath,
@@ -349,14 +349,14 @@ else {
 			JSON.stringify({ npmCommand: [originalExecPath, fakeNpmPath, "--prefix", globalPrefix] }, null, 2),
 		);
 		process.env.PI_PACKAGE_DIR = selfPackageDir;
-		process.env.PRIME_AGENT_DOWNLOAD_BASE_URL = baseUrl;
+		process.env.AXIOM_DOWNLOAD_BASE_URL = baseUrl;
 		Object.defineProperty(process, "execPath", {
 			value: join(selfPackageDir, "dist", "cli.js"),
 			configurable: true,
 		});
 		vi.stubGlobal(
 			"fetch",
-			vi.fn(async () => Response.json({ package: "prime-agent", tarball: tarballPath, version: "0.73.0" })),
+			vi.fn(async () => Response.json({ package: "axiom", tarball: tarballPath, version: "0.73.0" })),
 		);
 
 		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -378,12 +378,12 @@ else {
 		}
 	});
 
-	it("does not self-update when the same-version manifest uses the Prime Agent package alias", async () => {
+	it("does not self-update when the same-version manifest uses the Axiom package alias", async () => {
 		const globalPrefix = join(tempDir, "global-prefix");
 		const selfPackageDir = join(globalPrefix, "lib", "node_modules", "@earendil-works", "pi-coding-agent");
 		const fakeNpmPath = join(tempDir, "fake-npm.cjs");
 		const recordPath = join(tempDir, "self-update.json");
-		const baseUrl = "https://downloads.example.test/prime-agent";
+		const baseUrl = "https://downloads.example.test/axiom";
 		mkdirSync(selfPackageDir, { recursive: true });
 		writeFileSync(
 			fakeNpmPath,
@@ -397,7 +397,7 @@ else fs.writeFileSync(${JSON.stringify(recordPath)},JSON.stringify(args));
 			JSON.stringify({ npmCommand: [originalExecPath, fakeNpmPath, "--prefix", globalPrefix] }, null, 2),
 		);
 		process.env.PI_PACKAGE_DIR = selfPackageDir;
-		process.env.PRIME_AGENT_DOWNLOAD_BASE_URL = baseUrl;
+		process.env.AXIOM_DOWNLOAD_BASE_URL = baseUrl;
 		Object.defineProperty(process, "execPath", {
 			value: join(selfPackageDir, "dist", "cli.js"),
 			configurable: true,
@@ -406,8 +406,8 @@ else fs.writeFileSync(${JSON.stringify(recordPath)},JSON.stringify(args));
 			"fetch",
 			vi.fn(async () =>
 				Response.json({
-					package: "prime-agent",
-					tarball: "releases/current/prime-agent.tgz",
+					package: "axiom",
+					tarball: "releases/current/axiom.tgz",
 					version: VERSION,
 				}),
 			),

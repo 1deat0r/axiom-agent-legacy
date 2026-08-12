@@ -8,16 +8,16 @@
 - Added `app.messages.expand` (`ctrl+p`) to collapse or expand agent-to-agent messages separately from `ctrl+o` tool output.
 - Added a `ctrl+t` expand hint to collapsed thinking blocks, matching the tool output hint.
 - Changed expand/collapse hints to a consistent bracketed `(Ctrl+O to expand)` style across tool, message, summary, and error rows.
-- Added a configurable copy action to login dialogs so raw sign-in URLs can be copied without selecting wrapped text ([#643](https://github.com/PrimeIntellect-ai/prime-agent/issues/643)).
-- Added privacy-safe pseudonymous product analytics for onboarding, command use, execution modes, run outcomes, TTFT, latency, usage, tools, retries, and compactions, with disclosure and opt-out controls ([ENG-4682](https://linear.app/primeintellect/issue/ENG-4682/add-privacy-safe-posthog-analytics-to-prime-agent)).
+- Added a configurable copy action to login dialogs so raw sign-in URLs can be copied without selecting wrapped text ([#643](https://github.com/PrimeIntellect-ai/axiom/issues/643)).
+- Added privacy-safe pseudonymous product analytics for onboarding, command use, execution modes, run outcomes, TTFT, latency, usage, tools, retries, and compactions, with disclosure and opt-out controls ([ENG-4682](https://linear.app/primeintellect/issue/ENG-4682/add-privacy-safe-posthog-analytics-to-axiom)).
 - Changed sent agent messages in the IPython cell UI to show only the message text with a `╰─` gutter when expanded, matching received messages, and hid the raw `agent_message.send` receipt dictionary.
-- Fixed Homebrew installs attempting to self-update their versioned Cellar keg instead of directing users to `brew upgrade prime-agent` ([#844](https://github.com/PrimeIntellect-ai/prime-agent/issues/844))
+- Fixed Homebrew installs attempting to self-update their versioned Cellar keg instead of directing users to `brew upgrade axiom` ([#844](https://github.com/PrimeIntellect-ai/axiom/issues/844))
 - Fixed the agents view collapsing expanded subagent lists when returning from an opened agent ([ENG-5105](https://linear.app/primeintellect/issue/ENG-5105/keep-the-agents-view-state-persistent)).
 - Kept the subagent summary row visible and selectable while its list is expanded in the agents view, so pressing enter on it collapses the list again ([ENG-5105](https://linear.app/primeintellect/issue/ENG-5105/keep-the-agents-view-state-persistent)).
-- Added in-place editing of queued steering and follow-up messages: Alt+Up/Alt+Down browse the queue from the draft, Enter applies the edit as steering, Alt+Enter as a follow-up, and submitting an empty editor deletes the item; interrupts now preserve the queue ([#838](https://github.com/PrimeIntellect-ai/prime-agent/pull/838)).
-- Fixed workers with no live connection reporting as `ready`; stopping workers now report a `stopping` state, are hidden from live sessions, and no longer receive daemon-wide commands ([#850](https://github.com/PrimeIntellect-ai/prime-agent/pull/850)).
-- Fixed timed-out worker stops stranding dead-but-registered workers ("Session worker is not connected"); stops now finalize in the background once the process exits, and zombie processes are no longer counted as alive ([#851](https://github.com/PrimeIntellect-ai/prime-agent/pull/851)).
-- Fixed sessions becoming permanently unopenable after a stale worker registration was left behind; open/resume now self-heals by finishing the old cleanup and starting a fresh worker ([#852](https://github.com/PrimeIntellect-ai/prime-agent/pull/852)).
+- Added in-place editing of queued steering and follow-up messages: Alt+Up/Alt+Down browse the queue from the draft, Enter applies the edit as steering, Alt+Enter as a follow-up, and submitting an empty editor deletes the item; interrupts now preserve the queue ([#838](https://github.com/PrimeIntellect-ai/axiom/pull/838)).
+- Fixed workers with no live connection reporting as `ready`; stopping workers now report a `stopping` state, are hidden from live sessions, and no longer receive daemon-wide commands ([#850](https://github.com/PrimeIntellect-ai/axiom/pull/850)).
+- Fixed timed-out worker stops stranding dead-but-registered workers ("Session worker is not connected"); stops now finalize in the background once the process exits, and zombie processes are no longer counted as alive ([#851](https://github.com/PrimeIntellect-ai/axiom/pull/851)).
+- Fixed sessions becoming permanently unopenable after a stale worker registration was left behind; open/resume now self-heals by finishing the old cleanup and starting a fresh worker ([#852](https://github.com/PrimeIntellect-ai/axiom/pull/852)).
 
 ## [0.7.1] - 2026-08-07
 
@@ -32,7 +32,7 @@
 
 ### Changed
 
-- Changed self-updates to report the previous and new Prime Agent versions.
+- Changed self-updates to report the previous and new Axiom versions.
 
 ### Fixed
 
@@ -42,12 +42,12 @@
 
 - Added reverse tab navigation to the `/login` configuration menu and moved the model scope shortcut to `Alt+S`.
 - Fixed daemon startup crashes hiding their exit status and daemon log until the startup timeout.
-- Documented the global `idleEvictionMinutes` daemon setting, including its default, valid values, and eviction/passivation behavior ([#621](https://github.com/PrimeIntellect-ai/prime-agent/issues/621)).
-- Fixed top-level `--help` omitting `acp` from the supported `--mode` values ([#620](https://github.com/PrimeIntellect-ai/prime-agent/issues/620)).
-- Fixed `stop` and `rename` becoming prompts when `--daemon-socket` precedes the command ([#622](https://github.com/PrimeIntellect-ai/prime-agent/issues/622)).
-- Fixed subagent terminal notices arriving as anonymous follow-up prompts instead of attributed agent messages, so a parent can now tell which child reported completion, failure, or cancellation, and a busy parent is steered at the next turn boundary rather than waiting to go idle ([#617](https://github.com/PrimeIntellect-ai/prime-agent/issues/617)).
+- Documented the global `idleEvictionMinutes` daemon setting, including its default, valid values, and eviction/passivation behavior ([#621](https://github.com/PrimeIntellect-ai/axiom/issues/621)).
+- Fixed top-level `--help` omitting `acp` from the supported `--mode` values ([#620](https://github.com/PrimeIntellect-ai/axiom/issues/620)).
+- Fixed `stop` and `rename` becoming prompts when `--daemon-socket` precedes the command ([#622](https://github.com/PrimeIntellect-ai/axiom/issues/622)).
+- Fixed subagent terminal notices arriving as anonymous follow-up prompts instead of attributed agent messages, so a parent can now tell which child reported completion, failure, or cancellation, and a busy parent is steered at the next turn boundary rather than waiting to go idle ([#617](https://github.com/PrimeIntellect-ai/axiom/issues/617)).
 - Fixed ACP mode reporting a failed turn as a clean `end_turn`. A provider error, expired auth, or unusable model left `session/prompt` resolving with no updates at all, which reads to a client as a successful but empty turn; the turn now fails with the underlying error instead.
-- Fixed ACP cwd mismatch metadata treating symlink aliases such as macOS `/var` and `/private/var` as different directories ([#623](https://github.com/PrimeIntellect-ai/prime-agent/issues/623)).
+- Fixed ACP cwd mismatch metadata treating symlink aliases such as macOS `/var` and `/private/var` as different directories ([#623](https://github.com/PrimeIntellect-ai/axiom/issues/623)).
 
 ## [0.6.0] - 2026-08-04
 
@@ -61,7 +61,7 @@
 
 ### Added
 
-- Added `--mode acp`: Prime Agent now runs as an [Agent Client Protocol](https://agentclientprotocol.com) agent over NDJSON on stdio, driving an `AgentConnection` in-process. IPython surfaces as an ACP `execute` tool call carrying its cell source, and capabilities ACP has no native concept for (subagents, autonomous gate state, rich IPython output, compaction, goals, heartbeats, continual-harness refinement) travel in a namespaced `ai.primeintellect.prime-agent` `_meta` envelope that vanilla ACP clients ignore. Documented in `docs/acp.md`.
+- Added `--mode acp`: Axiom now runs as an [Agent Client Protocol](https://agentclientprotocol.com) agent over NDJSON on stdio, driving an `AgentConnection` in-process. IPython surfaces as an ACP `execute` tool call carrying its cell source, and capabilities ACP has no native concept for (subagents, autonomous gate state, rich IPython output, compaction, goals, heartbeats, continual-harness refinement) travel in a namespaced `ai.axiom` `_meta` envelope that vanilla ACP clients ignore. Documented in `docs/acp.md`.
 - Added `/rlm-max-depth` to view or set the recursion cap for the current chat, with `--global` to change the default for new sessions.
 - Added recursive navigation to the agents view: drill into any session's children and back out again, with each chat showing its own depth.
 - Added a family roster via `agent_message.list_agents()`, listing parent, siblings, and children with name, id, depth, and status, including family members currently on disk.
@@ -139,7 +139,7 @@
 ### Fixed
 
 - Fixed deeply nested `/tree` sessions overflowing the daemon serializer by transferring and rebuilding the session tree iteratively.
-- Fixed `prime-agent agents` opening a new chat for a process-local session.
+- Fixed `axiom agents` opening a new chat for a process-local session.
 - Fixed daemon startup after an interrupted supervisor leaves an empty ownership directory.
 - Fixed `/effort xhigh` and `/effort max` being rejected before a model is active.
 - Fixed IPython tracebacks emitting ANSI color codes.
@@ -159,18 +159,18 @@
 - Changed `/context` tree connectors from `├ `/`└ ` to `├─ `/`└─ ` to match the tree selector and session picker.
 - Changed the IPython cell queued marker from `▸` to `◇` to match the subagent and context-tree status icons.
 - Changed slash-command autocomplete to separate argument hints and resource provenance, show only the selected command description, and summarize hidden results directionally.
-- Fixed cancelled extension commands remaining alive when spawned processes ignored SIGTERM ([#458](https://github.com/PrimeIntellect-ai/prime-agent/pull/458) by [@snimu](https://github.com/snimu)).
+- Fixed cancelled extension commands remaining alive when spawned processes ignored SIGTERM ([#458](https://github.com/PrimeIntellect-ai/axiom/pull/458) by [@snimu](https://github.com/snimu)).
 - Fixed OAuth browser launch URLs being interpreted by the system shell.
-- Added agent-callable `refine` skill so the model can schedule continual harness refinement from IPython via `await refine.run()` without blocking the current turn ([#504](https://github.com/PrimeIntellect-ai/prime-agent/pull/504) by [@sethkarten](https://github.com/sethkarten)).
-- Changed long live session opens to render a bounded recent transcript tail while preserving full prompt history ([#343](https://github.com/PrimeIntellect-ai/prime-agent/pull/343) by [@sethkarten](https://github.com/sethkarten)).
-- Changed `/refine` to run planning in the background so the conversation is not blocked during the LLM pass ([#497](https://github.com/PrimeIntellect-ai/prime-agent/pull/497) by [@sethkarten](https://github.com/sethkarten)).
-- Added serialized headless refinement and `--goal` / `--goal-token-budget` for seeding durable session goals ([#514](https://github.com/PrimeIntellect-ai/prime-agent/pull/514) by [@sethkarten](https://github.com/sethkarten)).
-- Added multi-turn `/btw` side conversations with transient in-pane bash commands ([#512](https://github.com/PrimeIntellect-ai/prime-agent/pull/512) by [@ilijalichkovski](https://github.com/ilijalichkovski)).
+- Added agent-callable `refine` skill so the model can schedule continual harness refinement from IPython via `await refine.run()` without blocking the current turn ([#504](https://github.com/PrimeIntellect-ai/axiom/pull/504) by [@sethkarten](https://github.com/sethkarten)).
+- Changed long live session opens to render a bounded recent transcript tail while preserving full prompt history ([#343](https://github.com/PrimeIntellect-ai/axiom/pull/343) by [@sethkarten](https://github.com/sethkarten)).
+- Changed `/refine` to run planning in the background so the conversation is not blocked during the LLM pass ([#497](https://github.com/PrimeIntellect-ai/axiom/pull/497) by [@sethkarten](https://github.com/sethkarten)).
+- Added serialized headless refinement and `--goal` / `--goal-token-budget` for seeding durable session goals ([#514](https://github.com/PrimeIntellect-ai/axiom/pull/514) by [@sethkarten](https://github.com/sethkarten)).
+- Added multi-turn `/btw` side conversations with transient in-pane bash commands ([#512](https://github.com/PrimeIntellect-ai/axiom/pull/512) by [@ilijalichkovski](https://github.com/ilijalichkovski)).
 
 
 ## [0.3.2] - 2026-07-20
 
-- Fixed invalid `--resume` session IDs being submitted as prompts, with nearest-session guidance instead ([ENG-4722](https://linear.app/primeintellect/issue/ENG-4722/prime-agent-resume-accepts-incorrect-session-ids)).
+- Fixed invalid `--resume` session IDs being submitted as prompts, with nearest-session guidance instead ([ENG-4722](https://linear.app/primeintellect/issue/ENG-4722/axiom-resume-accepts-incorrect-session-ids)).
 - Changed `/model` to show all public models with authenticated providers first and open provider authentication when an unavailable model is selected ([ENG-4575](https://linear.app/primeintellect/issue/ENG-4575/show-all-models-in-model-and-prompt-auth-on-selection)).
 - Changed the shared configuration menu to cycle tabs with Tab, use Shift+Tab for model scope, show an Escape close hint, preserve arrow-key search editing, and remove the model selector's provider shortcut.
 - Fixed searchable selectors retaining their previous scroll position after the query changed.
@@ -182,13 +182,13 @@
 - Fixed daemon backpressure triggering redundant catch-up snapshots for events already queued by the socket.
 - Added dedicated stable and beta installers, with stable advancing on version bumps and beta advancing on every commit to `main`.
 - Fixed incompatible daemon builds crashing startup or respawning after shutdown, with capability negotiation, verified provenance, and convergent force shutdown ([ENG-4687](https://linear.app/primeintellect/issue/ENG-4687/make-daemon-version-mismatches-self-healing)).
-- Changed tool-result and announcement images to show compact metadata instead of terminal graphics ([#437](https://github.com/PrimeIntellect-ai/prime-agent/pull/437) by [@snimu](https://github.com/snimu)).
+- Changed tool-result and announcement images to show compact metadata instead of terminal graphics ([#437](https://github.com/PrimeIntellect-ai/axiom/pull/437) by [@snimu](https://github.com/snimu)).
 - Changed top-level CLI help to show concise common options and commands without loading runtime resources ([ENG-4688](https://linear.app/primeintellect/issue/ENG-4688/help-command-is-obscenely-verbose)).
 - Fixed completed subagents cancelling their RLM heartbeats before the first run ([ENG-4652](https://linear.app/primeintellect/issue/ENG-4652/subagent-heartbeats-dont-work)).
 - Changed the fullscreen follow shortcut from `Alt+Down` to `Ctrl+Shift+Down` for more reliable terminal input ([ENG-4684](https://linear.app/primeintellect/issue/ENG-4684/altdown-doesnt-work)).
 - Added user-requested model selection for subagents with bounded account-authorized discovery and explicit parent-model fallback warnings ([ENG-4649](https://linear.app/primeintellect/issue/ENG-4649/allow-subagents-to-use-a-different-model-than-the-parent-agent)).
-- Added subtle feature hints to longer-running agent turns ([ENG-4521](https://linear.app/primeintellect/issue/ENG-4521/add-subtle-hints-for-new-prime-agent-features)).
-- Fixed active heartbeats not resuming after Prime Agent updates ([ENG-4657](https://linear.app/primeintellect/issue/ENG-4657/heartbeats-dont-survive-updatesdaemon-reboots)).
+- Added subtle feature hints to longer-running agent turns ([ENG-4521](https://linear.app/primeintellect/issue/ENG-4521/add-subtle-hints-for-new-axiom-features)).
+- Fixed active heartbeats not resuming after Axiom updates ([ENG-4657](https://linear.app/primeintellect/issue/ENG-4657/heartbeats-dont-survive-updatesdaemon-reboots)).
 - Fixed the Agents View reordering sessions whenever prompts or heartbeats updated their activity timestamps ([ENG-4650](https://linear.app/primeintellect/issue/ENG-4650/agents-view-shifts-session-list-constantly)).
 - Added parent-scoped subagent lifecycle APIs: create children with readable default or orchestrator-chosen names, recover running or completed children through `rlm.list_subagents()`, continue them through agent messaging, and close/remove them with `rlm.delete_subagent()`.
 - Changed shell commands to use discoverable agent, schedule, package, model, session, update, doctor, and full-shutdown verbs without exposing the background daemon hierarchy ([ENG-4538](https://linear.app/primeintellect/issue/ENG-4538/standardize-bash-command-conventions-and-improve-command-discovery)).
@@ -197,8 +197,8 @@
 - Fixed slow daemon clients becoming stuck when newer session snapshots arrived during catch-up.
 - Fixed queued messages getting stranded when an agent turn ended ([ENG-4653](https://linear.app/primeintellect/issue/ENG-4653/queued-messages-can-get-stuck-with-heartbeats)).
 - Changed `/traces upload-all` to pace requests within the platform rate limit, honor bounded `Retry-After` responses, and support interruption.
-- Fixed resuming a daemon-resident session to attach the requesting client to its existing worker without disturbing other clients ([ENG-4656](https://linear.app/primeintellect/issue/ENG-4656/resuming-prime-agent-sessions-should-attach)).
-- Fixed daemon-owned updates terminating their updater before the daemon restart and session restore completed ([ENG-4606](https://linear.app/primeintellect/issue/ENG-4606/benign-error-on-prime-agent-update)).
+- Fixed resuming a daemon-resident session to attach the requesting client to its existing worker without disturbing other clients ([ENG-4656](https://linear.app/primeintellect/issue/ENG-4656/resuming-axiom-sessions-should-attach)).
+- Fixed daemon-owned updates terminating their updater before the daemon restart and session restore completed ([ENG-4606](https://linear.app/primeintellect/issue/ENG-4606/benign-error-on-axiom-update)).
 - Fixed first-launch Prime login and kept onboarding visible between team and model selection ([ENG-4658](https://linear.app/primeintellect/issue/ENG-4658/fix-onboarding-login-enter-key-and-model-selector-flicker)).
 - Fixed active heartbeat sessions appearing under Needs Input or Completed instead of a dedicated Heartbeats section ([ENG-4654](https://linear.app/primeintellect/issue/ENG-4654/categorize-heartbeat-sessions-as-working)).
 - Fixed stashed prompts being lost when leaving and reopening a session from the Agents View ([ENG-4659](https://linear.app/primeintellect/issue/ENG-4659/stashed-prompts-should-persist)).
@@ -232,7 +232,7 @@
 ## [0.3.0] - 2026-07-13
 
 - Changed daemon and headless execution to isolate each root session tree in a recoverable worker process, with protocol-v2 chunked snapshots, compact streaming, attachment-local backpressure, session leases, and unchanged print, JSON, and RPC interfaces.
-- Added autonomous mode with host-side continuations, configurable limits, and quality gates for evaluator-controlled runs ([#278](https://github.com/PrimeIntellect-ai/prime-agent/pull/278) by [@sethkarten](https://github.com/sethkarten)).
+- Added autonomous mode with host-side continuations, configurable limits, and quality gates for evaluator-controlled runs ([#278](https://github.com/PrimeIntellect-ai/axiom/pull/278) by [@sethkarten](https://github.com/sethkarten)).
 - Added `/traces preview` and `/traces upload-all` for inspecting the current payload and backfilling saved parent and subagent traces.
 - Changed `/traces upload` and `/traces upload-all` to be explicit one-shot uploads that do not enable automatic sharing.
 - Changed trace uploads to retry transient network and HTTP failures with bounded exponential backoff and jitter.
@@ -268,10 +268,10 @@
 ## [0.2.8] - 2026-07-09
 
 - Added built-in Herdr integration that reports agent lifecycle state to Herdr panes automatically, without requiring `herdr integration install pi`.
-- Changed Escape to interrupt active work with a visible abort notice, double Escape to open the session tree from an empty prompt or clear an idle draft, and `?` to show shortcuts ([ENG-4489](https://linear.app/primeintellect/issue/ENG-4489/rewire-prime-agent-shortcuts-to-match-claude-code-flow)).
-- Changed new-chat guidance to show concise shell, command, file, and shortcut hints, with Agents View first and `? for shortcuts` after the model and effort ([ENG-4489](https://linear.app/primeintellect/issue/ENG-4489/rewire-prime-agent-shortcuts-to-match-claude-code-flow)).
-- Changed `?` shortcut help to appear as a temporary compact panel below the transcript, while `/hotkeys` shows the full reference without Ctrl+Z ([ENG-4489](https://linear.app/primeintellect/issue/ENG-4489/rewire-prime-agent-shortcuts-to-match-claude-code-flow)).
-- Fixed Escape repeats around autocomplete, queued draft restoration, whitespace-only drafts, and active background work ([ENG-4489](https://linear.app/primeintellect/issue/ENG-4489/rewire-prime-agent-shortcuts-to-match-claude-code-flow)).
+- Changed Escape to interrupt active work with a visible abort notice, double Escape to open the session tree from an empty prompt or clear an idle draft, and `?` to show shortcuts ([ENG-4489](https://linear.app/primeintellect/issue/ENG-4489/rewire-axiom-shortcuts-to-match-claude-code-flow)).
+- Changed new-chat guidance to show concise shell, command, file, and shortcut hints, with Agents View first and `? for shortcuts` after the model and effort ([ENG-4489](https://linear.app/primeintellect/issue/ENG-4489/rewire-axiom-shortcuts-to-match-claude-code-flow)).
+- Changed `?` shortcut help to appear as a temporary compact panel below the transcript, while `/hotkeys` shows the full reference without Ctrl+Z ([ENG-4489](https://linear.app/primeintellect/issue/ENG-4489/rewire-axiom-shortcuts-to-match-claude-code-flow)).
+- Fixed Escape repeats around autocomplete, queued draft restoration, whitespace-only drafts, and active background work ([ENG-4489](https://linear.app/primeintellect/issue/ENG-4489/rewire-axiom-shortcuts-to-match-claude-code-flow)).
 - Fixed the agents-view splash shifting when opening an agent session ([ENG-4517](https://linear.app/primeintellect/issue/ENG-4517)).
 - Changed `/model` to sort featured flagship models above a provider's long tail (with a numeric-aware alphabetical tiebreak), so the full Prime Inference catalog doesn't flood the picker.
 - Fixed selector prompts and choices filling their background through the terminal's right edge.
@@ -282,7 +282,7 @@
 ## [0.2.7] - 2026-07-08
 
 - Changed subagent and refinement guidance to favor non-blocking subagent tasks by default, use disk-backed tracking for long-running fan-out, inspect or message live subagents when agent observation/messaging skills are available, and capture reusable delegation roles, procedures, facts, preferences, and prompt addendums with `/refine`.
-- Changed `attach_image` to resize and compress large inline image attachments before storing them for rendering and replay ([#340](https://github.com/PrimeIntellect-ai/prime-agent/pull/340) by [@sethkarten](https://github.com/sethkarten)).
+- Changed `attach_image` to resize and compress large inline image attachments before storing them for rendering and replay ([#340](https://github.com/PrimeIntellect-ai/axiom/pull/340) by [@sethkarten](https://github.com/sethkarten)).
 - Fixed heartbeat and goal continuation prompts rendering like ordinary user messages ([ENG-4482](https://linear.app/primeintellect/issue/ENG-4482/heartbeat-message-should-have-a-different-ui-from-user-message)).
 - Fixed `/heartbeat` guidance to show `stop` and the `every <duration> <instruction>` interval syntax ([ENG-4484](https://linear.app/primeintellect/issue/ENG-4484/improve-heartbeat-command-syntax-guidance-in-ui)).
 - Fixed Ctrl+C canceling the active turn, bash command, and IPython kernel execution deterministically, with a compact recovery prompt and model-visible reset notice when an interrupted IPython cell keeps running ([ENG-4490](https://linear.app/primeintellect/issue/ENG-4490)).
@@ -290,7 +290,7 @@
 - Fixed `/model` opening and selection staying blocked on live model refreshes ([ENG-4505](https://linear.app/primeintellect/issue/ENG-4505/model-ui-is-extremely-slow)).
 - Fixed provider auth failures leaving stale credentials shown as connected in `/login` ([ENG-4491](https://linear.app/primeintellect/issue/ENG-4491/mark-provider-stale-after-repeated-401s)).
 - Fixed typing into the prompt after highlighting an inline subagent ([ENG-4494](https://linear.app/primeintellect/issue/ENG-4494/allow-typing-after-highlighting-a-subagent)).
-- Fixed session-targeted heartbeat jobs staying scheduled after sessions are killed or saved sessions are deleted ([#332](https://github.com/PrimeIntellect-ai/prime-agent/pull/332)).
+- Fixed session-targeted heartbeat jobs staying scheduled after sessions are killed or saved sessions are deleted ([#332](https://github.com/PrimeIntellect-ai/axiom/pull/332)).
 - Fixed self-updates interrupting and automatically resuming daemon sessions instead of waiting for long-running work to finish.
 - Fixed provider errors being surfaced instead of retried within the retry budget ([ENG-4503](https://linear.app/primeintellect/issue/ENG-4503/restarting-old-session-returns-empty-model-response)).
 - Fixed Agents View returning from fullscreen sessions without flashing primary scrollback ([ENG-4508](https://linear.app/primeintellect/issue/ENG-4508/fullscreen-mode-agents-view-scroll)).
@@ -304,67 +304,67 @@
 
 ## [0.2.5] - 2026-07-06
 
-- Added daemon-backed user orchestration with agent-to-agent messaging and read-only observation of active sessions ([#207](https://github.com/PrimeIntellect-ai/prime-agent/pull/207) by [@sethkarten](https://github.com/sethkarten)).
-- Added an orchestration heartbeat skill for compact multi-session progress, blocker, and action summaries ([#207](https://github.com/PrimeIntellect-ai/prime-agent/pull/207) by [@sethkarten](https://github.com/sethkarten)).
-- Added an opt-in auto-refine review hook that can ask whether `/refine` should run after turn intervals or compaction checkpoints ([#201](https://github.com/PrimeIntellect-ai/prime-agent/pull/201) by [@sethkarten](https://github.com/sethkarten)).
-- Added opt-in fullscreen mode with a scrollable transcript, pinned prompt bar, mouse selection, and `/fullscreen` controls ([#316](https://github.com/PrimeIntellect-ai/prime-agent/pull/316)).
-- Added prompt stashing so a draft can be temporarily saved, a separate prompt or command can run, and the draft is restored afterward ([#321](https://github.com/PrimeIntellect-ai/prime-agent/pull/321)).
-- Added resume support to the agents view so stored sessions can be attached and managed without leaving the view ([#318](https://github.com/PrimeIntellect-ai/prime-agent/pull/318)).
-- Added subagent delegation guidance to encourage parallel and background `rlm` calls when recursion is available ([#306](https://github.com/PrimeIntellect-ai/prime-agent/pull/306) by [@alexzhang13](https://github.com/alexzhang13)).
-- Changed fullscreen TUI rendering to be enabled by default ([#325](https://github.com/PrimeIntellect-ai/prime-agent/pull/325)).
-- Changed `--resume` to accept an optional session path or ID ([#319](https://github.com/PrimeIntellect-ai/prime-agent/pull/319)).
-- Changed the installer onboarding splash to show ordered setup phases with a percentage instead of cycling detail text ([#327](https://github.com/PrimeIntellect-ai/prime-agent/pull/327), [ENG-4376](https://linear.app/primeintellect/issue/ENG-4376/onboarding-instructions-should-be-accurate-to-whats-happening)).
-- Changed provider stream failures to show classified diagnostics and request IDs, with structured agent logs for debugging ([#313](https://github.com/PrimeIntellect-ai/prime-agent/pull/313)).
-- Fixed daemon-hosted extensions sharing the wrong Herdr pane environment across concurrent sessions ([#303](https://github.com/PrimeIntellect-ai/prime-agent/pull/303)).
-- Fixed parallel subagent guidance failing on first use by pre-importing `asyncio` in the IPython kernel bootstrap ([#315](https://github.com/PrimeIntellect-ai/prime-agent/pull/315)).
+- Added daemon-backed user orchestration with agent-to-agent messaging and read-only observation of active sessions ([#207](https://github.com/PrimeIntellect-ai/axiom/pull/207) by [@sethkarten](https://github.com/sethkarten)).
+- Added an orchestration heartbeat skill for compact multi-session progress, blocker, and action summaries ([#207](https://github.com/PrimeIntellect-ai/axiom/pull/207) by [@sethkarten](https://github.com/sethkarten)).
+- Added an opt-in auto-refine review hook that can ask whether `/refine` should run after turn intervals or compaction checkpoints ([#201](https://github.com/PrimeIntellect-ai/axiom/pull/201) by [@sethkarten](https://github.com/sethkarten)).
+- Added opt-in fullscreen mode with a scrollable transcript, pinned prompt bar, mouse selection, and `/fullscreen` controls ([#316](https://github.com/PrimeIntellect-ai/axiom/pull/316)).
+- Added prompt stashing so a draft can be temporarily saved, a separate prompt or command can run, and the draft is restored afterward ([#321](https://github.com/PrimeIntellect-ai/axiom/pull/321)).
+- Added resume support to the agents view so stored sessions can be attached and managed without leaving the view ([#318](https://github.com/PrimeIntellect-ai/axiom/pull/318)).
+- Added subagent delegation guidance to encourage parallel and background `rlm` calls when recursion is available ([#306](https://github.com/PrimeIntellect-ai/axiom/pull/306) by [@alexzhang13](https://github.com/alexzhang13)).
+- Changed fullscreen TUI rendering to be enabled by default ([#325](https://github.com/PrimeIntellect-ai/axiom/pull/325)).
+- Changed `--resume` to accept an optional session path or ID ([#319](https://github.com/PrimeIntellect-ai/axiom/pull/319)).
+- Changed the installer onboarding splash to show ordered setup phases with a percentage instead of cycling detail text ([#327](https://github.com/PrimeIntellect-ai/axiom/pull/327), [ENG-4376](https://linear.app/primeintellect/issue/ENG-4376/onboarding-instructions-should-be-accurate-to-whats-happening)).
+- Changed provider stream failures to show classified diagnostics and request IDs, with structured agent logs for debugging ([#313](https://github.com/PrimeIntellect-ai/axiom/pull/313)).
+- Fixed daemon-hosted extensions sharing the wrong Herdr pane environment across concurrent sessions ([#303](https://github.com/PrimeIntellect-ai/axiom/pull/303)).
+- Fixed parallel subagent guidance failing on first use by pre-importing `asyncio` in the IPython kernel bootstrap ([#315](https://github.com/PrimeIntellect-ai/axiom/pull/315)).
 
 ## [0.2.4] - 2026-07-01
 
-- Changed the agents view to list only sessions the daemon is actively holding, and stopped the daemon from auto-restoring on-disk sessions on startup, so a restarted daemon no longer surfaces a wall of weeks-old sessions; sessions come back via `/resume` or `--resume` ([#295](https://github.com/PrimeIntellect-ai/prime-agent/issues/295)).
-- Changed the kernel install progress line to name the current step and show a percentage instead of a static message ([#293](https://github.com/PrimeIntellect-ai/prime-agent/issues/293)).
-- Changed the CLI to honor a `--` end-of-options separator, so arguments after it are passed through instead of parsed as flags ([#296](https://github.com/PrimeIntellect-ai/prime-agent/issues/296)).
-- Changed provider stream failures to retry transient errors (content filter trips and prose 5xx responses) instead of failing the turn ([#297](https://github.com/PrimeIntellect-ai/prime-agent/issues/297)).
-- Fixed IPython and bash tool calls failing for the rest of a run after a session was rebuilt, by rebinding built-in tools to the live runtime at call time ([#299](https://github.com/PrimeIntellect-ai/prime-agent/issues/299)).
-- Fixed the kernel venv not rebuilding when the bundled runtime source changed, by tracking a content hash of the runtime (including its `pyproject.toml`) in the staleness check ([#291](https://github.com/PrimeIntellect-ai/prime-agent/issues/291)).
-- Fixed a large subagent fan-out spawning every IPython kernel at once and starving the machine, by bounding concurrent kernel boots (default `min(16, 2*cores)`, override with `PRIME_AGENT_MAX_CONCURRENT_KERNEL_BOOTS`) ([#294](https://github.com/PrimeIntellect-ai/prime-agent/issues/294)).
-- Added a Python forkserver (on by default on Linux, opt out with `PRIME_AGENT_KERNEL_FORKSERVER=0`) that forks subagent kernels from one pre-imported template process instead of a full cold boot each time, with automatic fallback to direct spawn on any failure ([#298](https://github.com/PrimeIntellect-ai/prime-agent/issues/298), [#300](https://github.com/PrimeIntellect-ai/prime-agent/issues/300)).
-- Fixed empty tool results on OpenAI-style providers being sent as a literal "(see attached image)" placeholder, which made models hallucinate a nonexistent image ([#290](https://github.com/PrimeIntellect-ai/prime-agent/issues/290)).
+- Changed the agents view to list only sessions the daemon is actively holding, and stopped the daemon from auto-restoring on-disk sessions on startup, so a restarted daemon no longer surfaces a wall of weeks-old sessions; sessions come back via `/resume` or `--resume` ([#295](https://github.com/PrimeIntellect-ai/axiom/issues/295)).
+- Changed the kernel install progress line to name the current step and show a percentage instead of a static message ([#293](https://github.com/PrimeIntellect-ai/axiom/issues/293)).
+- Changed the CLI to honor a `--` end-of-options separator, so arguments after it are passed through instead of parsed as flags ([#296](https://github.com/PrimeIntellect-ai/axiom/issues/296)).
+- Changed provider stream failures to retry transient errors (content filter trips and prose 5xx responses) instead of failing the turn ([#297](https://github.com/PrimeIntellect-ai/axiom/issues/297)).
+- Fixed IPython and bash tool calls failing for the rest of a run after a session was rebuilt, by rebinding built-in tools to the live runtime at call time ([#299](https://github.com/PrimeIntellect-ai/axiom/issues/299)).
+- Fixed the kernel venv not rebuilding when the bundled runtime source changed, by tracking a content hash of the runtime (including its `pyproject.toml`) in the staleness check ([#291](https://github.com/PrimeIntellect-ai/axiom/issues/291)).
+- Fixed a large subagent fan-out spawning every IPython kernel at once and starving the machine, by bounding concurrent kernel boots (default `min(16, 2*cores)`, override with `AXIOM_MAX_CONCURRENT_KERNEL_BOOTS`) ([#294](https://github.com/PrimeIntellect-ai/axiom/issues/294)).
+- Added a Python forkserver (on by default on Linux, opt out with `AXIOM_KERNEL_FORKSERVER=0`) that forks subagent kernels from one pre-imported template process instead of a full cold boot each time, with automatic fallback to direct spawn on any failure ([#298](https://github.com/PrimeIntellect-ai/axiom/issues/298), [#300](https://github.com/PrimeIntellect-ai/axiom/issues/300)).
+- Fixed empty tool results on OpenAI-style providers being sent as a literal "(see attached image)" placeholder, which made models hallucinate a nonexistent image ([#290](https://github.com/PrimeIntellect-ai/axiom/issues/290)).
 
 ## [0.2.3] - 2026-06-30
 
-- Added built-in Linear and Notion integrations that the agent drives from Python in the kernel (no new agent tools); each is a bundled skill that talks to the service's official MCP server and auto-discovers its tools. They ship disabled and turn on after you sign in via the Services tab in `/login` or `/mcp login`, with credentials stored in the existing `auth.json` ([#280](https://github.com/PrimeIntellect-ai/prime-agent/issues/280)).
-- Added an `attach-image` skill that loads an on-disk image (PNG, JPEG, GIF, WebP) into the model's context as a viewable attachment so a vision-capable model can directly see screenshots, diagrams, charts, or scanned pages ([#274](https://github.com/PrimeIntellect-ai/prime-agent/issues/274)).
-- Changed subagents to be first-class sessions: opening a subagent now attaches to its own session and renders through the same rich chat UI as the main conversation instead of a laggy parent-rebuilt transcript, finished subagents stay viewable in the list and sort below running ones, and the detail view shows the subagent's own recap and animated working status ([#282](https://github.com/PrimeIntellect-ai/prime-agent/issues/282)).
-- Changed session lifecycle handling so the agents view now lists every live session (not only daemon-resident ones), fixing reports of sessions going missing; abandoned new chats that were never sent a message are discarded instead of lingering ([#269](https://github.com/PrimeIntellect-ai/prime-agent/issues/269)).
-- Changed the IPython kernel to stay alive across compaction: variables, imports, and helpers the agent defined are no longer wiped, and the model is instead told which names remain defined ([#267](https://github.com/PrimeIntellect-ai/prime-agent/issues/267)).
-- Changed local slash commands like `/context`, `/system-prompt`, `/logs`, `/changelog`, and `/hotkeys` to echo the typed command into the chat so their output is anchored to a visible command instead of floating ([#270](https://github.com/PrimeIntellect-ai/prime-agent/issues/270)).
-- Changed session recaps to use a non-reasoning model (Qwen3-30B instruct), which reliably closes the recap tag instead of occasionally surfacing a dangling "..." ([#284](https://github.com/PrimeIntellect-ai/prime-agent/issues/284)).
-- Changed the heartbeat scheduler to defer `/heartbeat` and internal heartbeat cron jobs while the target session is already working, rescheduling the next interval instead of piling a prompt onto a busy agent ([#265](https://github.com/PrimeIntellect-ai/prime-agent/issues/265)).
-- Changed `Ctrl+O` on IPython and bash cells to keep the same summary line in place and just attach the full code and output beneath it (aligned under the code gutter), instead of restructuring the block on expand ([#288](https://github.com/PrimeIntellect-ai/prime-agent/issues/288)).
-- Removed the "call at most one built-in tool per turn" instruction from the system prompt, allowing the agent to invoke multiple built-in tools in a single turn ([#210](https://github.com/PrimeIntellect-ai/prime-agent/issues/210)).
-- Fixed historical session replay re-emitting inline terminal image escape payloads; history now shows lightweight image fallback labels while live tool results still render images inline ([#281](https://github.com/PrimeIntellect-ai/prime-agent/issues/281)).
-- Fixed pressing back from a subagent opened directly from the agents view dropping you into the parent's chat; it now returns to the agents view, with a "back to agents" hint ([#271](https://github.com/PrimeIntellect-ai/prime-agent/issues/271)).
-- Fixed the agents view resetting the highlight to the first row when returning to it; selection now sticks to the session you had open across reorders and reattaches ([#268](https://github.com/PrimeIntellect-ai/prime-agent/issues/268)).
-- Fixed freshly created chats being titled by their session ID until their file flushed; they are now titled by their first prompt immediately ([#264](https://github.com/PrimeIntellect-ai/prime-agent/issues/264)).
-- Fixed opening a session from the agents view failing when its original working directory no longer exists; it now opens in a fallback directory with a notice instead of breaking ([#287](https://github.com/PrimeIntellect-ai/prime-agent/issues/287)).
+- Added built-in Linear and Notion integrations that the agent drives from Python in the kernel (no new agent tools); each is a bundled skill that talks to the service's official MCP server and auto-discovers its tools. They ship disabled and turn on after you sign in via the Services tab in `/login` or `/mcp login`, with credentials stored in the existing `auth.json` ([#280](https://github.com/PrimeIntellect-ai/axiom/issues/280)).
+- Added an `attach-image` skill that loads an on-disk image (PNG, JPEG, GIF, WebP) into the model's context as a viewable attachment so a vision-capable model can directly see screenshots, diagrams, charts, or scanned pages ([#274](https://github.com/PrimeIntellect-ai/axiom/issues/274)).
+- Changed subagents to be first-class sessions: opening a subagent now attaches to its own session and renders through the same rich chat UI as the main conversation instead of a laggy parent-rebuilt transcript, finished subagents stay viewable in the list and sort below running ones, and the detail view shows the subagent's own recap and animated working status ([#282](https://github.com/PrimeIntellect-ai/axiom/issues/282)).
+- Changed session lifecycle handling so the agents view now lists every live session (not only daemon-resident ones), fixing reports of sessions going missing; abandoned new chats that were never sent a message are discarded instead of lingering ([#269](https://github.com/PrimeIntellect-ai/axiom/issues/269)).
+- Changed the IPython kernel to stay alive across compaction: variables, imports, and helpers the agent defined are no longer wiped, and the model is instead told which names remain defined ([#267](https://github.com/PrimeIntellect-ai/axiom/issues/267)).
+- Changed local slash commands like `/context`, `/system-prompt`, `/logs`, `/changelog`, and `/hotkeys` to echo the typed command into the chat so their output is anchored to a visible command instead of floating ([#270](https://github.com/PrimeIntellect-ai/axiom/issues/270)).
+- Changed session recaps to use a non-reasoning model (Qwen3-30B instruct), which reliably closes the recap tag instead of occasionally surfacing a dangling "..." ([#284](https://github.com/PrimeIntellect-ai/axiom/issues/284)).
+- Changed the heartbeat scheduler to defer `/heartbeat` and internal heartbeat cron jobs while the target session is already working, rescheduling the next interval instead of piling a prompt onto a busy agent ([#265](https://github.com/PrimeIntellect-ai/axiom/issues/265)).
+- Changed `Ctrl+O` on IPython and bash cells to keep the same summary line in place and just attach the full code and output beneath it (aligned under the code gutter), instead of restructuring the block on expand ([#288](https://github.com/PrimeIntellect-ai/axiom/issues/288)).
+- Removed the "call at most one built-in tool per turn" instruction from the system prompt, allowing the agent to invoke multiple built-in tools in a single turn ([#210](https://github.com/PrimeIntellect-ai/axiom/issues/210)).
+- Fixed historical session replay re-emitting inline terminal image escape payloads; history now shows lightweight image fallback labels while live tool results still render images inline ([#281](https://github.com/PrimeIntellect-ai/axiom/issues/281)).
+- Fixed pressing back from a subagent opened directly from the agents view dropping you into the parent's chat; it now returns to the agents view, with a "back to agents" hint ([#271](https://github.com/PrimeIntellect-ai/axiom/issues/271)).
+- Fixed the agents view resetting the highlight to the first row when returning to it; selection now sticks to the session you had open across reorders and reattaches ([#268](https://github.com/PrimeIntellect-ai/axiom/issues/268)).
+- Fixed freshly created chats being titled by their session ID until their file flushed; they are now titled by their first prompt immediately ([#264](https://github.com/PrimeIntellect-ai/axiom/issues/264)).
+- Fixed opening a session from the agents view failing when its original working directory no longer exists; it now opens in a fallback directory with a notice instead of breaking ([#287](https://github.com/PrimeIntellect-ai/axiom/issues/287)).
 
 ## [0.2.2] - 2026-06-25
 
-- Added a bundled `websearch` skill (Google search via the Serper API) that loads by default. Add a Serper key via `/login` ("Serper (web search)"); it is stored with your other credentials and supplied to the skill automatically. The skill can be disabled with `bundledSkills.websearch: false` and overridden by a same-named skill in any user, project, package, or `--skill` location ([#86](https://github.com/PrimeIntellect-ai/prime-agent/issues/86)).
-- Added image input support for vision-capable Prime Inference models (Claude, GPT-5.x, Grok, Kimi K2.7 Code, Qwen3-VL), which previously dropped attached images as unsupported ([#261](https://github.com/PrimeIntellect-ai/prime-agent/issues/261)).
-- Added a live subagent tree above the working loader showing each in-flight subagent with a prompt excerpt, tool-use and token counts, and its recap once generated; finished subagents drop out of the tree ([#254](https://github.com/PrimeIntellect-ai/prime-agent/issues/254)).
-- Changed the prompt bar to show the active model and thinking level on the left and always show context token count and percentage used on the right, instead of only surfacing context usage past the halfway point ([#252](https://github.com/PrimeIntellect-ai/prime-agent/issues/252)).
-- Changed the `/model` picker to rank results by most-recently-used, so models you actually pick float to the top and break ties among equally-good fuzzy matches ([#251](https://github.com/PrimeIntellect-ai/prime-agent/issues/251)).
-- Changed the collapsed bash and IPython tool previews to pick the most informative line via a shared heuristic, skipping low-signal setup lines and redacting long blobs and secret-looking values ([#248](https://github.com/PrimeIntellect-ai/prime-agent/issues/248)).
-- Changed subagents to render as an inline, scrollable list below the prompt with arrow-key navigation and prompts that elide shared prefixes, replacing the full-screen subagent viewer; running subagents and in-progress markers now animate so the agent never looks crashed ([#247](https://github.com/PrimeIntellect-ai/prime-agent/issues/247)).
-- Fixed context overflow appearing at ~50% remaining for Prime Inference Claude models by correcting their context window to 200k and counting prompt tokens only (excluding output) for the context indicator and compaction trigger ([#246](https://github.com/PrimeIntellect-ai/prime-agent/issues/246)).
+- Added a bundled `websearch` skill (Google search via the Serper API) that loads by default. Add a Serper key via `/login` ("Serper (web search)"); it is stored with your other credentials and supplied to the skill automatically. The skill can be disabled with `bundledSkills.websearch: false` and overridden by a same-named skill in any user, project, package, or `--skill` location ([#86](https://github.com/PrimeIntellect-ai/axiom/issues/86)).
+- Added image input support for vision-capable Prime Inference models (Claude, GPT-5.x, Grok, Kimi K2.7 Code, Qwen3-VL), which previously dropped attached images as unsupported ([#261](https://github.com/PrimeIntellect-ai/axiom/issues/261)).
+- Added a live subagent tree above the working loader showing each in-flight subagent with a prompt excerpt, tool-use and token counts, and its recap once generated; finished subagents drop out of the tree ([#254](https://github.com/PrimeIntellect-ai/axiom/issues/254)).
+- Changed the prompt bar to show the active model and thinking level on the left and always show context token count and percentage used on the right, instead of only surfacing context usage past the halfway point ([#252](https://github.com/PrimeIntellect-ai/axiom/issues/252)).
+- Changed the `/model` picker to rank results by most-recently-used, so models you actually pick float to the top and break ties among equally-good fuzzy matches ([#251](https://github.com/PrimeIntellect-ai/axiom/issues/251)).
+- Changed the collapsed bash and IPython tool previews to pick the most informative line via a shared heuristic, skipping low-signal setup lines and redacting long blobs and secret-looking values ([#248](https://github.com/PrimeIntellect-ai/axiom/issues/248)).
+- Changed subagents to render as an inline, scrollable list below the prompt with arrow-key navigation and prompts that elide shared prefixes, replacing the full-screen subagent viewer; running subagents and in-progress markers now animate so the agent never looks crashed ([#247](https://github.com/PrimeIntellect-ai/axiom/issues/247)).
+- Fixed context overflow appearing at ~50% remaining for Prime Inference Claude models by correcting their context window to 200k and counting prompt tokens only (excluding output) for the context indicator and compaction trigger ([#246](https://github.com/PrimeIntellect-ai/axiom/issues/246)).
 
 ## [0.2.1] - 2026-06-23
 
 ### Fixed
 
-- Fixed daemon session recaps disappearing while a new turn regenerated them ([#239](https://github.com/PrimeIntellect-ai/prime-agent/issues/239)).
-- Fixed bundled built-in skills missing from the packaged release layouts ([#240](https://github.com/PrimeIntellect-ai/prime-agent/issues/240)).
+- Fixed daemon session recaps disappearing while a new turn regenerated them ([#239](https://github.com/PrimeIntellect-ai/axiom/issues/239)).
+- Fixed bundled built-in skills missing from the packaged release layouts ([#240](https://github.com/PrimeIntellect-ai/axiom/issues/240)).
 
 ## [0.2.0] - 2026-06-23
 
@@ -386,7 +386,7 @@
 
 ### Fixed
 
-- Fixed Prime Agent formatting breaking when resizing to a small screen, where tool-output colors bled into the padding at narrow widths.
+- Fixed Axiom formatting breaking when resizing to a small screen, where tool-output colors bled into the padding at narrow widths.
 - Fixed onboarding showing no models after entering a provider key by refreshing the scoped model list after login.
 - Fixed silent daemon replacement reading as random crashes by logging shutdown/replacement decisions, and offering to stop a stale-version daemon at startup instead of erroring out.
 
@@ -413,18 +413,18 @@
 
 ### Added
 
-- Added `daemon shutdown --all` to stop every Prime Agent daemon on the machine, hardened against recycled PIDs and able to force-kill wedged daemons.
+- Added `daemon shutdown --all` to stop every Axiom daemon on the machine, hardened against recycled PIDs and able to force-kill wedged daemons.
 - Added git context to session traces: each trace records the repository URL, branch ref, and HEAD commit, captured at end of turn and carried over when a session is forked.
 
 ### Changed
 
-- Changed `prime-agent` to open a new chat by default at launch instead of the previous session, with the daemon session created lazily on the first message and empty chats discarded on quit.
+- Changed `axiom` to open a new chat by default at launch instead of the previous session, with the daemon session created lazily on the first message and empty chats discarded on quit.
 - Changed sending a message from the Agents View to open the chat for that session.
 - Changed model resolution to persist the selected model across updates and default Prime Inference to Claude Opus 4.8 when no model has been chosen.
 
 ### Fixed
 
-- Fixed `prime-agent` attaching to a stale daemon left running by a previous version after self-update: `update` now stops the old daemon and starts the new version (confirming first when busy sessions would lose work), and a stale daemon that cannot be replaced fails loudly instead of a silent broken attach. Both shutdown paths now poll the socket until it stops listening, so a transient hiccup cannot spawn a duplicate daemon.
+- Fixed `axiom` attaching to a stale daemon left running by a previous version after self-update: `update` now stops the old daemon and starts the new version (confirming first when busy sessions would lose work), and a stale daemon that cannot be replaced fails loudly instead of a silent broken attach. Both shutdown paths now poll the socket until it stops listening, so a transient hiccup cannot spawn a duplicate daemon.
 
 ## [0.1.7] - 2026-06-18
 
@@ -440,7 +440,7 @@
 
 ### Added
 
-- Added a `daemon ps` CLI command that lists every Prime Agent daemon running on the machine, with confirmation before shutdown and guards against killing a shared or still-reachable daemon.
+- Added a `daemon ps` CLI command that lists every Axiom daemon running on the machine, with confirmation before shutdown and guards against killing a shared or still-reachable daemon.
 - Added opt-in trace uploads: `/traces` enables background upload of persisted session JSONL files to the Prime Inference trace endpoint.
 - Added agent summaries and live status to Agents View, generated daemon-side per session and refreshed on sweep.
 - Added crash-stack capture for the daemon: output routes to a rotating per-socket log file under `<agentDir>/logs/`, client-side crashes write to `client-errors.log`, and a `/logs` command shows the log directory.
@@ -506,15 +506,15 @@
 
 ### Fixed
 
-- Fixed the model selector showing no models after logging in with Prime Inference during onboarding by reloading auth storage from disk when the model registry refreshes ([#151](https://github.com/PrimeIntellect-ai/prime-agent/issues/151)).
+- Fixed the model selector showing no models after logging in with Prime Inference during onboarding by reloading auth storage from disk when the model registry refreshes ([#151](https://github.com/PrimeIntellect-ai/axiom/issues/151)).
 
 ## [0.1.1] - 2026-06-11
 
 ### Fixed
 
-- Fixed first launch to run onboarding before opening the Agents View ([#147](https://github.com/PrimeIntellect-ai/prime-agent/issues/147)).
-- Fixed multiline status errors in Agents View to render as a single flattened line so they cannot overlap the input ([#146](https://github.com/PrimeIntellect-ai/prime-agent/issues/146)).
-- Fixed slash commands in the main Agents View ([#149](https://github.com/PrimeIntellect-ai/prime-agent/issues/149)).
+- Fixed first launch to run onboarding before opening the Agents View ([#147](https://github.com/PrimeIntellect-ai/axiom/issues/147)).
+- Fixed multiline status errors in Agents View to render as a single flattened line so they cannot overlap the input ([#146](https://github.com/PrimeIntellect-ai/axiom/issues/146)).
+- Fixed slash commands in the main Agents View ([#149](https://github.com/PrimeIntellect-ai/axiom/issues/149)).
 
 ## [0.1.0] - 2026-06-11
 
@@ -531,13 +531,13 @@
 - Added daemon mode and CLI controls for starting on demand, creating, listing, attaching, detaching, killing, renaming, and prompting live sessions.
 - Added rich TUI attach for already-active daemon sessions via `--session <selector>` and live `daemon <selector>` shorthand.
 - Added a built-in `skill-creator` skill that teaches the agent to create new skills: markdown layout, frontmatter rules, placement and precedence, and the Python-backed skill contract (package layout, `run()` convention, optional CLI, kernel venv behavior) with a test-verified working template.
-- Added built-in skills shipped with prime-agent, starting with `prime-intellect`: ecosystem knowledge and prime CLI workflows for verifiers environments, evaluations, Hosted Training, sandboxes, inference, and compute. Built-in skills have the lowest precedence (user, project, and package skills with the same name win) and can be disabled with the `enableBuiltinSkills` setting or `--no-skills`.
+- Added built-in skills shipped with axiom, starting with `prime-intellect`: ecosystem knowledge and prime CLI workflows for verifiers environments, evaluations, Hosted Training, sandboxes, inference, and compute. Built-in skills have the lowest precedence (user, project, and package skills with the same name win) and can be disabled with the `enableBuiltinSkills` setting or `--no-skills`.
 - Added a session-backed `rlm.harness` state helper for reset-free prompt notes, memory, skills, subagent specs, and refinement events.
 - Added `/refine` to update editable harness state with Create/Update/Delete edits and rollback support based on refinement history.
 
 ### Changed
 
-- Changed Agents View `Ctrl+C` handling to mirror the interactive chat view: the first press shows a bottom hint and the second exits Prime Agent.
+- Changed Agents View `Ctrl+C` handling to mirror the interactive chat view: the first press shows a bottom hint and the second exits Axiom.
 - Changed keybinding hints to render arrow keys as `↑`, `↓`, `←`, and `→`.
 - Changed Agents View to keep transient status and reply text out of the agent list area.
 - Changed Agents View `Ctrl+X` so the first press only stops sessions that are actively running.
@@ -550,7 +550,7 @@
 ### Fixed
 
 - Fixed confusing transcript formatting around thinking blocks and tool calls: ipython cells and default-shell tools (bash and extension tools) now share one panel style with a subtle neutral background instead of a status-colored box or a left rail, and tool status headers name the tool (`python · done · 7ms`, `bash · running`) so they no longer read as floating labels for the preceding thinking block. Themes gain a required `toolPanelBg` color for the panel background.
-- Fixed `prime-agent` to detect a daemon left running by a previous version after self-update: the daemon now reports its app version on connect, and idle stale daemons are restarted automatically (daemons with active sessions are left running with a warning).
+- Fixed `axiom` to detect a daemon left running by a previous version after self-update: the daemon now reports its app version on connect, and idle stale daemons are restarted automatically (daemons with active sessions are left running with a warning).
 - Fixed Agents View listing daemon-owned subagents as top-level selectable agents instead of nested child rows.
 - Fixed Agents View opening saved or stale sessions by creating a daemon runtime from the saved session file before attaching.
 - Fixed Agents View delete confirmation so the red stopped confirmation expires after two seconds without removing the stopped session row.
@@ -617,13 +617,13 @@
 
 ### Changed
 
-- Changed the Prime Agent install script to use a bounded animated Prime Lab splash with centered progress and confirmation prompts.
+- Changed the Axiom install script to use a bounded animated Prime Lab splash with centered progress and confirmation prompts.
 - Changed startup onboarding to guide unauthenticated users through login and model selection before the first agent turn.
 - Changed installer npm and Node.js setup progress to keep command output hidden behind the splash and rotate detail text.
 
 ### Fixed
 
-- Fixed update notifications and package docs to point at `prime-agent update` and use compact one-line alerts.
+- Fixed update notifications and package docs to point at `axiom update` and use compact one-line alerts.
 - Fixed Prime CLI credentials from `prime login` to make Prime Inference models available on startup.
 - Fixed first-run search helper downloads to run quietly instead of printing over onboarding.
 - Fixed stale no-model and tmux/update startup notices from appearing during successful onboarding.
@@ -656,7 +656,7 @@
 
 - Changed startup onboarding to guide unauthenticated users through login and model selection before the first agent turn.
 - Changed the model selector and OAuth/provider selectors to render as centered surface menus rather than inline CLI lists.
-- Changed update and package-update notifications to compact one-line alerts pointing at `prime-agent update`.
+- Changed update and package-update notifications to compact one-line alerts pointing at `axiom update`.
 
 ## [0.0.4] - 2026-05-21
 
@@ -667,18 +667,18 @@
 
 ### Fixed
 
-- Fixed the RLM kernel package prompt to show importable module names and reject `PRIME_AGENT_KERNEL_PYTHON` overrides missing default kernel packages.
+- Fixed the RLM kernel package prompt to show importable module names and reject `AXIOM_KERNEL_PYTHON` overrides missing default kernel packages.
 
 ## [0.0.2] - 2026-05-20
 
 ### Added
 
 - Added a persistent `ipython` tool backed by a Jupyter kernel so Python variables and imports survive across tool calls.
-- Added the RLM harness system prompt and `prime-agent-runtime` bridge so IPython code can call `rlm.run` to spawn recursive child agent sessions.
-- Added automatic IPython runtime bootstrap with uv-managed Python, `ipykernel`, and `prime-agent-runtime`.
+- Added the RLM harness system prompt and `axiom-runtime` bridge so IPython code can call `rlm.run` to spawn recursive child agent sessions.
+- Added automatic IPython runtime bootstrap with uv-managed Python, `ipykernel`, and `axiom-runtime`.
 - Added subagent UI surfaces for recursive runs, including compact tray status, full-width detail views, and structured child transcripts rendered like the main chat.
 - Added `/goal` for long-running objectives that continue after normal follow-ups drain until the model marks the goal complete.
-- Added a pi-style installer script and R2-backed private npm tarball release pipeline for Prime Agent.
+- Added a pi-style installer script and R2-backed private npm tarball release pipeline for Axiom.
 - Added Prime Inference as a selectable built-in OpenAI-compatible provider with `PRIME_API_KEY` authentication and `openai/gpt-5.5` as the default model.
 - Added a first-class `/login` Prime Inference browser auth flow that imports usable Prime CLI credentials or obtains a new key through the Prime challenge flow.
 - Added `/usage` to show token, cost, and context usage on demand.
@@ -694,7 +694,7 @@
 - Changed the goal status UI to use a compact lower-tray indicator instead of repeating the full objective in chat.
 - Changed IPython prompt guidance to prefer `!cmd` and `%%bash` for shell commands.
 - Changed kernel bootstrap to prompt before installing `uv` and skip postinstall bootstrap unless explicitly enabled.
-- Changed the app update check and self-update flow to read the Prime Agent release manifest and install manifest tarballs directly.
+- Changed the app update check and self-update flow to read the Axiom release manifest and install manifest tarballs directly.
 
 ### Fixed
 
@@ -717,4 +717,4 @@
 
 ### Added
 
-- Initial Prime Agent release, forked from pi-mono: a persistent `ipython` tool backed by a Jupyter kernel as the default tool set, recursive RLM subagents via `rlm.run`, `/goal` for long-running objectives, an auto-bootstrapped uv-managed kernel runtime, Prime-branded TUI, and an R2-backed tarball release pipeline with a pi-style installer.
+- Initial Axiom release, forked from pi-mono: a persistent `ipython` tool backed by a Jupyter kernel as the default tool set, recursive RLM subagents via `rlm.run`, `/goal` for long-running objectives, an auto-bootstrapped uv-managed kernel runtime, Prime-branded TUI, and an R2-backed tarball release pipeline with a pi-style installer.

@@ -6,6 +6,7 @@
  * or printed usage); the process is kept alive while the gateway runs.
  */
 import { existsSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { getCronJobsPath } from "../config.js";
 import { axiomHome } from "../extensions/profile/registry.js";
@@ -13,17 +14,24 @@ import { JsonChannelIndex } from "../gateway/channel-index.js";
 import { CliCompletionRunner } from "../gateway/completion.js";
 import { loadGatewayConfig } from "../gateway/config.js";
 import { GatewayCron } from "../gateway/cron.js";
+import { FileDeliveryLedger } from "../gateway/delivery-ledger.js";
 import { Gateway } from "../gateway/gateway.js";
+import { DiscordTransport, FileDiscordCursorStore, HttpDiscordClient } from "../gateway/transports/discord.js";
 import { CliSignalClient, SignalTransport } from "../gateway/transports/signal.js";
+import { FileSlackCursorStore, HttpSlackClient, SlackTransport } from "../gateway/transports/slack.js";
 import { FileTelegramOffsetStore, HttpTelegramClient, TelegramTransport } from "../gateway/transports/telegram.js";
 import type { GatewayTransport } from "../gateway/types.js";
 
 export const GATEWAY_USAGE =
-	"axiom gateway [--profile <name>] [--project <name>] [--transport signal|telegram] [--telegram-token <token>] [--signal-cli <path>] [--signal-account <acct>]";
+	"axiom gateway [--profile <name>] [--project <name>] [--transport signal|telegram|discord|slack] [--telegram-token <token>] [--discord-token <token>] [--slack-token <token>] [--signal-cli <path>] [--signal-account <acct>]";
 
 export interface GatewayStartOptions {
-	transport: "signal" | "telegram";
+	transport: "signal" | "telegram" | "discord" | "slack";
 	telegramToken?: string;
+	/** --discord-token <token> (required for the discord transport). */
+	discordToken?: string;
+	/** --slack-token <token> (required for the slack transport). */
+	slackToken?: string;
 	/** signal-cli binary path (default "signal-cli" on PATH). */
 	signalCliPath?: string;
 	/** The linked signal-cli account to send/receive under (E.164). */
@@ -55,8 +63,16 @@ export function resolveGatewayStart(
 ): GatewayStartResolution {
 	const profile = readVal(args, "--profile") ?? "default";
 	const transportRaw = readVal(args, "--transport") ?? "signal";
-	if (transportRaw !== "signal" && transportRaw !== "telegram") {
-		return { ok: false, error: `unknown --transport '${transportRaw}' (expected 'signal' or 'telegram')` };
+	if (
+		transportRaw !== "signal" &&
+		transportRaw !== "telegram" &&
+		transportRaw !== "discord" &&
+		transportRaw !== "slack"
+	) {
+		return {
+			ok: false,
+			error: `unknown --transport '${transportRaw}' (expected 'signal', 'telegram', 'discord' or 'slack')`,
+		};
 	}
 	const transport = transportRaw as GatewayStartOptions["transport"];
 	const signalCliPath = readVal(args, "--signal-cli");
@@ -64,6 +80,20 @@ export function resolveGatewayStart(
 	const project = readVal(args, "--project");
 	if (project !== undefined && !PROJECT_NAME_RE.test(project)) {
 		return { ok: false, error: `invalid --project '${project}' (lowercase a-z0-9 and dashes)` };
+	}
+	if (transport === "slack") {
+		const slackToken = readVal(args, "--slack-token") ?? env.AXIOM_SLACK_BOT_TOKEN;
+		if (!slackToken) {
+			return { ok: false, error: "--transport slack requires --slack-token or AXIOM_SLACK_BOT_TOKEN" };
+		}
+		return { ok: true, profile, opts: { transport, slackToken, project } };
+	}
+	if (transport === "discord") {
+		const discordToken = readVal(args, "--discord-token") ?? env.AXIOM_DISCORD_BOT_TOKEN;
+		if (!discordToken) {
+			return { ok: false, error: "--transport discord requires --discord-token or AXIOM_DISCORD_BOT_TOKEN" };
+		}
+		return { ok: true, profile, opts: { transport, discordToken, project } };
 	}
 	if (transport !== "telegram") {
 		return { ok: true, profile, opts: { transport, signalCliPath, signalAccount, project } };
@@ -85,7 +115,7 @@ export async function handleGatewayCommand(
 	if (args[0] !== "gateway") return false;
 	if (args.includes("--help") || args.includes("-h")) {
 		console.log(
-			`${GATEWAY_USAGE}\n\nThe axiom assistant over Signal (signal-cli) or Telegram (Bot API): the\nactive profile's SOUL.md rides the prompt; gateway-local commands (/help,\n/profiles, /projects, /soul) never reach the model. Configure senders in\n<AXIOM_HOME>/gateway/config.json. Telegram denies unknown chats by default\n(allowlist the owner's personal chat id); never commit a bot token.`,
+			`${GATEWAY_USAGE}\n\nThe axiom assistant over Signal (signal-cli), Telegram, Discord, or Slack\n(Bot/Web API): the active profile's SOUL.md rides the prompt; gateway-local\ncommands (/help, /profiles, /projects, /soul) never reach the model. Configure\nsenders in <AXIOM_HOME>/gateway/config.json. Telegram, Discord, and Slack deny unknown\nsenders by default (allowlist the owner's personal chat / user id); never\ncommit a bot token.`,
 		);
 		return true;
 	}
@@ -112,6 +142,23 @@ export async function handleGatewayCommand(
  * projectHome: the root itself for the implicit 'default' profile, else
  * profiles/<name> (ADR-0014).
  */
+/**
+ * The sessions archive directory for the active profile: named profiles keep
+ * their agent dir at the profile home, the implicit `default` profile uses the
+ * base agent dir (~/.axiom/agent). Both hold sessions/<id>.jsonl.
+ */
+export function resolveSessionsDir(profile: string, projectHome: string): string {
+	return profile === "default" ? join(homedir(), ".axiom", "agent", "sessions") : join(projectHome, "sessions");
+}
+
+/**
+ * The persistent cross-session recall index: a sqlite file under the axiom
+ * home's search dir, isolated per profile home (writable, like the memory store).
+ */
+export function resolveSearchIndexPath(axiomHomeDir: string): string {
+	return join(axiomHomeDir, "search", "session-recall.sqlite");
+}
+
 export async function defaultGatewayStart(profile: string, opts: GatewayStartOptions): Promise<Gateway> {
 	const root = axiomHome();
 	const projectHome = profile === "default" ? root : join(axiomHome(), "profiles", profile);
@@ -129,16 +176,21 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 	const completion = new CliCompletionRunner({ projectRoot });
 	const transport = buildTransport(opts, root);
 	const config = loadGatewayConfig(root);
+	// One shared ledger records every outbound delivery — interactive replies,
+	// /announce fan-out, and scheduled cron-run deliveries alike (ADR-0022).
+	const ledger = new FileDeliveryLedger(join(root, "gateway", "ledger.jsonl"));
 	// Profile-scoped cron store: reuse the baseline AgentCronJobStore format at
 	// the profile home (default profile = the axiom root). The manager's
 	// scheduler fires /cron jobs and delivers their output to the job's channel
-	// via the same transport used for interactive replies.
+	// via the same transport used for interactive replies, recorded in `ledger`.
 	const cron = new GatewayCron({
 		storePath: getCronJobsPath(projectHome),
 		completion,
 		transport,
 		profile,
 		projectHome,
+		ledger,
+		transportName: opts.transport,
 	});
 	const gateway = new Gateway({
 		transport,
@@ -147,8 +199,14 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 		axiomHomeDir: root,
 		profile,
 		projectHome,
+		sessionsDir: resolveSessionsDir(profile, projectHome),
+		searchIndexPath: resolveSearchIndexPath(root),
+		projectRoot,
 		senders: config.senders,
 		cron,
+		ledger,
+		transportName: opts.transport,
+		transports: buildFanOutTransports(opts, root),
 	});
 	await gateway.start();
 	return gateway;
@@ -156,6 +214,16 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 
 /** Real transport selection: telegram (Bot API) or signal (signal-cli, default). */
 export function buildTransport(opts: GatewayStartOptions, axiomHomeDir: string): GatewayTransport {
+	if (opts.transport === "slack") {
+		const client = new HttpSlackClient({ token: opts.slackToken ?? "" });
+		const cursorStore = new FileSlackCursorStore(join(axiomHomeDir, "gateway", "slack-cursor.json"));
+		return new SlackTransport(client, { cursorStore });
+	}
+	if (opts.transport === "discord") {
+		const client = new HttpDiscordClient({ token: opts.discordToken ?? "" });
+		const cursorStore = new FileDiscordCursorStore(join(axiomHomeDir, "gateway", "discord-cursor.json"));
+		return new DiscordTransport(client, { cursorStore });
+	}
 	if (opts.transport === "telegram") {
 		const client = new HttpTelegramClient({ token: opts.telegramToken ?? "" });
 		const offsetStore = new FileTelegramOffsetStore(join(axiomHomeDir, "gateway", "telegram-offset.json"));
@@ -164,4 +232,36 @@ export function buildTransport(opts: GatewayStartOptions, axiomHomeDir: string):
 	// Signal: wire the operator's --signal-cli path and linked --signal-account
 	// so the one-command live test targets the right (shared) account.
 	return new SignalTransport(new CliSignalClient(opts.signalCliPath ?? "signal-cli", opts.signalAccount));
+}
+
+/** Build ONE named fan-out transport for `t` from its token. */
+function buildFanOutTransport(t: "telegram" | "discord" | "slack", token: string, root: string): GatewayTransport {
+	if (t === "telegram") return buildTransport({ transport: "telegram", telegramToken: token }, root);
+	if (t === "discord") return buildTransport({ transport: "discord", discordToken: token }, root);
+	return buildTransport({ transport: "slack", slackToken: token }, root);
+}
+
+/**
+ * Extra send-only transports for cross-platform fan-out (ADR-0023): every
+ * platform OTHER than the active transport whose token is present in the
+ * environment is built so a deliverTo entry naming that transport can reach
+ * it. A platform with no token is simply absent — graceful, never guessed.
+ */
+export function buildFanOutTransports(
+	opts: GatewayStartOptions,
+	root: string,
+	env: Record<string, string | undefined> = process.env,
+): Record<string, GatewayTransport> {
+	const out: Record<string, GatewayTransport> = {};
+	const candidates: Array<[t: "telegram" | "discord" | "slack", token: string | undefined]> = [
+		["telegram", env.AXIOM_TELEGRAM_BOT_TOKEN ?? opts.telegramToken],
+		["discord", env.AXIOM_DISCORD_BOT_TOKEN ?? opts.discordToken],
+		["slack", env.AXIOM_SLACK_BOT_TOKEN ?? opts.slackToken],
+	];
+	for (const [t, token] of candidates) {
+		if (t === opts.transport) continue; // the active transport is the primary
+		if (!token) continue; // operator hasn't enabled this platform
+		out[t] = buildFanOutTransport(t, token, root);
+	}
+	return out;
 }

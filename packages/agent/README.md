@@ -7,25 +7,25 @@
   </a>
 </p>
 
-<h1 align="center">Prime Agent Core</h1>
+<h1 align="center">Axiom Core</h1>
 
 <p align="center">
   Stateful agent runtime.
 </p>
 
-Release docs use the Prime Agent package names. The source workspace manifests still keep inherited package names until the namespace migration is complete.
+Release docs use the Axiom package names. The source workspace manifests still keep inherited package names until the namespace migration is complete.
 
 ## Workspace Package
 
 ```bash
-npm install prime-agent-core
+npm install axiom-core
 ```
 
 ## Quick Start
 
 ```typescript
-import { Agent } from "prime-agent-core";
-import { getModel } from "prime-agent-ai";
+import { Agent } from "axiom-core";
+import { getModel } from "axiom-ai";
 
 const agent = new Agent({
   initialState: {
@@ -368,7 +368,7 @@ Follow-up messages are checked only when there are no more tool calls and no ste
 Extend `AgentMessage` via declaration merging:
 
 ```typescript
-declare module "prime-agent-core" {
+declare module "axiom-core" {
   interface CustomAgentMessages {
     notification: { role: "notification"; text: string; timestamp: number };
   }
@@ -449,7 +449,7 @@ Return `terminate: true` from `execute()` or `afterToolCall` to hint that the ag
 For browser apps that proxy through a backend:
 
 ```typescript
-import { Agent, streamProxy } from "prime-agent-core";
+import { Agent, streamProxy } from "axiom-core";
 
 const agent = new Agent({
   streamFn: (model, context, options) =>
@@ -466,7 +466,7 @@ const agent = new Agent({
 For direct control without the Agent class:
 
 ```typescript
-import { agentLoop, agentLoopContinue } from "prime-agent-core";
+import { agentLoop, agentLoopContinue } from "axiom-core";
 
 const context: AgentContext = {
   systemPrompt: "You are helpful.",

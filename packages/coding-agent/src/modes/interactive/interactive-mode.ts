@@ -130,7 +130,7 @@ import {
 	type TelemetryOnboardingOutcome,
 } from "../../core/telemetry.js";
 import { type TruncationResult, truncateTail } from "../../core/tools/truncate.js";
-import { AXIOM_LOGO } from "../../themes/prime-logo.js";
+import { AXIOM_LOGO } from "../../themes/axiom-logo.js";
 import { getChangelogPath, parseChangelog } from "../../utils/changelog.js";
 import { copyToClipboard } from "../../utils/clipboard.js";
 import { readClipboardImage } from "../../utils/clipboard-image.js";
@@ -175,6 +175,7 @@ import { type AuthenticationResult, getAnthropicSubscriptionAuthWarning, Provide
 import { AgentMessageComponent } from "./components/agent-message.js";
 import { ArminComponent } from "./components/armin.js";
 import { AssistantMessageComponent } from "./components/assistant-message.js";
+import { AxiomOnboardingSplashComponent } from "./components/axiom-onboarding-splash.js";
 import { BashExecutionComponent } from "./components/bash-execution.js";
 import { BorderedLoader } from "./components/bordered-loader.js";
 import { BranchSummaryMessageComponent } from "./components/branch-summary-message.js";
@@ -203,7 +204,6 @@ import { HeartbeatManagerComponent } from "./components/heartbeat-manager.js";
 import { InjectedPromptMessageComponent, isInjectedPromptMessage } from "./components/injected-prompt-message.js";
 import { formatKeyText, keyHint, keyText, rawKeyHint } from "./components/keybinding-hints.js";
 import type { AuthSelectorProvider } from "./components/oauth-selector.js";
-import { PrimeOnboardingSplashComponent } from "./components/prime-onboarding-splash.js";
 import { ScopedModelsSelectorComponent } from "./components/scoped-models-selector.js";
 import { SettingsSelectorComponent } from "./components/settings-selector.js";
 import { SideQuestionComponent } from "./components/side-question.js";
@@ -8475,7 +8475,7 @@ export class InteractiveMode {
 			let settled = false;
 			let dismissed = false;
 			let handle: OverlayHandle | undefined;
-			let selector: PrimeOnboardingSplashComponent | undefined;
+			let selector: AxiomOnboardingSplashComponent | undefined;
 			const settle = (result: OnboardingSplashHandle | undefined) => {
 				if (settled) {
 					return;
@@ -8492,7 +8492,7 @@ export class InteractiveMode {
 				handle?.hide();
 				this.ui.requestRender();
 			};
-			selector = new PrimeOnboardingSplashComponent(
+			selector = new AxiomOnboardingSplashComponent(
 				() => {
 					selector?.dispose();
 					settle({
@@ -9207,7 +9207,7 @@ export class InteractiveMode {
 				return `Trace upload skipped: session file is ${result.size.toLocaleString()} bytes; limit is ${result.maxBytes.toLocaleString()} bytes.`;
 			case "failed":
 				if (result.statusCode === 404) {
-					return "Trace upload endpoint was not found. The platform API may not be deployed yet, or PRIME_AGENT_TRACES_BASE_URL points at the wrong API.";
+					return "Trace upload endpoint was not found. The platform API may not be deployed yet, or AXIOM_TRACES_BASE_URL points at the wrong API.";
 				}
 				return `Trace upload failed: ${result.statusCode ? `HTTP ${result.statusCode}: ` : ""}${result.message}. See ${getAgentTracesLogPath()} for details.`;
 		}
