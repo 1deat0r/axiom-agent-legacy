@@ -1,28 +1,29 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!--
   Axiom-agent personal mark (original design, not derived from the prime
-  butterfly).
+  butterfly). Square corners (miter joins / butt caps) — architectural, sharp.
 
-  Concept: an "A" (Axiom) whose crossbar is the logical assertion bar, with the
-  turnstile  ⊢  (read "asserts / is provable") grounded in the V below it. An
-  axiom is a foundational, self-evident statement; ⊢ is the symbol a prover
-  draws when it derives one. Hexagonal monogram avatar.
+  Concept: a bold slab "A" (Axiom) whose crossbar is the assertion bar, with the
+  double turnstile  ⊨  (read "derives / is provable / models") seated below. An
+  axiom is a foundational statement; ⊨ is the symbol a prover draws when it
+  derives one. Hexagonal monogram avatar, square-corned.
 
   Brand: axiom green #2fd58a on the dark badge #0e1117; thin outline #2a3342.
 -->
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none"
      version="1.1" xmlns="http://www.w3.org/2000/svg">
-  <!-- badge -->
-  <path d="M256 32 L450 144 L450 368 L256 480 L62 368 L62 144 Z"
-        fill="#0e1117" stroke="#2a3342" stroke-width="12" stroke-linejoin="round"/>
-  <!-- A: two legs -->
-  <g stroke="#2fd58a" stroke-width="44" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M256 120 L172 376"/>
-    <path d="M256 120 L340 376"/>
+  <!-- sharp hexagon badge -->
+  <path d="M256 30 L450 143 L450 369 L256 482 L62 369 L62 143 Z"
+        fill="#0e1117" stroke="#2a3342" stroke-width="12" stroke-linejoin="miter"/>
+  <!-- slab "A": two square legs -->
+  <g stroke="#2fd58a" stroke-width="52" stroke-linecap="butt" stroke-linejoin="miter">
+    <path d="M256 116 L168 380"/>
+    <path d="M256 116 L344 380"/>
   </g>
   <!-- crossbar = assertion bar -->
-  <path d="M184 296 L328 296" stroke="#2fd58a" stroke-width="38" stroke-linecap="round"/>
-  <!-- turnstile ⊢ grounded in the V below the A -->
-  <path d="M256 404 L256 450" stroke="#2fd58a" stroke-width="20" stroke-linecap="round"/>
-  <path d="M208 406 L256 406" stroke="#2fd58a" stroke-width="16" stroke-linecap="round"/>
+  <path d="M180 296 L332 296" stroke="#2fd58a" stroke-width="44" stroke-linecap="butt"/>
+  <!-- double turnstile ⊨ seated below -->
+  <path d="M256 404 L256 454" stroke="#2fd58a" stroke-width="24" stroke-linecap="butt"/>
+  <path d="M200 404 L256 404" stroke="#2fd58a" stroke-width="20" stroke-linecap="butt"/>
+  <path d="M200 434 L256 434" stroke="#2fd58a" stroke-width="12" stroke-linecap="butt"/>
 </svg>
