@@ -9472,7 +9472,8 @@ export class InteractiveMode {
 	 * gateway's /profiles//projects. Operates on the active axiom home.
 	 */
 	private async handleProfilesSlashCommand(args: string): Promise<void> {
-		await this.runProfileSurfaceCommand(handleProfileCommand, ["profile"], args);
+		// Bare `/profiles` lists, mirroring the gateway /profiles and `/projects`.
+		await this.runProfileSurfaceCommand(handleProfileCommand, ["profile"], args === "" ? "list" : args);
 	}
 
 	private async handleProjectsSlashCommand(args: string): Promise<void> {
