@@ -1,4 +1,4 @@
-# ADR-0031 — Mermaid diagrams as Unicode art in the terminal transcript
+# ADR-0032 — Mermaid diagrams as Unicode art in the terminal transcript
 
 ## Status
 Accepted (2026-08-12)
