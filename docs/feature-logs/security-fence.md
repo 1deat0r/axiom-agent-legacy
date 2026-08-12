@@ -17,3 +17,4 @@ Model: coding agent (axiom) · base main b31341e77 · worktree .worktrees/securi
 - Impl self-review: all plan items present; 28/28 green and assert real behaviour; no leftover TODOs/debug; edge cases covered. Fixed 1 clarity wart (stray AXIOM_PLACEHOLDER in a test name). biome+tsgo clean.
 - Impl external review (self-posed skeptic): r1 96/100 APPROVED; all plan items map to diff evidence; floor verified.
 - Final: build summary.html from this log.
+- DONE: branch feat/security-hardening pushed to origin (6 commits over base b31341e77). Final regression: security(28)+workspace guard(12)=40/40 green, tree clean.
