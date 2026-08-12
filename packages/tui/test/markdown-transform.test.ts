@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import assert from "node:assert";
+import { describe, it } from "node:test";
 import { Markdown } from "../src/components/markdown.js";
 
 const plainTheme = {
@@ -26,8 +27,8 @@ describe("Markdown transform hook", () => {
 			return text.replace("[[world]]", "there");
 		});
 		const lines = md.render(40);
-		expect(lines.join("\n")).toContain("hello there");
-		expect(seen).toEqual([40]);
+		assert.ok(lines.join("\n").includes("hello there"));
+		assert.deepEqual(seen, [40]);
 	});
 
 	it("re-renders when width changes (transform is width-aware)", () => {
@@ -37,13 +38,13 @@ describe("Markdown transform hook", () => {
 			return `w=${width}`;
 		});
 		md.render(10);
-		expect(widthSeen).toBe(10);
+		assert.equal(widthSeen, 10);
 		md.render(25);
-		expect(widthSeen).toBe(25);
+		assert.equal(widthSeen, 25);
 	});
 
 	it("leaves text untouched without a transform", () => {
 		const md = new Markdown("plain", 0, 0, plainTheme);
-		expect(md.render(10).join("\n")).toContain("plain");
+		assert.ok(md.render(10).join("\n").includes("plain"));
 	});
 });
