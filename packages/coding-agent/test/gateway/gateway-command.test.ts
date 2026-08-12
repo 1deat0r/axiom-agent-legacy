@@ -8,6 +8,7 @@ import {
 	handleGatewayCommand,
 	resolveGatewayStart,
 } from "../../src/cli/gateway-command.js";
+import { DiscordTransport } from "../../src/gateway/transports/discord.js";
 import { SignalTransport } from "../../src/gateway/transports/signal.js";
 import { TelegramTransport } from "../../src/gateway/transports/telegram.js";
 
@@ -51,6 +52,30 @@ describe("resolveGatewayStart (transport selection)", () => {
 			profile: "default",
 			opts: { transport: "telegram", telegramToken: "ENVTOK" },
 		});
+	});
+
+	it("selects discord from the --discord-token flag", () => {
+		expect(resolveGatewayStart(["gateway", "--transport", "discord", "--discord-token", "DTOK"])).toEqual({
+			ok: true,
+			profile: "default",
+			opts: { transport: "discord", discordToken: "DTOK" },
+		});
+	});
+
+	it("selects discord from AXIOM_DISCORD_BOT_TOKEN when no flag is given", () => {
+		expect(resolveGatewayStart(["gateway", "--transport", "discord"], { AXIOM_DISCORD_BOT_TOKEN: "ENVTOK" })).toEqual(
+			{
+				ok: true,
+				profile: "default",
+				opts: { transport: "discord", discordToken: "ENVTOK" },
+			},
+		);
+	});
+
+	it("fails fast when discord is selected with no token", () => {
+		const r = resolveGatewayStart(["gateway", "--transport", "discord"], {});
+		expect(r.ok).toBe(false);
+		if (!r.ok) expect(r.error).toContain("token");
 	});
 
 	it("errors on an unknown --transport value (never silently boots Signal)", () => {
@@ -104,6 +129,16 @@ describe("buildTransport", () => {
 		try {
 			const t = buildTransport({ transport: "telegram", telegramToken: "TOK" }, dir);
 			expect(t).toBeInstanceOf(TelegramTransport);
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("builds a DiscordTransport for --transport discord (with file cursor store)", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-dtg-"));
+		try {
+			const t = buildTransport({ transport: "discord", discordToken: "DTOK" }, dir);
+			expect(t).toBeInstanceOf(DiscordTransport);
 		} finally {
 			await rm(dir, { recursive: true, force: true });
 		}

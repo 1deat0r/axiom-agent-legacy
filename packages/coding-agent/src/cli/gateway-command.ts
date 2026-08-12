@@ -12,16 +12,19 @@ import { JsonChannelIndex } from "../gateway/channel-index.js";
 import { CliCompletionRunner } from "../gateway/completion.js";
 import { loadGatewayConfig } from "../gateway/config.js";
 import { Gateway } from "../gateway/gateway.js";
+import { DiscordTransport, FileDiscordCursorStore, HttpDiscordClient } from "../gateway/transports/discord.js";
 import { CliSignalClient, SignalTransport } from "../gateway/transports/signal.js";
 import { FileTelegramOffsetStore, HttpTelegramClient, TelegramTransport } from "../gateway/transports/telegram.js";
 import type { GatewayTransport } from "../gateway/types.js";
 
 export const GATEWAY_USAGE =
-	"axiom gateway [--profile <name>] [--project <name>] [--transport signal|telegram] [--telegram-token <token>] [--signal-cli <path>] [--signal-account <acct>]";
+	"axiom gateway [--profile <name>] [--project <name>] [--transport signal|telegram|discord] [--telegram-token <token>] [--discord-token <token>] [--signal-cli <path>] [--signal-account <acct>]";
 
 export interface GatewayStartOptions {
-	transport: "signal" | "telegram";
+	transport: "signal" | "telegram" | "discord";
 	telegramToken?: string;
+	/** --discord-token <token> (required for the discord transport). */
+	discordToken?: string;
 	/** signal-cli binary path (default "signal-cli" on PATH). */
 	signalCliPath?: string;
 	/** The linked signal-cli account to send/receive under (E.164). */
@@ -53,8 +56,11 @@ export function resolveGatewayStart(
 ): GatewayStartResolution {
 	const profile = readVal(args, "--profile") ?? "default";
 	const transportRaw = readVal(args, "--transport") ?? "signal";
-	if (transportRaw !== "signal" && transportRaw !== "telegram") {
-		return { ok: false, error: `unknown --transport '${transportRaw}' (expected 'signal' or 'telegram')` };
+	if (transportRaw !== "signal" && transportRaw !== "telegram" && transportRaw !== "discord") {
+		return {
+			ok: false,
+			error: `unknown --transport '${transportRaw}' (expected 'signal', 'telegram' or 'discord')`,
+		};
 	}
 	const transport = transportRaw as GatewayStartOptions["transport"];
 	const signalCliPath = readVal(args, "--signal-cli");
@@ -62,6 +68,13 @@ export function resolveGatewayStart(
 	const project = readVal(args, "--project");
 	if (project !== undefined && !PROJECT_NAME_RE.test(project)) {
 		return { ok: false, error: `invalid --project '${project}' (lowercase a-z0-9 and dashes)` };
+	}
+	if (transport === "discord") {
+		const discordToken = readVal(args, "--discord-token") ?? env.AXIOM_DISCORD_BOT_TOKEN;
+		if (!discordToken) {
+			return { ok: false, error: "--transport discord requires --discord-token or AXIOM_DISCORD_BOT_TOKEN" };
+		}
+		return { ok: true, profile, opts: { transport, discordToken, project } };
 	}
 	if (transport !== "telegram") {
 		return { ok: true, profile, opts: { transport, signalCliPath, signalAccount, project } };
@@ -83,7 +96,7 @@ export async function handleGatewayCommand(
 	if (args[0] !== "gateway") return false;
 	if (args.includes("--help") || args.includes("-h")) {
 		console.log(
-			`${GATEWAY_USAGE}\n\nThe axiom assistant over Signal (signal-cli) or Telegram (Bot API): the\nactive profile's SOUL.md rides the prompt; gateway-local commands (/help,\n/profiles, /projects, /soul) never reach the model. Configure senders in\n<AXIOM_HOME>/gateway/config.json. Telegram denies unknown chats by default\n(allowlist the owner's personal chat id); never commit a bot token.`,
+			`${GATEWAY_USAGE}\n\nThe axiom assistant over Signal (signal-cli), Telegram (Bot API) or Discord\n(Bot API): the active profile's SOUL.md rides the prompt; gateway-local\ncommands (/help, /profiles, /projects, /soul) never reach the model. Configure\nsenders in <AXIOM_HOME>/gateway/config.json. Telegram and Discord deny unknown\nsenders by default (allowlist the owner's personal chat / user id); never\ncommit a bot token.`,
 		);
 		return true;
 	}
@@ -142,6 +155,11 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 
 /** Real transport selection: telegram (Bot API) or signal (signal-cli, default). */
 export function buildTransport(opts: GatewayStartOptions, axiomHomeDir: string): GatewayTransport {
+	if (opts.transport === "discord") {
+		const client = new HttpDiscordClient({ token: opts.discordToken ?? "" });
+		const cursorStore = new FileDiscordCursorStore(join(axiomHomeDir, "gateway", "discord-cursor.json"));
+		return new DiscordTransport(client, { cursorStore });
+	}
 	if (opts.transport === "telegram") {
 		const client = new HttpTelegramClient({ token: opts.telegramToken ?? "" });
 		const offsetStore = new FileTelegramOffsetStore(join(axiomHomeDir, "gateway", "telegram-offset.json"));
