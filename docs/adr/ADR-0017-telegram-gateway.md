@@ -75,6 +75,6 @@ operator follow-up (nothing fabricated).
 - Live readiness needs the owner to: create a bot with @BotFather, put the
   token in `AXIOM_TELEGRAM_BOT_TOKEN` (or `--telegram-token`), add their
   personal chat id to the allowlist, and point the completion runner at a
-  working provider. Until then the gateway is exercised by its test suite (17
+  working provider. Until then the gateway is exercised by its test suite (18
   transport + 4 router-over-Telegram + 9 CLI tests) and the live pass is the
   operator follow-up.
