@@ -84,3 +84,8 @@ Total: 100/100 — APPROVED. Proceeding to implementation.
 - [x] Created CLI `skill-capture` (src/cli/skill-capture-command.ts) + wired into main.ts after gateway.
 - [x] Tests: test/skill-capture.test.ts — 24 tests. Fixed 3 test-side bugs + 1 syntax bug + PersistResult discriminant + flag narrowing; biome clean, tsgo clean.
 - [x] End-to-end demo: real run captured `fix-regression-test-first` SKILL.md, verified 0 loader diagnostics, printed offer.
+## 4b. Implementation verification (recorded)
+- [x] 24/24 skill-capture tests green; related suites (skills/builtin-skills/frontmatter/refinement/sdk-skills) 148/148 green.
+- [x] Full `./test.sh`: only pre-existing sandbox known-fails (4603/4685 EXDEV + daemon-serialized-refine, identical on pristine baseline) + one ipython-bootstrap timing flake (passes on re-run + on baseline). No new failures from this change.
+- [x] biome clean, tsgo clean. End-to-end demo captured a real, verifiable skill.
+- [x] Docs: ADR-0020, CONTEXT.md term, handoff-skill-capture.md (named, per convention; shared handoff.md left untouched).

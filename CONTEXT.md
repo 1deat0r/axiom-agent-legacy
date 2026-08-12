@@ -81,6 +81,17 @@ anchored by AXIOM_PROJECT_ROOT, that blocks an `edit` whose resolved path
 leaves the project root, returning a plain-English reason surfaced to the
 model (ADR-0018). Freeform bash/ipython confinement is the OS-sandbox tier,
 recorded as a follow-up.
+**Skill capture**:
+The procedural-memory skill pipeline (ADR-0020, step 1): turning a completed
+task that was flagged reusable into a durable `SKILL.md` that bundles the task
+prompt + its ordered steps + provenance (`metadata.provenance`), verified to
+load via the real skill loader before it is offered. The agent supplies the
+steps; capture only materializes a skill directory. Later steps add automatic
+flagging, an AST-level security audit of third-party skills, and hub/sync over
+agentskills.io.
+_Avoid_: Skills (the refinement harness's `skill` entries, which are in-memory
+harness lineage, not on-disk skill directories)
+
 **Drift**:
 An agent acting outside its project's identity, context, or boundary — wrong
 files, wrong memory, wrong ledger. Prevented by the anti-drift ladder
