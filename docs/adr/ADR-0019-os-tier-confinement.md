@@ -27,8 +27,11 @@ user-namespace + mount-namespace boundary, kernel-enforced, no root required):
   session) and the prime agent dir (`~/.prime`: kernel venv) are re-exposed
   writable.
 - `--tmpfs /tmp /run /var` — writable scratch that is NOT the host's dirs.
-- `--tmpfs <home>/.ssh .aws .gnupg .config .local .cache .netrc` — secret dirs
-  are **shadowed** (unreadable + detached from the host), read-hardening.
+- `--tmpfs <home>/.ssh .aws .gnupg .netrc` — **credential stores** are shadowed
+  (unreadable). Deliberately NOT shadowed: `~/.local` (user CLIs incl. the
+  Obscura web browser), `~/.config` (tool configs), `~/.cache` — hiding them
+  would strip the agent's tooling and web research. That read exposure is the
+  honest price of full capability; a per-project `shadowDir` override tunes it.
 - `--proc /proc --dev /dev` — fresh namespace proc + minimal dev.
 
 The freeform `bash` tool and the persistent ipython kernel are **subprocesses
@@ -53,13 +56,17 @@ or run without `--project`. An anchored run never falls back to unconfined.
 - `--ro-bind / /` keeps the host **readable**; only the listed secret dirs are
   shadowed. A **read-minimal allowlist** (bind only the dirs a project needs,
   shadow everything else) is a documented follow-up.
-- **Network is inherited** (no `--unshare-net`): in-sandbox egress remains
-  possible. Full network isolation is a documented follow-up / opt-in flag.
+- **Network is inherited** (no `--unshare-net`) — deliberately so agents can do
+  web research, fetches and searches inside a project. Network isolation is
+  therefore **opt-in per project, off by default**; it is not a default hardening.
 - The workspace **root guard (ADR-0018)** remains as belt-and-suspenders for
   the `edit` tool inside the sandbox.
 - Not yet operator-live verified end-to-end with a real model completion (no
   provider key in this run); the OS boundary itself is proven by the real-bwrap
   integration test (writes refused, secrets shadowed, project writes persist).
+  Tradeoffs to make explicit per project: shadowing `~/.ssh` blocks ssh-key git
+  push by default (open it via `shadowDir` when the operator wants it); web
+  research works (network inherited, tool dirs readable).
 
 ## Consequences
 

@@ -78,7 +78,13 @@ export interface CliCompletionOptions {
 	 * nonexistent one to exercise the fail-closed path) and the store homes.
 	 * Omit in production — defaults resolve from the environment.
 	 */
-	confinement?: { bwrap?: string; axiomHome?: string; primeHome?: string };
+	confinement?: {
+		bwrap?: string;
+		axiomHome?: string;
+		primeHome?: string;
+		/** Extra host dirs to shadow, merged over the credential-only default. */
+		shadowDirs?: string[];
+	};
 	/**
 	 * Bounded wait for one completion before giving up. Completions are
 	 * serialized per channel, so a single hang must not wedge the channel
@@ -96,7 +102,7 @@ export class CliCompletionRunner implements CompletionRunner {
 	private readonly printFlag: string;
 	private readonly timeoutMs: number;
 	private readonly projectRoot?: string;
-	private readonly confinement?: { bwrap?: string; axiomHome?: string; primeHome?: string };
+	private readonly confinement?: { bwrap?: string; axiomHome?: string; primeHome?: string; shadowDirs?: string[] };
 	constructor(options: CliCompletionOptions = {}) {
 		const child = resolveCompletionChild(options.bin);
 		this.bin = child.bin;
@@ -157,7 +163,7 @@ export class CliCompletionRunner implements CompletionRunner {
 					projectRoot: this.projectRoot,
 					axiomHome,
 					primeHome,
-					shadowDirs: defaultShadowDirs(home),
+					shadowDirs: this.confinement?.shadowDirs ?? defaultShadowDirs(home),
 				});
 				spawnargv = assembleProgramArgv(bwrap, mount, this.bin, args);
 				childEnv = confinementEnv({ ...process.env, AXIOM_PROJECT_ROOT: this.projectRoot });

@@ -26,16 +26,17 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-/** Sensitive dirs under HOME shadowed as empty tmpfs (unreadable + writable-apart). */
-export const DEFAULT_SHADOW_REL: readonly string[] = [
-	".ssh",
-	".aws",
-	".gnupg",
-	".config",
-	".local",
-	".cache",
-	".netrc",
-];
+/**
+ * Credential dirs under HOME shadowed as empty tmpfs (unreadable) by default.
+ *
+ * Deliberately CREDENTIAL-ONLY so tooling + web research keep working: ~/.local
+ * (user CLIs incl. the Obscura browser), ~/.config (tool configs) and ~/.cache
+ * are NOT shadowed — hiding them would strip the agent's tools. That read
+ * exposure is the honest price of full capability; a per-project shadowDir
+ * override (e.g. opening ~/.ssh for git auth) is the tunable knob. Note ~/.ssh
+ * being shadowed blocks ssh-key git push by default — trade that explicitly.
+ */
+export const DEFAULT_SHADOW_REL: readonly string[] = [".ssh", ".aws", ".gnupg", ".netrc"];
 
 /** The writable surfaces + read-shadows a sandboxed completion child needs. */
 export interface SandboxMountOptions {

@@ -51,7 +51,12 @@ bwrap; host stays readable (secret dirs shadowed); network inherited.</p>
 gap ADR-0018 flagged; wrapping the child at the gateway spawn gives one OS layer that confines bash + ipython together.</p>
 <p><span class="k">Deployment-safe mount model.</span> A wholesale <code>--tmpfs &lt;home&gt;</code> would hide axiom's own CLI /
 node_modules under <code>$HOME</code> and break every anchored run. Kept <code>--ro-bind / /</code> (complete write confinement)
-+ explicit <code>--tmpfs</code> shadows of <code>~/.ssh .aws .gnupg .config .local .cache .netrc</code>.</p>
++ <code>--tmpfs</code> shadows of the CREDENTIAL dirs <code>~/.ssh .aws .gnupg .netrc</code>.</p>
+<p><span class="k">Capability-preserving shadows.</span> <code>~/.local ~/.config ~/.cache</code> are NOT shadowed — they hold the agent's
+actual tooling (user CLIs, the Obscura web browser, caches) and web research must keep working. Per-project
+<code>shadowDir</code> override tunes it (e.g. open <code>~/.ssh</code> for git auth).</p>
+<p><span class="k">Web/research first.</span> Network is inherited (no <code>--unshare-net</code>) so web search/fetch works inside a
+project; network isolation is opt-in per project, off by default.</p>
 <p><span class="k">Fail-closed.</span> Absent bwrap returns a clear error — an anchored run never runs unconfined.</p>
 <p><span class="k">Observability.</span> <code>AXIOM_CONFINED=1</code> marker + <code>[sandbox-confined]</code> reply prefix.</p>
 </div>
@@ -65,6 +70,8 @@ absent refuses an unconfined run.</p>
 <p><span class="k">Real-bwrap integration (5).</span> fixture child inside the sandbox writes <code>inside.txt</code> (persists);
 operator-home and <code>/etc</code> writes are refused at the OS level with no host artifact; a <code>~/.ssh</code> sentinel is unreadable.
 Self-skips with a reason when bwrap/userns is absent.</p>
+<p><span class="k">Unit — tooling preserved (10).</span> shadow default is credential-only: <code>.ssh .aws .gnupg .netrc</code> shadowed,
+<code>.local .config .cache</code> NOT.</p>
 <p><span class="k">Floor.</span> <code>./test.sh</code> coding-agent 325 passed / 8 skipped / 4 known-environmental
 (4603 EXDEV, 4685 FORCE_COLOR, refine, kernel-heartbeat) — identical to baseline; my 3 new files all pass.
 biome + tsgo clean; <code>npm run build</code> exit 0.</p>
@@ -83,6 +90,7 @@ bwrap-gated CI skip.</p>
 <p>An anchored gateway run is OS-confined end-to-end. Commits: sandbox builder, runner wiring, real-bwrap integration test.
 Docs: ADR-0019, CONTEXT vocabulary, handoff addendum. Honest follow-ups (recorded, not faked): read-minimal allowlist,
 network isolation (<code>--unshare-net</code>), and an operator-live round-trip with a real model completion (no provider key this run).</p>
-<p class="warn">Scope honestly bounded: host readable (only secret dirs shadowed); network inherited; requires bwrap + userns.</p>
+<p class="warn">Scope honestly bounded: host readable (only CREDENTIAL dirs shadowed, so full tooling + web research work);
+network inherited (opt-in isolation); <code>~/.ssh</code> shadowed blocks ssh-key git push by default — open it per project when you want.</p>
 </div>
 </div></body></html>

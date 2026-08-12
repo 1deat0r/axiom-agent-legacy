@@ -92,10 +92,12 @@ category)
 The ADR-0019 OS-tier strict tier: an anchored gateway run (projectRoot set)
 spawns the whole completion child inside a bubblewrap sandbox — host mounted
 read-only except the project root and the persistent stores (AXIOM_HOME,
-~/.prime) bound writable; /tmp /run /var and the secret home dirs (~/.ssh,
-~/.aws, ...) shadowed as tmpfs. Freeform bash and the ipython kernel inherit the
-mount namespace, so one kernel boundary confines them; the child is marked
-AXIOM_CONFINED=1 and replies open with [sandbox-confined]. Fail-closed when
-bwrap is absent. Follow-ups (honest): read-minimal allowlist, network
-isolation (--unshare-net).
+~/.prime) bound writable; /tmp /run /var and the CREDENTIAL dirs (~/.ssh,
+~/.aws, ~/.gnupg, ~/.netrc) shadowed as tmpfs. Tooling dirs (~/.local, ~/.config,
+~/.cache) stay readable so agents keep full bash/tooling and web research; a
+per-project shadowDir override tunes this. Freeform bash and the ipython kernel
+inherit the mount namespace, so one kernel boundary confines them; the child is
+marked AXIOM_CONFINED=1 and replies open with [sandbox-confined]. Fail-closed
+when bwrap is absent. Follow-ups (honest): read-minimal allowlist; network
+isolation is opt-in per project, off by default (agents need the web).
 _Avoid_: Jail, container (not a full container; a mount-ns confinement)

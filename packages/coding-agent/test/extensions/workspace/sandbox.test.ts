@@ -3,6 +3,7 @@ import {
 	assembleProgramArgv,
 	buildSandboxMountArgs,
 	confinementEnv,
+	DEFAULT_SHADOW_REL,
 	defaultShadowDirs,
 	resolveBwrap,
 	resolveConfinementPaths,
@@ -102,9 +103,14 @@ describe("resolveBwrap", () => {
 });
 
 describe("defaultShadowDirs", () => {
-	it("derives secret dirs under home, keeping only those that exist", () => {
-		const dirs = defaultShadowDirs(HOME);
-		// /home/op does not exist on this host -> no dirs qualify
-		expect(dirs).toEqual([]);
+	it("shadows credential stores but NOT tooling dirs (~/.local ~/.config ~/.cache)", () => {
+		// DEFAULT_SHADOW_REL is credential-only: secrets shadowed, tools stay visible.
+		expect(DEFAULT_SHADOW_REL).not.toContain(".local");
+		expect(DEFAULT_SHADOW_REL).not.toContain(".config");
+		expect(DEFAULT_SHADOW_REL).not.toContain(".cache");
+		expect(DEFAULT_SHADOW_REL).toContain(".ssh");
+		expect(DEFAULT_SHADOW_REL).toContain(".aws");
+		// /home/op does not exist on this host -> no dirs qualify (existence gate)
+		expect(defaultShadowDirs(HOME)).toEqual([]);
 	});
 });
