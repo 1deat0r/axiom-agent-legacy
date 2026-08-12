@@ -149,15 +149,16 @@ Signal feature left un-plumbed.
 
 ## What was verified, and how
 
-- Gateway behavior (unit tests, 30 new): URL-only = 17 transport (offset ack +
+- Gateway behavior (unit tests, 31 new): 18 telegram transport (offset ack +
   persistence no-replay, String(chat.id) delivery, >4096 chunking + hard-split
-  fallback, skip-none, transient-keeps-polling, fatal-stops via real error_code,
-  disconnect-aborts, timeout in seconds, send-failure surfacing, offset-write
-  failure), 4 router-over-Telegram paths (allowlist deny, group-deny by negative
-  id, command-vs-agent, session index over chat.id), 9 CLI selection/build/
-  error-path.
+  fallback, skip-none, transient-keeps-polling with throttled log,
+  fatal-stops via real error_code, disconnect-aborts, timeout in seconds
+  clamped to 50s, send-failure surfacing, offset-write failure), 4
+  router-over-Telegram paths (allowlist deny, group-deny by negative id,
+  command-vs-agent, session index over chat.id), 9 CLI selection/build/
+  error-path. Gateway floor: 58 tests green.
 - Floor: `npm run check` (biome + tsgo + installer + browser-smoke) green,
-  `npm run build` green, gateway suite 53 tests green; full coding-agent vitest
+  `npm run build` green, gateway suite 58 tests green; full coding-agent vitest
   green modulo the documented sandbox EXDEV daemon fails (4603 + daemon-
   serialized-refine) — none in gateway code.
 
@@ -179,7 +180,34 @@ Signal feature left un-plumbed.
   conversion + units test; (3) docs (ADR-0017/handoff/summary) missing from the
   landed commit; fixed here. Non-blocking acted on: offset-write failure now
   logs instead of entering transient-retry; send-failure path pinned by a test.
-- Impl r2: (pending — see date; re-gate after blockers closed).
+- Impl r2 APPROVED, 0 blockers (reviewer also verified the real Bot API error
+  shape live). Round-2 non-blocking acted on: long-poll timeout clamped to the
+  Bot API 50s max; transient poll errors now emit a throttled stderr line (one
+  per distinct error) so a stuck network / 5xx storm is visible without
+  spamming.
+
+## Scoped deviations and decisions (autonomous)
+
+- **One chat = one sender = one session.** For Telegram, `channelId = sender =
+  String(chat.id)`. Private chats are allowlisted by the owner's personal
+  (positive) chat id; **group chats have a negative chat.id and are denied by
+  default** because the allowlist holds positive personal ids — no special
+  transport logic, the router's existing deny-before-model gate does it.
+- **Offset ack is at-most-once.** The offset is acknowledged per batch and
+  persisted under `<AXIOM_HOME>/gateway/telegram-offset.json`; a crash between
+  getUpdates returning and the router delivering loses that batch (deliberate
+  trade-off for no-replay, recorded in ADR-0017).
+- **4096-char outbound chunking is a transport-level guarantee.** Long agent
+  replies are split into ≤4096 segments (whitespace split, hard-split
+  fallback), sent in order; a failing chunk logs to stderr and stops — never a
+  silent drop (the router's chain catch would otherwise swallow it).
+- **No operator-side linked daemon** — the Bot API is HTTPS; unlike signal-cli
+  there is nothing to link. The token is read from `--telegram-token` or
+  `AXIOM_TELEGRAM_BOT_TOKEN`, never committed.
+- **Deferred (recorded, not built):** suppressing the public "unrecognized
+  sender" deny reply in group chats would require chat-type on the shared
+  `GatewayMessage` boundary (touching Signal too); not worth it for a first cut
+  on a single-owner private-chat allowlist. Documented as a follow-up.
 
 ## Operator follow-ups (live/operator-gated)
 
