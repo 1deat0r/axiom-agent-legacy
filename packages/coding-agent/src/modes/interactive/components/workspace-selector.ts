@@ -66,7 +66,6 @@ const SESSION_SELECT_FLAGS = new Set(["--resume", "-r", "--continue", "-c", "--f
 /** Daemon continuity is per agent-home; a switched workspace needs its own daemon. */
 const DAEMON_FLAGS = new Set(["--daemon-socket"]);
 
-
 /**
  * Derive the child argv for a workspace switch: drop the old
  * profile/project/session-selection/daemon flags (both `--flag value` and

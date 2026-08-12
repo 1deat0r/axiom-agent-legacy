@@ -4,8 +4,8 @@ import {
 	buildSwitchRelaunchArgs,
 	shouldOpenWorkspaceMenu,
 	type WorkspaceOption,
-	type WorkspaceSelectorOptions,
 	WorkspaceSelectorComponent,
+	type WorkspaceSelectorOptions,
 } from "../src/modes/interactive/components/workspace-selector.js";
 import { initTheme } from "../src/modes/interactive/theme/theme.js";
 
