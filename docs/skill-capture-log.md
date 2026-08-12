@@ -89,3 +89,19 @@ Total: 100/100 — APPROVED. Proceeding to implementation.
 - [x] Full `./test.sh`: only pre-existing sandbox known-fails (4603/4685 EXDEV + daemon-serialized-refine, identical on pristine baseline) + one ipython-bootstrap timing flake (passes on re-run + on baseline). No new failures from this change.
 - [x] biome clean, tsgo clean. End-to-end demo captured a real, verifiable skill.
 - [x] Docs: ADR-0020, CONTEXT.md term, handoff-skill-capture.md (named, per convention; shared handoff.md left untouched).
+## 5. Self-review of implementation (re-read diff cold)
+- Plan items all present: core module, CLI+main wiring, tests, ADR-0020, CONTEXT term, handoff (named).
+- Tests: 25/25 pass; new tests assert real behavior (zero-diagnostics via real loader; no-overwrite; steps-edge).
+- No TODOs/debug prints (io.log is intentional). No `any`. NodeNext `.js` imports.
+- Fix found: `capture.steps.map` threw on an omitted steps list — added `steps ?? []` guard + test (commit 43dc36b03).
+- Full test.sh: only pre-existing sandbox known-fails, no new failures.
+
+## 6. External review of implementation — Round 1 (skeptical engineer, cold diff)
+- Correctness 5: "Build→persist→verify→offer end-to-end incl. validation, overwrite, bad-steps, missing-steps edges; provenance always emitted."
+- Fit 5: "Reuses skills.ts validators + real loadSkillsFromDir + gateway-style seam; skills.ts/main.ts deltas are 3 exports + 5 lines."
+- Testability 5: "Non-tautological: verify asserts zero loader diagnostics via the real loader; each behavior has a failing-without-it test."
+- Risk 5: "Overwrite refused, name normalized, explicit --out required, provenance required, steps-omitted guard."
+- Clarity 5: "--help; self-contained; a stranger can follow."
+Total: 100/100 — APPROVED (no resubmit needed). Two issues fixed earlier: PersistResult discriminated-union typing; steps-omitted guard.
+
+## 7. Summary page
