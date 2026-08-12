@@ -2,6 +2,7 @@
  * Gateway types (the axiom messaging gateway, ADR-0001/0004/0006, first port
  * onto the prime-agent v0.7.2 baseline). One sender channels to one session.
  */
+import type { AgentCronJob } from "../core/cron-jobs.js";
 
 /** A normalized, platform-agnostic inbound or outbound message. */
 export interface GatewayMessage {
@@ -40,6 +41,13 @@ export interface CompletionRunner {
 	}>;
 }
 
+/** The cron surface the /cron command drives (list/add/remove). */
+export interface GatewayCronCommandApi {
+	listJobs(): AgentCronJob[];
+	addJob(input: { channelId: string; scheduleText: string; prompt: string; label?: string }): AgentCronJob;
+	removeJob(id: string): AgentCronJob | undefined;
+}
+
 /** A gateway-local command handler (never reaches the model). */
 export interface GatewayCommand {
 	name: string;
@@ -56,7 +64,10 @@ export interface GatewayCommandContext {
 	/** Persistent sqlite FTS index file for cross-session recall. */
 	searchIndexPath?: string;
 	/** Anchored project root; /search scopes to it unless --all is given. */
-	projectRoot?: string;
+	projectRoot?: string /** The channel the inbound command arrived on (cron delivery target). */;
+	channelId?: string;
+	/** The gateway's cron manager, when wired (drives /cron). */
+	cron?: GatewayCronCommandApi;
 }
 
 /** The resolved command reply for one inbound command message. */

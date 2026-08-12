@@ -1,15 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!-- Axiom-agent mark, monochrome black, square corners. -->
+<!-- Axiom-agent beacon mark, monochrome black (badge outline + rings + core). -->
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none"
      version="1.1" xmlns="http://www.w3.org/2000/svg">
-  <path d="M256 30 L450 143 L450 369 L256 482 L62 369 L62 143 Z"
-        fill="none" stroke="#000000" stroke-width="16" stroke-linejoin="miter"/>
-  <g stroke="#000000" stroke-width="54" stroke-linecap="butt" stroke-linejoin="miter">
-    <path d="M256 116 L168 380"/>
-    <path d="M256 116 L344 380"/>
-  </g>
-  <path d="M180 296 L332 296" stroke="#000000" stroke-width="46" stroke-linecap="butt"/>
-  <path d="M256 404 L256 456" stroke="#000000" stroke-width="26" stroke-linecap="butt"/>
-  <path d="M198 404 L256 404" stroke="#000000" stroke-width="22" stroke-linecap="butt"/>
-  <path d="M198 434 L256 434" stroke="#000000" stroke-width="14" stroke-linecap="butt"/>
+  <rect x="44" y="44" width="424" height="424" fill="none" stroke="#000000" stroke-width="12"/>
+  <path d="M256 106 L406 256 L256 406 L106 256 Z" stroke="#000000" stroke-width="18" stroke-linejoin="miter"/>
+  <path d="M256 186 L330 256 L256 326 L182 256 Z" stroke="#000000" stroke-width="12" stroke-linejoin="miter"/>
+  <path d="M256 236 L278 256 L256 276 L234 256 Z" fill="#000000"/>
 </svg>

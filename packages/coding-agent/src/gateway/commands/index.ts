@@ -1,4 +1,5 @@
 import type { GatewayCommand, GatewayCommandContext } from "../types.js";
+import { cronCommand } from "./cron.js";
 import { helpCommand } from "./help.js";
 import { profilesCommand } from "./profiles.js";
 import { projectsCommand } from "./projects.js";
@@ -11,6 +12,7 @@ export const gatewayCommands: GatewayCommand[] = [
 	helpCommand,
 	searchCommand,
 	sessionsCommand,
+	cronCommand,
 	profilesCommand,
 	projectsCommand,
 	soulCommand,
