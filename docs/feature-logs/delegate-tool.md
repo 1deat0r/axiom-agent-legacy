@@ -91,7 +91,7 @@ Reviewer: RLM subagent delegate-impl-reviewer-2. Both fixes verified in source +
 path only live-gated), Clarity 5 -> 96/100 APPROVE. No new blocking issues.
 
 ## Docs + summary
-ADR-0028, handoff-delegate-tool.md, summary-delegate-tool.html built from this log.
+ADR-0029, handoff-delegate-tool.md, summary-delegate-tool.html built from this log.
 
 ## Floor check — full ./test.sh
 4393 passed / 15 failed / 60 skipped. The 14 are ONLY the documented sandbox
@@ -135,3 +135,12 @@ COMMIT+push increment.
 - self-review: each batch behavior has a failing-without-it test; no dead code; back-compat preserved
   (single path unchanged, details shape is mode-dependent); empty tasks falls through to single/reject.
 COMMIT increment.
+
+## Bring up to date on main
+Merged origin/main (49 commits: rebrand, session-search, discord+slack gateway 0020-0023,
+skill-capture 0024-0027, security-fence, cron) into feat/delegate-rpc (merge 066ceeb5f, clean,
+no conflicts; extensions/index.ts auto-merged with both sides' extensions).
+ADR collision: main already had ADR-0028-security-fence -> renumbered delegate ADR to
+ADR-0029-delegate-tool (git mv + ref rewrite in handoff/summary/log). Verified on merged tree:
+tsgo --noEmit clean, biome clean, delegate suite 30/1 green; main rpc.test.ts still uses
+PI_CODING_AGENT_DIR (matches my live-gated test). Re-running full ./test.sh on the merged tree.

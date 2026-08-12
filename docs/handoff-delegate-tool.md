@@ -13,7 +13,7 @@ Files (branch `feat/delegate-rpc`, worktree `.worktrees/delegate-rpc`):
 - `packages/coding-agent/src/extensions/delegate/{types,result,bridge,index}.ts`
 - `packages/coding-agent/src/extensions/index.ts` (wired into `builtInExtensions`)
 - `packages/coding-agent/test/extensions/delegate.test.ts`
-- `docs/adr/ADR-0028-delegate-tool.md`, `docs/feature-logs/delegate-tool.md`,
+- `docs/adr/ADR-0029-delegate-tool.md`, `docs/feature-logs/delegate-tool.md`,
   `docs/summary-delegate-tool.html`, `docs/plans/delegate-tool.md`
 
 ## What was verified, and how

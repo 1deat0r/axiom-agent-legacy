@@ -1,4 +1,4 @@
-# ADR-0028 — Delegate tool: RPC bridge with a compact result block
+# ADR-0029 — Delegate tool: RPC bridge with a compact result block
 
 - Status: accepted
 - Date: 2026-08-12
