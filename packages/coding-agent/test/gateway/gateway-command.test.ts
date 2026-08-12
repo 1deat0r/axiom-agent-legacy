@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+	buildFanOutTransports,
 	buildTransport,
 	defaultGatewayStart,
 	handleGatewayCommand,
@@ -213,5 +214,36 @@ describe("handleGatewayCommand error paths", () => {
 		});
 		expect(handled).toBe(true);
 		expect(started).toBe(false);
+	});
+});
+
+describe("buildFanOutTransports (cross-platform fan-out, ADR-0023)", () => {
+	it("builds a sibling discord transport when its token is set and the active is telegram", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-fot-"));
+		try {
+			const out = buildFanOutTransports({ transport: "telegram", telegramToken: "T" }, dir, {
+				AXIOM_DISCORD_BOT_TOKEN: "D",
+			});
+			expect(Object.keys(out)).toEqual(["discord"]);
+			expect(out.discord).toBeInstanceOf(DiscordTransport);
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("excludes the active transport and any platform without a token", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-fot-"));
+		try {
+			// Active = discord; only a slack token present -> only slack is a fan-out.
+			const out = buildFanOutTransports({ transport: "discord", discordToken: "D" }, dir, {
+				AXIOM_SLACK_BOT_TOKEN: "S",
+			});
+			expect(Object.keys(out)).toEqual(["slack"]);
+			expect(out.slack).toBeInstanceOf(SlackTransport);
+			// No sibling tokens -> empty map (single-platform default).
+			expect(buildFanOutTransports({ transport: "signal" }, dir, {})).toEqual({});
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
 	});
 });

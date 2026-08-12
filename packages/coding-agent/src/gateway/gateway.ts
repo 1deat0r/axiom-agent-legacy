@@ -43,6 +43,12 @@ export interface GatewayDeps {
 	ledger?: DeliveryLedger;
 	/** The active transport's name, recorded on each ledger entry. */
 	transportName?: string;
+	/**
+	 * Extra named fan-out transports (ADR-0023): send-only targets a
+	 * deliverTo entry's `transport` name can address, so one run reaches
+	 * channels across platforms.
+	 */
+	transports?: Record<string, GatewayTransport>;
 }
 
 /** Per-channel run chain so two messages on one session never interleave. */
@@ -58,6 +64,7 @@ export class Gateway {
 	private readonly projectHome: string;
 	private readonly ledger: DeliveryLedger | undefined;
 	private readonly transportName: string;
+	private readonly transports: Record<string, GatewayTransport>;
 	private readonly cron: (GatewayCronCommandApi & { start(): void; stop(): void }) | undefined;
 	private readonly chains = new Map<string, ChannelChain>();
 	private started = false;
@@ -74,6 +81,7 @@ export class Gateway {
 			(deps.profile === "default" ? deps.axiomHomeDir : join(deps.axiomHomeDir, "profiles", deps.profile));
 		this.ledger = deps.ledger;
 		this.transportName = deps.transportName ?? "transport";
+		this.transports = deps.transports ?? {};
 		this.cron = deps.cron;
 	}
 
@@ -100,21 +108,27 @@ export class Gateway {
 	}
 
 	/**
-	 * The single outbound path: send `text` to `to` and record it in the ledger.
-	 * A transport that throws is still recorded (ok:false) and never left silent.
+	 * The single outbound path: send `text` to `to` over one transport and
+	 * record it in the ledger labelled with that transport's name. A transport
+	 * that throws is still recorded (ok:false) and never left silent.
 	 */
-	private async deliver(to: GatewayRecipient, text: string): Promise<void> {
+	private async deliverVia(
+		transport: GatewayTransport,
+		name: string,
+		to: GatewayRecipient,
+		text: string,
+	): Promise<void> {
 		let ok = true;
 		let error: string | undefined;
 		try {
-			await this.transport.send(to, text);
+			await transport.send(to, text);
 		} catch (cause) {
 			ok = false;
 			error = cause instanceof Error ? cause.message : String(cause);
 		}
 		this.ledger?.record({
 			ts: Date.now(),
-			transport: this.transportName,
+			transport: name,
 			channel: to.channelId,
 			recipient: to.recipient,
 			chars: text.length,
@@ -123,16 +137,27 @@ export class Gateway {
 		});
 	}
 
+	/** Reply/denial on the active transport, recorded in the ledger. */
+	private deliver(to: GatewayRecipient, text: string): Promise<void> {
+		return this.deliverVia(this.transport, this.transportName, to, text);
+	}
+
 	/**
-	 * Fan one message out to every configured deliverTo channel on the active
-	 * transport (ADR-0022) — the "one run reaches every channel" primitive the
-	 * automation spine can feed. Returns how many channels were targeted.
+	 * Fan one message out to every configured deliverTo channel — across
+	 * transports when a target names one (ADR-0023), else the active transport
+	 * (ADR-0022). Returns how many channels were targeted.
 	 */
 	async deliverToAll(text: string): Promise<{ channels: number }> {
 		const config = loadGatewayConfig(this.axiomHomeDir);
 		const targets = config.deliverTo ?? [];
 		for (const target of targets) {
-			await this.deliver({ channelId: target.channel, recipient: "" }, text);
+			// Resolve the actual transport first: a named target we do not hold
+			// degrades to the active transport, and the ledger labels what really
+			// delivered (never a phantom transport name).
+			const named = target.transport !== undefined ? this.transports[target.transport] : undefined;
+			const transport = named ?? this.transport;
+			const name = named !== undefined ? target.transport! : this.transportName;
+			await this.deliverVia(transport, name, { channelId: target.channel, recipient: "" }, text);
 		}
 		return { channels: targets.length };
 	}

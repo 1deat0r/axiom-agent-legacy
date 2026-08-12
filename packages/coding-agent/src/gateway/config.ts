@@ -22,8 +22,9 @@ export function loadGatewayConfig(axiomHomeDir: string): GatewayConfig {
 		const raw = JSON.parse(readFileSync(gatewayConfigPath(axiomHomeDir), "utf8")) as Partial<GatewayConfig>;
 		const senders = Array.isArray(raw.senders) ? raw.senders.filter((s): s is string => typeof s === "string") : [];
 		const deliverTo = Array.isArray(raw.deliverTo)
-			? (raw.deliverTo as Array<{ channel?: unknown }>).filter(
-					(t): t is { channel: string } => typeof t?.channel === "string",
+			? (raw.deliverTo as Array<{ transport?: unknown; channel?: unknown }>).filter(
+					(t): t is { transport?: string; channel: string } =>
+						typeof t?.channel === "string" && (t.transport === undefined || typeof t.transport === "string"),
 				)
 			: [];
 		return { senders, deliverTo };

@@ -185,6 +185,7 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 		cron,
 		ledger,
 		transportName: opts.transport,
+		transports: buildFanOutTransports(opts, root),
 	});
 	await gateway.start();
 	return gateway;
@@ -210,4 +211,36 @@ export function buildTransport(opts: GatewayStartOptions, axiomHomeDir: string):
 	// Signal: wire the operator's --signal-cli path and linked --signal-account
 	// so the one-command live test targets the right (shared) account.
 	return new SignalTransport(new CliSignalClient(opts.signalCliPath ?? "signal-cli", opts.signalAccount));
+}
+
+/** Build ONE named fan-out transport for `t` from its token. */
+function buildFanOutTransport(t: "telegram" | "discord" | "slack", token: string, root: string): GatewayTransport {
+	if (t === "telegram") return buildTransport({ transport: "telegram", telegramToken: token }, root);
+	if (t === "discord") return buildTransport({ transport: "discord", discordToken: token }, root);
+	return buildTransport({ transport: "slack", slackToken: token }, root);
+}
+
+/**
+ * Extra send-only transports for cross-platform fan-out (ADR-0023): every
+ * platform OTHER than the active transport whose token is present in the
+ * environment is built so a deliverTo entry naming that transport can reach
+ * it. A platform with no token is simply absent — graceful, never guessed.
+ */
+export function buildFanOutTransports(
+	opts: GatewayStartOptions,
+	root: string,
+	env: Record<string, string | undefined> = process.env,
+): Record<string, GatewayTransport> {
+	const out: Record<string, GatewayTransport> = {};
+	const candidates: Array<[t: "telegram" | "discord" | "slack", token: string | undefined]> = [
+		["telegram", env.AXIOM_TELEGRAM_BOT_TOKEN ?? opts.telegramToken],
+		["discord", env.AXIOM_DISCORD_BOT_TOKEN ?? opts.discordToken],
+		["slack", env.AXIOM_SLACK_BOT_TOKEN ?? opts.slackToken],
+	];
+	for (const [t, token] of candidates) {
+		if (t === opts.transport) continue; // the active transport is the primary
+		if (!token) continue; // operator hasn't enabled this platform
+		out[t] = buildFanOutTransport(t, token, root);
+	}
+	return out;
 }

@@ -10,13 +10,13 @@ import { Gateway } from "../../src/gateway/gateway.js";
 import type { GatewayMessage, GatewayTransport } from "../../src/gateway/types.js";
 
 function fakeTransport() {
-	const sent: Array<{ to: string; text: string }> = [];
+	const sent: Array<{ to: string; channelId: string; text: string }> = [];
 	let handler: ((msg: GatewayMessage) => void) | undefined;
 	const t: GatewayTransport = {
 		async connect() {},
 		async disconnect() {},
 		async send(to, text) {
-			sent.push({ to: to.recipient, text });
+			sent.push({ to: to.recipient, channelId: to.channelId, text });
 		},
 		onMessage(h) {
 			handler = h;
@@ -126,6 +126,80 @@ describe("Gateway delivery ledger (ADR-0022)", () => {
 			expect(ann).toContain("announcing");
 			expect(deliverToAll).toHaveBeenCalledWith("hello world");
 			expect(dispatchCommand("/announce", ctx2)).toContain("nothing to send");
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("cross-transport fan-out (ADR-0023)", () => {
+	it("routes deliverTo targets to a named sibling transport and labels the ledger", async () => {
+		const dir = await home("axiom-lg-x-");
+		try {
+			await writeFile(
+				join(dir, "gateway", "config.json"),
+				JSON.stringify({
+					senders: ["U-OWNER"],
+					deliverTo: [
+						{ transport: "slack", channel: "S1" }, // sibling platform
+						{ channel: "C1" }, // active transport default
+					],
+				}),
+			);
+			const primary = fakeTransport();
+			const slack = fakeTransport();
+			const ledger = new MemoryDeliveryLedger();
+			const g = new Gateway({
+				transport: primary.t,
+				index: new MemoryChannelIndex(),
+				completion: fakeCompletionRunner(),
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["U-OWNER"],
+				ledger,
+				transportName: "discord",
+				transports: { slack: slack.t },
+			});
+			await g.start();
+			const res = await g.deliverToAll("hello everyone");
+			expect(res).toEqual({ channels: 2 });
+			// Right destination per platform.
+			expect(primary.sent.map((s) => s.channelId)).toEqual(["C1"]);
+			expect(slack.sent.map((s) => s.channelId)).toEqual(["S1"]);
+			// Ledger labelled by the delivering transport.
+			const entries = ledger.recent(10);
+			expect(entries.map((e) => `${e.transport}->${e.channel}`)).toEqual(["slack->S1", "discord->C1"]);
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("falls back to the active transport for an unknown named target", async () => {
+		const dir = await home("axiom-lg-x-");
+		try {
+			await writeFile(
+				join(dir, "gateway", "config.json"),
+				JSON.stringify({ senders: ["U-OWNER"], deliverTo: [{ transport: "nope", channel: "X" }] }),
+			);
+			const primary = fakeTransport();
+			const ledger = new MemoryDeliveryLedger();
+			const g = new Gateway({
+				transport: primary.t,
+				index: new MemoryChannelIndex(),
+				completion: fakeCompletionRunner(),
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["U-OWNER"],
+				ledger,
+				transportName: "discord",
+			});
+			await g.start();
+			await g.deliverToAll("hi");
+			// Unknown transport -> degrade to the active transport, labelled as it.
+			expect(primary.sent.map((s) => s.channelId)).toEqual(["X"]);
+			expect(ledger.recent(10)[0]!.transport).toBe("discord");
+			await g.stop();
 		} finally {
 			await rm(dir, { recursive: true, force: true });
 		}

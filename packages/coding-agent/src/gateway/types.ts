@@ -79,6 +79,10 @@ export interface CommandResult {
 export interface GatewayConfig {
 	/** Allowlisted senders — only these may reach the model/commands. */
 	senders: string[];
-	/** Fan-out targets on the active transport for /announce (channel ids). */
-	deliverTo?: Array<{ channel: string }>;
+	/**
+	 * Fan-out targets for /announce (ADR-0022/0023). Each may name a `transport`
+	 * (default: the active transport) so one run can reach channels across
+	 * platforms.
+	 */
+	deliverTo?: Array<{ transport?: string; channel: string }>;
 }
