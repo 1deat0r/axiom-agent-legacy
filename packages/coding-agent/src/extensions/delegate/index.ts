@@ -31,6 +31,10 @@ import type { DelegateBatchResult, DelegateResult } from "./types.js";
 
 export const DEFAULT_TIMEOUT_MS = 120_000;
 export const MAX_TIMEOUT_MS = 300_000;
+/** Upper bound on the number of tasks in one batch (guard against unbounded fan-out). */
+export const MAX_TASKS = 16;
+/** Cap on concurrently-running helpers in a batch (bounded concurrency pool). */
+export const BATCH_CONCURRENCY = 4;
 
 const DelegateParamsSchema = Type.Object({
 	task: Type.Optional(Type.String()),
@@ -71,6 +75,27 @@ function withTimeout<T>(promise: Promise<T>, ms: number, onTimeout: Error): Prom
 			},
 		);
 	});
+}
+
+/**
+ * Map `fn` over `items` with at most `limit` concurrent executions, preserving
+ * input order in the result. Bounds the number of spawned helpers in a batch.
+ */
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+	const results = new Array<R>(items.length);
+	let cursor = 0;
+	async function worker(): Promise<void> {
+		for (;;) {
+			const index = cursor++;
+			if (index >= items.length) {
+				return;
+			}
+			results[index] = await fn(items[index]);
+		}
+	}
+	const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+	await Promise.all(workers);
+	return results;
 }
 
 /**
@@ -151,19 +176,21 @@ export function createDelegateExtension(deps?: Partial<DelegateDeps>): (pi: Exte
 				const effectiveModel = viaParam ?? viaParent;
 
 				if (batchTasks.length > 0) {
-					// Batch/parallel fan-out: one fresh helper per task, concurrently.
-					// Each delegation reaps its own bridge; a failing task does not
-					// abort its siblings (partial failure -> ok:false but results kept).
-					const delegations = await Promise.all(
-						batchTasks.map((task) =>
-							runDelegation(
-								resolved.bridge(effectiveModel),
-								task,
-								timeoutMs,
-								params.name,
-								effectiveModel,
-								resolved.summaryMaxChars,
-							),
+					if (batchTasks.length > MAX_TASKS) {
+						throw new Error(`delegate batch exceeds MAX_TASKS (${MAX_TASKS}) — got ${batchTasks.length}`);
+					}
+					// Bounded parallel fan-out: one fresh helper per task through a
+					// fixed concurrency pool (BATCH_CONCURRENCY). Each delegation reaps
+					// its own bridge; a failing task does not abort its siblings
+					// (partial failure -> ok:false but results kept).
+					const delegations = await mapWithConcurrency(batchTasks, BATCH_CONCURRENCY, (task) =>
+						runDelegation(
+							resolved.bridge(effectiveModel),
+							task,
+							timeoutMs,
+							params.name,
+							effectiveModel,
+							resolved.summaryMaxChars,
 						),
 					);
 					const batch: DelegateBatchResult = toBatchResult(delegations);

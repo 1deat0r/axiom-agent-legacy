@@ -8,7 +8,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 import type { ExtensionAPI } from "../../src/core/extensions/types.js";
 import type { SessionStats } from "../../src/core/session-stats.js";
 import type { RpcDelegateBridge, RpcDelegateRunResult } from "../../src/extensions/delegate/bridge.js";
-import { createDelegateExtension, DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS } from "../../src/extensions/delegate/index.js";
+import {
+	BATCH_CONCURRENCY,
+	createDelegateExtension,
+	DEFAULT_TIMEOUT_MS,
+	MAX_TASKS,
+	MAX_TIMEOUT_MS,
+} from "../../src/extensions/delegate/index.js";
 import {
 	capSummary,
 	DEFAULT_SUMMARY_MAX_CHARS,
@@ -133,12 +139,23 @@ class StubBridge implements RpcDelegateBridge {
 	runError: Error | null = null;
 	hang = false;
 	failOnTask: string | null = null;
+	// Concurrency probe: when gateOn is set, runTask stays in-flight until release().
+	gateOn = false;
+	running = 0;
+	maxRunning = 0;
+	private gates: Array<() => void> = [];
 
 	async start(): Promise<void> {
 		this.started += 1;
 	}
 	async runTask(task: string, timeoutMs: number): Promise<RpcDelegateRunResult> {
 		this.runCalls.push({ task, timeoutMs });
+		this.running += 1;
+		this.maxRunning = Math.max(this.maxRunning, this.running);
+		if (this.gateOn) {
+			await new Promise<void>((resolve) => this.gates.push(resolve));
+		}
+		this.running -= 1;
 		if (this.hang) {
 			return new Promise<RpcDelegateRunResult>(() => undefined); // never resolves
 		}
@@ -147,6 +164,14 @@ class StubBridge implements RpcDelegateBridge {
 		}
 		if (this.runError) throw this.runError;
 		return this.runResult ?? { lastAssistantText: "default summary", stats: stats() };
+	}
+	release(): void {
+		// Open the gate permanently so later waves (new task slots in the pool)
+		// proceed instead of blocking forever.
+		this.gateOn = false;
+		for (const gate of this.gates.splice(0)) {
+			gate();
+		}
 	}
 	async stop(): Promise<void> {
 		this.stopped += 1;
@@ -345,13 +370,14 @@ describe("createDelegateExtension", () => {
 		await expect(tool.execute!("c1", { tasks: [] })).rejects.toThrow("non-empty task");
 	});
 
-	it("runs a batch across fresh helpers, one per task, and aggregates", async () => {
+	it("runs a batch across fresh helpers, one per task, aggregates, and reaps them all", async () => {
 		const { pi, tools } = fakePi();
-		let built = 0;
+		const built: StubBridge[] = [];
 		createDelegateExtension({
 			bridge: () => {
-				built += 1;
-				return new StubBridge();
+				const stub = new StubBridge();
+				built.push(stub);
+				return stub;
 			},
 		})(pi);
 		const tool = tools.find((t) => t.name === "delegate")!;
@@ -364,13 +390,43 @@ describe("createDelegateExtension", () => {
 				cost: number;
 			};
 		};
-		expect(built).toBe(3); // one fresh helper per task (per-call reset holds per delegation)
+		expect(built).toHaveLength(3); // one fresh helper per task (per-call reset holds per delegation)
 		expect(out.details.ok).toBe(true);
 		expect(out.details.delegations).toHaveLength(3);
 		expect(out.details.tokens.total).toBe(180); // 3 x 60
 		expect(out.details.cost).toBeCloseTo(0.0036); // 3 x 0.0012
 		expect(out.content[0]!.text).toContain("[delegate batch]");
 		expect(out.content[0]!.text).toContain("3 tasks");
+		// No orphan: every per-delegation bridge was started and stopped exactly once.
+		for (const stub of built) {
+			expect(stub.started).toBe(1);
+			expect(stub.stopped).toBe(1);
+		}
+	});
+
+	it("bounds batch concurrency to BATCH_CONCURRENCY helpers at a time", async () => {
+		const { pi, tools } = fakePi();
+		const stub = new StubBridge();
+		stub.gateOn = true;
+		createDelegateExtension({ bridge: () => stub })(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		const tasks = Array.from({ length: 8 }, (_, i) => `t${i}`);
+		const promise = tool.execute!("c1", { tasks });
+		await new Promise((resolve) => setTimeout(resolve, 60));
+		expect(stub.maxRunning).toBeLessThanOrEqual(BATCH_CONCURRENCY);
+		expect(stub.maxRunning).toBe(BATCH_CONCURRENCY); // exactly 4 in-flight, not 8
+		stub.release();
+		const out = (await promise) as { details: { ok: boolean; delegations: unknown[] } };
+		expect(out.details.ok).toBe(true);
+		expect(out.details.delegations).toHaveLength(8);
+	});
+
+	it("rejects a batch larger than MAX_TASKS", async () => {
+		const { pi, tools } = fakePi();
+		createDelegateExtension()(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		const tasks = Array.from({ length: MAX_TASKS + 1 }, (_, i) => `t${i}`);
+		await expect(tool.execute!("c1", { tasks })).rejects.toThrow("exceeds MAX_TASKS");
 	});
 
 	it("batch keeps sibling results and reports ok:false on partial failure", async () => {
