@@ -9,19 +9,23 @@ import {
 	sessionIdForChannel,
 } from "../../src/gateway/completion.js";
 
-/** Write an executable axiom/signal shim that records argv to SHIM_ARGV and prints a canned line. */
-async function writeShim(dir: string, binName: string, outText = "ok"): Promise<string> {
-	const bin = join(dir, binName);
+/** Write an executable shim at an absolute path that records argv/meta and prints a canned line. */
+async function writeShimAt(bin: string, outText = "ok"): Promise<string> {
 	await writeFile(
 		bin,
 		"#!/usr/bin/env node\n" +
 			'import {writeFileSync} from "node:fs";\n' +
 			"writeFileSync(process.env.SHIM_ARGV, JSON.stringify(process.argv.slice(2)));\n" +
-			"if (process.env.SHIM_META) writeFileSync(process.env.SHIM_META, JSON.stringify({ cwd: process.cwd(), root: process.env.AXIOM_PROJECT_ROOT ?? null }));\n" +
+			"if (process.env.SHIM_META) writeFileSync(process.env.SHIM_META, JSON.stringify({ cwd: process.cwd(), root: process.env.AXIOM_PROJECT_ROOT ?? null, confined: process.env.AXIOM_CONFINED ?? null }));\n" +
 			`process.stdout.write("${outText}\\n");\n`,
 	);
 	await chmod(bin, 0o755);
 	return bin;
+}
+
+/** Write an executable shim in a dir (join the name for callers). */
+async function writeShim(dir: string, binName: string, outText = "ok"): Promise<string> {
+	return writeShimAt(join(dir, binName), outText);
 }
 
 describe("sessionIdForChannel", () => {
@@ -97,25 +101,57 @@ describe("CliCompletionRunner", () => {
 		}
 	});
 
-	it("spawns with cwd = projectRoot and AXIOM_PROJECT_ROOT set when anchored", async () => {
+	it("anchors cwd + AXIOM_PROJECT_ROOT and OS-confines the child (bwrap) when anchored", async () => {
 		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-proj-"));
 		try {
 			const projectRoot = join(dir, "project");
 			await mkdir(projectRoot, { recursive: true });
-			const bin = await writeShim(dir, "axiom.mjs");
-			process.env.SHIM_ARGV = join(dir, "argv.json");
-			process.env.SHIM_META = join(dir, "meta.json");
+			// shim + outputs live INSIDE the project root so they persist through
+			// the sandbox (host /tmp is shadowed).
+			const bin = join(projectRoot, "axiom.mjs");
+			await writeShimAt(bin, "ok");
+			const out = join(projectRoot, "out");
+			await mkdir(out, { recursive: true });
+			process.env.SHIM_ARGV = join(out, "argv.json");
+			process.env.SHIM_META = join(out, "meta.json");
 			const runner = new CliCompletionRunner({ bin, printFlag: "-p", projectRoot });
-			await runner.runCompletion({ sessionId: "gw-p", prompt: "hi", profile: { name: "default" } });
-			const meta = JSON.parse(await readFile(join(dir, "meta.json"), "utf8")) as {
+			const result = await runner.runCompletion({ sessionId: "gw-p", prompt: "hi", profile: { name: "default" } });
+			expect(result.error).toBeUndefined();
+			const meta = JSON.parse(await readFile(join(out, "meta.json"), "utf8")) as {
 				cwd: string;
 				root: string | null;
+				confined: string | null;
 			};
 			expect(meta.cwd).toBe(projectRoot);
 			expect(meta.root).toBe(projectRoot);
+			expect(meta.confined).toBe("1");
+			expect(result.reply).toContain("[sandbox-confined]");
 		} finally {
 			delete process.env.SHIM_ARGV;
 			delete process.env.SHIM_META;
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("fails CLOSED when an anchored run has no bubblewrap", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-npb-"));
+		const prevPath = process.env.PATH;
+		try {
+			const projectRoot = join(dir, "project");
+			await mkdir(projectRoot, { recursive: true });
+			const bin = join(projectRoot, "shim.mjs");
+			await writeShimAt(bin, "ok");
+			// Empty PATH -> resolveBwrap finds no bwrap -> the anchored run must
+			// refuse to spawn unconfined (fail closed), never fall through.
+			process.env.PATH = "";
+			const runner = new CliCompletionRunner({ bin, printFlag: "-p", projectRoot });
+			const out = await runner.runCompletion({ sessionId: "gw-f", prompt: "hi", profile: { name: "default" } });
+			expect(out.reply).toBe("");
+			expect(out.error).toMatch(/bubblewrap/i);
+			expect(out.error).toMatch(/unconfined/i);
+		} finally {
+			if (prevPath === undefined) delete process.env.PATH;
+			else process.env.PATH = prevPath;
 			await rm(dir, { recursive: true, force: true });
 		}
 	});

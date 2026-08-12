@@ -9,9 +9,18 @@
  * inject a fake runner; the shipped `CliCompletionRunner` shells the real CLI.
  */
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+	assembleProgramArgv,
+	buildSandboxMountArgs,
+	confinementEnv,
+	defaultShadowDirs,
+	resolveBwrap,
+	resolveConfinementPaths,
+} from "../extensions/workspace/sandbox.js";
 import type { CompletionRunner, GatewayProfile } from "./types.js";
 
 /** Deterministic, channel-stable session id so resume just re-passes it. */
@@ -65,6 +74,12 @@ export interface CliCompletionOptions {
 	 */
 	projectRoot?: string;
 	/**
+	 * Confinement overrides for tests: force a bwrap binary path (or a
+	 * nonexistent one to exercise the fail-closed path) and the store homes.
+	 * Omit in production — defaults resolve from the environment.
+	 */
+	confinement?: { bwrap?: string; axiomHome?: string; primeHome?: string };
+	/**
 	 * Bounded wait for one completion before giving up. Completions are
 	 * serialized per channel, so a single hang must not wedge the channel
 	 * forever: if the child neither exits nor finishes within this window we
@@ -81,6 +96,7 @@ export class CliCompletionRunner implements CompletionRunner {
 	private readonly printFlag: string;
 	private readonly timeoutMs: number;
 	private readonly projectRoot?: string;
+	private readonly confinement?: { bwrap?: string; axiomHome?: string; primeHome?: string };
 	constructor(options: CliCompletionOptions = {}) {
 		const child = resolveCompletionChild(options.bin);
 		this.bin = child.bin;
@@ -88,6 +104,7 @@ export class CliCompletionRunner implements CompletionRunner {
 		this.printFlag = options.printFlag ?? "-p";
 		this.timeoutMs = options.timeoutMs ?? 300_000;
 		this.projectRoot = options.projectRoot;
+		this.confinement = options.confinement;
 	}
 	async runCompletion(input: {
 		sessionId: string;
@@ -107,15 +124,57 @@ export class CliCompletionRunner implements CompletionRunner {
 			input.sessionId,
 		];
 		try {
+			// An anchored run (projectRoot set) is OS-confined: the whole child
+			// spawns inside a bubblewrap sandbox (host read-only, project + the
+			// persistent stores writable, secret home dirs shadowed), so the
+			// freeform bash tool and the ipython kernel inherit the boundary.
+			// Bubblewrap absence FAILS CLOSED — never an unconfined anchored run.
+			let spawnargv: string[];
+			let childEnv: NodeJS.ProcessEnv | undefined;
+			let confined = false;
+			if (this.projectRoot) {
+				const bwrap = this.confinement?.bwrap ?? resolveBwrap(process.env);
+				if (!bwrap) {
+					throw new Error(
+						"Anchored run requires bubblewrap (bwrap) for OS-tier confinement, but it was not found. " +
+							"Install bubblewrap (or set AXIOM_BWRAP to its path), or run this gateway without " +
+							"--project. Refusing to spawn the completion unconfined.",
+					);
+				}
+				const home = homedir();
+				const stores = resolveConfinementPaths(home, process.env);
+				const axiomHome = this.confinement?.axiomHome ?? stores.axiomHome;
+				const primeHome = this.confinement?.primeHome ?? stores.primeHome;
+				// Writable store dirs must exist on the host to bind-mount.
+				try {
+					mkdirSync(axiomHome, { recursive: true });
+					mkdirSync(primeHome, { recursive: true });
+				} catch {
+					/* a missing store still fails closed at spawn (bind error) */
+				}
+				const mount = buildSandboxMountArgs({
+					home,
+					projectRoot: this.projectRoot,
+					axiomHome,
+					primeHome,
+					shadowDirs: defaultShadowDirs(home),
+				});
+				spawnargv = assembleProgramArgv(bwrap, mount, this.bin, args);
+				childEnv = confinementEnv({ ...process.env, AXIOM_PROJECT_ROOT: this.projectRoot });
+				confined = true;
+			} else {
+				spawnargv = [this.bin, ...args];
+				childEnv = undefined;
+			}
 			const stdout = await new Promise<string>((resolve, reject) => {
 				// Spawn and collect stdout ourselves rather than execFile: the
 				// completion CLI writes its final answer to stdio, and execFile's
 				// internal pipe collection can deadlock in some hosts. Stdio here
 				// is stdin ignored, stdout+stderr piped so we can collect the reply.
-				const child = spawn(this.bin, args, {
+				const child = spawn(spawnargv[0], spawnargv.slice(1), {
 					stdio: ["ignore", "pipe", "pipe"],
 					cwd: this.projectRoot,
-					env: this.projectRoot ? { ...process.env, AXIOM_PROJECT_ROOT: this.projectRoot } : undefined,
+					env: childEnv,
 				});
 				let collected = "";
 				let settled = false;
@@ -151,7 +210,8 @@ export class CliCompletionRunner implements CompletionRunner {
 					}
 				});
 			});
-			return { reply: stdout.trimEnd(), sessionId: input.sessionId };
+			const reply = confined ? `[sandbox-confined] ${stdout.trimEnd()}` : stdout.trimEnd();
+			return { reply, sessionId: input.sessionId };
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			return { reply: "", sessionId: input.sessionId, error: message };
