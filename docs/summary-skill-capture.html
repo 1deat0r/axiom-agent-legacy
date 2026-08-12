@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Feature Summary — Skills that learn procedural memory (step 1)</title>
+<style>
+  :root{--accent:#0f6f5e;--ink:#1a1d1c;--muted:#5b615f;--line:#e3e7e5;--bg:#ffffff;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.5;font-size:15px}
+  main{max-width:720px;margin:0 auto;padding:24px 20px 56px}
+  header{border-bottom:3px solid var(--accent);padding-bottom:14px;margin-bottom:26px}
+  h1{font-size:1.45rem;margin:0 0 6px;letter-spacing:-.01em}
+  .meta{color:var(--muted);font-size:.82rem}
+  h2{font-size:1.05rem;margin:30px 0 8px;color:var(--accent);
+    text-transform:uppercase;letter-spacing:.04em}
+  p{margin:8px 0}
+  ul{margin:8px 0 8px 20px;padding:0}
+  li{margin:4px 0}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:.86em;background:#f2f4f3;padding:1px 5px;border-radius:4px;color:#124c41}
+  .card{border:1px solid var(--line);border-left:3px solid var(--accent);
+    border-radius:6px;padding:12px 14px;margin:12px 0}
+  .verdict{font-weight:700;color:var(--accent)}
+  table{border-collapse:collapse;width:100%;margin:10px 0;font-size:.9rem}
+  th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}
+  th{background:#f2f4f3;color:var(--muted);font-weight:600}
+  .foot{margin-top:40px;padding-top:12px;border-top:1px solid var(--line);
+    color:var(--muted);font-size:.78rem}
+  @media print{
+    body{font-size:12px}
+    main{max-width:100%;padding:12px}
+    header{break-after:avoid}
+    .card,table{break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Skills that learn procedural memory — step 1: skill capture</h1>
+    <div class="meta">Timestamp: 2026-08-12 &nbsp;·&nbsp; Model: Axiom coding-agent (feat/skill-capture worktree) &nbsp;·&nbsp; ADR-0020</div>
+  </header>
+
+  <h2>Goal &amp; assumptions</h2>
+  <p>When a completed task is flagged as reusable, generate a validated, provenance-bearing
+     markdown skill that bundles the task prompt + its ordered steps, persist it to a skills
+     directory, verify it loads via the real skill loader, and offer the result &mdash; as a core
+     <code>skill-capture</code> module plus a standalone <code>axiom skill-capture</code> CLI,
+     all unit-tested.</p>
+  <p><strong>Assumptions (reviewed):</strong> this run implements only the mechanical first step.
+     Automatic flagging, the AST-level security audit of third-party skills, and hub/sync over
+     agentskills.io are later steps; here the &ldquo;flag&rdquo; is explicit (CLI args / JSON capture).</p>
+
+  <h2>Plan as executed</h2>
+  <ul>
+    <li>Core types + <code>document.ts</code> (slugify, buildSkillDocument) &rarr; vitest</li>
+    <li><code>capture.ts</code> persist (no-overwrite) + verify (real loader, zero diagnostics) &rarr; vitest</li>
+    <li>CLI <code>skill-capture</code> + <code>main.ts</code> wiring &rarr; command tests + biome + tsgo</li>
+    <li>ADR-0020, CONTEXT.md term, named handoff &rarr; full <code>test.sh</code></li>
+  </ul>
+
+  <h2>Key decisions</h2>
+  <div class="card">
+    <ul>
+      <li><strong>Reuse loader validators.</strong> Exported <code>validateName</code>/<code>validateDescription</code>/<code>MAX_NAME_LENGTH</code> from <code>skills.ts</code> (single source of truth) so a generated document can never be silently dropped.</li>
+      <li><strong>Provenance always emitted</strong> into <code>metadata.provenance</code> (source, createdAt, optional sessionId/trigger).</li>
+      <li><strong>No-overwrite persist</strong> &mdash; a capture must never clobber a hand-written skill.</li>
+      <li><strong>Verification via the real loader</strong> (<code>loadSkillsFromDir</code>) asserting zero diagnostics &mdash; the non-tautological proof of validity.</li>
+      <li><strong>CLI seam</strong> mirrors the gateway command pattern; minimal blast radius (3 exports / 5 lines touched in shared files).</li>
+    </ul>
+  </div>
+
+  <h2>Verification evidence</h2>
+  <table>
+    <tr><th>Check</th><th>Result</th></tr>
+    <tr><td><code>test/skill-capture.test.ts</code></td><td>25/25 pass</td></tr>
+    <tr><td>Related suites (skills, builtin-skills, frontmatter, refinement, sdk-skills)</td><td>148/148 pass</td></tr>
+    <tr><td><code>./test.sh</code></td><td>Only pre-existing sandbox known-fails: 4603/4685 EXDEV + daemon-serialized-refine (identical on pristine baseline), plus one ipython-bootstrap timing flake (passes on re-run + baseline). No new failures from this change.</td></tr>
+    <tr><td><code>biome check</code></td><td>clean</td></tr>
+    <tr><td><code>tsgo --noEmit</code></td><td>clean</td></tr>
+    <tr><td>End-to-end real run</td><td>captured <code>fix-regression-test-first</code>; verified 0 loader diagnostics; offer printed</td></tr>
+  </table>
+  <p>Edge cases handled: validation errors, name normalization/oversize, overwrite protection,
+     bad steps file, missing prompt / provenance.source, and a steps-omitted guard.</p>
+
+  <h2>Review history</h2>
+  <h3>Plan reviews</h3>
+  <table>
+    <tr><th>Round</th><th>Confidence</th><th>Cited issues &amp; fixes</th></tr>
+    <tr><td>Self</td><td class="verdict">approved</td><td>(a) reuse skills.ts validators, (b) provenance round-trip test, (c) explicit <code>--out</code> &mdash; all fixed</td></tr>
+    <tr><td>External 1</td><td>86/100 &rarr; denied</td><td>rule duplication (fixed), explicit <code>--out</code> (fixed), verify must return the loaded skill non-tautologically (fixed)</td></tr>
+    <tr><td>External 2</td><td class="verdict">100/100 approved</td><td>&mdash;</td></tr>
+  </table>
+  <h3>Implementation reviews</h3>
+  <table>
+    <tr><th>Round</th><th>Confidence</th><th>Cited issues &amp; fixes</th></tr>
+    <tr><td>Self</td><td class="verdict">passed</td><td>found <code>capture.steps.map</code> throw on omitted steps &rarr; added <code>steps ?? []</code> guard + test</td></tr>
+    <tr><td>External</td><td class="verdict">100/100 approved</td><td>no resubmit; earlier fixes (PersistResult discriminated union, steps guard) confirmed in diff</td></tr>
+  </table>
+
+  <h2>Final state</h2>
+  <div class="card">
+    <p class="verdict">Complete and green.</p>
+    <ul>
+      <li><code>src/core/skill-capture/{types,document,capture,index}.ts</code></li>
+      <li><code>src/cli/skill-capture-command.ts</code> + <code>main.ts</code> wiring</li>
+      <li><code>test/skill-capture.test.ts</code> (25 tests)</li>
+      <li><code>docs/adr/ADR-0020-skill-capture.md</code>, CONTEXT term, <code>handoff-skill-capture.md</code></li>
+    </ul>
+    <p>Commits: <code>2504d91e0</code>, <code>931e7e65a</code>, <code>43dc36b03</code>, <code>e7bb92629</code> on <code>feat/skill-capture</code>.</p>
+  </div>
+
+  <div class="foot">Built from the running log only (<code>docs/skill-capture-log.md</code>). Branch not yet pushed; later feature steps (auto-flagging, AST audit, hub/sync) extend <code>core/skill-capture</code>.</div>
+</main>
+</body>
+</html>

@@ -105,3 +105,4 @@ Total: 100/100 — APPROVED. Proceeding to implementation.
 Total: 100/100 — APPROVED (no resubmit needed). Two issues fixed earlier: PersistResult discriminated-union typing; steps-omitted guard.
 
 ## 7. Summary page
+- [x] summary-skill-capture.html built from this log only (7.2KB, inline CSS, phone/print ready). Committed.
