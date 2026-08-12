@@ -92,3 +92,11 @@ path only live-gated), Clarity 5 -> 96/100 APPROVE. No new blocking issues.
 
 ## Docs + summary
 ADR-0028, handoff-delegate-tool.md, summary-delegate-tool.html built from this log.
+
+## Floor check — full ./test.sh
+4393 passed / 15 failed / 60 skipped. The 14 are ONLY the documented sandbox
+known-fails (daemon-serialized-refine 1, 4603-worker-recovery 4,
+4685-daemon-client-modes 9 = EXDEV hard-link / real-process). The 15th,
+kernel-agent-message-skill (agent_message broadcast receipts, 30s timeout), is a
+parallel-load flake: it references none of this change and passes 7/7 standalone
+(2.85s). NO new regressions. biome clean, tsgo clean, delegate suite 22 green.
