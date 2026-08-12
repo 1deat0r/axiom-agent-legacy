@@ -387,6 +387,7 @@ describe("ENG-4531 agent message UI", () => {
 			chatContainer,
 			toolOutputExpanded: false,
 			getMarkdownThemeWithSettings: () => undefined,
+			uiServices: { settingsManager: { getMermaidRendering: () => false } },
 		};
 		Object.setPrototypeOf(mode, InteractiveMode.prototype);
 		const addMessage = (message: AgentMessage) =>

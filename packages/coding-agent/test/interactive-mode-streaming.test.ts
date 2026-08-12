@@ -27,7 +27,7 @@ const EMPTY_USAGE: Usage = {
 
 type HandleEventThis = {
 	isInitialized: boolean;
-	settingsManager: { getShowTerminalProgress(): boolean };
+	settingsManager: { getShowTerminalProgress(): boolean; getMermaidRendering(): boolean };
 	connectionState: { isStreaming: boolean };
 	toolOutputExpanded: boolean;
 	footer: { invalidate(): void };
@@ -75,7 +75,7 @@ type HandleSubagentSummaryChatAction = (
 function createFakeInteractiveModeThis(): HandleEventThis {
 	const fakeThis = {
 		isInitialized: true,
-		settingsManager: { getShowTerminalProgress: () => false },
+		settingsManager: { getShowTerminalProgress: () => false, getMermaidRendering: () => false },
 		connectionState: { isStreaming: false },
 		toolOutputExpanded: false,
 		footer: { invalidate: vi.fn() },
