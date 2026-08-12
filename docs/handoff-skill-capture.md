@@ -1,4 +1,4 @@
-# Handoff — Skills that learn procedural memory (steps 1–3: capture + security audit + automatic flagging)
+# Handoff — Skills that learn procedural memory (steps 1–4: capture + security audit + auto flag + unattended hook)
 
 **Branch:** `feat/skill-capture` (isolated worktree at `.worktrees/skill-capture`)
 **Base:** baseline 68a3f31ae (prime-agent v0.7.2 fork)
@@ -21,7 +21,7 @@ result.
   `validateDescription`, `MAX_NAME_LENGTH` (single source of truth) — only
   three `export` additions, no behavior change.
 - `packages/coding-agent/test/skill-capture.test.ts` — 24 vitest tests.
-- `docs/adr/ADR-0020`, `ADR-0021`, `ADR-0022`, `CONTEXT.md`,
+- `docs/adr/ADR-0020`–`ADR-0023`, `CONTEXT.md`,
   `docs/handoff-skill-capture.md`, `docs/skill-capture-log.md`.
 
 ## What was verified, and how
@@ -39,6 +39,21 @@ result.
 - **biome** clean; **tsgo --noEmit** clean.
 - **End-to-end** real run: captured `fix-regression-test-first` SKILL.md,
   verified 0 loader diagnostics, printed the offer.
+
+## Step 4 — Fully-unattended runtime hook (ADR-0023)
+
+Closed the loop: the agent captures/offers reusable tasks on its own at
+`agent_end`, no caller required.
+
+- `src/extensions/skill-capture/index.ts` — builtin `agent_end` extension:
+  `buildTaskTraceFromMessages` (user prompt + tool-call steps + completion via
+  stopReason), `evaluateTaskForCapture`, and if flagged materialize into
+  `<AXIOM_HOME>/captured-skills` + verify + notify. Inert unless
+  `AXIOM_SKILL_CAPTURE_AUTO=1` (or injected `enabled`); never blocks.
+- Registered in `src/extensions/index.ts` builtins.
+- `test/extensions/skill-capture.test.ts` — 5 tests; capture+evaluate+audit+
+  extension = 53/53 green; biome + tsgo clean; full test.sh only pre-existing
+  sandbox known-fails.
 
 ## Step 3 — Automatic flagging (ADR-0022)
 
@@ -77,10 +92,9 @@ statically screen a skill before running/installing a third-party one.
   (network egress, conservative default — first-party skills are operator
   allowlisted).
 
-## What is deliberately NOT in this feature yet (later steps)
+## What is deliberately NOT in this feature (remaining)
 
-- Fully unattended trigger — a runtime hook that auto-runs
-  `evaluateTaskForCapture` at session end (this ADR ships the decision fn +
-  CLI it would call).
-- Skills hub/sync over agentskills.io (needs network).
-Both extend what is built here and are deferred.
+- Skills hub/sync over agentskills.io (needs external network/spec + credentials;
+  not testable in this restricted sandbox).
+All locally-implementable steps (capture, audit, auto flagging, unattended hook)
+are complete and green.

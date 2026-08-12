@@ -88,7 +88,9 @@ prompt + its ordered steps + provenance (`metadata.provenance`), verified to
 load via the real skill loader before it is offered. The agent supplies the
 steps; capture only materializes a skill directory. Automatic flagging
 (ADR-0022) scores a completed task trace (`evaluateTaskForCapture`) and
-captures only when reusable. Hub/sync over agentskills.io remains.
+captures only when reusable; a builtin `agent_end` extension (ADR-0023) runs
+it unattended (inert unless AXIOM_SKILL_CAPTURE_AUTO=1). Hub/sync over
+agentskills.io remains.
 
 **Skill audit**:
 The security half (ADR-0021, step 2): statically inspecting a skill directory

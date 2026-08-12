@@ -147,3 +147,21 @@ Total 100/100 — approved.
 - [x] capture+evaluate+audit 48/48; biome repo-wide clean; tsgo clean.
 - [x] Full test.sh: only pre-existing sandbox known-fails; no new failures.
 - [x] End-to-end: 6-step reusable→flagged+captured; thin one-off→skipped w/ reasons; --force→override; provenance source "auto".
+
+## 10. Step 4 — fully-unattended runtime hook (ADR-0023)
+
+### Plan / implement
+- Goal: wire evaluateTaskForCapture at the end of a session so reusable tasks are auto-captured/offered with no caller.
+- [x] src/extensions/skill-capture/index.ts — createSkillCaptureExtension: on `agent_end`, buildTaskTraceFromMessages (user prompt + tool-call steps + completion via stopReason), evaluateTaskForCapture, and only if flagged materialize into <AXIOM_HOME>/captured-skills (or injected dir) + verify + notify offer.
+- [x] Inert unless enabled (env AXIOM_SKILL_CAPTURE_AUTO=1 or injected), so ordinary sessions unaffected; never blocks.
+- [x] Registered as an axiom builtin extension (src/extensions/index.ts) alongside ledger/memory/profile/workspace.
+- [x] test/extensions/skill-capture.test.ts — 5 tests (trace builder, capture+offer when flagged+enabled, inert when disabled, skip thin one-off).
+- [x] Fixed: type imports from package index, AgentMessage union narrowing via MessageLike, notify severity, stray `};` in afterEach.
+
+### Self / external review
+- Self: plan items present; tests assert real behavior (capture/offer, inert, skip); edge cases (disabled, error stopReason, thin session); no `any`.
+- External: Correctness 5, Fit 5 (reuses capture+verify+evaluate; inert-by-default matching workspace-root-guard pattern), Testability 5, Risk 5 (gated, non-blocking, conservative flagging), Clarity 5 — 100/100 approved.
+
+### Verification recorded
+- [x] capture+evaluate+audit+extension = 53/53; biome clean; tsgo clean.
+- [x] Full test.sh: only pre-existing sandbox known-fails; no new failures.
