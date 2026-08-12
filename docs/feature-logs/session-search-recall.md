@@ -18,3 +18,18 @@
 - IMPL step 3 (GREEN): integration test routes /search through the real Gateway (fake transport +
   fake completion) — local command, returns project-scoped hits, 0 model calls. Gateway dir 97 pass
   (clean env), biome clean, tsgo clean. Committed.
+- VERIFY full floor (npm test, ~14 min): coding-agent vitest = 322 files passed incl. my 2 test
+  files; 30 tests failed across 9 files — ALL pre-existing ENV/SANDBOX known-fails, none in my diff:
+  daemon/worker/self-update/recursion suites (4600/4603/4606/4685 daemon-supervisor-process,
+  daemon-serialized-refine-process, agent-session-recursion, package-command-paths) — the 4603/4685
+  EXDEV hard-link failures are documented in AGENTS.md as this sandbox's known-fail; plus ONE
+  gateway-command 'telegram no token' test that fails ONLY when AXIOM_TELEGRAM_BOT_TOKEN leaks in
+  env — passes with env scrubbed (proven) and is scrubbed by ./test.sh. My diff touches only
+  gateway/* + search + these 2 tests (git diff confirms); the failing suites import none of them.
+- IMPL self-review (cold diff): every planned item present; tests assert behavior; no TODOs/dead
+  code; edge cases (injection, min-len, project guard, empty archive) covered; caps bounded. Only
+  polish: 'match(es)' phrasing (left as-is), in-memory rebuild per call (documented follow-up).
+- REVIEWER (cold senior, rubric): Correctness 5, Fit 4.5 (resolveSessionsDir re-states main.ts
+  agent-dir rule — correct for default & named profiles, documented as follow-up to centralize),
+  Testability 5, Risk 4 (per-call rebuild capped; no persistence yet), Clarity 4.5 -> 23/25 = 92/100
+  (>=90 approve). Approved.
