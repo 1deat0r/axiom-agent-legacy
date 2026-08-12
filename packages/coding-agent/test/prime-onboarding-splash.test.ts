@@ -141,7 +141,11 @@ describe("PrimeOnboardingSplashComponent", () => {
 			{ getRows: () => 40 },
 		);
 		const rendered = component.render(60).map((line) => stripAnsi(line));
-		const logoLine = rendered.find((line) => line.includes(AXIOM_LOGO.split("\n")[0].trim()));
+		// The logo uses half-block glyphs (▀ ▄ █) unique to the mark — the lab
+		// field decorates with · ◆ ╌ ─ and never these, and draws its own frame
+		// into the logo's blank gaps, so matching a full contiguous row is
+		// unreliable. Find a line carrying the mark's unique top-border glyph.
+		const logoLine = rendered.find((line) => line.includes("▀"));
 		const brandLine = rendered.find((line) => line.includes("Welcome to PRIME Agent"));
 		const hintLine = rendered.find((line) => line.includes("Press Enter to login with Prime Intellect"));
 

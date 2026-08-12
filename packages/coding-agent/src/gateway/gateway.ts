@@ -4,10 +4,12 @@
  * gateway-local commands. Non-listed senders are denied before anything else;
  * per-channel runs are serialized so two messages never interleave one session.
  *
- * Every outbound delivery (reply, denial, command reply, fan-out) runs through
- * `deliver`, which records it in the optional delivery ledger (ADR-0022) so one
- * run can fan a result out to every configured channel and the whole history is
- * auditable via `/ledger` and `/announce`.
+ * Every outbound delivery (reply, denial, command reply, fan-out, cron) runs
+ * through `deliver`, which records it in the optional delivery ledger
+ * (ADR-0022) so one run can fan a result out to every configured channel and
+ * the whole history is auditable via `/ledger` and `/announce`. An optional
+ * cron manager (ADR — gateway cron) rides the gateway lifecycle and targets
+ * `/cron` delivery at a channel.
  */
 import { join } from "node:path";
 import type { ChannelIndex } from "./channel-index.js";
@@ -18,6 +20,7 @@ import type { DeliveryLedger } from "./delivery-ledger.js";
 import type {
 	CompletionRunner,
 	GatewayCommandContext,
+	GatewayCronCommandApi,
 	GatewayMessage,
 	GatewayRecipient,
 	GatewayTransport,
@@ -34,6 +37,8 @@ export interface GatewayDeps {
 	senders?: string[];
 	/** Resolve the active profile home (defaults to the axiom home). */
 	projectHome?: string;
+	/** Optional gateway cron manager: lifecycle rides the gateway; /cron drives it. */
+	cron?: GatewayCronCommandApi & { start(): void; stop(): void };
 	/** Delivery ledger (ADR-0022); deliveries are recorded when present. */
 	ledger?: DeliveryLedger;
 	/** The active transport's name, recorded on each ledger entry. */
@@ -53,6 +58,7 @@ export class Gateway {
 	private readonly projectHome: string;
 	private readonly ledger: DeliveryLedger | undefined;
 	private readonly transportName: string;
+	private readonly cron: (GatewayCronCommandApi & { start(): void; stop(): void }) | undefined;
 	private readonly chains = new Map<string, ChannelChain>();
 	private started = false;
 
@@ -68,17 +74,20 @@ export class Gateway {
 			(deps.profile === "default" ? deps.axiomHomeDir : join(deps.axiomHomeDir, "profiles", deps.profile));
 		this.ledger = deps.ledger;
 		this.transportName = deps.transportName ?? "transport";
+		this.cron = deps.cron;
 	}
 
 	async start(): Promise<void> {
 		if (this.started) return;
 		this.started = true;
 		this.transport.onMessage((msg) => void this.enqueue(msg));
+		this.cron?.start();
 		await this.transport.connect();
 	}
 
 	async stop(): Promise<void> {
 		this.started = false;
+		this.cron?.stop();
 		await this.transport.disconnect();
 	}
 
@@ -140,6 +149,8 @@ export class Gateway {
 				profile: this.profile,
 				axiomHomeDir: this.axiomHomeDir,
 				projectHome: this.projectHome,
+				channelId: msg.channelId,
+				cron: this.cron,
 				ledger: this.ledger,
 				deliverToAll: (text) => this.deliverToAll(text),
 			};

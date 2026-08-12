@@ -36,6 +36,8 @@ export interface AgentCronJob {
 	status: AgentCronJobStatus;
 	source?: AgentCronJobSource;
 	runtimeKind?: AgentCronJobRuntimeKind;
+	/** The gateway channel a scheduled run's output is delivered to (gateway /cron). */
+	channelId?: string;
 	/** Delivery mode for heartbeat/rlm_heartbeat jobs when the session is busy. Defaults to "steer". */
 	deliveryMode?: AgentHeartbeatDeliveryMode;
 	activeSessionId: string;
@@ -64,6 +66,8 @@ export interface CreateAgentCronJobInput {
 	scheduleText: string;
 	source?: AgentCronJobSource;
 	runtimeKind?: AgentCronJobRuntimeKind;
+	/** Gateway channel to deliver this job's output to (gateway /cron). */
+	channelId?: string;
 	deliveryMode?: AgentHeartbeatDeliveryMode;
 	now?: Date;
 }
@@ -232,6 +236,7 @@ export class AgentCronJobStore {
 			status: "active",
 			source: input.source ?? "cron",
 			runtimeKind: input.runtimeKind,
+			channelId: input.channelId,
 			activeSessionId: input.activeSessionId,
 			sessionId: input.sessionId,
 			sessionFile: input.sessionFile,

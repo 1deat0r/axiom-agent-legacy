@@ -2,12 +2,17 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { bwrapCreatesNamespace } from "../../src/extensions/workspace/sandbox.js";
 import {
 	CliCompletionRunner,
 	fakeCompletionRunner,
 	resolveCompletionChild,
 	sessionIdForChannel,
 } from "../../src/gateway/completion.js";
+
+// The real-bwrap anchored-confine test needs a working namespace (GitHub-hosted
+// CI ships bwrap but forbids unprivileged user namespaces). Skip with reason there.
+const bwrapUsable = bwrapCreatesNamespace();
 
 /** Write an executable shim at an absolute path that records argv/meta and prints a canned line. */
 async function writeShimAt(bin: string, outText = "ok"): Promise<string> {
@@ -101,37 +106,44 @@ describe("CliCompletionRunner", () => {
 		}
 	});
 
-	it("anchors cwd + AXIOM_PROJECT_ROOT and OS-confines the child (bwrap) when anchored", async () => {
-		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-proj-"));
-		try {
-			const projectRoot = join(dir, "project");
-			await mkdir(projectRoot, { recursive: true });
-			// shim + outputs live INSIDE the project root so they persist through
-			// the sandbox (host /tmp is shadowed).
-			const bin = join(projectRoot, "axiom.mjs");
-			await writeShimAt(bin, "ok");
-			const out = join(projectRoot, "out");
-			await mkdir(out, { recursive: true });
-			process.env.SHIM_ARGV = join(out, "argv.json");
-			process.env.SHIM_META = join(out, "meta.json");
-			const runner = new CliCompletionRunner({ bin, printFlag: "-p", projectRoot });
-			const result = await runner.runCompletion({ sessionId: "gw-p", prompt: "hi", profile: { name: "default" } });
-			expect(result.error).toBeUndefined();
-			const meta = JSON.parse(await readFile(join(out, "meta.json"), "utf8")) as {
-				cwd: string;
-				root: string | null;
-				confined: string | null;
-			};
-			expect(meta.cwd).toBe(projectRoot);
-			expect(meta.root).toBe(projectRoot);
-			expect(meta.confined).toBe("1");
-			expect(result.reply).toContain("[sandbox-confined]");
-		} finally {
-			delete process.env.SHIM_ARGV;
-			delete process.env.SHIM_META;
-			await rm(dir, { recursive: true, force: true });
-		}
-	});
+	it.skipIf(!bwrapUsable)(
+		"anchors cwd + AXIOM_PROJECT_ROOT and OS-confines the child (bwrap) when anchored",
+		async () => {
+			const dir = await mkdtemp(join(tmpdir(), "axiom-gw-proj-"));
+			try {
+				const projectRoot = join(dir, "project");
+				await mkdir(projectRoot, { recursive: true });
+				// shim + outputs live INSIDE the project root so they persist through
+				// the sandbox (host /tmp is shadowed).
+				const bin = join(projectRoot, "axiom.mjs");
+				await writeShimAt(bin, "ok");
+				const out = join(projectRoot, "out");
+				await mkdir(out, { recursive: true });
+				process.env.SHIM_ARGV = join(out, "argv.json");
+				process.env.SHIM_META = join(out, "meta.json");
+				const runner = new CliCompletionRunner({ bin, printFlag: "-p", projectRoot });
+				const result = await runner.runCompletion({
+					sessionId: "gw-p",
+					prompt: "hi",
+					profile: { name: "default" },
+				});
+				expect(result.error).toBeUndefined();
+				const meta = JSON.parse(await readFile(join(out, "meta.json"), "utf8")) as {
+					cwd: string;
+					root: string | null;
+					confined: string | null;
+				};
+				expect(meta.cwd).toBe(projectRoot);
+				expect(meta.root).toBe(projectRoot);
+				expect(meta.confined).toBe("1");
+				expect(result.reply).toContain("[sandbox-confined]");
+			} finally {
+				delete process.env.SHIM_ARGV;
+				delete process.env.SHIM_META;
+				await rm(dir, { recursive: true, force: true });
+			}
+		},
+	);
 
 	it("fails CLOSED when an anchored run has no bubblewrap", async () => {
 		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-npb-"));

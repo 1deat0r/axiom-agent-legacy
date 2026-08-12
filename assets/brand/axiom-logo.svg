@@ -1,29 +1,23 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!--
-  Axiom-agent personal mark (original design, not derived from the prime
-  butterfly). Square corners (miter joins / butt caps) — architectural, sharp.
-
-  Concept: a bold slab "A" (Axiom) whose crossbar is the assertion bar, with the
-  double turnstile  ⊨  (read "derives / is provable / models") seated below. An
-  axiom is a foundational statement; ⊨ is the symbol a prover draws when it
-  derives one. Hexagonal monogram avatar, square-corned.
+  Axiom-agent personal mark (original design, space/futuristic-tech).
+  Concept: a BEACON — concentric square (diamond) signal rings radiating out
+  from a solid axiom core: the gateway beaming you status from every project.
+  Square corners throughout (miter joins / butt caps).
 
   Brand: axiom green #2fd58a on the dark badge #0e1117; thin outline #2a3342.
 -->
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none"
      version="1.1" xmlns="http://www.w3.org/2000/svg">
-  <!-- sharp hexagon badge -->
-  <path d="M256 30 L450 143 L450 369 L256 482 L62 369 L62 143 Z"
-        fill="#0e1117" stroke="#2a3342" stroke-width="12" stroke-linejoin="miter"/>
-  <!-- slab "A": two square legs -->
-  <g stroke="#2fd58a" stroke-width="52" stroke-linecap="butt" stroke-linejoin="miter">
-    <path d="M256 116 L168 380"/>
-    <path d="M256 116 L344 380"/>
-  </g>
-  <!-- crossbar = assertion bar -->
-  <path d="M180 296 L332 296" stroke="#2fd58a" stroke-width="44" stroke-linecap="butt"/>
-  <!-- double turnstile ⊨ seated below -->
-  <path d="M256 404 L256 454" stroke="#2fd58a" stroke-width="24" stroke-linecap="butt"/>
-  <path d="M200 404 L256 404" stroke="#2fd58a" stroke-width="20" stroke-linecap="butt"/>
-  <path d="M200 434 L256 434" stroke="#2fd58a" stroke-width="12" stroke-linecap="butt"/>
+  <!-- square badge -->
+  <rect x="44" y="44" width="424" height="424" fill="#0e1117"
+        stroke="#2a3342" stroke-width="8"/>
+  <!-- outer signal ring (diamond) -->
+  <path d="M256 106 L406 256 L256 406 L106 256 Z"
+        stroke="#2fd58a" stroke-width="16" stroke-linejoin="miter" stroke-linecap="butt"/>
+  <!-- inner signal ring (diamond) -->
+  <path d="M256 186 L330 256 L256 326 L182 256 Z"
+        stroke="#2fd58a" stroke-width="10" stroke-linejoin="miter" stroke-linecap="butt"/>
+  <!-- axiom core -->
+  <path d="M256 236 L278 256 L256 276 L234 256 Z" fill="#2fd58a"/>
 </svg>

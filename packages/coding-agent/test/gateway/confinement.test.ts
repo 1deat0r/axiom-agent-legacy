@@ -20,11 +20,11 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { resolveBwrap } from "../../src/extensions/workspace/sandbox.js";
+import { bwrapCreatesNamespace } from "../../src/extensions/workspace/sandbox.js";
 import { CliCompletionRunner } from "../../src/gateway/completion.js";
 
-const hasBwrap = Boolean(resolveBwrap(process.env));
-const maybeDescribe = hasBwrap ? describe : describe.skip;
+const bwrapUsable = bwrapCreatesNamespace(process.env);
+const maybeDescribe = bwrapUsable ? describe : describe.skip;
 maybeDescribe("OS-tier confinement (real bwrap)", () => {
 	let state:
 		| {
