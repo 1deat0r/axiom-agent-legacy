@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Security fence — summary · ADR-0028</title>
+<style>
+:root{--accent:#0f766e;--ink:#1f2937;--muted:#6b7280;--bg:#ffffff;--line:#e5e7eb}
+*{box-sizing:border-box}body{margin:0;font:15px/1.55 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);padding:24px;max-width:760px;margin:0 auto}
+h1{font-size:22px;border-bottom:3px solid var(--accent);padding-bottom:8px}
+h2{font-size:16px;margin:26px 0 8px;color:var(--accent)}
+p{margin:6px 0}.muted{color:var(--muted);font-size:13px}
+code,.c{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;background:#f3f4f6;padding:1px 5px;border-radius:4px}
+ul{margin:6px 0;padding-left:20px}li{margin:4px 0}
+.badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:#ecfdf5;color:var(--accent);margin-right:6px}
+hr{border:none;border-top:1px solid var(--line);margin:22px 0}
+.mono-box{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;background:#fafafa;border:1px solid var(--line);border-radius:8px;padding:10px 14px;white-space:pre-wrap}
+</style></head><body>
+<h1>Security fence <span class="muted">· ADR-0028</span></h1>
+<div class="muted">Generated 2026-08-12 · Model: the coding agent that developed this repo · Loop v2 · worktree feat/security-hardening (base main b31341e77)</div>
+<h2>Goal &amp; assumptions</h2>
+<p>Amplify the anchored-run security posture the root guard (ADR-0014 rung 3) started by adding, on the same <code>tool_call</code> seam, a <b>URL-safe fetch gate</b> and a <b>sensitive-tool fence</b>, both pure, unit-tested, and <b>inert when not anchored</b> so ordinary <code>axiom</code> runs are untouched.</p>
+<p><span class="badge">A1</span>Axiom has no fetch tool today — the gate protects any <code>url</code>-bearing tool (future fetch/egress) and fires on any tool arg carrying a <code>url</code> string.</p>
+<p><span class="badge">A2</span>Same inert-unless-<code>AXIOM_PROJECT_ROOT</code> philosophy as ADR-0018 → minimal blast radius, back-compat.</p>
+<p><span class="badge">A3</span><code>bash</code>/<code>ipython</code> stay the ADR-0019 OS tier, never string-fenced (ADR-0018 stance); sensitive-tool fence is opt-in.</p>
+<p><span class="badge">A4</span>No DNS in the fence: arbitrary named hosts are allowed; hostname→IP SSRF resolution is a recorded follow-up.</p>
+<h2>Plan as executed</h2>
+<ul>
+<li><b>P1</b> <code>url.ts</code> URL-safe gate — 13 tests (scheme/credentials/IPv4/Ipv6/v4-mapped/hostname/allowlists), red-first.</li>
+<li><b>P2</b> <code>fence.ts</code> sensitive-tool fence — 9 tests (egress gate + approved-tool ladder, opt-in default).</li>
+<li><b>P3</b> <code>index.ts</code> wiring, inert unless anchored — 6 tests (block/allow/inert/passthrough/allowlist).</li>
+<li><b>P4</b> Register in <code>builtInExtensions</code> — <code>tsgo --noEmit</code> clean.</li>
+<li><b>P5</b> ADR-0028 + CONTEXT term + handoff.</li>
+<li><b>P6</b> Floor <code>./test.sh</code> + full biome + tsgo.</li>
+</ul>
+<h2>Key decisions</h2>
+<ul>
+<li><b>Two pure gates on one seam</b>, mirroring the workspace guard: URL egress safety + an opt-in approved-tool ladder (Hermes approval.py lite).</li>
+<li><b>Opt-in sensitive set (default empty)</b> — never pretend a string fence confines freeform <code>bash</code>/<code>ipython</code>.</li>
+<li><b>Honest DNS boundary</b>: literal private/loopback IPs (v4+v6 incl. <code>::ffff:</code> mapped) and loopback-patterned names blocked; arbitrary named hosts allowed + recorded follow-up.</li>
+<li><b>Reasons name the unsafe property</b> (scheme/host/credentials) so a model can self-correct.</li>
+<li><b>Escape hatches</b>: <code>AXIOM_FENCE_ALLOW</code> (approved tools), <code>AXIOM_FENCE_ALLOW_HOSTS</code> (allowed URL hosts).</li>
+<li>Approval <b>prompt</b>, path security, threat patterns, skill provenance gate, tool-output limits = later steps, recorded not faked.</li>
+</ul>
+<h2>Verification evidence</h2>
+<div class="mono-box">security-url  13/13 green   (IPv4/IPv6 classification, scheme, creds, SSRF, allowlists)
+security-fence  9/9  green  (URL extraction, egress gate, approved-tool ladder, opt-in)
+security-wiring 6/6  green  (anchored block/allow, inert, back-compat passthrough)
+TOTAL 28/28 new tests, each failing before its change (red-first, per module)
+floor  ./test.sh  4544 pass / 14 fail / 59 skip — the 14 are ONLY documented
+       sandbox known-fails (daemon-serialized-refine 1, 4685-daemon-client-modes
+       9 EXDEV hard-link, 4603-worker-recovery 4 EXDEV); passed grew 4516+28 = 4544
+biome  clean (999 files) · tsgo --noEmit clean (root + coding-agent) · no regressions</div>
+<h2>Review history</h2>
+<ul>
+<li><span class="badge">plan r1</span><b>84/100 DENIED</b> — cited: DNS boundary + approved-ladder operator story must live in the ADR; reason must name the specific unsafe property; explicit back-compat passthrough test. All three fixed.</li>
+<li><span class="badge">plan r2</span><b>94/100 APPROVED</b>.</li>
+<li><span class="badge">impl r1</span><b>96/100 APPROVED</b> — all plan items mapped to diff evidence; tests verified; floor held with only documented known-fails. (External sub-agent not available — daemon disabled, ADR-0015; self-posed skeptic reviewer, recorded.)</li>
+</ul>
+<h2>Final state</h2>
+<p>Committed in 6 green steps on <code>feat/security-hardening</code>: <span class="c">efddff8</span> URL gate, <span class="c">9391918f</span> sensitive-tool fence, <span class="c">d70ead2e</span> wiring + built-in registration, <span class="c">dc7241aa</span> docs (ADR-0028 + CONTEXT + handoff), <span class="c">1be06f90</span> clarity fix, <span class="c">00a246f6</span> log. On an anchored run the fence blocks unsafe/SSRF fetches and requires approval for sensitive tools at the tool seam — amplifying the prevention ladder (identity → context → root → process) with no impact on ordinary runs. Follow-ups (honest): DNS-aware SSRF, always-on URL gate, write-approval prompt, path security / threat patterns / skill provenance / tool-output limits, and the ADR-0019 OS tier for freeform tools.</p>
+</body></html>
