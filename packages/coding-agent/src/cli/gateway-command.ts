@@ -14,17 +14,20 @@ import { loadGatewayConfig } from "../gateway/config.js";
 import { Gateway } from "../gateway/gateway.js";
 import { DiscordTransport, FileDiscordCursorStore, HttpDiscordClient } from "../gateway/transports/discord.js";
 import { CliSignalClient, SignalTransport } from "../gateway/transports/signal.js";
+import { FileSlackCursorStore, HttpSlackClient, SlackTransport } from "../gateway/transports/slack.js";
 import { FileTelegramOffsetStore, HttpTelegramClient, TelegramTransport } from "../gateway/transports/telegram.js";
 import type { GatewayTransport } from "../gateway/types.js";
 
 export const GATEWAY_USAGE =
-	"axiom gateway [--profile <name>] [--project <name>] [--transport signal|telegram|discord] [--telegram-token <token>] [--discord-token <token>] [--signal-cli <path>] [--signal-account <acct>]";
+	"axiom gateway [--profile <name>] [--project <name>] [--transport signal|telegram|discord|slack] [--telegram-token <token>] [--discord-token <token>] [--slack-token <token>] [--signal-cli <path>] [--signal-account <acct>]";
 
 export interface GatewayStartOptions {
-	transport: "signal" | "telegram" | "discord";
+	transport: "signal" | "telegram" | "discord" | "slack";
 	telegramToken?: string;
 	/** --discord-token <token> (required for the discord transport). */
 	discordToken?: string;
+	/** --slack-token <token> (required for the slack transport). */
+	slackToken?: string;
 	/** signal-cli binary path (default "signal-cli" on PATH). */
 	signalCliPath?: string;
 	/** The linked signal-cli account to send/receive under (E.164). */
@@ -56,10 +59,15 @@ export function resolveGatewayStart(
 ): GatewayStartResolution {
 	const profile = readVal(args, "--profile") ?? "default";
 	const transportRaw = readVal(args, "--transport") ?? "signal";
-	if (transportRaw !== "signal" && transportRaw !== "telegram" && transportRaw !== "discord") {
+	if (
+		transportRaw !== "signal" &&
+		transportRaw !== "telegram" &&
+		transportRaw !== "discord" &&
+		transportRaw !== "slack"
+	) {
 		return {
 			ok: false,
-			error: `unknown --transport '${transportRaw}' (expected 'signal', 'telegram' or 'discord')`,
+			error: `unknown --transport '${transportRaw}' (expected 'signal', 'telegram', 'discord' or 'slack')`,
 		};
 	}
 	const transport = transportRaw as GatewayStartOptions["transport"];
@@ -68,6 +76,13 @@ export function resolveGatewayStart(
 	const project = readVal(args, "--project");
 	if (project !== undefined && !PROJECT_NAME_RE.test(project)) {
 		return { ok: false, error: `invalid --project '${project}' (lowercase a-z0-9 and dashes)` };
+	}
+	if (transport === "slack") {
+		const slackToken = readVal(args, "--slack-token") ?? env.AXIOM_SLACK_BOT_TOKEN;
+		if (!slackToken) {
+			return { ok: false, error: "--transport slack requires --slack-token or AXIOM_SLACK_BOT_TOKEN" };
+		}
+		return { ok: true, profile, opts: { transport, slackToken, project } };
 	}
 	if (transport === "discord") {
 		const discordToken = readVal(args, "--discord-token") ?? env.AXIOM_DISCORD_BOT_TOKEN;
@@ -96,7 +111,7 @@ export async function handleGatewayCommand(
 	if (args[0] !== "gateway") return false;
 	if (args.includes("--help") || args.includes("-h")) {
 		console.log(
-			`${GATEWAY_USAGE}\n\nThe axiom assistant over Signal (signal-cli), Telegram (Bot API) or Discord\n(Bot API): the active profile's SOUL.md rides the prompt; gateway-local\ncommands (/help, /profiles, /projects, /soul) never reach the model. Configure\nsenders in <AXIOM_HOME>/gateway/config.json. Telegram and Discord deny unknown\nsenders by default (allowlist the owner's personal chat / user id); never\ncommit a bot token.`,
+			`${GATEWAY_USAGE}\n\nThe axiom assistant over Signal (signal-cli), Telegram, Discord, or Slack\n(Bot/Web API): the active profile's SOUL.md rides the prompt; gateway-local\ncommands (/help, /profiles, /projects, /soul) never reach the model. Configure\nsenders in <AXIOM_HOME>/gateway/config.json. Telegram, Discord, and Slack deny unknown\nsenders by default (allowlist the owner's personal chat / user id); never\ncommit a bot token.`,
 		);
 		return true;
 	}
@@ -155,6 +170,11 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 
 /** Real transport selection: telegram (Bot API) or signal (signal-cli, default). */
 export function buildTransport(opts: GatewayStartOptions, axiomHomeDir: string): GatewayTransport {
+	if (opts.transport === "slack") {
+		const client = new HttpSlackClient({ token: opts.slackToken ?? "" });
+		const cursorStore = new FileSlackCursorStore(join(axiomHomeDir, "gateway", "slack-cursor.json"));
+		return new SlackTransport(client, { cursorStore });
+	}
 	if (opts.transport === "discord") {
 		const client = new HttpDiscordClient({ token: opts.discordToken ?? "" });
 		const cursorStore = new FileDiscordCursorStore(join(axiomHomeDir, "gateway", "discord-cursor.json"));

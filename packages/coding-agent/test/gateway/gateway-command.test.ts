@@ -10,6 +10,7 @@ import {
 } from "../../src/cli/gateway-command.js";
 import { DiscordTransport } from "../../src/gateway/transports/discord.js";
 import { SignalTransport } from "../../src/gateway/transports/signal.js";
+import { SlackTransport } from "../../src/gateway/transports/slack.js";
 import { TelegramTransport } from "../../src/gateway/transports/telegram.js";
 
 describe("resolveGatewayStart (transport selection)", () => {
@@ -78,6 +79,28 @@ describe("resolveGatewayStart (transport selection)", () => {
 		if (!r.ok) expect(r.error).toContain("token");
 	});
 
+	it("selects slack from the --slack-token flag", () => {
+		expect(resolveGatewayStart(["gateway", "--transport", "slack", "--slack-token", "STOK"])).toEqual({
+			ok: true,
+			profile: "default",
+			opts: { transport: "slack", slackToken: "STOK" },
+		});
+	});
+
+	it("selects slack from AXIOM_SLACK_BOT_TOKEN when no flag is given", () => {
+		expect(resolveGatewayStart(["gateway", "--transport", "slack"], { AXIOM_SLACK_BOT_TOKEN: "ENVTOK" })).toEqual({
+			ok: true,
+			profile: "default",
+			opts: { transport: "slack", slackToken: "ENVTOK" },
+		});
+	});
+
+	it("fails fast when slack is selected with no token", () => {
+		const r = resolveGatewayStart(["gateway", "--transport", "slack"], {});
+		expect(r.ok).toBe(false);
+		if (!r.ok) expect(r.error).toContain("token");
+	});
+
 	it("errors on an unknown --transport value (never silently boots Signal)", () => {
 		const r = resolveGatewayStart(["gateway", "--transport", "carrier-pigeon"]);
 		expect(r.ok).toBe(false);
@@ -129,6 +152,16 @@ describe("buildTransport", () => {
 		try {
 			const t = buildTransport({ transport: "telegram", telegramToken: "TOK" }, dir);
 			expect(t).toBeInstanceOf(TelegramTransport);
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("builds a SlackTransport for --transport slack (with file cursor store)", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-slt-"));
+		try {
+			const t = buildTransport({ transport: "slack", slackToken: "STOK" }, dir);
+			expect(t).toBeInstanceOf(SlackTransport);
 		} finally {
 			await rm(dir, { recursive: true, force: true });
 		}
