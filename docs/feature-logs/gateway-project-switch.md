@@ -15,3 +15,4 @@
 - [impl-review] APPROVED 96/100 (mutation-tested). Applied flagged risk: resolve-path validation of stored names (shared PROJECT_NAME_RE). Debugging caught a silent import-miss bug (biome-reordered import); fixed + test (h).
 - [docs DONE] ADR-0031, handoff-gateway-project-switch.md, summary-gateway-project-switch.html (5.8 KB, from log only).
 - [loop DONE] All 7 loop steps complete; branch pushed.
+- [tui step2 DONE] interactive-mode wiring (menu open + relaunch); 43 tests green; committed (hook clean: tsgo 0 after transient baseline edits vanished).
