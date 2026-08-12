@@ -33,8 +33,8 @@ two agent processes on one profile home.
 _Avoid_: Persona, account
 
 **Channel**:
-A conversation's stable address on a messaging platform (gateway port,
-ADR-0001 — deferred until the gateway is re-ported).
+A conversation's stable address on a messaging platform (gateway, ADR-0001;
+signal gateway shipped ADR-0016).
 _Avoid_: Thread, room, conversation id
 
 **Session**:

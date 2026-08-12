@@ -27,13 +27,20 @@ spine. Each row is its own work item (red-first on `baseline/prime-v0.7.2`).
 - Data cutover (ADR-0015): axiom-owned config/memory carry over via AXIOM_HOME;
   lifetime spend restarts at zero (derived from the new agent dir's sessions).
 
+## The gateway (ADR-0016) — shipped 2026-08-12
+
+| # | Capability | Spec | Status |
+|---|---|---|---|
+| 10 | **Signal gateway + project-manager assistant** — one sender = one session over signal-cli; `/help`,`/profiles`,`/projects`,`/soul` gateway-local; SOUL.md rides the prompt under `--profile`; sender allowlist owner-gated | ADR-0001/0004/0006, ADR-0016 | **SHIPPED** (2026-08-12, 01f164dd): `axiom gateway`; 27 tests; live signal-cli link + provider pass operator/live-gated |
+
 ## Still ahead (from the pi fork's unfinished queue + the product spine)
 
 - **Projects + root guard** (ADR-0014 port to the prime baseline): named
   workspaces inside a profile; per-project sessions/memory/ledger/cap; a
   zero-dep root guard on bash/read/write with plain-English escape approval.
-- **Gateway + channel index** (ADR-0001/0004/0006, deferred in ADR-0013):
-  platform transports + channel-to-session mapping — not yet on the map.
+- **Signal streaming** (ADR-0004): in-place edit streaming across the transport
+  (ADR-0016 consequence, follow-up).
+- **More transports** (Telegram etc.) behind the same `GatewayTransport`.
 
 ## Superseded by the prime baseline (do not port)
 

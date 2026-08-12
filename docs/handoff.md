@@ -72,3 +72,52 @@ new baseline (ADR-0015), replacing the pi v0.84.1 fork (ADR-0013).
   sandbox by no TTY / no provider key; run `axiom`, then `/cost` to confirm.
 - **Lifetime `/cost` is an O(n) session-file scan**; fine for interactive use,
   add a cache only if the ledger lands on an autonomous path.
+
+---
+
+# Handoff addendum — Signal gateway + project-manager assistant (ADR-0016)
+
+**Date:** 2026-08-12. **Loop:** Feature Implementation Loop v2 (second feature).
+
+## What was done
+
+Implemented axiom's first living surface on the prime-agent v0.7.2 baseline:
+`axiom gateway` — the agent, riding a profile's SOUL.md, reachable over Signal
+(signal-cli), replying as a project manager. Modules: gateway router
+(channel->session index, command vs agent, per-channel serialization, sender
+allowlist), Signal transport (signal-cli send/receive, faked in tests),
+project-manager commands (/help, /profiles, /projects, /soul), and a completion
+adapter that reuses the headless print-mode seam (`axiom -p ... --profile
+<name> --session-id <id>`).
+
+## What was verified, and how
+
+- Gateway behavior (unit tests, 27 new): channel index get/set/persist/reload;
+  message normalization + isCommand; Signal transport send argv + receive
+  delivery + skip-none; router (allowlisted sender -> completion; command ->
+  local effect, model never called; unknown sender denied before model;
+  per-channel serialization max-in-flight=1; completion-failure error reply);
+  PM commands (profiles/projects/soul real-dir effects); completion argv
+  contract (exact `-p --profile --session-id` invocation captured).
+- Cross-checked: `npm run check` + `tsgo` + `npm run build` green; `axiom
+  gateway --help` prints usage. Full relevant suite 163 tests green (128
+  extensions + 8 acceptance + 27 gateway).
+
+## Scoped deviations from the approved plan (recorded honestly)
+
+- **Step 6 "real headless seam via faux provider"** was scoped down. Driving
+  the real print-mode seam in-process would require duplicating main()'s heavy
+  runtime bootstrap (resource loader, model registry, session manager) — the
+  blast radius the plan review explicitly wanted to avoid. Instead: the
+  completion argv test proves the real CLI is invoked under `--profile`
+  (the wiring that activates the SOUL.md ride), and the SOUL.md-append behavior
+  itself is already pinned by the ported axiom-profile extension suite. The
+  full live print-mode run needs a live provider and is the operator follow-up.
+
+## Operator follow-ups (live/operator-gated)
+
+- Link a signal-cli account (device linking) and add the owner's number to
+  `<AXIOM_HOME>/gateway/config.json` senders.
+- Point the completion runner at a working provider, then run `axiom gateway
+  --profile <name>`; send a message to confirm the live reply and the live
+  signal-cli send.
