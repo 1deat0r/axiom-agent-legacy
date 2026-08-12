@@ -21,7 +21,7 @@ function projectsRoot(projectHome: string): string {
 }
 
 /** Sorted project names under the projects root (missing root -> empty). */
-export function listProjects(root: string): string[] {
+function listProjects(root: string): string[] {
 	try {
 		return readdirSync(root, { encoding: "utf8" })
 			.filter((n) => !n.startsWith("."))
