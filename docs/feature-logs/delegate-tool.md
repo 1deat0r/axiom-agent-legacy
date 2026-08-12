@@ -119,3 +119,6 @@ increments toward full implementation:
   without the change; explicit param wins; empty model param falls through to parent; additive
   (execute ctx is optional in tests). No dead code.
 COMMIT: git commit the increment.
+- Increment (A)+(B) external review: delegate-incr-reviewer APPROVE 98/100. Non-blocking: empty
+  model-param fallback has no dedicated test -> ADDED (25 neutral / 1 live-gated skipped).
+COMMIT+push increment.

@@ -299,6 +299,23 @@ describe("createDelegateExtension", () => {
 		expect(out.details.helper!.sessionId).toBe("s");
 	});
 
+	it("an empty/whitespace model param falls through to the parent's live model", async () => {
+		const { pi, tools } = fakePi();
+		const stub = new StubBridge();
+		let seen: string | undefined;
+		createDelegateExtension({
+			bridge: (model) => {
+				seen = model;
+				return stub;
+			},
+		})(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		await tool.execute!("c1", { task: "t", model: "   " }, undefined, undefined, {
+			model: { provider: "anthropic", id: "claude-sonnet-4-5" },
+		});
+		expect(seen).toBe("anthropic/claude-sonnet-4-5");
+	});
+
 	it("an explicit model param wins over the parent's live model", async () => {
 		const { pi, tools } = fakePi();
 		const stub = new StubBridge();
