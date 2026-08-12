@@ -7,10 +7,12 @@
  */
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { getCronJobsPath } from "../config.js";
 import { axiomHome } from "../extensions/profile/registry.js";
 import { JsonChannelIndex } from "../gateway/channel-index.js";
 import { CliCompletionRunner } from "../gateway/completion.js";
 import { loadGatewayConfig } from "../gateway/config.js";
+import { GatewayCron } from "../gateway/cron.js";
 import { Gateway } from "../gateway/gateway.js";
 import { CliSignalClient, SignalTransport } from "../gateway/transports/signal.js";
 import { FileTelegramOffsetStore, HttpTelegramClient, TelegramTransport } from "../gateway/transports/telegram.js";
@@ -127,6 +129,17 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 	const completion = new CliCompletionRunner({ projectRoot });
 	const transport = buildTransport(opts, root);
 	const config = loadGatewayConfig(root);
+	// Profile-scoped cron store: reuse the baseline AgentCronJobStore format at
+	// the profile home (default profile = the axiom root). The manager's
+	// scheduler fires /cron jobs and delivers their output to the job's channel
+	// via the same transport used for interactive replies.
+	const cron = new GatewayCron({
+		storePath: getCronJobsPath(projectHome),
+		completion,
+		transport,
+		profile,
+		projectHome,
+	});
 	const gateway = new Gateway({
 		transport,
 		index,
@@ -135,6 +148,7 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 		profile,
 		projectHome,
 		senders: config.senders,
+		cron,
 	});
 	await gateway.start();
 	return gateway;
