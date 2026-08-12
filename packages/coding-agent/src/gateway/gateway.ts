@@ -9,7 +9,13 @@ import type { ChannelIndex } from "./channel-index.js";
 import { dispatchCommand } from "./commands/index.js";
 import { sessionIdForChannel } from "./completion.js";
 import { isAllowedSender, loadGatewayConfig } from "./config.js";
-import type { CompletionRunner, GatewayCommandContext, GatewayMessage, GatewayTransport } from "./types.js";
+import type {
+	CompletionRunner,
+	GatewayCommandContext,
+	GatewayCronCommandApi,
+	GatewayMessage,
+	GatewayTransport,
+} from "./types.js";
 
 const UNRECOGNIZED = "unrecognized sender — this gateway is private to allowed senders.";
 
@@ -22,6 +28,8 @@ export interface GatewayDeps {
 	senders?: string[];
 	/** Resolve the active profile home (defaults to the axiom home). */
 	projectHome?: string;
+	/** Optional gateway cron manager: lifecycle rides the gateway; /cron drives it. */
+	cron?: GatewayCronCommandApi & { start(): void; stop(): void };
 }
 
 /** Per-channel run chain so two messages on one session never interleave. */
@@ -35,6 +43,7 @@ export class Gateway {
 	private readonly profile: string;
 	private readonly senders: Set<string>;
 	private readonly projectHome: string;
+	private readonly cron: (GatewayCronCommandApi & { start(): void; stop(): void }) | undefined;
 	private readonly chains = new Map<string, ChannelChain>();
 	private started = false;
 
@@ -48,17 +57,20 @@ export class Gateway {
 		this.projectHome =
 			deps.projectHome ??
 			(deps.profile === "default" ? deps.axiomHomeDir : join(deps.axiomHomeDir, "profiles", deps.profile));
+		this.cron = deps.cron;
 	}
 
 	async start(): Promise<void> {
 		if (this.started) return;
 		this.started = true;
 		this.transport.onMessage((msg) => void this.enqueue(msg));
+		this.cron?.start();
 		await this.transport.connect();
 	}
 
 	async stop(): Promise<void> {
 		this.started = false;
+		this.cron?.stop();
 		await this.transport.disconnect();
 	}
 
@@ -82,6 +94,8 @@ export class Gateway {
 				profile: this.profile,
 				axiomHomeDir: this.axiomHomeDir,
 				projectHome: this.projectHome,
+				channelId: msg.channelId,
+				cron: this.cron,
 			};
 			const reply = dispatchCommand(msg.text, ctx);
 			await this.transport.send({ channelId: msg.channelId, recipient: msg.sender }, reply);
