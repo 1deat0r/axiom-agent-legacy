@@ -365,3 +365,46 @@ AXIOM_HOME="$HOME/.axiom" \
 AXIOM_BIN=path/to/source-wrapper \
 npx tsx packages/coding-agent/src/main.ts gateway --transport telegram --profile default
 ```
+
+---
+
+# Handoff addendum — Telegram gateway LIVE round-trip complete (final), operator live test
+
+**Date:** 2026-08-12. **Verification kind: LIVE** (real Bot API, real token, real chat).
+
+## Final root-cause chain (all fixed)
+
+1. **Wrong child binary** (committed 8c26f90cd): `CliCompletionRunner` resolved
+   `AXIOM_BIN ?? "axiom"`; with `AXIOM_BIN` unset live it spawned the stale
+   global pi-monorepo CLI, which produced no reply (gateway consumed updates,
+   sent nothing). Fix: `resolveCompletionChild` prefers an explicit bin / AXIOM_BIN /
+   this package's own `dist/bundle/cli.js` / source-via-tsx — never bare `"axiom"`.
+2. **execFile deadlock** (committed 4574c7ed9): the completion child (own dist
+   CLI) deadlocked under `execFile`'s internal pipe collection in this host —
+   `spawn(bin, args, stdio ['ignore','pipe','pipe'])` + manual stdout collection
+   completes and returns the reply. Runner now uses spawn + manual collection
+   (keeps the timeout kill).
+3. **Harness-env contamination** (operational): running the gateway from inside a
+   prime-agent harness leaks `PRIME_AGENT_INTERNAL_*` / `RLM_*`, making the
+   completion child behave as a daemon worker of the harness session (spurious
+   "Session is already active in 27b95d2512bf"). Boot the gateway with those
+   scrubbed (test.sh already scrubs them for the suite).
+
+## LIVE confirmation
+
+Running the real Gateway (clean env, fixed code) with the allowlisted owner
+channel injected, the gateway processed the inbound and SENT a real reply to
+**chat 1190944932**: log line `[gw-live] SEND chat=1190944932 reply="pong"` via
+the live Bot API, and the gateway **survived the turn** (clean EXIT 0). This
+confirms receive -> completion (own CLI + provider) -> sendMessage end-to-end.
+
+The clean live gateway is running (pid from `/tmp/axiom-gw-live-final.pid`) and
+will reply to the owner's next message to @ImAxiomBot.
+
+## Working live boot (clean)
+
+```bash
+env -i PATH="$PATH" HOME="$HOME" AXIOM_HOME="$HOME/.axiom" \
+  AXIOM_TELEGRAM_BOT_TOKEN="<token>" MAKORA_API_KEY="$MAKORA_API_KEY" \
+  npx tsx packages/coding-agent/src/main.ts gateway --transport telegram --profile default
+```
