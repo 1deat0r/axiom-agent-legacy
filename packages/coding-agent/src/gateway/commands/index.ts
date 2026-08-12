@@ -2,10 +2,17 @@ import type { GatewayCommand, GatewayCommandContext } from "../types.js";
 import { helpCommand } from "./help.js";
 import { profilesCommand } from "./profiles.js";
 import { projectsCommand } from "./projects.js";
+import { searchCommand } from "./search.js";
 import { soulCommand } from "./soul.js";
 
 /** All gateway-local commands; they never reach the model. */
-export const gatewayCommands: GatewayCommand[] = [helpCommand, profilesCommand, projectsCommand, soulCommand];
+export const gatewayCommands: GatewayCommand[] = [
+	helpCommand,
+	searchCommand,
+	profilesCommand,
+	projectsCommand,
+	soulCommand,
+];
 
 export function commandByName(name: string): GatewayCommand | undefined {
 	return gatewayCommands.find((c) => c.name === name);

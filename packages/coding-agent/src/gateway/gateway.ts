@@ -22,6 +22,10 @@ export interface GatewayDeps {
 	senders?: string[];
 	/** Resolve the active profile home (defaults to the axiom home). */
 	projectHome?: string;
+	/** Sessions archive directory for /search cross-session recall. */
+	sessionsDir?: string;
+	/** Anchored project root; scopes /search unless --all is given. */
+	projectRoot?: string;
 }
 
 /** Per-channel run chain so two messages on one session never interleave. */
@@ -35,6 +39,8 @@ export class Gateway {
 	private readonly profile: string;
 	private readonly senders: Set<string>;
 	private readonly projectHome: string;
+	private readonly sessionsDir?: string;
+	private readonly projectRoot?: string;
 	private readonly chains = new Map<string, ChannelChain>();
 	private started = false;
 
@@ -48,6 +54,8 @@ export class Gateway {
 		this.projectHome =
 			deps.projectHome ??
 			(deps.profile === "default" ? deps.axiomHomeDir : join(deps.axiomHomeDir, "profiles", deps.profile));
+		this.sessionsDir = deps.sessionsDir;
+		this.projectRoot = deps.projectRoot;
 	}
 
 	async start(): Promise<void> {
@@ -82,6 +90,8 @@ export class Gateway {
 				profile: this.profile,
 				axiomHomeDir: this.axiomHomeDir,
 				projectHome: this.projectHome,
+				...(this.sessionsDir ? { sessionsDir: this.sessionsDir } : {}),
+				...(this.projectRoot ? { projectRoot: this.projectRoot } : {}),
 			};
 			const reply = dispatchCommand(msg.text, ctx);
 			await this.transport.send({ channelId: msg.channelId, recipient: msg.sender }, reply);

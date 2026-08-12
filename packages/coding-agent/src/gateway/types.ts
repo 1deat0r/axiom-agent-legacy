@@ -51,6 +51,10 @@ export interface GatewayCommandContext {
 	profile: string;
 	axiomHomeDir: string;
 	projectHome: string;
+	/** Sessions archive directory for cross-session recall (/search). */
+	sessionsDir?: string;
+	/** Anchored project root; /search scopes to it unless --all is given. */
+	projectRoot?: string;
 }
 
 /** The resolved command reply for one inbound command message. */
