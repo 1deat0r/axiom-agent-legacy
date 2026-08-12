@@ -74,7 +74,7 @@ describe("createSecurityFence wiring", () => {
 			await toolCall({ type: "tool_call", toolName: "bash", toolCallId: "6", input: { command: "ls" } }),
 		).toBeUndefined();
 	});
-	it("honors AXIOM_PLACEHOLDER host-allowlist via options (gated URL passes)", async () => {
+	it("honors an explicit host allowlist via options (gated URL passes)", async () => {
 		const { pi, toolCall } = fakePi();
 		createSecurityFence({ root: "/srv/proj", allowHosts: ["127.0.0.1"] })(pi);
 		expect(
