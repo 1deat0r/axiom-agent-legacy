@@ -15,3 +15,6 @@
   (6 tests). Verified: gateway test dir 96 pass (clean env), biome clean, tsgo clean. NOTE: bare-vitest
   'no token exists' test is red ONLY when AXIOM_TELEGRAM_BOT_TOKEN is set in env (pre-existing env leak;
   baseline fails identically; ./test.sh scrubs it). Committed.
+- IMPL step 3 (GREEN): integration test routes /search through the real Gateway (fake transport +
+  fake completion) — local command, returns project-scoped hits, 0 model calls. Gateway dir 97 pass
+  (clean env), biome clean, tsgo clean. Committed.

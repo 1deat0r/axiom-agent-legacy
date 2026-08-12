@@ -110,3 +110,56 @@ describe("/search command", () => {
 		expect(renderSearchReply(argv("anything"), ctx(""))).toContain("no sessions directory");
 	});
 });
+
+import { MemoryChannelIndex } from "../../src/gateway/channel-index.js";
+import { fakeCompletionRunner } from "../../src/gateway/completion.js";
+import { Gateway } from "../../src/gateway/gateway.js";
+import type { GatewayMessage, GatewayTransport } from "../../src/gateway/types.js";
+
+function fakeTransport() {
+	const sent: Array<{ to: string; text: string }> = [];
+	let handler: ((msg: GatewayMessage) => void) | undefined;
+	const t: GatewayTransport = {
+		async connect() {},
+		async disconnect() {},
+		async send(to, text) {
+			sent.push({ to: to.recipient, text });
+		},
+		onMessage(h) {
+			handler = h;
+		},
+	};
+	return { t, sent, push: (m: GatewayMessage) => handler?.(m) };
+}
+
+describe("/search through the Gateway router", () => {
+	it("runs as a local command, returns hits, and never calls the model", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "axml-gw-"));
+		try {
+			writeSessions(dir);
+			const { t, sent, push } = fakeTransport();
+			const completion = fakeCompletionRunner();
+			const g = new Gateway({
+				transport: t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				sessionsDir: dir,
+				projectRoot: ALPHA,
+				senders: ["+1"],
+			});
+			await g.start();
+			push({ channelId: "+1", sender: "+1", text: "/search recall index", isCommand: true, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 30));
+			expect(completion.calls).toHaveLength(0);
+			const reply = sent.find((s) => s.text.startsWith("2 ") || s.text.includes("match(es)"));
+			expect(reply).toBeTruthy();
+			expect(reply!.text).toContain("aaaaaaaa-aaaa".slice(0, 7));
+			expect(reply!.text).not.toContain("bbbbbbbb-bbbb".slice(0, 7));
+			await g.stop();
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+});
