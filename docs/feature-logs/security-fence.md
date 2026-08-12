@@ -14,3 +14,4 @@ Model: coding agent (axiom) · base main b31341e77 · worktree .worktrees/securi
 - IMPL green: url 13, fence 9, wiring 6 = 28/28; biome clean (999 files); tsgo --noEmit clean (root + coding-agent).
 - Floor ./test.sh: 14 failed / 4544 passed / 59 skipped. The 14 = ONLY documented sandbox known-fails (daemon-serialized-refine 1, 4685-daemon-client-modes 9 EXDEV, 4603-worker-recovery 4 EXDEV). Passed grew 4516+28(new)=4544 -> no regressions.
 - Docs: ADR-0028, CONTEXT term, handoff-security-fence.md written.
+- Impl self-review: all plan items present; 28/28 green and assert real behaviour; no leftover TODOs/debug; edge cases covered. Fixed 1 clarity wart (stray AXIOM_PLACEHOLDER in a test name). biome+tsgo clean.
