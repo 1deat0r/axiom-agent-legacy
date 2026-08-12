@@ -17,6 +17,7 @@ async function writeShim(dir: string, binName: string, outText = "ok"): Promise<
 		"#!/usr/bin/env node\n" +
 			'import {writeFileSync} from "node:fs";\n' +
 			"writeFileSync(process.env.SHIM_ARGV, JSON.stringify(process.argv.slice(2)));\n" +
+			"if (process.env.SHIM_META) writeFileSync(process.env.SHIM_META, JSON.stringify({ cwd: process.cwd(), root: process.env.AXIOM_PROJECT_ROOT ?? null }));\n" +
 			`process.stdout.write("${outText}\\n");\n`,
 	);
 	await chmod(bin, 0o755);
@@ -92,6 +93,29 @@ describe("CliCompletionRunner", () => {
 			expect(out.error).toBeUndefined();
 		} finally {
 			delete process.env.SHIM_ARGV;
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("spawns with cwd = projectRoot and AXIOM_PROJECT_ROOT set when anchored", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-proj-"));
+		try {
+			const projectRoot = join(dir, "project");
+			await mkdir(projectRoot, { recursive: true });
+			const bin = await writeShim(dir, "axiom.mjs");
+			process.env.SHIM_ARGV = join(dir, "argv.json");
+			process.env.SHIM_META = join(dir, "meta.json");
+			const runner = new CliCompletionRunner({ bin, printFlag: "-p", projectRoot });
+			await runner.runCompletion({ sessionId: "gw-p", prompt: "hi", profile: { name: "default" } });
+			const meta = JSON.parse(await readFile(join(dir, "meta.json"), "utf8")) as {
+				cwd: string;
+				root: string | null;
+			};
+			expect(meta.cwd).toBe(projectRoot);
+			expect(meta.root).toBe(projectRoot);
+		} finally {
+			delete process.env.SHIM_ARGV;
+			delete process.env.SHIM_META;
 			await rm(dir, { recursive: true, force: true });
 		}
 	});

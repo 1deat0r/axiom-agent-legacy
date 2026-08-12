@@ -58,6 +58,13 @@ export interface CliCompletionOptions {
 	/** Print-mode the CLI exposes (`-p`/`--print`). */
 	printFlag?: string;
 	/**
+	 * Anchor this completion to a project workspace: spawn the child with cwd =
+	 * the project root and AXIOM_PROJECT_ROOT set, so relative work starts
+	 * inside the project and the workspace root guard (ADR-0014 rung 3) enforces
+	 * the edit boundary. Omit for unanchored runs.
+	 */
+	projectRoot?: string;
+	/**
 	 * Bounded wait for one completion before giving up. Completions are
 	 * serialized per channel, so a single hang must not wedge the channel
 	 * forever: if the child neither exits nor finishes within this window we
@@ -73,12 +80,14 @@ export class CliCompletionRunner implements CompletionRunner {
 	private readonly prefix: string[];
 	private readonly printFlag: string;
 	private readonly timeoutMs: number;
+	private readonly projectRoot?: string;
 	constructor(options: CliCompletionOptions = {}) {
 		const child = resolveCompletionChild(options.bin);
 		this.bin = child.bin;
 		this.prefix = child.prefix;
 		this.printFlag = options.printFlag ?? "-p";
 		this.timeoutMs = options.timeoutMs ?? 300_000;
+		this.projectRoot = options.projectRoot;
 	}
 	async runCompletion(input: {
 		sessionId: string;
@@ -103,7 +112,11 @@ export class CliCompletionRunner implements CompletionRunner {
 				// completion CLI writes its final answer to stdio, and execFile's
 				// internal pipe collection can deadlock in some hosts. Stdio here
 				// is stdin ignored, stdout+stderr piped so we can collect the reply.
-				const child = spawn(this.bin, args, { stdio: ["ignore", "pipe", "pipe"] });
+				const child = spawn(this.bin, args, {
+					stdio: ["ignore", "pipe", "pipe"],
+					cwd: this.projectRoot,
+					env: this.projectRoot ? { ...process.env, AXIOM_PROJECT_ROOT: this.projectRoot } : undefined,
+				});
 				let collected = "";
 				let settled = false;
 				child.stdout?.on("data", (d) => (collected += d.toString("utf8")));
