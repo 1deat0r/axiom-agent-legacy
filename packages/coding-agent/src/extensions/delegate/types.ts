@@ -1,0 +1,46 @@
+/**
+ * Axiom `delegate` tool — types for the compact result block.
+ *
+ * The delegate tool spawns an isolated helper process (the existing RPC
+ * bridge, `--mode rpc`) to run one bounded task, then returns to the parent
+ * session ONLY this compact block. The helper's intermediate tool calls and
+ * full context never enter the parent session — a multi-step pipeline
+ * collapses into one zero-context-cost turn.
+ */
+
+/** Parameters accepted by the `delegate` tool. */
+export interface DelegateParams {
+	/** The natural-language task instruction for the helper to run (required). */
+	task: string;
+	/** Optional stable label for the helper (informational only). */
+	name?: string;
+	/** Optional model reference for the helper (provider/model). */
+	model?: string;
+	/** Optional per-run budget in ms. Default 120_000; clamped to MAX_TIMEOUT_MS. */
+	timeoutMs?: number;
+}
+
+/** Honest token accounting for the helper, from the session's recorded usage. */
+export interface DelegateTokenAccounting {
+	input: number;
+	output: number;
+	cacheRead: number;
+	cacheWrite: number;
+	total: number;
+}
+
+/** The compact result block returned into the parent session. */
+export interface DelegateResult {
+	/** Whether the helper finished (reason high-level) without error/timeout. */
+	ok: boolean;
+	/** Length-capped closing text/summary. NEVER a transcript of the helper. */
+	summary: string;
+	/** Recorded token accounting from the helper session (never guessed). */
+	tokens: DelegateTokenAccounting;
+	/** Recorded session cost in USD from the helper (0 when none recorded). */
+	cost: number;
+	/** Optional helper identity metadata. */
+	helper?: { name?: string; model?: string; sessionId?: string };
+	/** Human-readable failure reason when ok is false. */
+	error?: string;
+}
