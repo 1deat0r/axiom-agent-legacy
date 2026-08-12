@@ -4,7 +4,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { KeybindingsManager } from "../src/core/keybindings.js";
 import { PrimeOnboardingSplashComponent } from "../src/modes/interactive/components/prime-onboarding-splash.js";
 import { initTheme } from "../src/modes/interactive/theme/theme.js";
-import { PRIME_BUTTERFLY_LOGO } from "../src/themes/prime-logo.js";
+import { AXIOM_LOGO } from "../src/themes/prime-logo.js";
 
 describe("PrimeOnboardingSplashComponent", () => {
 	beforeAll(() => {
@@ -28,7 +28,8 @@ describe("PrimeOnboardingSplashComponent", () => {
 		const lines = component.render(100);
 		const output = stripAnsi(lines.join("\n"));
 
-		expect(lines).toHaveLength(36);
+		// logo block + 3 spacers + brand line + continue hint
+		expect(lines).toHaveLength(AXIOM_LOGO.split("\n").length + 5);
 		expect(output).toContain("Welcome to PRIME Agent");
 		expect(output).toContain("Press Enter to login with Prime Intellect");
 		expect(output).toContain("·");
@@ -59,7 +60,7 @@ describe("PrimeOnboardingSplashComponent", () => {
 		expect(output).not.toContain("→");
 		expect(output).not.toContain("Use a subscription");
 		expect(output).not.toContain("Use an API key");
-		expect(output).toContain(PRIME_BUTTERFLY_LOGO.split("\n")[0].trim());
+		expect(output).toContain(AXIOM_LOGO.split("\n")[0].trim());
 		for (const line of lines) {
 			expect(visibleWidth(line)).toBeLessThanOrEqual(100);
 		}
@@ -140,7 +141,7 @@ describe("PrimeOnboardingSplashComponent", () => {
 			{ getRows: () => 40 },
 		);
 		const rendered = component.render(60).map((line) => stripAnsi(line));
-		const logoLine = rendered.find((line) => line.includes(PRIME_BUTTERFLY_LOGO.split("\n")[0].trim()));
+		const logoLine = rendered.find((line) => line.includes(AXIOM_LOGO.split("\n")[0].trim()));
 		const brandLine = rendered.find((line) => line.includes("Welcome to PRIME Agent"));
 		const hintLine = rendered.find((line) => line.includes("Press Enter to login with Prime Intellect"));
 

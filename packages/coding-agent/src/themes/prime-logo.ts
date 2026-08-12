@@ -1,18 +1,44 @@
 /**
- * Pre-rendered ASCII versions of the Prime butterfly mark.
+ * Pre-rendered ASCII of the Axiom-agent personal mark (hexagon + A + turnstile ⊢).
  *
- * Source: assets/brand/prime-butterfly.svg
- * Re-render at any width: `uv run scripts/render-logo.py --width N`
+ * Source: assets/brand/axiom-logo.svg
+ * Re-render at any width: `uv run scripts/render-logo.py --width N --svg assets/brand/axiom-logo.svg`
  */
 
-/** ~10 rows × 32 cols. The default brand mark — half-block butterfly, splash-ready. */
-export const PRIME_BUTTERFLY_LOGO = `                          ▄▄███▀
-    ▄▄▄▄▄              ▄█████▀
-    ██████▄         ▄██████▀
-   ▄███▀███▄     ▄███▀▄██▀
-   ███ ▄████▄▄▄████▀▄▄██
-  ▀██  ▀█████████▀▀▀▀▀▀
-  ▄██   ██████▀▀ ▄███
- █████    ▀█▄▄▄█████▀
-███████▄  ████████▀
-▀███▀▀    █████▀`;
+/** Hexagonal "A" monogram with the assertion turnstile grounded below — the Axiom brand mark. */
+export const AXIOM_LOGO = `                                     ▄████▄
+                                 ▄▄██▀▀  ▀▀██▄▄
+                              ▄██▀▀          ▀▀██▄
+                          ▄▄██▀▀                ▀▀██▄▄
+                       ▄██▀▀                        ▀▀██▄
+                   ▄▄██▀▀             ▄▄▄▄             ▀▀██▄▄
+                ▄▄█▀▀                ██████                ▀▀██▄
+            ▄▄██▀▀                  ████████                  ▀▀██▄▄
+         ▄▄██▀                     ▄████████▄                     ▀██▄▄
+        ██▀                        ██████████                        ▀██
+        ██                        ████████████                        ██
+        ██                       ▄████████████▄                       ██
+        ██                       ██████████████                       ██
+        ██                      ████████████████                      ██
+        ██                     ▄███████  ███████▄                     ██
+        ██                     ███████▀  ▀███████                     ██
+        ██                    ████████    ████████                    ██
+        ██                   ▄███████      ███████▄                   ██
+        ██                   ███████▀      ▀███████                   ██
+        ██                 ▄████████▄▄▄▄▄▄▄▄████████▄                 ██
+        ██                ████████████████████████████                ██
+        ██                ████████████████████████████                ██
+        ██                ████████▀▀▀▀▀▀▀▀▀▀▀▀████████                ██
+        ██               ▄███████              ███████▄               ██
+        ██               ███████▀              ▀███████               ██
+        ██              ████████                ████████              ██
+        ██▄            ▄███████                  ███████▄            ▄██
+         ▀▀██▄         ███████▀                  ▀███████         ▄██▀▀
+            ▀▀██▄▄      ▀████▀         ▄▄         ▀████▀      ▄▄██▀▀
+                ▀▀█▄▄          ███████████                 ▄▄██▀
+                   ▀▀██▄▄       ▀▀▀▀▀▀████             ▄▄██▀▀
+                       ▀██▄▄          ████          ▄▄██▀
+                          ▀▀██▄▄      ████      ▄▄██▀▀
+                              ▀██▄▄   ▀██▀   ▄▄██▀
+                                 ▀▀██▄▄  ▄▄██▀▀
+                                     ▀████▀`;

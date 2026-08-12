@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Axiom-agent mark, monochrome black (badge outline + mark), like prime-butterfly-black. -->
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none"
+     version="1.1" xmlns="http://www.w3.org/2000/svg">
+  <path d="M256 32 L450 144 L450 368 L256 480 L62 368 L62 144 Z"
+        fill="none" stroke="#000000" stroke-width="16" stroke-linejoin="round"/>
+  <g stroke="#000000" stroke-width="46" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M256 120 L172 376"/>
+    <path d="M256 120 L340 376"/>
+  </g>
+  <path d="M184 296 L328 296" stroke="#000000" stroke-width="40" stroke-linecap="round"/>
+  <path d="M256 404 L256 452" stroke="#000000" stroke-width="22" stroke-linecap="round"/>
+  <path d="M206 406 L256 406" stroke="#000000" stroke-width="18" stroke-linecap="round"/>
+</svg>
