@@ -40,3 +40,33 @@ describe("JsonChannelIndex", () => {
 		}
 	});
 });
+
+describe("removeWhere (composite session cleanup)", () => {
+	it("memory: drops only keys matching the predicate", () => {
+		const i = new MemoryChannelIndex();
+		i.set("c1", "s1");
+		i.set("c1:alpha:0", "sa");
+		i.set("c1:beta:0", "sb");
+		i.set("c2:alpha:0", "sa2");
+		i.removeWhere((key) => key.endsWith(":alpha:0"));
+		expect(i.get("c1")).toBe("s1");
+		expect(i.get("c1:alpha:0")).toBeNull();
+		expect(i.get("c1:beta:0")).toBe("sb");
+		expect(i.get("c2:alpha:0")).toBeNull();
+	});
+
+	it("json: persists the removal across instances", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-rw-"));
+		try {
+			const a = new JsonChannelIndex(dir);
+			a.set("c1", "s1");
+			a.set("c1:alpha:0", "sa");
+			a.removeWhere((key) => key.includes(":alpha:"));
+			const b = new JsonChannelIndex(dir);
+			expect(b.get("c1:alpha:0")).toBeNull();
+			expect(b.get("c1")).toBe("s1");
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+});

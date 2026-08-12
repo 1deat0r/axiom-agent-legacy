@@ -12,6 +12,8 @@ export interface ChannelIndex {
 	has(channelId: string): boolean;
 	set(channelId: string, sessionId: string): void;
 	remove(channelId: string): void;
+	/** Drop every mapping whose key satisfies the predicate (composite session cleanup). */
+	removeWhere(predicate: (key: string) => boolean): void;
 }
 
 export class MemoryChannelIndex implements ChannelIndex {
@@ -27,6 +29,11 @@ export class MemoryChannelIndex implements ChannelIndex {
 	}
 	remove(channelId: string): void {
 		this.map.delete(channelId);
+	}
+	removeWhere(predicate: (key: string) => boolean): void {
+		for (const key of [...this.map.keys()]) {
+			if (predicate(key)) this.map.delete(key);
+		}
 	}
 }
 
@@ -59,6 +66,16 @@ export class JsonChannelIndex implements ChannelIndex {
 	remove(channelId: string): void {
 		this.map.delete(channelId);
 		this.persist();
+	}
+	removeWhere(predicate: (key: string) => boolean): void {
+		let changed = false;
+		for (const key of [...this.map.keys()]) {
+			if (predicate(key)) {
+				this.map.delete(key);
+				changed = true;
+			}
+		}
+		if (changed) this.persist();
 	}
 	private persist(): void {
 		mkdirSync(dirname(this.filePath), { recursive: true });
