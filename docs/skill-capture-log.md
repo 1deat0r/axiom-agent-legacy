@@ -129,3 +129,21 @@ Total 100/100 — approved.
 ### Verification recorded
 - [x] audit + capture tests 37/37 green; biome clean; tsgo clean.
 - [x] End-to-end: evil→BLOCK, benign→ALLOW, real websearch skill→BLOCK (network egress, conservative; documented).
+
+## 9. Step 3 — automatic flagging (ADR-0022)
+
+### Plan / implement
+- Goal: after a completed task, decide automatically whether it is reusable and only then capture it through the ADR-0020 pipeline.
+- [x] evaluate.ts — evaluateTaskForCapture(trace): deterministic, tunable (complexity capped at 6 steps, reusable-signal +0.3, one-off -0.35, completion ±, thin penalty), threshold 0.55; exported constants/signals.
+- [x] cli skill-capture-auto <trace.json> [--out] [--force] [--json]; provenance source "auto"; reuses capture+verify; deriveName moved into core/document.ts (removed core->cli layering).
+- [x] test/skill-capture-evaluate.test.ts — 11 tests (heuristic, boundaries, parse, readTrace, command capture/skip/force).
+- [x] Fixed: union-type syntax slip (2nd occurrence), flag narrowing, readonly steps spread, unused map param.
+
+### Self / external review
+- Self: plan items present; tests assert behavior (flag/skip/force/boundaries); edge cases (thin, incomplete, --force); no debug prints; no `any`.
+- External: Correctness 5, Fit 5 (reuses capture+verify; heuristic isolated; deriveName moved core), Testability 5, Risk 5 (tunable, conservative, escape hatch), Clarity 5 — 100/100 approved.
+
+### Verification recorded
+- [x] capture+evaluate+audit 48/48; biome repo-wide clean; tsgo clean.
+- [x] Full test.sh: only pre-existing sandbox known-fails; no new failures.
+- [x] End-to-end: 6-step reusable→flagged+captured; thin one-off→skipped w/ reasons; --force→override; provenance source "auto".

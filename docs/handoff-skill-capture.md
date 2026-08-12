@@ -1,4 +1,4 @@
-# Handoff — Skills that learn procedural memory (steps 1–2: capture + security audit)
+# Handoff — Skills that learn procedural memory (steps 1–3: capture + security audit + automatic flagging)
 
 **Branch:** `feat/skill-capture` (isolated worktree at `.worktrees/skill-capture`)
 **Base:** baseline 68a3f31ae (prime-agent v0.7.2 fork)
@@ -21,8 +21,8 @@ result.
   `validateDescription`, `MAX_NAME_LENGTH` (single source of truth) — only
   three `export` additions, no behavior change.
 - `packages/coding-agent/test/skill-capture.test.ts` — 24 vitest tests.
-- `docs/adr/ADR-0020-skill-capture.md` + `ADR-0021-skill-audit.md`,
-  `CONTEXT.md` (new terms), `docs/handoff-skill-capture.md`, `docs/skill-capture-log.md`.
+- `docs/adr/ADR-0020`, `ADR-0021`, `ADR-0022`, `CONTEXT.md`,
+  `docs/handoff-skill-capture.md`, `docs/skill-capture-log.md`.
 
 ## What was verified, and how
 
@@ -39,6 +39,23 @@ result.
 - **biome** clean; **tsgo --noEmit** clean.
 - **End-to-end** real run: captured `fix-regression-test-first` SKILL.md,
   verified 0 loader diagnostics, printed the offer.
+
+## Step 3 — Automatic flagging (ADR-0022)
+
+Closed the "agent flags a task as reusable" loop: a completed task trace is
+scored and only captured when reusable.
+
+- `core/skill-capture/evaluate.ts` — `evaluateTaskForCapture(trace)` heuristic
+  (complexity + reusable/one-off signals + completion), tunable exported
+  weights/signals/threshold.
+- `axiom skill-capture-auto <trace.json> [--out] [--force] [--json]` CLI +
+  `main.ts` wiring; reused the ADR-0020 capture+verify pipeline; provenance
+  `source: "auto"`.
+- `test/skill-capture-evaluate.test.ts` — 11 tests; capture+evaluate+audit
+  suites 48/48 green; biome + tsgo clean; full test.sh only pre-existing
+  sandbox known-fails.
+- End-to-end: reusable 6-step task flagged+captured; thin one-off skipped with
+  reasons; `--force` override works.
 
 ## Step 2 — AST-level security audit (ADR-0021)
 
@@ -62,5 +79,8 @@ statically screen a skill before running/installing a third-party one.
 
 ## What is deliberately NOT in this feature yet (later steps)
 
-Automatic flagging ("agent detects a task was reusable"), and the skills
-hub/sync over agentskills.io. Both extend what is built here and are deferred.
+- Fully unattended trigger — a runtime hook that auto-runs
+  `evaluateTaskForCapture` at session end (this ADR ships the decision fn +
+  CLI it would call).
+- Skills hub/sync over agentskills.io (needs network).
+Both extend what is built here and are deferred.

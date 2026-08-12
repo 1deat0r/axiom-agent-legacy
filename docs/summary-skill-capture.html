@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Feature Summary — Skills that learn procedural memory (steps 1–2)</title>
+<title>Feature Summary — Skills that learn procedural memory (steps 1–3)</title>
 <style>
   :root{--accent:#0f6f5e;--ink:#1a1d1c;--muted:#5b615f;--line:#e3e7e5;--bg:#ffffff;}
   *{box-sizing:border-box}
@@ -40,7 +40,7 @@
 <body>
 <main>
   <header>
-    <h1>Skills that learn procedural memory — steps 1–2: capture + security audit</h1>
+    <h1>Skills that learn procedural memory — steps 1–3: capture + security audit + auto-flag</h1>
     <div class="meta">Timestamp: 2026-08-12 &nbsp;·&nbsp; Model: Axiom coding-agent (feat/skill-capture worktree) &nbsp;·&nbsp; ADR-0020</div>
   </header>
 
@@ -51,8 +51,9 @@
      <code>skill-capture</code> module plus a standalone <code>axiom skill-capture</code> CLI,
      all unit-tested.</p>
   <p><strong>Assumptions (reviewed):</strong> step 1 takes an explicit flag (CLI args / JSON
-     capture); step 2 is the AST-level security audit of third-party skills. Automatic flagging and
-     hub/sync over agentskills.io remain later steps. The audit is conservative and targets
+     capture); step 2 is the AST-level security audit of third-party skills; step 3 is automatic
+     flagging (a completed task is scored and only captured when reusable). Hub/sync over
+     agentskills.io remains. The audit is conservative and targets
      third-party skills; bundled first-party skills are operator allowlisted.</p>
 
   <h2>Plan as executed</h2>
@@ -73,6 +74,15 @@
     </ul>
   </div>
 
+  <h2>Step 3 &mdash; automatic flagging (ADR-0022)</h2>
+  <div class="card">
+    <ul>
+      <li><code>evaluateTaskForCapture(trace)</code> &mdash; deterministic, tunable heuristic (complexity + reusable/one-off signals + completion), exported weights/signals/threshold.</li>
+      <li><code>axiom skill-capture-auto &lt;trace.json&gt; [--out] [--force] [--json]</code> &mdash; reuses the capture+verify pipeline; provenance <code>source: "auto"</code>.</li>
+      <li>Flagged &rarr; capture; un-flagged &rarr; reasons + suggest <code>--force</code>; incomplete/thin tasks not captured.</li>
+    </ul>
+  </div>
+
   <h2>Step 2 &mdash; security audit (ADR-0021)</h2>
   <div class="card">
     <ul>
@@ -88,6 +98,7 @@
     <tr><th>Check</th><th>Result</th></tr>
     <tr><td><code>test/skill-capture.test.ts</code></td><td>25/25 pass</td></tr>
     <tr><td><code>test/skill-audit.test.ts</code></td><td>12/12 pass</td></tr>
+    <tr><td><code>test/skill-capture-evaluate.test.ts</code></td><td>11/11 pass</td></tr>
     <tr><td>Related suites (skills, builtin-skills, frontmatter, refinement, sdk-skills)</td><td>148/148 pass</td></tr>
     <tr><td><code>./test.sh</code></td><td>Only pre-existing sandbox known-fails: 4603/4685 EXDEV + daemon-serialized-refine (identical on pristine baseline), plus one ipython-bootstrap timing flake (passes on re-run + baseline). No new failures from this change.</td></tr>
     <tr><td><code>biome check</code></td><td>clean</td></tr>
@@ -118,14 +129,15 @@
     <ul>
       <li><code>src/core/skill-capture/{types,document,capture,index}.ts</code></li>
       <li><code>src/core/skill-audit/{types,python-ast,rules,audit,index}.ts</code></li>
+      <li><code>src/core/skill-capture/evaluate.ts</code> + <code>cli/skill-capture-auto-command.ts</code></li>
       <li><code>src/cli/skill-capture-command.ts</code>, <code>src/cli/skill-audit-command.ts</code> + <code>main.ts</code> wiring</li>
       <li><code>test/skill-capture.test.ts</code> (25) + <code>test/skill-audit.test.ts</code> (12)</li>
-      <li><code>docs/adr/ADR-0020</code> + <code>ADR-0021</code>, CONTEXT terms, <code>handoff-skill-capture.md</code></li>
+      <li><code>docs/adr/ADR-0020</code>, <code>ADR-0021</code>, <code>ADR-0022</code>, CONTEXT terms, <code>handoff-skill-capture.md</code></li>
     </ul>
     <p>Branch <code>feat/skill-capture</code> (5 step-1 commits + step-2 commits).</p>
   </div>
 
-  <div class="foot">Built from the running log only (<code>docs/skill-capture-log.md</code>). Branch not yet pushed; later feature steps (automatic flagging, hub/sync over agentskills.io) extend what is built.</div>
+  <div class="foot">Built from the running log only (<code>docs/skill-capture-log.md</code>). Branch not yet pushed; later feature steps (fully unattended session-end trigger, hub/sync over agentskills.io) extend what is built.</div>
 </main>
 </body>
 </html>

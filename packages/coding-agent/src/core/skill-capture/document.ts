@@ -20,6 +20,15 @@ export function slugify(name: string): string {
  * loader's own rules (`validateName`/`validateDescription` from skills.ts) so a
  * generated document can never be silently dropped by the loader.
  */
+/**
+ * Derive a default skill name from a task prompt (a slug of its first 60
+ * chars), falling back to a stable default when the prompt is not slug-able.
+ */
+export function deriveName(prompt: string): string {
+	const short = prompt.trim().slice(0, 60);
+	return slugify(short) || "captured-task";
+}
+
 export function buildSkillDocument(capture: TaskCapture): CaptureValidationResult {
 	const errors: string[] = [];
 

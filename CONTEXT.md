@@ -86,8 +86,9 @@ The procedural-memory skill pipeline (ADR-0020, step 1): turning a completed
 task that was flagged reusable into a durable `SKILL.md` that bundles the task
 prompt + its ordered steps + provenance (`metadata.provenance`), verified to
 load via the real skill loader before it is offered. The agent supplies the
-steps; capture only materializes a skill directory. Later steps add automatic
-flagging and hub/sync over agentskills.io.
+steps; capture only materializes a skill directory. Automatic flagging
+(ADR-0022) scores a completed task trace (`evaluateTaskForCapture`) and
+captures only when reusable. Hub/sync over agentskills.io remains.
 
 **Skill audit**:
 The security half (ADR-0021, step 2): statically inspecting a skill directory

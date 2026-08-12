@@ -7,7 +7,12 @@
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { buildSkillDocument, persistCapturedSkill, slugify, verifyCapturedSkill } from "../core/skill-capture/index.js";
+import {
+	buildSkillDocument,
+	deriveName,
+	persistCapturedSkill,
+	verifyCapturedSkill,
+} from "../core/skill-capture/index.js";
 import type { SkillProvenance, TaskCapture, TaskStep } from "../core/skill-capture/types.js";
 
 export const SKILL_CAPTURE_USAGE =
@@ -98,11 +103,6 @@ export function readStepsFile(path: string): { ok: true; steps: TaskStep[] } | {
 		const message = error instanceof Error ? error.message : String(error);
 		return { ok: false, errors: [`invalid steps file: ${message}`] };
 	}
-}
-
-export function deriveName(prompt: string): string {
-	const short = prompt.trim().slice(0, 60);
-	return slugify(short) || "captured-task";
 }
 
 interface SkillCaptureIo {
