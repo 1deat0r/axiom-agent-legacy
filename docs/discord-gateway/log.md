@@ -15,3 +15,14 @@ the same channel index + sender allowlist (issue #3 "Gateway breadth" first step
 - [review] Self-review of impl cold diff: no TODOs/dead/debug; edge cases (per-channel isolation, fatal/transient, no-replay, chunk, cursor-write failure, disconnect abort) all tested.
 - [review] External review (skeptical-se): Correctness 5, Fit 5, Testability 5, Risk 4, Clarity 5 = 24/25 (96). Approved round 1.
 - [docs] ADR-0020 written; handoff + summary.html generated from this log.
+
+## Session 2 — Slack transport (issue #3, next slice; reuses Discord shape ADR-0021)
+- [preflight] Slack API has a REST receive (conversations.list + conversations.history, cursor = message ts), so the same poll-per-channel shape is honest; ok:false bodies (like Telegram) drive fatal classification. Continued in the same isolated worktree.
+- [impl] slack.ts transport + boundary + stores (SlackClient: postMessage/listChannels/history(ts cursor); ok:false fatal classification; 40k chunk reuse).
+- [impl] slack-transport.test.ts red-first: 19 tests; the inclusive-oldest boundary (no-replay on resume) is genuinely asserted. Green.
+- [impl] CLI wiring: --transport slack + --slack-token + AXIOM_SLACK_BOT_TOKEN + help/usage + buildTransport; gateway-command.test.ts +4 -> 22 green.
+- [impl] gateway-slack.test.ts (router over Slack: user allowlist, channel index, command) -> 3 green.
+- [floor] biome clean; root tsgo --noEmit clean; full gateway dir 16 files / 134 tests pass. Same pre-existing env/known-fail test.sh delta as session 1 (unrelated to gateway).
+- [review] Self-review of impl cold diff: no TODOs/dead/debug; edge cases (inclusive oldest no-replay, per-channel isolation, fatal ok:false, transient 429, cursor-write failure, disconnect abort, missing user/text) all tested.
+- [review] External review (skeptical-se): Correctness 5, Fit 5, Testability 5, Risk 4, Clarity 5 = 24/25 (96). Approved round 1.
+- [docs] ADR-0021 written; handoff + summary regenerated from this log.
