@@ -8,7 +8,7 @@
  * Behind a `CompletionRunner` interface so the router and end-to-end tests
  * inject a fake runner; the shipped `CliCompletionRunner` shells the real CLI.
  */
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -99,16 +99,44 @@ export class CliCompletionRunner implements CompletionRunner {
 		];
 		try {
 			const stdout = await new Promise<string>((resolve, reject) => {
-				const child = execFile(this.bin, args, { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }, (err, out) =>
-					err ? reject(err) : resolve(out),
-				);
+				// Spawn and collect stdout ourselves rather than execFile: the
+				// completion CLI writes its final answer to stdio, and execFile's
+				// internal pipe collection can deadlock in some hosts. Stdio here
+				// is stdin ignored, stdout+stderr piped so we can collect the reply.
+				const child = spawn(this.bin, args, { stdio: ["ignore", "pipe", "pipe"] });
+				let collected = "";
+				let settled = false;
+				child.stdout?.on("data", (d) => (collected += d.toString("utf8")));
+				child.stderr?.on("data", () => {
+					/* drain stderr; the reply / errors stream on stdout */
+				});
 				const timer = setTimeout(() => {
+					if (settled) return;
+					settled = true;
 					child.kill("SIGKILL");
 					reject(new Error(`completion timed out after ${this.timeoutMs}ms: ${[this.bin, ...args].join(" ")}`));
 				}, this.timeoutMs);
-				// Don't keep the gateway's event loop alive waiting on the timer
-				// once the child exits or errors normally.
 				timer.unref?.();
+				child.on("error", (error) => {
+					if (settled) return;
+					settled = true;
+					clearTimeout(timer);
+					reject(error);
+				});
+				child.on("close", (code) => {
+					if (settled) return;
+					settled = true;
+					clearTimeout(timer);
+					if (code === 0) {
+						resolve(collected);
+					} else {
+						reject(
+							new Error(
+								`completion exited with code ${String(code ?? "unknown")}: ${[this.bin, ...args].join(" ")}`,
+							),
+						);
+					}
+				});
 			});
 			return { reply: stdout.trimEnd(), sessionId: input.sessionId };
 		} catch (error) {
