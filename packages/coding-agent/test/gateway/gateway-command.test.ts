@@ -1,0 +1,89 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { buildTransport, handleGatewayCommand, resolveGatewayStart } from "../../src/cli/gateway-command.js";
+import { SignalTransport } from "../../src/gateway/transports/signal.js";
+import { TelegramTransport } from "../../src/gateway/transports/telegram.js";
+
+describe("resolveGatewayStart (transport selection)", () => {
+	it("defaults to the signal transport when --transport is absent", () => {
+		expect(resolveGatewayStart(["gateway"])).toEqual({
+			ok: true,
+			profile: "default",
+			opts: { transport: "signal" },
+		});
+	});
+
+	it("selects telegram from the --telegram-token flag", () => {
+		expect(resolveGatewayStart(["gateway", "--transport", "telegram", "--telegram-token", "TOK"])).toEqual({
+			ok: true,
+			profile: "default",
+			opts: { transport: "telegram", telegramToken: "TOK" },
+		});
+	});
+
+	it("selects telegram from AXIOM_TELEGRAM_BOT_TOKEN when no flag is given", () => {
+		expect(
+			resolveGatewayStart(["gateway", "--transport", "telegram"], { AXIOM_TELEGRAM_BOT_TOKEN: "ENVTOK" }),
+		).toEqual({
+			ok: true,
+			profile: "default",
+			opts: { transport: "telegram", telegramToken: "ENVTOK" },
+		});
+	});
+
+	it("errors on an unknown --transport value (never silently boots Signal)", () => {
+		const r = resolveGatewayStart(["gateway", "--transport", "carrier-pigeon"]);
+		expect(r.ok).toBe(false);
+		if (!r.ok) expect(r.error).toContain("unknown --transport");
+	});
+
+	it("fails fast when telegram is selected with no token", () => {
+		const r = resolveGatewayStart(["gateway", "--transport", "telegram"]);
+		expect(r.ok).toBe(false);
+		if (!r.ok) expect(r.error).toContain("token");
+	});
+});
+
+describe("buildTransport", () => {
+	it("builds a TelegramTransport for --transport telegram (with file offset store)", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-tgc-"));
+		try {
+			const t = buildTransport({ transport: "telegram", telegramToken: "TOK" }, dir);
+			expect(t).toBeInstanceOf(TelegramTransport);
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("builds a SignalTransport by default", () => {
+		expect(buildTransport({ transport: "signal" }, "/tmp")).toBeInstanceOf(SignalTransport);
+	});
+});
+
+describe("handleGatewayCommand error paths", () => {
+	it("returns true on an unknown transport without booting the gateway", async () => {
+		let started = false;
+		const handled = await handleGatewayCommand(["gateway", "--transport", "carrier-pigeon"], {
+			start: async () => {
+				started = true;
+				throw new Error("must not be called");
+			},
+		});
+		expect(handled).toBe(true);
+		expect(started).toBe(false);
+	});
+
+	it("returns true when telegram is selected but no token exists", async () => {
+		let started = false;
+		const handled = await handleGatewayCommand(["gateway", "--transport", "telegram"], {
+			start: async () => {
+				started = true;
+				throw new Error("must not be called");
+			},
+		});
+		expect(handled).toBe(true);
+		expect(started).toBe(false);
+	});
+});
