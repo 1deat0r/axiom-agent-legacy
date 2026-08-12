@@ -4,17 +4,16 @@ import type { GatewayCommand } from "../types.js";
 
 const NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
 
-/** The active profile's projects root. */
-function projectsRoot(activeProfileHome: string): string {
-	return join(activeProfileHome, "projects");
+/** The active profile's projects root (projectHome holds the profile home). */
+function projectsRoot(projectHome: string): string {
+	return join(projectHome, "projects");
 }
 
 export const projectsCommand: GatewayCommand = {
 	name: "projects",
 	summary: "List, add, or remove projects of the active profile",
 	handler(args, ctx) {
-		const activeHome = join(ctx.axiomHomeDir, "profiles", ctx.profile);
-		const root = projectsRoot(activeHome);
+		const root = projectsRoot(ctx.projectHome);
 		const sub = args[0];
 		if (sub === "add") {
 			const name = args[1];

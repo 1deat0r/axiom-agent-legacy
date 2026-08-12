@@ -218,3 +218,47 @@ Signal feature left un-plumbed.
 - Note: a public bot username + a permissive allowlist is a live-exposure risk;
   allowlist only the owner's personal chat id. Group chats (negative chat.id)
   are denied unless the group id is allowlisted.
+
+---
+
+# Handoff addendum — gateway live-test wiring (operator follow-up)
+
+**Date:** 2026-08-12.
+
+## What was done (wiring + docs, honest — no live send attempted)
+
+1. **Sender allowlist config** created at `<AXIOM_HOME>/gateway/config.json`
+   (`~/.axiom/gateway/config.json`, default profile) listing the owner number
+   `+64272811798`. Verified the gateway loads it and allowlists the owner.
+2. **Wired the live-test flags** that were documented but inert: `--signal-account`
+   and `--signal-cli` now flow into `buildTransport` ->
+   `CliSignalClient(bin, account)`, so `signal-cli send/receive` use the linked
+   account (`-a <acct>`). New tests pin the wiring (account in argv via a real
+   shim; `resolveGatewayStart` carries the flags; default-profile completion
+   omits `--profile` so the implicit `~/.axiom` home is used).
+3. **Fixed the gateway's profile-home model** so the default profile operates at
+   the axiom root `~/.axiom` (config + channel index there; projectHome = the
+   root for default, `profiles/<name>` for named profiles). This was a latent
+   inconsistency: the gateway passed the resolved profile home as `axiomHomeDir`
+   while the command layer treats it as the axiom root, so named profiles would
+   have double-nested and the default config would not land where the task asked.
+   `/projects` and `/soul` now operate on `projectHome` consistently.
+4. **Live-test doc**: `docs/gateway-live-test.md` (exact one-command run +
+   signal-cli account constraint).
+
+## Verified / how
+
+- `npm run check`, `tsgo`, `npm run build` green; `axiom gateway --help` works.
+- 197 tests green (gateway 62, extensions 128, acceptance 8 — gateway grew with
+  the telegram transport + this wiring).
+- Config at the root loads the owner: `isAllowedSender(loadGatewayConfig(~/.axiom),
+  "+64272811798")` -> true (verified via tsx, not mocked).
+
+## Single-instance account constraint (operator)
+
+The shared signal-cli account is currently held by another process; the live
+Signal send will run later when that account is free. No live send was attempted;
+the gateway is verified by its suite (fake signal-cli + argv shim proving the
+account flag reaches `signal-cli -a <acct>`). Follow the one-command live test in
+`docs/gateway-live-test.md` when the account is free, and record the result as a
+live verification.

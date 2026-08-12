@@ -15,6 +15,21 @@ describe("resolveGatewayStart (transport selection)", () => {
 		});
 	});
 
+	it("carries the operator's --signal-account and --signal-cli into the signal start", () => {
+		const r = resolveGatewayStart([
+			"gateway",
+			"--signal-account",
+			"+64272811798",
+			"--signal-cli",
+			"/usr/local/bin/signal-cli",
+		]);
+		expect(r).toEqual({
+			ok: true,
+			profile: "default",
+			opts: { transport: "signal", signalCliPath: "/usr/local/bin/signal-cli", signalAccount: "+64272811798" },
+		});
+	});
+
 	it("selects telegram from the --telegram-token flag", () => {
 		expect(resolveGatewayStart(["gateway", "--transport", "telegram", "--telegram-token", "TOK"])).toEqual({
 			ok: true,
@@ -59,6 +74,14 @@ describe("buildTransport", () => {
 
 	it("builds a SignalTransport by default", () => {
 		expect(buildTransport({ transport: "signal" }, "/tmp")).toBeInstanceOf(SignalTransport);
+	});
+
+	it("builds a SignalTransport with the operator's signal-cli path + account", () => {
+		const t = buildTransport(
+			{ transport: "signal", signalCliPath: "/x/bin/signal-cli", signalAccount: "+64272811798" },
+			"/tmp",
+		);
+		expect(t).toBeInstanceOf(SignalTransport);
 	});
 });
 

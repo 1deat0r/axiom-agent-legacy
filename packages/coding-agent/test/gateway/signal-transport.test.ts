@@ -62,6 +62,30 @@ describe("SignalTransport", () => {
 });
 
 describe("CliSignalClient", () => {
+	it("prepends -a <account> to send argv when an account is set (argv-check shim)", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-cli-acct-"));
+		try {
+			const outDir = join(dir, "out");
+			await mkdir(outDir, { recursive: true });
+			const shim = join(dir, "sig.mjs");
+			await writeFile(
+				shim,
+				"#!/usr/bin/env node\n" +
+					'import {writeFileSync} from "node:fs";\n' +
+					`writeFileSync(process.env.SHIM_OUT, JSON.stringify(process.argv.slice(2)));\n`,
+			);
+			await chmod(shim, 0o755);
+			process.env.SHIM_OUT = join(outDir, "argv.json");
+			const cli = new CliSignalClient(shim, "+64272811798");
+			await cli.send("+1", "hi");
+			const argv = JSON.parse(await readFile(join(outDir, "argv.json"), "utf8")) as string[];
+			expect(argv).toEqual(["-a", "+64272811798", "send", "-m", "hi", "+1"]);
+		} finally {
+			delete process.env.SHIM_OUT;
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
 	it("invokes signal-cli send with the right argv (argv-check shim)", async () => {
 		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-cli-"));
 		try {

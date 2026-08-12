@@ -7,7 +7,7 @@
  */
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { resolveProfile } from "../extensions/profile/registry.js";
+import { axiomHome } from "../extensions/profile/registry.js";
 import { JsonChannelIndex } from "../gateway/channel-index.js";
 import { CliCompletionRunner } from "../gateway/completion.js";
 import { loadGatewayConfig } from "../gateway/config.js";
@@ -22,6 +22,10 @@ export const GATEWAY_USAGE =
 export interface GatewayStartOptions {
 	transport: "signal" | "telegram";
 	telegramToken?: string;
+	/** signal-cli binary path (default "signal-cli" on PATH). */
+	signalCliPath?: string;
+	/** The linked signal-cli account to send/receive under (E.164). */
+	signalAccount?: string;
 }
 
 export type GatewayStartResolution =
@@ -49,7 +53,11 @@ export function resolveGatewayStart(
 		return { ok: false, error: `unknown --transport '${transportRaw}' (expected 'signal' or 'telegram')` };
 	}
 	const transport = transportRaw as GatewayStartOptions["transport"];
-	if (transport !== "telegram") return { ok: true, profile, opts: { transport } };
+	const signalCliPath = readVal(args, "--signal-cli");
+	const signalAccount = readVal(args, "--signal-account");
+	if (transport !== "telegram") {
+		return { ok: true, profile, opts: { transport, signalCliPath, signalAccount } };
+	}
 	const telegramToken = readVal(args, "--telegram-token") ?? env.AXIOM_TELEGRAM_BOT_TOKEN;
 	if (!telegramToken) {
 		return { ok: false, error: "--transport telegram requires --telegram-token or AXIOM_TELEGRAM_BOT_TOKEN" };
@@ -87,20 +95,28 @@ export async function handleGatewayCommand(
 	return true;
 }
 
-/** Default gateway start: JSON channel index + CLI runner + chosen transport. */
+/**
+ * Default gateway start: JSON channel index + CLI runner + chosen transport.
+ * `axiomHomeDir` is the AXIOM ROOT (~/.axiom) — where the shared gateway
+ * config + channel index live (ADR-0016/17). The active profile's home is
+ * projectHome: the root itself for the implicit 'default' profile, else
+ * profiles/<name> (ADR-0014).
+ */
 export async function defaultGatewayStart(profile: string, opts: GatewayStartOptions): Promise<Gateway> {
-	const { axiomHome: home } = resolveProfile(profile);
-	mkdirSync(join(home, "gateway"), { recursive: true });
-	const index = new JsonChannelIndex(join(home, "gateway"));
+	const root = axiomHome();
+	const projectHome = profile === "default" ? root : join(axiomHome(), "profiles", profile);
+	mkdirSync(join(root, "gateway"), { recursive: true });
+	const index = new JsonChannelIndex(join(root, "gateway"));
 	const completion = new CliCompletionRunner();
-	const transport = buildTransport(opts, home);
-	const config = loadGatewayConfig(home);
+	const transport = buildTransport(opts, root);
+	const config = loadGatewayConfig(root);
 	const gateway = new Gateway({
 		transport,
 		index,
 		completion,
-		axiomHomeDir: home,
+		axiomHomeDir: root,
 		profile,
+		projectHome,
 		senders: config.senders,
 	});
 	await gateway.start();
@@ -114,5 +130,7 @@ export function buildTransport(opts: GatewayStartOptions, axiomHomeDir: string):
 		const offsetStore = new FileTelegramOffsetStore(join(axiomHomeDir, "gateway", "telegram-offset.json"));
 		return new TelegramTransport(client, { offsetStore });
 	}
-	return new SignalTransport(new CliSignalClient());
+	// Signal: wire the operator's --signal-cli path and linked --signal-account
+	// so the one-command live test targets the right (shared) account.
+	return new SignalTransport(new CliSignalClient(opts.signalCliPath ?? "signal-cli", opts.signalAccount));
 }

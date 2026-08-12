@@ -45,7 +45,9 @@ export class Gateway {
 		this.axiomHomeDir = deps.axiomHomeDir;
 		this.profile = deps.profile;
 		this.senders = new Set(deps.senders ?? []);
-		this.projectHome = deps.projectHome ?? join(deps.axiomHomeDir, "profiles", deps.profile);
+		this.projectHome =
+			deps.projectHome ??
+			(deps.profile === "default" ? deps.axiomHomeDir : join(deps.axiomHomeDir, "profiles", deps.profile));
 	}
 
 	async start(): Promise<void> {

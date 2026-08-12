@@ -6,7 +6,9 @@ import { dispatchCommand } from "../../src/gateway/commands/index.js";
 import { defaultGatewayConfig, isAllowedSender } from "../../src/gateway/config.js";
 
 function ctx(axiomHomeDir: string, profile = "default") {
-	return { profile, axiomHomeDir, projectHome: join(axiomHomeDir, "profiles", profile) };
+	// Mirror production: the default profile's home IS the axiom root.
+	const projectHome = profile === "default" ? axiomHomeDir : join(axiomHomeDir, "profiles", profile);
+	return { profile, axiomHomeDir, projectHome };
 }
 
 describe("command dispatch", () => {

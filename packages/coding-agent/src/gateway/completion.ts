@@ -42,7 +42,12 @@ export class CliCompletionRunner implements CompletionRunner {
 		prompt: string;
 		profile: GatewayProfile;
 	}): Promise<{ reply: string; sessionId: string; error?: string }> {
-		const args = [this.printFlag, input.prompt, "--profile", input.profile.name, "--session-id", input.sessionId];
+		const args = [this.printFlag, input.prompt, "--session-id", input.sessionId];
+		// Named profiles ride their SOUL.md via --profile; the implicit default
+		// profile needs no flag (main() uses the ~/.axiom home either way).
+		if (input.profile.name !== "default") {
+			args.splice(2, 0, "--profile", input.profile.name);
+		}
 		try {
 			const stdout = await new Promise<string>((resolve, reject) => {
 				execFile(this.bin, args, { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }, (err, out) =>
