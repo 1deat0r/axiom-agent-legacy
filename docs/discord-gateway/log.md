@@ -36,3 +36,7 @@ the same channel index + sender allowlist (issue #3 "Gateway breadth" first step
 - [review] Self-review of impl cold diff: no TODOs/dead/debug; edge cases (JSONL malformed line, memory cap, fan-out recipient blank, deny-path recorded, sync command dispatch preserved, back-compat config) all tested.
 - [review] External review (skeptical-se): Correctness 5, Fit 5, Testability 5, Risk 4, Clarity 5 = 24/25 (96). Approved round 1.
 - [docs] ADR-0022 written; handoff + summary regenerated from this log.
+
+## Session 4 — routine baseline merge + cron spine feeds the ledger (ADR-0022)
+- [merge] Merged baseline/prime-v0.7.2 (cron-gateway) into feat/discord-gateway: resolved 4 additive conflicts (types.ts, gateway.ts, commands/index.ts, gateway-command.ts). Gateway dir 19 files / 161 tests green; branch now current with baseline e1f071cbd.
+- [impl] GatewayCron now records each scheduled-run delivery in the shared ledger (options ledger + transportName); CLI hoists ONE FileDeliveryLedger shared by Gateway + GatewayCron. Cron ledger tests +2. Full gateway dir 19 files / 163 tests green; biome + tsgo clean.

@@ -46,7 +46,13 @@ multi-transport fan-out and the cron spine feeding `deliverTo` are follow-ups
    dispatch is preserved.
 5. **CLI wiring.** `defaultGatewayStart` passes a `FileDeliveryLedger` (at
    `<AXIOM_HOME>/gateway/ledger.jsonl`) and the transport name so each entry is
-   labelled (e.g. `telegram`, `discord`, `slack`).
+   labelled (e.g. `telegram`, `discord`, `slack`). The CLI hoists ONE shared
+   ledger that BOTH the router and the cron manager write to.
+6. **The automation spine feeds the ledger.** `GatewayCron` (the cron-gateway
+   merge, on baseline) records each scheduled-run delivery in the same shared
+   ledger, so a due `/cron` run's output is continuous and auditable like an
+   interactive reply. This is the "spine feeds the ledger" continuity story from
+   the issue.
 
 ## Consequences
 

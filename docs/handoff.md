@@ -23,7 +23,10 @@ ledger + fan-out continuity (ADR-0022).
 - `src/gateway/commands/{announce,ledger}.ts` — `/announce <text>` +
   `/ledger [n]`, wired into the registry and /help.
 - `src/cli/gateway-command.ts` — `--transport discord|slack`, tokens, help,
-  buildTransport, and the CLI passes a FileDeliveryLedger + transport name.
+  buildTransport; the CLI hoists ONE FileDeliveryLedger + transport name shared
+  by both the router and the cron manager.
+- `src/gateway/cron.ts` (+ CLI) — scheduled `/cron` run deliveries now record
+  into the same shared ledger (cron spine feeds the ledger).
 - Tests: discord-transport (17), slack-transport (19), gateway-command (22),
   gateway-discord (3), gateway-slack (3), delivery-ledger (5), gateway-ledger
   (3), config deliverTo (+1). Full gateway dir 18 files / 143 tests.
@@ -59,8 +62,8 @@ Real Discord, Slack, or Telegram needs tokens + owner ids in the allowlist + a
 provider. Not fabricated; both transports are exercised by their test suites only.
 
 ## Notes / follow-ups
-- Baseline tip advanced to e1f071cbd (cron-gateway merge) since this branch was
-  cut; a routine baseline merge brings it current (AGENTS.md cadence).
+- Baseline is merged and current (e1f071cbd, cron-gateway included) — the branch
+  is no longer behind the baseline tip.
 - Issue #3 remaining scope: cross-platform multi-transport fan-out; the cron
   spine feeding `deliverTo` (once rebased onto the cron baseline); websocket /
   Socket Mode low-latency receive; the roadmap's relay/mirror + TTS consumer;
