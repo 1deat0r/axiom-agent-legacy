@@ -5,7 +5,7 @@
  * commands. Returns true when the invocation was a gateway command (and it ran
  * or printed usage); the process is kept alive while the gateway runs.
  */
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { axiomHome } from "../extensions/profile/registry.js";
 import { JsonChannelIndex } from "../gateway/channel-index.js";
@@ -17,7 +17,7 @@ import { FileTelegramOffsetStore, HttpTelegramClient, TelegramTransport } from "
 import type { GatewayTransport } from "../gateway/types.js";
 
 export const GATEWAY_USAGE =
-	"axiom gateway [--profile <name>] [--transport signal|telegram] [--telegram-token <token>] [--signal-cli <path>] [--signal-account <acct>]";
+	"axiom gateway [--profile <name>] [--project <name>] [--transport signal|telegram] [--telegram-token <token>] [--signal-cli <path>] [--signal-account <acct>]";
 
 export interface GatewayStartOptions {
 	transport: "signal" | "telegram";
@@ -26,11 +26,15 @@ export interface GatewayStartOptions {
 	signalCliPath?: string;
 	/** The linked signal-cli account to send/receive under (E.164). */
 	signalAccount?: string;
+	/** Anchor the run to a project under the profile's workspace (rung-3 guard). */
+	project?: string;
 }
 
 export type GatewayStartResolution =
 	| { ok: true; profile: string; opts: GatewayStartOptions }
 	| { ok: false; error: string };
+
+const PROJECT_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 function readVal(args: string[], flag: string): string | undefined {
 	const i = args.indexOf(flag);
@@ -55,14 +59,18 @@ export function resolveGatewayStart(
 	const transport = transportRaw as GatewayStartOptions["transport"];
 	const signalCliPath = readVal(args, "--signal-cli");
 	const signalAccount = readVal(args, "--signal-account");
+	const project = readVal(args, "--project");
+	if (project !== undefined && !PROJECT_NAME_RE.test(project)) {
+		return { ok: false, error: `invalid --project '${project}' (lowercase a-z0-9 and dashes)` };
+	}
 	if (transport !== "telegram") {
-		return { ok: true, profile, opts: { transport, signalCliPath, signalAccount } };
+		return { ok: true, profile, opts: { transport, signalCliPath, signalAccount, project } };
 	}
 	const telegramToken = readVal(args, "--telegram-token") ?? env.AXIOM_TELEGRAM_BOT_TOKEN;
 	if (!telegramToken) {
 		return { ok: false, error: "--transport telegram requires --telegram-token or AXIOM_TELEGRAM_BOT_TOKEN" };
 	}
-	return { ok: true, profile, opts: { transport, telegramToken } };
+	return { ok: true, profile, opts: { transport, telegramToken, project } };
 }
 
 /** Handle `axiom gateway ...`; returns true if it was a gateway invocation. */
@@ -107,7 +115,16 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 	const projectHome = profile === "default" ? root : join(axiomHome(), "profiles", profile);
 	mkdirSync(join(root, "gateway"), { recursive: true });
 	const index = new JsonChannelIndex(join(root, "gateway"));
-	const completion = new CliCompletionRunner();
+	let projectRoot: string | undefined;
+	if (opts.project) {
+		projectRoot = join(projectHome, "projects", opts.project);
+		if (!existsSync(projectRoot)) {
+			throw new Error(
+				`--project '${opts.project}' not found under the profile workspace (${projectRoot}) \u2014 create it with /projects add first`,
+			);
+		}
+	}
+	const completion = new CliCompletionRunner({ projectRoot });
 	const transport = buildTransport(opts, root);
 	const config = loadGatewayConfig(root);
 	const gateway = new Gateway({

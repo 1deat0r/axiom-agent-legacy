@@ -2,7 +2,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildTransport, handleGatewayCommand, resolveGatewayStart } from "../../src/cli/gateway-command.js";
+import {
+	buildTransport,
+	defaultGatewayStart,
+	handleGatewayCommand,
+	resolveGatewayStart,
+} from "../../src/cli/gateway-command.js";
 import { SignalTransport } from "../../src/gateway/transports/signal.js";
 import { TelegramTransport } from "../../src/gateway/transports/telegram.js";
 
@@ -58,6 +63,38 @@ describe("resolveGatewayStart (transport selection)", () => {
 		const r = resolveGatewayStart(["gateway", "--transport", "telegram"], {});
 		expect(r.ok).toBe(false);
 		if (!r.ok) expect(r.error).toContain("token");
+	});
+});
+
+describe("resolveGatewayStart (project anchor, rung 3)", () => {
+	it("carries --project into the start options", () => {
+		expect(resolveGatewayStart(["gateway", "--project", "acme"])).toMatchObject({
+			ok: true,
+			opts: { project: "acme" },
+		});
+	});
+
+	it("rejects an unsafe --project name (fail fast, like the telegram token rule)", () => {
+		const r = resolveGatewayStart(["gateway", "--project", "../escape"]);
+		expect(r.ok).toBe(false);
+		if (!r.ok) expect(r.error).toContain("invalid --project");
+	});
+});
+
+describe("defaultGatewayStart (project validation)", () => {
+	it("fails fast when --project names a project that does not exist", async () => {
+		const home = await mkdtemp(join(tmpdir(), "axiom-gwc-"));
+		const prev = process.env.AXIOM_HOME;
+		process.env.AXIOM_HOME = home;
+		try {
+			await expect(defaultGatewayStart("default", { transport: "signal", project: "nope" })).rejects.toThrow(
+				/--project 'nope' not found/,
+			);
+		} finally {
+			if (prev === undefined) delete process.env.AXIOM_HOME;
+			else process.env.AXIOM_HOME = prev;
+			await rm(home, { recursive: true, force: true });
+		}
 	});
 });
 
