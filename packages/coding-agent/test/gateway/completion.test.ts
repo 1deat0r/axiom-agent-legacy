@@ -54,7 +54,7 @@ describe("CliCompletionRunner", () => {
 		}
 	});
 
-	it("omits --profile for the implicit default profile", async () => {
+	it("passes --profile default so the spawned agent reads the profile's provider settings", async () => {
 		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-comp-def-"));
 		try {
 			const outDir = join(dir, "out");
@@ -64,7 +64,7 @@ describe("CliCompletionRunner", () => {
 			const runner = new CliCompletionRunner({ bin, printFlag: "-p" });
 			await runner.runCompletion({ sessionId: "gw-def", prompt: "hi", profile: { name: "default" } });
 			const argv = JSON.parse(await readFile(join(outDir, "argv.json"), "utf8")) as string[];
-			expect(argv).toEqual(["-p", "hi", "--session-id", "gw-def"]);
+			expect(argv).toEqual(["-p", "hi", "--profile", "default", "--session-id", "gw-def"]);
 		} finally {
 			delete process.env.SHIM_ARGV;
 			await rm(dir, { recursive: true, force: true });

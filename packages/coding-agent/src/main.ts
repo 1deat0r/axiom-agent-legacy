@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 /**
  * Main entry point for the coding agent CLI.
  *
@@ -1753,4 +1754,22 @@ export async function main(args: string[], options?: MainOptions) {
 		}
 		process.exit(exitCode);
 	}
+}
+
+// Direct-script entry: `npx tsx src/main.ts <args>` should drive main() so
+// surfaces like the gateway stay up. cli.ts -> cli-main.ts imports main as a
+// module, so this guard only fires when main.ts is itself the entry script.
+// (Health: running `npx tsx src/main.ts gateway --transport telegram` boots
+// the gateway; running any non-gateway command behaves like the CLI.)
+let isMainModule = false;
+try {
+	isMainModule = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+} catch {
+	isMainModule = false;
+}
+if (isMainModule) {
+	void main(process.argv.slice(2)).catch((error) => {
+		console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
+		process.exit(1);
+	});
 }

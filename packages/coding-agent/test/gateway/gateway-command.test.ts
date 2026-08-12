@@ -55,7 +55,7 @@ describe("resolveGatewayStart (transport selection)", () => {
 	});
 
 	it("fails fast when telegram is selected with no token", () => {
-		const r = resolveGatewayStart(["gateway", "--transport", "telegram"]);
+		const r = resolveGatewayStart(["gateway", "--transport", "telegram"], {});
 		expect(r.ok).toBe(false);
 		if (!r.ok) expect(r.error).toContain("token");
 	});

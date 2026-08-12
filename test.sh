@@ -45,6 +45,9 @@ unset PRIME_AGENT_INTERNAL_DAEMON_WORKER_RECOVERY_JOURNAL
 unset PRIME_AGENT_INTERNAL_ORPHAN_PROCESS_JOURNAL
 unset RLM_DEPTH RLM_MAX_DEPTH RLM_SESSION_DIR
 unset RLM_GLOBAL_HARNESS_STATE_DIR RLM_HARNESS_STATE_DIR
+# Live gateway credentials must never leak into the suite (a set token would
+# flip the "telegram selected with no token fails fast" gateway tests).
+unset AXIOM_TELEGRAM_BOT_TOKEN AXIOM_BIN
 
 echo "Running tests without API keys or live-agent env..."
 npm test
