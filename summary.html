@@ -1,0 +1,76 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Axiom /cron gateway — feature loop summary</title>
+<style>
+:root{--accent:#0a7d5f;--ink:#1a1f1c;--mut:#68706b;--bg:#fbfbf9;--code:#f2f2ef;--line:#e5e5e0}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:0 16px 48px}
+.wrap{max-width:760px;margin:0 auto}
+header{padding:28px 0 16px;border-bottom:1px solid var(--line);margin-bottom:24px}
+h1{font-size:22px;margin:0 0 4px}h1 a,h1 span{color:var(--accent)}
+.meta{color:var(--mut);font-size:13px}
+h2{font-size:17px;margin:34px 0 10px;padding-left:10px;border-left:3px solid var(--accent)}
+h3{font-size:15px;margin:18px 0 6px}
+p{margin:8px 0}ul{margin:8px 0;padding-left:20px}li{margin:4px 0}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;background:var(--code);padding:1px 4px;border-radius:4px}
+table{border-collapse:collapse;width:100%;margin:10px 0;font-size:14px}td,th{border:1px solid var(--line);padding:6px 8px;text-align:left}th{background:var(--code)}
+.badge{display:inline-block;background:var(--accent);color:#fff;border-radius:10px;padding:1px 9px;font-size:12px;font-weight:600}
+</style></head><body><div class="wrap">
+<header>
+<h1>Axiom <span>/cron</span> gateway — automation spine, step 1</h1>
+<div class="meta">Feature Implementation Loop v2 &middot; worktree <code>.worktrees/cron-gateway</code> on <code>feat/cron-gateway</code> &middot; generated <b>2026-08-12 05:10 UTC</b> &middot; model: axiom coding agent (this run)</div>
+</header>
+
+<h2>Goal &amp; assumptions</h2>
+<p>A gateway-local <code>/cron</code> command that schedules agent runs via the existing
+<code>AgentCronJobStore</code> and delivers each run&rsquo;s output to the profile&rsquo;s gateway channel.
+Success: <code>/cron add &lt;schedule&gt; &lt;prompt&gt;</code> persists a job; the scheduler boots a headless
+<code>--profile</code> turn at due; the reply goes to the creating channel (<code>list</code>/<code>rm</code> manage).</p>
+<p>Assumptions: jobs are profile-scoped at <code>getCronJobsPath(projectHome)</code>; cron runs reuse the
+<code>CliCompletionRunner</code> seam; only allowlisted senders reach commands; delivery targets the
+creating channel id.</p>
+
+<h2>Plan as executed</h2>
+<ul>
+<li><b>Step 1</b> — optional <code>channelId</code> on <code>AgentCronJob</code> + <code>create()</code> passthrough (back-compat). <span class="badge">cron-jobs.test 52</span></li>
+<li><b>Step 2</b> — <code>GatewayCron</code> manager (store + scheduler + delivery). <span class="badge">cron.test 7</span></li>
+<li><b>Step 3</b> — <code>/cron</code> command (list/add/rm) + <code>GatewayCronCommandApi</code> + registration + help. <span class="badge">commands.test 13</span></li>
+<li><b>Step 4</b> — Gateway drives optional cron lifecycle + passes channel into command ctx. <span class="badge">gateway.test 7</span></li>
+<li><b>Step 5</b> — <code>defaultGatewayStart</code> wires a real <code>GatewayCron</code> at the profile home.</li>
+<li><b>Step 6</b> — cold self-review of diff; <b>Step 7</b> — risk fix + external review.</li>
+</ul>
+
+<h2>Key decisions</h2>
+<ul>
+<li><b>Reuse, not rebuild:</b> the baseline <code>AgentCronJobStore</code> + <code>AgentCronScheduler</code> + <code>CliCompletionRunner</code> are used as-is; <code>channelId</code> is additive and optional.</li>
+<li><b>Skip undeliverable jobs:</b> a run proceeds only for <code>source==="cron"</code> with a <code>channelId</code>, so a shared heartbeat store is never hijacked.</li>
+<li><b>Process isolation:</b> cron runs use a <code>cron-&lt;channel&gt;</code> session, distinct from the interactive <code>gw-&lt;channel&gt;</code> session (ADR-0014), so a due job never boots a second agent process on an interactive session.</li>
+<li><b>Deterministic scheduling:</b> <code>GatewayCron.runDue(now?)</code> is a thin seam over the scheduler for tests and operator sweeps.</li>
+<li><b>Resilient error replies:</b> command store ops are try/caught; rm resolves exact-id then unique-prefix; delivery failures surface &ldquo;scheduled run failed&rdquo;.</li>
+</ul>
+
+<h2>Verification evidence</h2>
+<table>
+<tr><th>Check</th><th>Result</th></tr>
+<tr><td>gateway + gateway-command + cron-jobs suites (vitest)</td><td><b>152 / 152 pass</b></td></tr>
+<tr><td>cron-jobs.test.ts (existing, unchanged)</td><td>52 pass — back-compat</td></tr>
+<tr><td><code>tsgo --noEmit</code></td><td>clean</td></tr>
+<tr><td><code>biome check</code></td><td>clean (957 files)</td></tr>
+<tr><td><code>npm run check</code> (installer + browser-smoke)</td><td>passed</td></tr>
+</table>
+
+<h2>Review history</h2>
+<table>
+<tr><th>Round</th><th>Scope</th><th>Score</th><th>Fixed</th></tr>
+<tr><td>Plan r1</td><td>plan vs rubric</td><td>96/100 approve</td><td>command store try/catch; lifecycle test; skip-no-channelId; prefix disambiguation</td></tr>
+<tr><td>Impl r1</td><td>cold feature diff</td><td>100/100 approve</td><td>process-isolation fix (cron-namespaced session) landed as 71699e359 before review</td></tr>
+</table>
+
+<h2>Final state</h2>
+<p>Feature branch <code>feat/cron-gateway</code> (6 commits, 86a0ffa9&hellip;71699e35) over the
+<code>.worktrees/cron-gateway</code> isolated worktree. Deliverable: <code>/cron add|list|rm</code> scheduling agent
+runs in the profile&rsquo;s cron store and delivering each run&rsquo;s output to its channel. No live
+provider exercised (completions faked in tests); operator follow-up: <code>axiom gateway</code> + one real
+<code>/cron add</code> on a live transport.</p>
+<p>Note: the parent <code>baseline/prime-v0.7.2</code> branch advanced by two unrelated branding commits
+(01948fe39) during this run; the worktree is isolated and unaffected. Next automation-spine
+increments (webhook/GitHub triggers, <code>[SILENT]</code> pre-prompt injection) are out of scope here.</p>
+</div></body></html>
