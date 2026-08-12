@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MemoryChannelIndex } from "../../src/gateway/channel-index.js";
 import { fakeCompletionRunner, sessionIdForChannel } from "../../src/gateway/completion.js";
+import { GatewayCron } from "../../src/gateway/cron.js";
 import { Gateway } from "../../src/gateway/gateway.js";
 import type { GatewayMessage, GatewayTransport } from "../../src/gateway/types.js";
 
@@ -259,6 +260,55 @@ describe("Gateway cron lifecycle + command wiring", () => {
 			await new Promise((r) => setTimeout(r, 20));
 			expect(sent.some((s) => s.text.includes("not wired"))).toBe(true);
 			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("full /cron path through a real Gateway + GatewayCron", () => {
+	it("a /cron add message schedules, and the fired run delivers to the channel", async () => {
+		const dir = await home("axiom-gw-e2ecron-");
+		try {
+			const { t, sent, push } = fakeTransport();
+			const cronCompletion = fakeCompletionRunner();
+			const cron = new GatewayCron({
+				storePath: join(dir, "cron-jobs.json"),
+				completion: cronCompletion,
+				transport: t,
+				profile: "default",
+				projectHome: dir,
+			});
+			const g = new Gateway({
+				transport: t,
+				index: new MemoryChannelIndex(),
+				completion: fakeCompletionRunner(),
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+555"],
+				cron,
+			});
+			await g.start();
+			// Real command message: scheduling reply goes back to the sender.
+			push({
+				channelId: "+555",
+				sender: "+555",
+				text: "/cron add every 1h nightly report",
+				isCommand: true,
+				timestamp: 1,
+			});
+			await new Promise((r) => setTimeout(r, 20));
+			expect(sent.some((s) => s.text.includes("scheduled"))).toBe(true);
+			// The job is in the profile store with the right prompt + channel.
+			const job = cron.listJobs().find((j) => j.status === "active");
+			expect(job?.prompt).toBe("nightly report");
+			expect(job?.channelId).toBe("+555");
+			// Fire the due run: the reply is delivered to the job's channel.
+			await cron.runDue(new Date(Date.parse(job?.nextRunAt ?? "")));
+			await g.stop();
+			expect(sent.some((s) => s.to === "+555" && s.text === "axiom reply to: nightly report")).toBe(true);
+			// Cron ran on its namespaced session, never the interactive one.
+			expect(cronCompletion.calls[0]?.sessionId).toBe(`cron-${sessionIdForChannel("+555")}`);
 		} finally {
 			await rm(dir, { recursive: true, force: true });
 		}
