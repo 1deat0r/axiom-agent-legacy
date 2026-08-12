@@ -85,11 +85,13 @@ FTS5 via <code>node:sqlite</code> (no new dependency); a session belongs to a pr
 </table>
 
 <h2>Final state</h2>
-<p><code>/search</code> (persistent FTS index), scroll paging, and <code>/sessions</code> browse are
-implemented, tested, and wired into the gateway + CLI. Project isolation holds (anchored default scopes;
-<code>--all</code> guarded + labeled). Remaining card item: <b>LLM-summarized recall / memory surfacing</b>
-— a model-facing agent tool, deferred because gateway commands never reach the model (ADR-0001) and it needs
-a live model to verify. See <code>docs/handoff-session-search.md</code>.</p>
+<p>All card phases are now implemented and verified at the unit level: <code>/search</code> over a
+<b>persistent FTS5 session index</b>, scroll paging (<code>--offset</code>), <code>/sessions</code>
+discovery/browse, and an agent-facing <b><code>recall</code> tool</b> (LLM-summarized recall / memory
+surfacing) that hands past-session snippets to the model to summarize and persist via the memory tool.
+Project isolation holds throughout (anchored default scopes; <code>--all</code> guarded + labeled). The only
+untested layer is a live end-to-end agent run with a real model, which this sandbox cannot exercise. See
+<code>docs/handoff-session-search.md</code>.</p>
 
 <footer>Generated 2026-08-12 from <code>docs/feature-logs/session-search-recall.md</code>.</footer>
 </main></body></html>

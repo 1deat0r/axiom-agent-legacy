@@ -50,12 +50,10 @@ as one workspace.
   and code review, not by a live end-to-end agent run.
 
 ## Follow-ups
-- **LLM-summarized recall / memory surfacing** (the card's remaining item): a model-facing next phase —
-  an agent-side `recall` tool (mirroring the memory-extension pattern) that surfaces top snippets for the
-  model to summarize/decide. Not in this run because (a) gateway commands by ADR-0001 never reach the
-  model, so a summary layer is an agent tool, not a gateway command, and (b) it needs a live model to be
-  meaningfully verified, which the sandbox cannot run. Persistence (done) + browse + scroll (done) remove
-  the infrastructure gap that unblocks it.
+- **Done: LLM-summarized recall / memory surfacing** — an agent-facing `recall` tool surfaced past-session
+  content for the model to summarize and persist via the memory tool (reuses the shared persistent index).
+  Verified at the unit level (registration + behavior with injectable paths); a live end-to-end agent run
+  (real model) is the only layer this sandbox cannot exercise.
 - Centralize the profile→agent-dir rule instead of `resolveSessionsDir` restating it.
 
 ## Note on review

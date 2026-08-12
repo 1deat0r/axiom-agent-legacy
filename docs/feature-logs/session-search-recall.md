@@ -46,3 +46,9 @@
 - VERIFY: ./test.sh (scrubbed) coding-agent suite green (758/0 incl. my tests); overall npm exit=1 is a
   PRE-EXISTING env artifact (ai workspace intentional 'nonexistent-package' fixture + daemon hard-link),
   identical before this continuation. Committed continuation + docs.
+- CONTINUATION (LLM-summarized recall — final card item): added agent-facing `recall` tool
+  (src/extensions/recall/index.ts), registered in extensions/index.ts. action=query (FTS search,
+  project-scoped by AXIOM_PROJECT_ROOT default, all=true labeled cross) + action=recent (browse).
+  Reuses the same persistent index as gateway /search; returns longer snippets the model summarizes
+  and can persist via the memory tool. Tests: test/extensions/recall.test.ts (7); extensions+gateway
+  dir = 26 files / 324 tests pass; biome clean; tsgo clean. Committed.
