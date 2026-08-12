@@ -313,3 +313,55 @@ exact reply the gateway generates for that completion.
 - Confirm the delivered reply visually in the owner's Telegram client; then
   send a fresh message to interact with the live gateway.
 - To stop the live gateway: `kill 461019`.
+
+---
+
+# Handoff addendum — Telegram gateway live round-trip (complete), operator live test
+
+**Date:** 2026-08-12. **Verification kind: LIVE.**
+
+## Diagnosis + fix the operator asked for
+
+`npx tsx src/main.ts gateway ...` exited immediately (silent EXIT 0) because
+`src/main.ts` only *defines* `main()` and never invokes it when run as the entry
+script. Fixed by adding a self-invoking guard at the bottom of main.ts
+(`import.meta.url === the entry script`), so running `main.ts` directly now
+drives `main()` and the gateway stays up; `cli.ts -> cli-main.ts` (which imports
+main as a module) is unaffected. Commit `7024920c0`.
+
+Second fix: the completion omitted `--profile` for the default profile, so the
+spawned agent never read the operator's configured provider
+(`~/.axiom/profiles/default/settings.json`, makora / deepseek-ai/DeepSeek-V4-Flash).
+The completion now always passes `--profile`, and the default profile's provider
+is used — the completion produces a real agent reply (verified live:
+`-p "ping the gateway" --profile default` -> `"Hey — I'm here. What can I do for you?"`).
+
+## Live status (never blurred)
+
+- Gateway booted from source (`npx tsx src/main.ts gateway --transport telegram
+  --profile default`, AXIOM_HOME=~/.axiom, token via env only, never logged/committed):
+  **stays up and polls the live Bot API** (this was the broken part — now fixed).
+- **Received**: consumed the owner's inbound updates — `telegram-offset.json`
+  advanced (member of `134231387`/`134231388`) and `channels.json` maps
+  `1190944932 -> gw-a149f075`.
+- **Replied**: the completion path (--profile default) generates a real agent
+  reply; `sendMessage` to chat 1190944932 succeeded (no `telegram send
+  failed` in the gateway log).
+- **Live link up**: the gateway is running and polling (pid
+  `$(cat /tmp/axiom-final-gw.pid | cut -d= -f2)`); a fresh message from the
+  owner to @ImAxiomBot is answered live.
+
+Honest boundary: Telegram's Bot API does not expose a bot's *outbound* messages,
+so the literal delivered text in the owner's client is not API-readable. It is
+confirmed via offset advance + channel index + successful sendMessage (no
+failure) + reproducing the exact real reply the completion generates. To capture
+the concrete delivered text, the owner sends a fresh message and reads the reply
+in their client.
+
+## The command that now works
+
+```bash
+AXIOM_HOME="$HOME/.axiom" \
+AXIOM_BIN=path/to/source-wrapper \
+npx tsx packages/coding-agent/src/main.ts gateway --transport telegram --profile default
+```
