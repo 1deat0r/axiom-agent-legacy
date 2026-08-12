@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Axiom — Delegate tool (feature #5, first step)</title>
+<title>Axiom — Delegate tool (feature #5)</title>
 <style>
   :root{--accent:#7c3aed;}
   *{box-sizing:border-box}
@@ -69,11 +69,15 @@
   <tr><td>Plan</td><td>1</td><td>94/100</td><td class="badge ok">APPROVE</td><td>— (folded 4 non-blocking notes below)</td></tr>
   <tr><td>Impl</td><td>1</td><td>84/100</td><td class="badge deny">DENY</td><td>1) <code>model</code> now threaded into helper via <code>parseModelRef</code>; 2) clamp guards <code>Number.isFinite</code> (NaN/Infinity→default), negatives floor to 1ms.</td></tr>
   <tr><td>Impl</td><td>2</td><td>96/100</td><td class="badge ok">APPROVE</td><td>— both fixes verified in source + independent test run; no new issues.</td></tr>
+  <tr><td>Continuation: live-model + sessionId</td><td>1</td><td>98/100</td><td class="badge ok">APPROVE</td><td>— empty-model-param fallback test added (non-blocking note).</td></tr>
+  <tr><td>Continuation: batch/parallel (tasks[])</td><td>1</td><td>92/100</td><td class="badge deny">DENY</td><td>Risk 3/5: unbounded fan-out.</td></tr>
+  <tr><td>Continuation: batch (fixed)</td><td>2</td><td>—</td><td class="badge ok">APPROVE</td><td>BATCH_CONCURRENCY pool + MAX_TASKS cap + tests (exactly-4 in-flight, cap rejection, per-bridge no-orphan).</td></tr>
 </table>
 <p>Rubric: Correctness · Fit · Testability · Risk · Clarity (5×20=100). Plan notes folded in: per-call reset = one fresh process; use existing <code>getLastAssistantText()</code>; define <code>DelegateTokenAccounting</code> (= <code>SessionStats.tokens</code> + cost) and <code>summaryMaxChars=2000</code>; fallback for tool-only final turns = &ldquo;(no textual summary captured)&rdquo;.</p>
 
 <h2>Final state</h2>
-<p>The <code>delegate</code> tool ships on branch <code>feat/delegate-rpc</code> (commits <code>43d31b45a</code>, <code>9f4fe96fb</code>). Neutral suite green, biome + tsgo clean. Live process-spawn path is operator/pass-gated and the live-gated test runs where API keys exist. Follow-ups (honest): propagate the parent's live provider/model selection; pollute-free live cross-provider pass; batch/parallel delegation (<code>async_delegation</code>); surface <code>helper.sessionId</code> + files written.</p>
+<p>The <code>delegate</code> tool ships on branch <code>feat/delegate-rpc</code>, now merged up to date with <code>origin/main</code> (ADR renumbered to <b>ADR-0029</b> after main's <code>ADR-0028-security-fence</code>). It supports a single <code>task</code> OR a batch <code>tasks[]</code> (bounded fan-out: <code>BATCH_CONCURRENCY=4</code>, <code>MAX_TASKS=16</code>), defaults the helper to the parent's LIVE model via <code>ctx.model</code>, reports ONLY recorded tokens/cost, and surfaces <code>helper.sessionId</code>. Merged-tree suite is regression-free: 4574 passed, the 14 failures being only the documented sandbox known-fails; tui 758/0, ai 69, agent 315.</p>
+<p>Remaining feature-#5 elements (recorded follow-ups): <code>delegation_output_schema</code> (structured JSON from the helper), a pollute-free live cross-provider pass (operator-gated — needs API keys), and surfacing the files the helper wrote in the block.</p>
 
 </body>
 </html>
