@@ -3,6 +3,7 @@ import axiomLedgerExtension from "./ledger/index.js";
 import axiomMemoryExtension from "./memory/index.js";
 import axiomProfileExtension from "./profile/index.js";
 import axiomRecallExtension from "./recall/index.js";
+import axiomSecurityExtension from "./security/index.js";
 import axiomSkillCaptureExtension from "./skill-capture/index.js";
 import axiomWorkspaceExtension from "./workspace/index.js";
 
@@ -13,5 +14,6 @@ export const builtInExtensions: ExtensionFactory[] = [
 	axiomProfileExtension,
 	axiomRecallExtension,
 	axiomSkillCaptureExtension,
+	axiomSecurityExtension,
 	axiomWorkspaceExtension,
 ];
