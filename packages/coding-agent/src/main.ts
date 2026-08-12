@@ -36,6 +36,9 @@ import {
 	SessionSelectorError,
 	SessionSelectorNotFoundError,
 } from "./cli/session-resolver.js";
+import { handleSkillAuditCommand } from "./cli/skill-audit-command.js";
+import { handleSkillCaptureAutoCommand } from "./cli/skill-capture-auto-command.js";
+import { handleSkillCaptureCommand } from "./cli/skill-capture-command.js";
 import { APP_NAME, ENV_AGENT_DIR, expandTildePath, getAgentDir, getSessionDirEnvOverride, VERSION } from "./config.js";
 import {
 	type AgentExecutionMode,
@@ -1102,6 +1105,18 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	if (await handleGatewayCommand(args)) {
+		return;
+	}
+
+	if (await handleSkillCaptureCommand(args)) {
+		return;
+	}
+
+	if (await handleSkillAuditCommand(args)) {
+		return;
+	}
+
+	if (await handleSkillCaptureAutoCommand(args)) {
 		return;
 	}
 
