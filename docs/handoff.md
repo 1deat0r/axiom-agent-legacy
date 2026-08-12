@@ -1,63 +1,67 @@
-# Handoff — Gateway breadth: Discord + Slack transports (feat/discord-gateway)
+# Handoff — Gateway breadth: Discord + Slack transports + delivery ledger (feat/discord-gateway)
 
 Status: ready for merge review. Branch `feat/discord-gateway`, cut from
-`baseline/prime-v0.7.2` @ 01948fe39 (ADR-0017 hardened telegram in HEAD). Two
-slices of issue #3 ("Gateway breadth — more transports") landed back-to-back in
-this isolated worktree: Discord (session 1, ADR-0020) and Slack (session 2,
-ADR-0021), each reusing the Telegram/Discord per-channel-cursor shape and wired
-into the SAME Gateway router, JsonChannelIndex, and sender allowlist.
+`baseline/prime-v0.7.2` @ 01948fe39 (ADR-0017 hardened telegram in HEAD). Three
+slices of issue #3 ("Gateway breadth — more transports + continuity") landed in
+this isolated worktree: Discord (ADR-0020), Slack (ADR-0021), and the delivery
+ledger + fan-out continuity (ADR-0022).
 
 ## What was done
 - `src/gateway/transports/discord.ts` — DiscordTransport, DiscordClient
   (sendMessage/listChannels/getMessages), cursor stores, HttpDiscordClient
-  (Bot token, REST), chunk reuse (2000 cap), fatal-401 + per-channel isolation.
+  (Bot, REST), chunk reuse (2000), fatal-401 + per-channel isolation.
 - `src/gateway/transports/slack.ts` — SlackTransport, SlackClient
   (postMessage/listChannels/history), cursor stores, HttpSlackClient (Bearer,
-  REST), chunk reuse (40k cap), ok:false fatal classification + per-channel
-  isolation + exclusive-ts no-replay.
-- `src/cli/gateway-command.ts` — `--transport discord|slack`, `--discord-token`,
-  `--slack-token`, `AXIOM_DISCORD_BOT_TOKEN`, `AXIOM_SLACK_BOT_TOKEN`, help +
-  usage, buildTransport routing. Default stays signal; signal/telegram untouched.
-- Tests: discord-transport (17), slack-transport (19), gateway-command +8 (22),
-  gateway-discord (3), gateway-slack (3). Full gateway dir 16 files / 134 tests.
-- `docs/adr/ADR-0020-discord-gateway.md`, `docs/adr/ADR-0021-slack-gateway.md`,
-  `docs/discord-gateway/summary.html`, this handoff.
+  REST), chunk reuse (40k), ok:false fatal classification + inclusive-oldest
+  no-replay + per-channel isolation.
+- `src/gateway/delivery-ledger.ts` — Memory + File(JSONL) DeliveryLedger
+  (ADR-0022), capped + malformed-line tolerant.
+- `src/gateway/gateway.ts` — single `deliver()` path records every outbound
+  delivery; `deliverToAll()` fans one message to every configured `deliverTo`
+  channel.
+- `src/gateway/config.ts` — `deliverTo?: { channel }[]` (back-compat).
+- `src/gateway/commands/{announce,ledger}.ts` — `/announce <text>` +
+  `/ledger [n]`, wired into the registry and /help.
+- `src/cli/gateway-command.ts` — `--transport discord|slack`, tokens, help,
+  buildTransport, and the CLI passes a FileDeliveryLedger + transport name.
+- Tests: discord-transport (17), slack-transport (19), gateway-command (22),
+  gateway-discord (3), gateway-slack (3), delivery-ledger (5), gateway-ledger
+  (3), config deliverTo (+1). Full gateway dir 18 files / 143 tests.
+- Docs: `docs/adr/ADR-0020/21/22*.md`, `docs/discord-gateway/summary.html`,
+  this handoff.
 
 ## What was verified, and how
-- **Unit (injected fake clients):** per transport — send + chunk order/length,
-  deliver identity (channel id + sender), per-channel cursor advance + no-replay
-  (persisted cursor file across runs; Slack's inclusive `oldest` boundary is
-  genuinely asserted as never replayed), transient list failure recovers, one
-  channel's failure isolated (throttled log) while others + loop continue, fatal
-  (Discord 401 / Slack ok:false invalid_auth) stops the loop, cursor-write
-  failure warns + keeps polling, disconnect aborts in-flight pull, skips
-  author/user-less or content-less messages.
-- **Mock (local node:http server, never a live bot):** Http clients hit the
-  right routes with the right auth (Bot / Bearer), send the right bodies
-  (create-message, chat.postMessage, history `oldest`/`limit`, conversations.list
-  `types`), parse results, and surface fatal statuses/errors.
-- **CLI mock:** flag/env/missing-token resolution for both + buildTransport
-  returns the right transport.
-- **Router (in-memory):** author/user allowlist gates the model; channel index
-  maps channel -> session; commands stay local.
-- **Floor:** biome check clean; root + package `tsgo --noEmit` clean; full
-  gateway dir 16 files / 134 tests pass.
+- **Unit (injected fakes):** per transport — send + chunk, deliver identity
+  (channel + sender), per-channel cursor no-replay (incl. Slack's inclusive old-
+  est), transient recovers, per-channel isolation (throttled), fatal stops,
+  cursor-write failure warns+continues, disconnect aborts, skips blank. Ledger:
+  JSONL append + continuity across instances + malformed-line tolerance + cap.
+- **Mock (local node:http server, never live):** Http clients — right routes +
+  auth (Bot/Bearer) + bodies (create-message, chat.postMessage, history, con-
+  versations.list) + result parse + fatal surfaced.
+- **Router (in-memory):** every outbound delivery (reply + denial) is recorded;
+  deliverToAll fans out to each configured channel and records each; /ledger
+  lists entries; /announce dispatches to deliverToAll.
+- **CLI mock:** flag/env/missing-token resolution + buildTransport returns the
+  right transport.
+- **Floor:** biome check clean; root `tsgo --noEmit` clean; gateway dir 18
+  files / 143 tests pass.
 
 `./test.sh` reports 15 failures across 4451 tests — every one a pre-existing
-*sandbox/environment* baseline daemon/worker suite, none touched by this change
+*sandbox/environment* baseline daemon/worker suite, none touched by this work
 (verified identical on a pristine baseline worktree: 4603 EXDEV +
 daemon-serialized-refine; 4685 was FORCE_COLOR stderr noise and passes scrubbed;
 kernel-heartbeat timing-flaky). Per AGENTS.md these are known-fails here
 ("record as known-fail with reason, never mute").
 
 ## Live (not done — operator-gated)
-Real Discord needs a bot + messages intent, token, owner user id in the
-allowlist, provider. Real Slack needs an app + bot token, the bot added to
-channels, owner user id in the allowlist, provider. Neither fabricated; both
-transports are exercised by their test suites only.
+Real Discord, Slack, or Telegram needs tokens + owner ids in the allowlist + a
+provider. Not fabricated; both transports are exercised by their test suites only.
 
 ## Notes / follow-ups
 - Baseline tip advanced to e1f071cbd (cron-gateway merge) since this branch was
   cut; a routine baseline merge brings it current (AGENTS.md cadence).
-- Issue #3 remaining: the delivery ledger (one run -> many channels), Socket
-  Mode / websocket low-latency receive, and a live pass on both.
+- Issue #3 remaining scope: cross-platform multi-transport fan-out; the cron
+  spine feeding `deliverTo` (once rebased onto the cron baseline); websocket /
+  Socket Mode low-latency receive; the roadmap's relay/mirror + TTS consumer;
+  and a live pass.

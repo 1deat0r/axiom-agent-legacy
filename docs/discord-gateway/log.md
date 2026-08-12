@@ -26,3 +26,13 @@ the same channel index + sender allowlist (issue #3 "Gateway breadth" first step
 - [review] Self-review of impl cold diff: no TODOs/dead/debug; edge cases (inclusive oldest no-replay, per-channel isolation, fatal ok:false, transient 429, cursor-write failure, disconnect abort, missing user/text) all tested.
 - [review] External review (skeptical-se): Correctness 5, Fit 5, Testability 5, Risk 4, Clarity 5 = 24/25 (96). Approved round 1.
 - [docs] ADR-0021 written; handoff + summary regenerated from this log.
+
+## Session 3 — Delivery ledger + fan-out continuity (ADR-0022)
+- [plan] Scope: (a) delivery-ledger.ts (Memory + File JSONL), (b) Gateway records every outbound delivery + deliverToAll() fan-out to configured channels, (c) /announce + /ledger gateway-local commands, (d) config `deliverTo`. Commands stay sync (fire-and-forget fan-out) to avoid breaking the sync dispatch; cross-platform multi-transport fan-out + cron-spine feeding are documented follow-ups.
+- [impl] delivery-ledger.ts (Memory + File JSONL, capped, malformed-line tolerant).
+- [impl] gateway.ts: single deliver() path records every outbound delivery; deliverToAll() fans out to config deliverTo channels.
+- [impl] config.ts deliverTo + types ctx ledger/deliverToAll; commands announce.ts + ledger.ts wired into registry + help; CLI passes FileDeliveryLedger + transportName.
+- [impl] Tests red-first: delivery-ledger (5), config deliverTo (1), gateway-ledger (3). Full gateway dir 18 files / 143 tests green; biome clean; root tsgo clean.
+- [review] Self-review of impl cold diff: no TODOs/dead/debug; edge cases (JSONL malformed line, memory cap, fan-out recipient blank, deny-path recorded, sync command dispatch preserved, back-compat config) all tested.
+- [review] External review (skeptical-se): Correctness 5, Fit 5, Testability 5, Risk 4, Clarity 5 = 24/25 (96). Approved round 1.
+- [docs] ADR-0022 written; handoff + summary regenerated from this log.
