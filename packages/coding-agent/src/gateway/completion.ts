@@ -9,6 +9,9 @@
  * inject a fake runner; the shipped `CliCompletionRunner` shells the real CLI.
  */
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { CompletionRunner, GatewayProfile } from "./types.js";
 
 /** Deterministic, channel-stable session id so resume just re-passes it. */
@@ -22,8 +25,35 @@ export function sessionIdForChannel(channelId: string): string {
 	return `gw-${(h >>> 0).toString(16).padStart(8, "0")}`;
 }
 
+/**
+ * The child process spec for one completion: the executable and any loader
+ * prefix args. Resolved so the runner ALWAYS invokes axiom-agent's own CLI —
+ * never the ambiguous global `axiom` on PATH (a stale/different install would
+ * silently produce no reply, which is exactly the bug this fixes).
+ */
+export interface CompletionChild {
+	bin: string;
+	prefix: string[];
+}
+
+/**
+ * Resolve the axiom CLI child to spawn. Priority: an explicit bin (tests),
+ * AXIOM_BIN (operator override), then axiom-agent's own entrypoint — the built
+ * `dist/bundle/cli.js` of this package, else the source `src/cli.ts` via
+ * `node --import tsx`. There is deliberately NO bare-`"axiom"` fallback.
+ */
+export function resolveCompletionChild(userBin?: string): CompletionChild {
+	if (userBin) return { bin: userBin, prefix: [] };
+	if (process.env.AXIOM_BIN) return { bin: process.env.AXIOM_BIN, prefix: [] };
+	const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+	const distCli = join(pkgRoot, "dist", "bundle", "cli.js");
+	if (existsSync(distCli)) return { bin: distCli, prefix: [] };
+	const srcCli = join(pkgRoot, "src", "cli.ts");
+	return { bin: process.execPath, prefix: ["--import", "tsx", srcCli] };
+}
+
 export interface CliCompletionOptions {
-	/** The axiom CLI binary to spawn. */
+	/** The axiom CLI binary to spawn. If omitted, resolves to axiom-agent's own CLI. */
 	bin?: string;
 	/** Print-mode the CLI exposes (`-p`/`--print`). */
 	printFlag?: string;
@@ -40,10 +70,13 @@ export interface CliCompletionOptions {
 /** Real completion runner: shells the axiom CLI in print mode under --profile. */
 export class CliCompletionRunner implements CompletionRunner {
 	private readonly bin: string;
+	private readonly prefix: string[];
 	private readonly printFlag: string;
 	private readonly timeoutMs: number;
 	constructor(options: CliCompletionOptions = {}) {
-		this.bin = options.bin ?? process.env.AXIOM_BIN ?? "axiom";
+		const child = resolveCompletionChild(options.bin);
+		this.bin = child.bin;
+		this.prefix = child.prefix;
 		this.printFlag = options.printFlag ?? "-p";
 		this.timeoutMs = options.timeoutMs ?? 300_000;
 	}
@@ -55,7 +88,15 @@ export class CliCompletionRunner implements CompletionRunner {
 		// Always pass --profile so the spawned agent resolves the profile home
 		// (~/.axiom/profiles/<name>, incl. 'default') and reads that profile's
 		// provider settings (e.g. ~/.axiom/profiles/default/settings.json).
-		const args = [this.printFlag, input.prompt, "--profile", input.profile.name, "--session-id", input.sessionId];
+		const args = [
+			...this.prefix,
+			this.printFlag,
+			input.prompt,
+			"--profile",
+			input.profile.name,
+			"--session-id",
+			input.sessionId,
+		];
 		try {
 			const stdout = await new Promise<string>((resolve, reject) => {
 				const child = execFile(this.bin, args, { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }, (err, out) =>

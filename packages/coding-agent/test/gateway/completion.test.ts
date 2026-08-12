@@ -2,7 +2,12 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CliCompletionRunner, fakeCompletionRunner, sessionIdForChannel } from "../../src/gateway/completion.js";
+import {
+	CliCompletionRunner,
+	fakeCompletionRunner,
+	resolveCompletionChild,
+	sessionIdForChannel,
+} from "../../src/gateway/completion.js";
 
 /** Write an executable axiom/signal shim that records argv to SHIM_ARGV and prints a canned line. */
 async function writeShim(dir: string, binName: string, outText = "ok"): Promise<string> {
@@ -31,6 +36,43 @@ describe("fakeCompletionRunner", () => {
 		const out = await r.runCompletion({ sessionId: "s", prompt: "hello", profile: { name: "p" } });
 		expect(out.reply).toContain("hello");
 		expect(r.calls).toHaveLength(1);
+	});
+});
+
+describe("resolveCompletionChild (live-path guard: the child must be axiom-agent's own CLI)", () => {
+	it("never falls back to the bare global 'axiom' command", () => {
+		// Root-cause regressions: an unset AXIOM_BIN used to resolve to "axiom"
+		// (the stale global pi-monorepo binary), which silently produced no reply.
+		const child = resolveCompletionChild();
+		expect(child.bin).not.toBe("axiom");
+		// It must point at an axiom-agent entry: this package's built bundle, or
+		// source-via-tsx when not built.
+		const isOwnCli = child.bin.endsWith("/dist/bundle/cli.js") || child.bin === process.execPath;
+		expect(isOwnCli).toBe(true);
+		if (child.bin === process.execPath) {
+			expect(child.prefix.join(" ")).toContain("src/cli.ts");
+		} else {
+			expect(child.prefix).toEqual([]);
+		}
+	});
+
+	it("honors an explicit bin override", () => {
+		const child = resolveCompletionChild("/tmp/shim.js");
+		expect(child.bin).toBe("/tmp/shim.js");
+		expect(child.prefix).toEqual([]);
+	});
+
+	it("honors AXIOM_BIN as the operator override", () => {
+		const prev = process.env.AXIOM_BIN;
+		process.env.AXIOM_BIN = "/opt/my-axiom/cli.js";
+		try {
+			const child = resolveCompletionChild();
+			expect(child.bin).toBe("/opt/my-axiom/cli.js");
+			expect(child.prefix).toEqual([]);
+		} finally {
+			if (prev === undefined) delete process.env.AXIOM_BIN;
+			else process.env.AXIOM_BIN = prev;
+		}
 	});
 });
 
