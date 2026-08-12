@@ -1,15 +1,18 @@
 /**
- * `pi profile create|list` — the profile scaffolding command (port #8,
- * ADR-0014 on the pi baseline).
+ * `axiom profile create|list|switch` — the profile scaffolding command (port
+ * #8, ADR-0014 on the pi baseline), the CLI sibling of the gateway's
+ * `/profiles` command.
  *
  * `profile create <name>` scaffolds `<axiom-home>/profiles/<name>/` with a
  * starter SOUL.md (the profile's identity). `profile list` shows existing
- * profiles. Returns true when the invocation was a profile command.
+ * profiles. `profile switch <name>` validates a profile and tells the caller
+ * how to run under it (a terminal run is `axiom --profile <name>`, not a
+ * persistent boot). Returns true when the invocation was a profile command.
  */
 
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { axiomHome, isValidProfileName, profileDir } from "../extensions/profile/registry.js";
+import { basename, dirname, join } from "node:path";
+import { axiomHome, isValidProfileName, profileDir, profileLabel } from "../extensions/profile/registry.js";
 
 export interface ProfileCommandIO {
 	axiomHome?: string;
@@ -26,6 +29,17 @@ function starterSoul(name: string): string {
 		`Edit this file to give me my personality and priorities. It rides my system\n` +
 		`prompt on every run.\n`
 	);
+}
+
+/**
+ * The base axiom home where profiles live (`<base>/profiles/<name>`). When the
+ * active home is itself a profile home (`<base>/profiles/<name>`), a profile
+ * command must list/validate against the base, not the nested profile home —
+ * mirroring the gateway, which reads the base AXIOM_HOME for /profiles.
+ */
+function baseHome(home: string): string {
+	const parent = dirname(home);
+	return basename(parent) === "profiles" ? dirname(parent) : home;
 }
 
 export async function handleProfileCommand(args: string[], io: ProfileCommandIO = {}): Promise<boolean> {
@@ -86,9 +100,38 @@ export async function handleProfileCommand(args: string[], io: ProfileCommandIO 
 		}
 		return true;
 	}
+	if (sub === "switch") {
+		const name = args[2] ?? "";
+		const base = baseHome(home);
+		const profilesDir = join(base, "profiles");
+		let names: string[] = [];
+		try {
+			names = (await list(profilesDir)).filter((n) => isValidProfileName(n)).sort();
+		} catch {
+			names = [];
+		}
+		if (!name || !names.includes(name)) {
+			out(
+				names.length === 0
+					? "No profiles yet — create one with 'profile create <name>'."
+					: `Unknown profile '${name}' — existing: ${names.join(", ")}`,
+			);
+			return true;
+		}
+		if (profileLabel(home) === name) {
+			out(`already running as '${name}'`);
+			return true;
+		}
+		out(
+			`validated profile '${name}' — run 'axiom --profile ${name}' to operate as it ` +
+				`(this session stays '${profileLabel(home)}')`,
+		);
+		return true;
+	}
 	out(
 		"Usage: profile create <name>   scaffold a new profile (own home + SOUL.md)\n" +
-			"       profile list           list existing profiles",
+			"       profile list           list existing profiles\n" +
+			"       profile switch <name>  validate a profile; run 'axiom --profile <name>' as it",
 	);
 	return true;
 }

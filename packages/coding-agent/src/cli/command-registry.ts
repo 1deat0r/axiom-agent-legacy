@@ -152,7 +152,7 @@ export const COMMAND_SPECS: readonly CommandSpec[] = [
 	},
 	{
 		path: ["profile"],
-		usage: "profile <create|list>",
+		usage: "profile <create|list|switch>",
 		summary: "Manage profile identities (ADR-0014)",
 		description: "A profile is a separate axiom home with its own SOUL.md, keys, memory, and sessions.",
 	},
@@ -165,6 +165,11 @@ export const COMMAND_SPECS: readonly CommandSpec[] = [
 		path: ["profile", "list"],
 		usage: "profile list",
 		summary: "List existing profiles",
+	},
+	{
+		path: ["profile", "switch"],
+		usage: "profile switch <name>",
+		summary: "Validate a profile; run 'axiom --profile <name>' as it",
 	},
 	{
 		path: ["projects"],

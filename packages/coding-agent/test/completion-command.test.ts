@@ -21,7 +21,7 @@ describe("completionCandidates", () => {
 	});
 
 	it("yields the profile subcommands", async () => {
-		expect(await completionCandidates(["profile", ""])).toEqual(["create", "list"]);
+		expect(await completionCandidates(["profile", ""])).toEqual(["create", "list", "switch"]);
 	});
 
 	it("yields the projects subcommands", async () => {
