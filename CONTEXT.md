@@ -148,3 +148,13 @@ sensitive-tool fence (a configurable approved-tool ladder, opt-in, escaped via
 `AXIOM_FENCE_ALLOW`/`AXIOM_FENCE_ALLOW_HOSTS`). Freeform `bash`/`ipython` stay
 the ADR-0019 OS-sandbox tier, never string-fenced.
 _Avoid_: Firewall (a wall, not a fence — the fence is one rung of the ladder)
+
+**Self-update**:
+The gateway-local `/update` command (ADR-0034): fetch + report, or `/update
+now` to fast-forward the configured worktree (`AXIOM_UPDATE_REPO` /
+`--update-repo`, branch `main`) and rebuild the axiom bundle, then restart
+the gateway process — systemd `Restart=always` brings it back on the new
+build, and the transport offset cursors persist, so no message is lost or
+replayed. Gated: clean worktree, on `main`, ff-only merge, build exit 0;
+any failure leaves the old code serving and never restarts.
+_Avoid_: Deploy script (the runner is typed, tested, gate-checked in-repo)

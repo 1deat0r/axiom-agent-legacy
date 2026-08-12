@@ -24,7 +24,7 @@ import { FileTelegramOffsetStore, HttpTelegramClient, TelegramTransport } from "
 import type { GatewayTransport } from "../gateway/types.js";
 
 export const GATEWAY_USAGE =
-	"axiom gateway [--profile <name>] [--project <name>] [--transport signal|telegram|discord|slack] [--telegram-token <token>] [--discord-token <token>] [--slack-token <token>] [--signal-cli <path>] [--signal-account <acct>]";
+	"axiom gateway [--profile <name>] [--project <name>] [--transport signal|telegram|discord|slack] [--telegram-token <token>] [--discord-token <token>] [--slack-token <token>] [--signal-cli <path>] [--signal-account <acct>] [--update-repo <path>]";
 
 export interface GatewayStartOptions {
 	transport: "signal" | "telegram" | "discord" | "slack";
@@ -39,6 +39,8 @@ export interface GatewayStartOptions {
 	signalAccount?: string;
 	/** Anchor the run to a project under the profile's workspace (rung-3 guard). */
 	project?: string;
+	/** Git worktree to self-update from (/update, ADR-0034); inert unless set. */
+	updateRepo?: string;
 }
 
 export type GatewayStartResolution =
@@ -79,6 +81,7 @@ export function resolveGatewayStart(
 	const signalCliPath = readVal(args, "--signal-cli");
 	const signalAccount = readVal(args, "--signal-account");
 	const project = readVal(args, "--project");
+	const updateRepo = readVal(args, "--update-repo") ?? env.AXIOM_UPDATE_REPO;
 	if (project !== undefined && !PROJECT_NAME_RE.test(project)) {
 		return { ok: false, error: `invalid --project '${project}' (lowercase a-z0-9 and dashes)` };
 	}
@@ -87,23 +90,23 @@ export function resolveGatewayStart(
 		if (!slackToken) {
 			return { ok: false, error: "--transport slack requires --slack-token or AXIOM_SLACK_BOT_TOKEN" };
 		}
-		return { ok: true, profile, opts: { transport, slackToken, project } };
+		return { ok: true, profile, opts: { transport, slackToken, project, updateRepo } };
 	}
 	if (transport === "discord") {
 		const discordToken = readVal(args, "--discord-token") ?? env.AXIOM_DISCORD_BOT_TOKEN;
 		if (!discordToken) {
 			return { ok: false, error: "--transport discord requires --discord-token or AXIOM_DISCORD_BOT_TOKEN" };
 		}
-		return { ok: true, profile, opts: { transport, discordToken, project } };
+		return { ok: true, profile, opts: { transport, discordToken, project, updateRepo } };
 	}
 	if (transport !== "telegram") {
-		return { ok: true, profile, opts: { transport, signalCliPath, signalAccount, project } };
+		return { ok: true, profile, opts: { transport, signalCliPath, signalAccount, project, updateRepo } };
 	}
 	const telegramToken = readVal(args, "--telegram-token") ?? env.AXIOM_TELEGRAM_BOT_TOKEN;
 	if (!telegramToken) {
 		return { ok: false, error: "--transport telegram requires --telegram-token or AXIOM_TELEGRAM_BOT_TOKEN" };
 	}
-	return { ok: true, profile, opts: { transport, telegramToken, project } };
+	return { ok: true, profile, opts: { transport, telegramToken, project, updateRepo } };
 }
 
 /** Handle `axiom gateway ...`; returns true if it was a gateway invocation. */
@@ -209,6 +212,10 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 		transportName: opts.transport,
 		modelStore: new FileActiveModelStore(activeModelPath(root, profile)),
 		transports: buildFanOutTransports(opts, root),
+		...(opts.updateRepo ? { update: { repoDir: opts.updateRepo } } : {}),
+		// The update path only fires on an explicit, successful /update now —
+		// systemd `Restart=always` brings the service back on the new bundle.
+		restart: () => process.exit(0),
 	});
 	await gateway.start();
 	return gateway;

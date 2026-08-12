@@ -6,6 +6,7 @@ import type { AgentCronJob } from "../core/cron-jobs.js";
 /** A normalized, platform-agnostic inbound or outbound message. */
 import type { ActiveModelStore } from "./active-model.js";
 import type { DeliveryLedger } from "./delivery-ledger.js";
+import type { UpdateApply, UpdateCheck } from "./self-update.js";
 
 export interface GatewayMessage {
 	channelId: string;
@@ -56,6 +57,12 @@ export interface GatewayCronCommandApi {
 	removeJob(id: string): AgentCronJob | undefined;
 }
 
+/** The self-update surface the /update command drives (ADR-0034). */
+export interface GatewayUpdateApi {
+	check(): Promise<UpdateCheck>;
+	apply(): Promise<UpdateApply>;
+}
+
 /** A gateway-local command handler (never reaches the model). */
 export interface GatewayCommand {
 	name: string;
@@ -70,6 +77,14 @@ export interface GatewayCommandContext {
 	/** Sessions archive directory for cross-session recall (/search). */
 	/** Per-profile active-model store (/model hotswap); optional. */
 	modelStore?: ActiveModelStore;
+	/** Self-update surface (/update); absent = not configured. */
+	update?: GatewayUpdateApi;
+	/** Deferred action: runs after the command's reply has been delivered. */
+	afterReply?: () => Promise<void> | void;
+	/** Set by a command's deferred action to restart the gateway process. */
+	restartRequested?: boolean;
+	/** Deliver a follow-up to the channel the command arrived on. */
+	deliver?: (text: string) => Promise<void>;
 	sessionsDir?: string;
 	/** Persistent sqlite FTS index file for cross-session recall. */
 	searchIndexPath?: string;

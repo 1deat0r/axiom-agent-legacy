@@ -9,6 +9,7 @@ import { projectsCommand } from "./projects.js";
 import { searchCommand } from "./search.js";
 import { sessionsCommand } from "./sessions.js";
 import { soulCommand } from "./soul.js";
+import { updateCommand } from "./update.js";
 
 /** All gateway-local commands; they never reach the model. */
 export const gatewayCommands: GatewayCommand[] = [
@@ -22,6 +23,7 @@ export const gatewayCommands: GatewayCommand[] = [
 	announceCommand,
 	ledgerCommand,
 	modelCommand,
+	updateCommand,
 ];
 
 export function commandByName(name: string): GatewayCommand | undefined {
