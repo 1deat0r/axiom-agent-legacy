@@ -27,15 +27,25 @@ export interface CliCompletionOptions {
 	bin?: string;
 	/** Print-mode the CLI exposes (`-p`/`--print`). */
 	printFlag?: string;
+	/**
+	 * Bounded wait for one completion before giving up. Completions are
+	 * serialized per channel, so a single hang must not wedge the channel
+	 * forever: if the child neither exits nor finishes within this window we
+	 * kill it and surface an error reply instead of blocking all later
+	 * messages on that channel.
+	 */
+	timeoutMs?: number;
 }
 
 /** Real completion runner: shells the axiom CLI in print mode under --profile. */
 export class CliCompletionRunner implements CompletionRunner {
 	private readonly bin: string;
 	private readonly printFlag: string;
+	private readonly timeoutMs: number;
 	constructor(options: CliCompletionOptions = {}) {
 		this.bin = options.bin ?? process.env.AXIOM_BIN ?? "axiom";
 		this.printFlag = options.printFlag ?? "-p";
+		this.timeoutMs = options.timeoutMs ?? 300_000;
 	}
 	async runCompletion(input: {
 		sessionId: string;
@@ -50,9 +60,16 @@ export class CliCompletionRunner implements CompletionRunner {
 		}
 		try {
 			const stdout = await new Promise<string>((resolve, reject) => {
-				execFile(this.bin, args, { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }, (err, out) =>
+				const child = execFile(this.bin, args, { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }, (err, out) =>
 					err ? reject(err) : resolve(out),
 				);
+				const timer = setTimeout(() => {
+					child.kill("SIGKILL");
+					reject(new Error(`completion timed out after ${this.timeoutMs}ms: ${[this.bin, ...args].join(" ")}`));
+				}, this.timeoutMs);
+				// Don't keep the gateway's event loop alive waiting on the timer
+				// once the child exits or errors normally.
+				timer.unref?.();
 			});
 			return { reply: stdout.trimEnd(), sessionId: input.sessionId };
 		} catch (error) {

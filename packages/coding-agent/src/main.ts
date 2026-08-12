@@ -1739,9 +1739,18 @@ export async function main(args: string[], options?: MainOptions) {
 		});
 		stopThemeWatcher();
 		restoreStdout();
-		if (exitCode !== 0) {
-			process.exitCode = exitCode;
+		// Print mode is a one-shot: once the reply is flushed we must exit
+		// explicitly, or lingering ref'd handles (keep-alive provider sockets,
+		// the detached daemon/worker child) keep the event loop alive and the
+		// process never terminates. That hang breaks execFile-based callers like
+		// the gateway's CliCompletionRunner, which waits for child exit before
+		// delivering a reply ("could not run the agent: Command failed").
+		if (process.stdout.writableLength > 0) {
+			await new Promise<void>((resolve) => process.stdout.once("drain", resolve));
 		}
-		return;
+		if (process.stderr.writableLength > 0) {
+			await new Promise<void>((resolve) => process.stderr.once("drain", resolve));
+		}
+		process.exit(exitCode);
 	}
 }

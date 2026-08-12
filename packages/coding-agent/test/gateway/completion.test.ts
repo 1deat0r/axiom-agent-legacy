@@ -71,3 +71,30 @@ describe("CliCompletionRunner", () => {
 		}
 	});
 });
+
+describe("CliCompletionRunner timeout", () => {
+	it("surfaces an error and kills the child when a completion NEVER exits", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-comp-to-"));
+		try {
+			// A shim that prints nothing and never exits: the exact hang that
+			// once wedged the per-channel queue with "could not run the agent".
+			const bin = join(dir, "hang.mjs");
+			await writeFile(
+				bin,
+				"#!/usr/bin/env node\n" +
+					'import {writeFileSync} from "node:fs";\n' +
+					"writeFileSync(process.env.SHIM_ARGV, 'hang');\n" +
+					"setInterval(() => {}, 60_000);\n",
+			);
+			await chmod(bin, 0o755);
+			process.env.SHIM_ARGV = join(dir, "argv.json");
+			const runner = new CliCompletionRunner({ bin, printFlag: "-p", timeoutMs: 150 });
+			const out = await runner.runCompletion({ sessionId: "gw-hang", prompt: "hi", profile: { name: "default" } });
+			expect(out.reply).toBe("");
+			expect(out.error).toMatch(/timed out after 150ms/);
+		} finally {
+			delete process.env.SHIM_ARGV;
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+});
