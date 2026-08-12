@@ -58,3 +58,20 @@ Non-blocking notes to fold into implementation:
    total) + cost; concrete summaryMaxChars = 2000.
 4. Fallback when final turn has no assistant text: summary = "(no textual summary captured)".
 POST-APPROVAL: fold all 4 into implementation; proceed to implement.
+
+## Implement (steps 4-5)
+- files: types.ts, result.ts, bridge.ts, index.ts; wired into builtInExtensions; test file.
+- delegate.test.ts: 19 neutral tests (stub bridge) pass; 1 live-gated skipped; biome clean;
+  tsgo --noEmit clean; sensitive extension tests (trigger-compact, compaction-extensions,
+  interactive-mode-status) pass.
+- committed 43d31b45a (source + test + log).
+
+## Self-review (impl) — round 1
+Checklist:
+- All planned items present: types/result/bridge/index + builtInExtensions wiring + test. ADR/handoff/summary pending (step 8).
+- Tests pass; assert real behavior (cap truncation, timeout => exactly-once stop, per-call reset,
+  no-transcript keys, error path, clamp).
+- No TODOs/debug prints/dead code; withTimeout attaches settle handlers so a late rejection is safe.
+- Edge cases handled: empty task (throws), timeout (ok:false + stop), error (ok:false + stop),
+  no textual summary (NO_SUMMARY_TEXT fallback), timeoutMs clamp.
+PASS. Proceeding to external review of impl.

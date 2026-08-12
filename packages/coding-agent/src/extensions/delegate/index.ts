@@ -16,7 +16,7 @@
 
 import { type Static, Type } from "typebox";
 import type { ExtensionAPI } from "../../core/extensions/types.js";
-import { createRpcClientBridge, type RpcDelegateBridge } from "./bridge.js";
+import { createRpcClientBridge, parseModelRef, type RpcDelegateBridge } from "./bridge.js";
 import { DEFAULT_SUMMARY_MAX_CHARS, emptyAccounting, renderDelegateResult, toDelegateResult } from "./result.js";
 import type { DelegateResult } from "./types.js";
 
@@ -33,8 +33,9 @@ const DelegateParamsSchema = Type.Object({
 type DelegateParams = Static<typeof DelegateParamsSchema>;
 
 export interface DelegateDeps {
-	/** Factory for one helper process per delegate call. Inject a stub in tests. */
-	bridge(): RpcDelegateBridge;
+	/** Factory for one helper process per delegate call. A model reference
+	 *  ("provider/model") may be supplied to configure the helper. */
+	bridge(model?: string): RpcDelegateBridge;
 	/** Default per-run budget in ms (clamped to MAX_TIMEOUT_MS). */
 	timeoutMs: number;
 	/** Summary cap for the compact block. */
@@ -64,7 +65,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, onTimeout: Error): Prom
 
 export function createDelegateExtension(deps?: Partial<DelegateDeps>): (pi: ExtensionAPI) => void {
 	const resolved: DelegateDeps = {
-		bridge: deps?.bridge ?? (() => createRpcClientBridge()),
+		bridge: deps?.bridge ?? ((model?: string) => createRpcClientBridge(parseModelRef(model))),
 		timeoutMs: deps?.timeoutMs ?? DEFAULT_DEPS.timeoutMs,
 		summaryMaxChars: deps?.summaryMaxChars ?? DEFAULT_DEPS.summaryMaxChars,
 	};
@@ -85,11 +86,15 @@ export function createDelegateExtension(deps?: Partial<DelegateDeps>): (pi: Exte
 				if (!task) {
 					throw new Error("delegate requires a non-empty task");
 				}
-				const requested = typeof params.timeoutMs === "number" ? params.timeoutMs : resolved.timeoutMs;
+				const requested =
+					typeof params.timeoutMs === "number" && Number.isFinite(params.timeoutMs)
+						? params.timeoutMs
+						: resolved.timeoutMs;
 				const timeoutMs = Math.max(1, Math.min(requested, MAX_TIMEOUT_MS));
 
-				// One fresh helper process per call (per-call reset).
-				const bridge = resolved.bridge();
+				// One fresh helper process per call (per-call reset), configured with
+				// the requested model when supplied.
+				const bridge = resolved.bridge(params.model);
 				let result: DelegateResult;
 				try {
 					await bridge.start();

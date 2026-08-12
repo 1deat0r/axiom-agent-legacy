@@ -1,7 +1,7 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { createRpcClientBridge } from "../../src/extensions/delegate/bridge.js";
+import { createRpcClientBridge, parseModelRef } from "../../src/extensions/delegate/bridge.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -237,6 +237,44 @@ describe("createDelegateExtension", () => {
 	it("defaults the timeout to DEFAULT_TIMEOUT_MS", async () => {
 		expect(DEFAULT_TIMEOUT_MS).toBe(120_000);
 		expect(DEFAULT_SUMMARY_MAX_CHARS).toBe(2000);
+	});
+
+	it("parseModelRef parses provider/model, bare model, and empty", () => {
+		expect(parseModelRef("anthropic/claude-sonnet-4-5")).toEqual({
+			provider: "anthropic",
+			model: "claude-sonnet-4-5",
+		});
+		expect(parseModelRef("claude-sonnet-4-5")).toEqual({ model: "claude-sonnet-4-5" });
+		expect(parseModelRef(undefined)).toEqual({});
+		expect(parseModelRef("   ")).toEqual({});
+	});
+
+	it("threads a requested model reference into the helper bridge", async () => {
+		const { pi, tools } = fakePi();
+		const stub = new StubBridge();
+		let seenModel: string | undefined;
+		createDelegateExtension({
+			bridge: (model) => {
+				seenModel = model;
+				return stub;
+			},
+		})(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		await tool.execute!("c1", { task: "t", model: "anthropic/claude-sonnet-4-5" });
+		expect(seenModel).toBe("anthropic/claude-sonnet-4-5");
+	});
+
+	it("clamps non-finite and negative timeouts safely", async () => {
+		const { pi, tools } = fakePi();
+		const stub = new StubBridge();
+		createDelegateExtension({ bridge: () => stub })(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		await tool.execute!("c1", { task: "t", timeoutMs: Number.NaN });
+		expect(stub.runCalls[0]!.timeoutMs).toBe(DEFAULT_TIMEOUT_MS); // non-finite -> default
+		await tool.execute!("c2", { task: "t", timeoutMs: Number.POSITIVE_INFINITY });
+		expect(stub.runCalls[1]!.timeoutMs).toBe(DEFAULT_TIMEOUT_MS); // non-finite -> default
+		await tool.execute!("c3", { task: "t", timeoutMs: -5 });
+		expect(stub.runCalls[2]!.timeoutMs).toBe(1); // negatives floored to 1
 	});
 
 	it("the default export wires real defaults", () => {

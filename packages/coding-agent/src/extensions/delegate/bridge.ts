@@ -38,6 +38,26 @@ export interface RpcClientBridgeOptions {
 }
 
 /**
+ * Parse a "provider/model" (or bare "model") reference into client options.
+ * The tool's `model` param uses this so the helper is actually configured with
+ * the requested model — never merely echoed back unhonored.
+ */
+export function parseModelRef(ref: string | undefined): { provider?: string; model?: string } {
+	if (typeof ref !== "string") {
+		return {};
+	}
+	const trimmed = ref.trim();
+	if (!trimmed) {
+		return {};
+	}
+	const slash = trimmed.indexOf("/");
+	if (slash > 0 && slash < trimmed.length - 1) {
+		return { provider: trimmed.slice(0, slash), model: trimmed.slice(slash + 1) };
+	}
+	return { model: trimmed };
+}
+
+/**
  * Build one helper process backed by `RpcClient` (`--mode rpc`).
  * One instance = one running helper process; the tool constructs, starts,
  * runs, and stops it for each delegate call (per-call reset, never reused).
