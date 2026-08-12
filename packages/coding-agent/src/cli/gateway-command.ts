@@ -11,6 +11,7 @@ import { axiomHome } from "../extensions/profile/registry.js";
 import { JsonChannelIndex } from "../gateway/channel-index.js";
 import { CliCompletionRunner } from "../gateway/completion.js";
 import { loadGatewayConfig } from "../gateway/config.js";
+import { FileDeliveryLedger } from "../gateway/delivery-ledger.js";
 import { Gateway } from "../gateway/gateway.js";
 import { DiscordTransport, FileDiscordCursorStore, HttpDiscordClient } from "../gateway/transports/discord.js";
 import { CliSignalClient, SignalTransport } from "../gateway/transports/signal.js";
@@ -163,6 +164,8 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 		profile,
 		projectHome,
 		senders: config.senders,
+		ledger: new FileDeliveryLedger(join(root, "gateway", "ledger.jsonl")),
+		transportName: opts.transport,
 	});
 	await gateway.start();
 	return gateway;
