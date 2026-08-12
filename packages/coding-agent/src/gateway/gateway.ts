@@ -12,6 +12,7 @@
  * `/cron` delivery at a channel.
  */
 import { join } from "node:path";
+import type { ActiveModelStore } from "./active-model.js";
 import type { ChannelIndex } from "./channel-index.js";
 import { dispatchCommand } from "./commands/index.js";
 import { sessionIdForChannel } from "./completion.js";
@@ -41,6 +42,8 @@ export interface GatewayDeps {
 	sessionsDir?: string;
 	/** Persistent sqlite FTS index file for cross-session recall. */
 	searchIndexPath?: string;
+	/** Per-profile active-model store (/model hotswap). */
+	modelStore?: ActiveModelStore;
 	/** Anchored project root; scopes /search unless --all is given. */
 	projectRoot?: string /** Optional gateway cron manager: lifecycle rides the gateway; /cron drives it. */;
 	cron?: GatewayCronCommandApi & { start(): void; stop(): void };
@@ -73,6 +76,7 @@ export class Gateway {
 	private readonly sessionsDir?: string;
 	private readonly searchIndexPath?: string;
 	private readonly projectRoot?: string;
+	private readonly modelStore: ActiveModelStore | undefined;
 	private readonly cron: (GatewayCronCommandApi & { start(): void; stop(): void }) | undefined;
 	private readonly chains = new Map<string, ChannelChain>();
 	private started = false;
@@ -93,6 +97,7 @@ export class Gateway {
 		this.sessionsDir = deps.sessionsDir;
 		this.searchIndexPath = deps.searchIndexPath;
 		this.projectRoot = deps.projectRoot;
+		this.modelStore = deps.modelStore;
 		this.cron = deps.cron;
 	}
 
@@ -188,6 +193,7 @@ export class Gateway {
 				...(this.sessionsDir ? { sessionsDir: this.sessionsDir } : {}),
 				...(this.searchIndexPath ? { searchIndexPath: this.searchIndexPath } : {}),
 				...(this.projectRoot ? { projectRoot: this.projectRoot } : {}),
+				modelStore: this.modelStore,
 				channelId: msg.channelId,
 				cron: this.cron,
 				ledger: this.ledger,
@@ -207,6 +213,7 @@ export class Gateway {
 			sessionId,
 			prompt: msg.text,
 			profile: { name: this.profile },
+			model: this.modelStore?.load(),
 		});
 		if (result.error) {
 			await this.deliver(

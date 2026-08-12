@@ -116,6 +116,7 @@ export class CliCompletionRunner implements CompletionRunner {
 		sessionId: string;
 		prompt: string;
 		profile: GatewayProfile;
+		model?: { provider: string; model: string };
 	}): Promise<{ reply: string; sessionId: string; error?: string }> {
 		// Always pass --profile so the spawned agent resolves the profile home
 		// (~/.axiom/profiles/<name>, incl. 'default') and reads that profile's
@@ -129,6 +130,12 @@ export class CliCompletionRunner implements CompletionRunner {
 			"--session-id",
 			input.sessionId,
 		];
+		// Active-model hotswap (/model): force the operator's chosen provider+model
+		// on this completion. Provider is optional (empty keeps the profile's).
+		if (input.model) {
+			if (input.model.provider) args.push("--provider", input.model.provider);
+			args.push("--model", input.model.model);
+		}
 		try {
 			// An anchored run (projectRoot set) is OS-confined: the whole child
 			// spawns inside a bubblewrap sandbox (host read-only, project + the
@@ -226,11 +233,15 @@ export class CliCompletionRunner implements CompletionRunner {
 }
 
 /** A canned, injectable completion runner for router/e2e tests. */
-export function fakeCompletionRunner(): CompletionRunner & { calls: Array<{ sessionId: string; prompt: string }> } {
-	const runner: CompletionRunner & { calls: Array<{ sessionId: string; prompt: string }> } = {
+export function fakeCompletionRunner(): CompletionRunner & {
+	calls: Array<{ sessionId: string; prompt: string; model: { provider: string; model: string } | undefined }>;
+} {
+	const runner: CompletionRunner & {
+		calls: Array<{ sessionId: string; prompt: string; model: { provider: string; model: string } | undefined }>;
+	} = {
 		calls: [],
 		async runCompletion(input) {
-			this.calls.push({ sessionId: input.sessionId, prompt: input.prompt });
+			this.calls.push({ sessionId: input.sessionId, prompt: input.prompt, model: input.model });
 			return { reply: `axiom reply to: ${input.prompt}`, sessionId: input.sessionId };
 		},
 	};

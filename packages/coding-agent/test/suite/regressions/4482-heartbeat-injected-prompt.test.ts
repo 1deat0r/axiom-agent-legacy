@@ -28,6 +28,7 @@ type LegacyHeartbeatRenderMode = {
 	toolOutputExpanded: boolean;
 	editor: { addToHistory?: (text: string) => void };
 	getMarkdownThemeWithSettings: () => MarkdownTheme;
+	uiServices: { settingsManager: { getMermaidRendering: () => boolean } };
 };
 
 type MessageStartHandleMode = {
@@ -563,7 +564,7 @@ describe("ENG-4482 heartbeat injected prompt UI", () => {
 			mode.toolOutputExpanded = false;
 			mode.editor = { addToHistory };
 			mode.getMarkdownThemeWithSettings = () => getMarkdownTheme();
-		mode.uiServices = { settingsManager: { getMermaidRendering: () => false } };
+			mode.uiServices = { settingsManager: { getMermaidRendering: () => false } };
 			mode.uiServices = { settingsManager: { getMermaidRendering: () => false } };
 			const message: AgentMessage = {
 				role: "user",

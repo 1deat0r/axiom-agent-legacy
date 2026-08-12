@@ -3,9 +3,10 @@
  * onto the axiom v0.7.2 baseline). One sender channels to one session.
  */
 import type { AgentCronJob } from "../core/cron-jobs.js";
+/** A normalized, platform-agnostic inbound or outbound message. */
+import type { ActiveModelStore } from "./active-model.js";
 import type { DeliveryLedger } from "./delivery-ledger.js";
 
-/** A normalized, platform-agnostic inbound or outbound message. */
 export interface GatewayMessage {
 	channelId: string;
 	sender: string;
@@ -35,7 +36,13 @@ export interface GatewayProfile {
 
 /** Runs one agent completion and returns the reply + the channel's session id. */
 export interface CompletionRunner {
-	runCompletion(input: { sessionId: string; prompt: string; profile: GatewayProfile }): Promise<{
+	runCompletion(input: {
+		sessionId: string;
+		prompt: string;
+		profile: GatewayProfile;
+		/** Optional active-model override (provider/model) from /model. */
+		model?: { provider: string; model: string };
+	}): Promise<{
 		reply: string;
 		sessionId: string;
 		error?: string;
@@ -61,6 +68,8 @@ export interface GatewayCommandContext {
 	axiomHomeDir: string;
 	projectHome: string;
 	/** Sessions archive directory for cross-session recall (/search). */
+	/** Per-profile active-model store (/model hotswap); optional. */
+	modelStore?: ActiveModelStore;
 	sessionsDir?: string;
 	/** Persistent sqlite FTS index file for cross-session recall. */
 	searchIndexPath?: string;

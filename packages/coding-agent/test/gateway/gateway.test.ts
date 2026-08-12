@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { activeModelPath, FileActiveModelStore } from "../../src/gateway/active-model.js";
 import { MemoryChannelIndex } from "../../src/gateway/channel-index.js";
 import { fakeCompletionRunner, sessionIdForChannel } from "../../src/gateway/completion.js";
 import { GatewayCron } from "../../src/gateway/cron.js";
@@ -309,6 +310,47 @@ describe("full /cron path through a real Gateway + GatewayCron", () => {
 			expect(sent.some((s) => s.to === "+555" && s.text === "axiom reply to: nightly report")).toBe(true);
 			// Cron ran on its namespaced session, never the interactive one.
 			expect(cronCompletion.calls[0]?.sessionId).toBe(`cron-${sessionIdForChannel("+555")}`);
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("Gateway /model hotswap", () => {
+	it("threads a /model-set provider+model into the next completion", async () => {
+		const dir = await home("axiom-gw-model-");
+		try {
+			const { t, sent, push } = fakeTransport();
+			const completion = fakeCompletionRunner();
+			const modelStore = new FileActiveModelStore(activeModelPath(dir, "default"));
+			const g = new Gateway({
+				transport: t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+				modelStore,
+			});
+			await g.start();
+			// operator sets the model via /model (a gateway-local command)
+			push({
+				channelId: "+1",
+				sender: "+1",
+				text: "/model deepseek deepseek-v4-pro",
+				isCommand: true,
+				timestamp: 1,
+			});
+			await new Promise((r) => setTimeout(r, 20));
+			expect(sent.some((s) => s.text.includes("model set to deepseek/deepseek-v4-pro"))).toBe(true);
+			// persisted
+			expect(modelStore.load()).toEqual({ provider: "deepseek", model: "deepseek-v4-pro" });
+			// next agent run carries the model
+			push({ channelId: "+1", sender: "+1", text: "hello", isCommand: false, timestamp: 2 });
+			await new Promise((r) => setTimeout(r, 20));
+			expect(completion.calls.length).toBeGreaterThan(0);
+			expect(completion.calls.at(-1)!.model).toEqual({ provider: "deepseek", model: "deepseek-v4-pro" });
+			await g.stop();
 		} finally {
 			await rm(dir, { recursive: true, force: true });
 		}

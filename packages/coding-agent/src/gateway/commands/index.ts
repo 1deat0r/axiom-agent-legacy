@@ -3,6 +3,7 @@ import { announceCommand } from "./announce.js";
 import { cronCommand } from "./cron.js";
 import { helpCommand } from "./help.js";
 import { ledgerCommand } from "./ledger.js";
+import { modelCommand } from "./model.js";
 import { profilesCommand } from "./profiles.js";
 import { projectsCommand } from "./projects.js";
 import { searchCommand } from "./search.js";
@@ -20,6 +21,7 @@ export const gatewayCommands: GatewayCommand[] = [
 	soulCommand,
 	announceCommand,
 	ledgerCommand,
+	modelCommand,
 ];
 
 export function commandByName(name: string): GatewayCommand | undefined {

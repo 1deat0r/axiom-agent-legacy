@@ -32,6 +32,7 @@ const config: SettingsConfig = {
 	clearOnShrink: false,
 	showTerminalProgress: false,
 	fullscreen: true,
+	mermaidRendering: true,
 	warnings: {},
 };
 
@@ -57,6 +58,7 @@ const callbacks: SettingsCallbacks = {
 	onClearOnShrinkChange: () => {},
 	onShowTerminalProgressChange: () => {},
 	onFullscreenChange: () => {},
+	onMermaidRenderingChange: () => {},
 	onWarningsChange: () => {},
 	onCancel: () => {},
 };

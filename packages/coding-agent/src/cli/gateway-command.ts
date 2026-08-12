@@ -10,6 +10,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { getCronJobsPath } from "../config.js";
 import { axiomHome } from "../extensions/profile/registry.js";
+import { activeModelPath, FileActiveModelStore } from "../gateway/active-model.js";
 import { JsonChannelIndex } from "../gateway/channel-index.js";
 import { CliCompletionRunner } from "../gateway/completion.js";
 import { loadGatewayConfig } from "../gateway/config.js";
@@ -206,6 +207,7 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 		cron,
 		ledger,
 		transportName: opts.transport,
+		modelStore: new FileActiveModelStore(activeModelPath(root, profile)),
 		transports: buildFanOutTransports(opts, root),
 	});
 	await gateway.start();

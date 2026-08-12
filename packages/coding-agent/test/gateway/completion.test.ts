@@ -106,6 +106,55 @@ describe("CliCompletionRunner", () => {
 		}
 	});
 
+	it("injects --provider/--model from the /model active-model override", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-model-"));
+		try {
+			const outDir = join(dir, "out");
+			await mkdir(outDir, { recursive: true });
+			const bin = await writeShim(dir, "axiom.mjs", "reply");
+			process.env.SHIM_ARGV = join(outDir, "argv.json");
+			const runner = new CliCompletionRunner({ bin, printFlag: "-p" });
+			await runner.runCompletion({
+				sessionId: "gw-abc",
+				prompt: "hi",
+				profile: { name: "builder" },
+				model: { provider: "deepseek", model: "deepseek-v4-pro" },
+			});
+			const argv = JSON.parse(await readFile(join(outDir, "argv.json"), "utf8")) as string[];
+			expect(argv).toContain("--provider");
+			expect(argv[argv.indexOf("--provider") + 1]).toBe("deepseek");
+			expect(argv).toContain("--model");
+			expect(argv[argv.indexOf("--model") + 1]).toBe("deepseek-v4-pro");
+		} finally {
+			delete process.env.SHIM_ARGV;
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("injects only --model when the override leaves provider empty", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-model-"));
+		try {
+			const outDir = join(dir, "out");
+			await mkdir(outDir, { recursive: true });
+			const bin = await writeShim(dir, "axiom.mjs", "reply");
+			process.env.SHIM_ARGV = join(outDir, "argv.json");
+			const runner = new CliCompletionRunner({ bin, printFlag: "-p" });
+			await runner.runCompletion({
+				sessionId: "gw-abc",
+				prompt: "hi",
+				profile: { name: "builder" },
+				model: { provider: "", model: "deepseek-v4-pro" },
+			});
+			const argv = JSON.parse(await readFile(join(outDir, "argv.json"), "utf8")) as string[];
+			expect(argv).not.toContain("--provider");
+			expect(argv).toContain("--model");
+			expect(argv[argv.indexOf("--model") + 1]).toBe("deepseek-v4-pro");
+		} finally {
+			delete process.env.SHIM_ARGV;
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
 	it.skipIf(!bwrapUsable)(
 		"anchors cwd + AXIOM_PROJECT_ROOT and OS-confines the child (bwrap) when anchored",
 		async () => {
