@@ -408,3 +408,27 @@ env -i PATH="$PATH" HOME="$HOME" AXIOM_HOME="$HOME/.axiom" \
   AXIOM_TELEGRAM_BOT_TOKEN="<token>" MAKORA_API_KEY="$MAKORA_API_KEY" \
   npx tsx packages/coding-agent/src/main.ts gateway --transport telegram --profile default
 ```
+
+# Handoff addendum — Workspace root guard (ADR-0018, rung 3)
+
+**Date:** 2026-08-12. **Loop:** Feature Implementation Loop v2 (fourth feature).
+
+Project isolation's load-bearing rung: a gateway run anchored with `axiom
+gateway --project <name>` enforces the write boundary. The completion child
+spawns with `cwd = projectRoot` + `AXIOM_PROJECT_ROOT`; the new workspace
+guard extension (built-in, inert unless anchored) blocks an `edit` whose
+realpath-resolved path leaves the project root, returning `{block, reason}`
+that surfaces to the model. `--project` is NAME_RE-validated and fails fast
+when the dir is missing. ADR-0018 records the honest boundary: bash/ipython
+confinement (OS tier) and an escape allowlist are documented follow-ups.
+
+## What was verified, and how
+
+- Guard behavior (unit, 12): containment + symlink-escape + new-file + `../`
+  + sibling-prefix + inert-default + env-driven root, on real tmp dirs.
+- Completion anchoring (unit, 1): real spawned child asserts cwd + env.
+- CLI (unit, 3): `--project` parse, invalid-name fail, missing-dir fail-fast.
+- Floor: `./test.sh` 4338 pass / 14 known-environmental fails (EXDEV 4603,
+  FORCE_COLOR-stderr 4685, daemon-refine); biome + tsgo + installer +
+  browser-smoke green. Still no live round-trip of an anchored run (no
+  operator step run this session); boundary verified at the unit level.

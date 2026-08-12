@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Workspace root guard — summary</title>
+<style>
+:root{--accent:#4f46e5;--ink:#1f2937;--muted:#6b7280;--bg:#ffffff;--line:#e5e7eb}
+*{box-sizing:border-box}body{margin:0;font:15px/1.55 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);padding:24px;max-width:760px;margin:0 auto}
+h1{font-size:22px;border-bottom:3px solid var(--accent);padding-bottom:8px}
+h2{font-size:16px;margin:26px 0 8px;color:var(--accent)}
+p{margin:6px 0}.muted{color:var(--muted);font-size:13px}
+code,.c{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;background:#f3f4f6;padding:1px 5px;border-radius:4px}
+ul{margin:6px 0;padding-left:20px}li{margin:4px 0}
+.dim{color:var(--muted)}
+.badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:#eef2ff;color:var(--accent);margin-right:6px}
+hr{border:none;border-top:1px solid var(--line);margin:22px 0}
+.mono-box{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;background:#fafafa;border:1px solid var(--line);border-radius:8px;padding:10px 14px;white-space:pre-wrap}
+</style></head><body>
+
+<h1>Workspace root guard <span class="muted">· ADR-0018</span></h1>
+<div class="muted">Generated 2026-08-12 · Model: the coding agent that developed this repo · Loop v2</div>
+
+<h2>Goal &amp; assumptions</h2>
+<p>Implement ADR-0014 rung-3 project isolation: when a run is anchored to a project, an <code>edit</code> whose resolved path leaves the project root is blocked with a plain-English reason surfaced to the model; the completion child runs with <code>cwd&nbsp;=&nbsp;root</code> and <code>AXIOM_PROJECT_ROOT</code> set; tests fail without the guard.</p>
+<p><span class="badge">A1</span>Only the structured <code>edit</code> tool carries a reliably resolvable path; <code>bash</code>/<code>ipython</code> are freeform and are the ADR OS-sandbox tier (follow-up), recorded not faked.</p>
+<p><span class="badge">A2</span>Guard is inert unless <code>AXIOM_PROJECT_ROOT</code> is set → no impact on ordinary runs.</p>
+<p><span class="badge">A3</span>Reads/context drift are rung-2 (per-project memory); rung-3 targets writes.</p>
+<p><span class="badge">A4</span><code>--project</code> requires an existing dir; fails fast like the telegram-token rule.</p>
+
+<h2>Plan as executed</h2>
+<ul>
+<li><b>P1</b> Resolver <code>guard.ts</code> (isWithin/realpathX) — 6 resolver tests, red-first.</li>
+<li><b>P2</b> Handler <code>workspace/index.ts</code> — 7 handler tests (allow/block/inert/env).</li>
+<li><b>P3</b> Wire <code>builtInExtensions</code> (main.ts:1072) — <code>tsgo</code> clean.</li>
+<li><b>P4</b> <code>completion.ts</code> spawn cwd+env; new shim asserts real child cwd+env.</li>
+<li><b>P5</b> CLI <code>--project</code> in <code>gateway-command.ts</code> — 3 new tests.</li>
+<li><b>P6</b> ADR-0018 + CONTEXT.md vocabulary.</li>
+<li><b>P7</b> Floor <code>./test.sh</code> + biome + tsgo.</li>
+</ul>
+
+<h2>Key decisions</h2>
+<ul>
+<li>Guard is <b>default-inert</b>: no root → no-op, minimal blast radius (A2).</li>
+<li><b>Both root and target realpath-normalized</b> (symlinked root / symlink-escape caught); new files resolve to nearest existing ancestor and rebase.</li>
+<li>Block returns <code>{block, reason}</code> → becomes an error tool-result (agent-loop.prepareToolCall:827) naming the allowed root.</li>
+<li><b>Lifecycle:</b> one gateway process = one profile = (when anchored) one project; root read at child boot.</li>
+<li>Honest boundary: <code>bash</code>/<code>ipython</code> confinement and a per-project <b>escape allowlist</b> are recorded ADR follow-ups, not shipped.</li>
+</ul>
+
+<h2>Verification evidence</h2>
+<div class="mono-box">workspace  12/12 green   (resolver + handler; real tmp files/symlinks)
+completion  9/9  green   (incl. new cwd+AXIOM_PROJECT_ROOT anchor test)
+gateway-command 13/14 green (sole fail = pre-existing 'telegram no token',
+                             sandbox env exposes AXIOM_TELEGRAM_BOT_TOKEN; passes under test.sh scrub)
+floor  ./test.sh  4338 pass / 14 fail — ALL known-environmental
+        (EXDEV 4603 hard-link, FORCE_COLOR stderr 4685, daemon-refine)
+biome   clean · tsgo --noEmit clean · installer + browser-smoke green
+new tests +16</div>
+<p class="muted">Red-first confirmed: resolver suite failed on missing module before implementation; each behavior test would fail without its change.</p>
+
+<h2>Review history</h2>
+<ul>
+<li><span class="badge">plan r1</span><b>91/100 APPROVED</b> (self-posed skeptic; no external sub-agent — daemon disabled, ADR-0015, recorded). Fixes: allowlist+OS-tier named as follow-ups; realpath root+target consistently; NAME_RE validate <code>--project</code>; usage string updated.</li>
+<li><span class="badge">impl r1</span><b>92/100 APPROVED</b> — plan items P1–P7 all mapped to diff evidence; tests verified; 1 pre-existing env-known-fail.</li>
+</ul>
+
+<h2>Final state</h2>
+<p>Committed in 4 green steps on <code>baseline/prime-v0.7.2</code>: <span class="c">124e7b3f9</span> (guard+ext), <span class="c">c89b5cd6c</span> (completion anchor), <span class="c">366ef3c03</span> (CLI <code>--project</code>), <span class="c">047196868</span> (ADR-0018 + vocabulary). Cross-project <b>write</b> drift via <code>edit</code> is now impossible on an anchored run; <code>bash</code>/<code>ipython</code> OS confinement and the escape allowlist remain the documented follow-ups.</p>
+
+</body></html>
