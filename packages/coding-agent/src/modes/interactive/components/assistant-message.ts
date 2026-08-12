@@ -10,6 +10,7 @@ import {
 	visibleWidth,
 } from "@earendil-works/pi-tui";
 import { LOGIN_RECOVERY_MESSAGE } from "../../../core/auth-guidance.js";
+import { transformMermaidBlocks } from "../../../core/mermaid-transform.js";
 import { getMarkdownTheme, theme } from "../theme/theme.js";
 import {
 	CollapsibleErrorComponent,
@@ -27,6 +28,8 @@ const LOGIN_RECOVERY_SUFFIX = `\n\n${LOGIN_RECOVERY_MESSAGE}`;
 export interface AssistantMessageComponentOptions {
 	expanded?: boolean;
 	precededByToolActivity?: boolean;
+	/** Render mermaid code blocks as diagrams (default off when unset). */
+	mermaidRendering?: boolean;
 }
 
 function getThinkingMarkdownTheme(baseTheme: MarkdownTheme): MarkdownTheme {
@@ -113,6 +116,19 @@ function formatInlineLoginRecoveryMessage(message: string): string | undefined {
 export class AssistantMessageComponent extends Container {
 	private contentContainer: Container;
 	private hideThinkingBlock: boolean;
+	/** Width-aware mermaid fence -> Unicode art transform (settings-gated). */
+	private transformMermaid(text: string, width: number): string {
+		return transformMermaidBlocks(text, {
+			enabled: this.mermaidRendering,
+			maxWidth: width,
+			theme: {
+				border: (line) => theme.fg("dim", line),
+				edge: (line) => theme.fg("accent", line),
+				title: (line) => theme.bold(theme.fg("dim", line)),
+			},
+		});
+	}
+
 	private markdownTheme: MarkdownTheme;
 	private hiddenThinkingLabel: string;
 	private lastMessage?: AssistantMessage;
@@ -123,6 +139,7 @@ export class AssistantMessageComponent extends Container {
 	private blockMarkdowns = new Map<number, Markdown>();
 	private lastBlockTexts = new Map<number, string>();
 	private precededByToolActivity: boolean;
+	private mermaidRendering = false;
 
 	constructor(
 		message?: AssistantMessage,
@@ -138,6 +155,7 @@ export class AssistantMessageComponent extends Container {
 		this.hiddenThinkingLabel = hiddenThinkingLabel;
 		this.expanded = options.expanded ?? false;
 		this.precededByToolActivity = options.precededByToolActivity ?? false;
+		this.mermaidRendering = options.mermaidRendering ?? false;
 
 		// Container for text/thinking content
 		this.contentContainer = new Container();
@@ -272,7 +290,9 @@ export class AssistantMessageComponent extends Container {
 			if (content.type === "text" && content.text.trim()) {
 				// Assistant text messages with no background - trim the text
 				// Set paddingY=0 to avoid extra spacing before tool executions
-				const markdown = new Markdown(content.text.trim(), 1, 0, this.markdownTheme);
+				const markdown = new Markdown(content.text.trim(), 1, 0, this.markdownTheme, undefined, (text, width) =>
+					this.transformMermaid(text, width),
+				);
 				this.blockMarkdowns.set(i, markdown);
 				this.lastBlockTexts.set(i, content.text.trim());
 				this.contentContainer.addChild(markdown);

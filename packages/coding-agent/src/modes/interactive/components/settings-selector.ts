@@ -38,6 +38,7 @@ export interface SettingsConfig {
 	blockImages: boolean;
 	enableSkillCommands: boolean;
 	enableBuiltinSkills: boolean;
+	mermaidRendering: boolean;
 	steeringMode: "all" | "one-at-a-time";
 	followUpMode: "all" | "one-at-a-time";
 	transport: Transport;
@@ -65,6 +66,7 @@ export interface SettingsCallbacks {
 	onBlockImagesChange: (blocked: boolean) => void;
 	onEnableSkillCommandsChange: (enabled: boolean) => void;
 	onEnableBuiltinSkillsChange: (enabled: boolean) => void;
+	onMermaidRenderingChange: (enabled: boolean) => void;
 	onSteeringModeChange: (mode: "all" | "one-at-a-time") => void;
 	onFollowUpModeChange: (mode: "all" | "one-at-a-time") => void;
 	onTransportChange: (transport: Transport) => void;
@@ -383,6 +385,16 @@ export class SettingsSelectorComponent extends Container {
 			values: ["true", "false"],
 		});
 
+		// Mermaid rendering toggle (insert after builtin-skills)
+		const builtinSkillsItemIndex = items.findIndex((item) => item.id === "builtin-skills");
+		items.splice(builtinSkillsItemIndex + 1, 0, {
+			id: "mermaid-rendering",
+			label: "Mermaid diagrams",
+			description: "Render mermaid code blocks as diagrams in the transcript (takes effect after reload)",
+			currentValue: config.mermaidRendering ? "true" : "false",
+			values: ["true", "false"],
+		});
+
 		// Hardware cursor toggle (insert after builtin-skills)
 		const skillCommandsIndex = items.findIndex((item) => item.id === "builtin-skills");
 		items.splice(skillCommandsIndex + 1, 0, {
@@ -472,6 +484,7 @@ export class SettingsSelectorComponent extends Container {
 						break;
 					case "builtin-skills":
 						callbacks.onEnableBuiltinSkillsChange(newValue === "true");
+						callbacks.onMermaidRenderingChange(newValue === "true");
 						break;
 					case "steering-mode":
 						callbacks.onSteeringModeChange(newValue as "all" | "one-at-a-time");

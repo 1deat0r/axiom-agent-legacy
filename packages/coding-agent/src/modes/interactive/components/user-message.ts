@@ -1,4 +1,5 @@
 import { Box, type Component, Container, Markdown, type MarkdownTheme, visibleWidth } from "@earendil-works/pi-tui";
+import { transformMermaidBlocks } from "../../../core/mermaid-transform.js";
 import { parseSlashCommand } from "../../../core/slash-commands.js";
 import { getMarkdownTheme, theme } from "../theme/theme.js";
 import { isLeadingSlashCommand } from "./slash-command-message.js";
@@ -12,11 +13,24 @@ const COMMAND_MASK_ZERO_WIDTH = "\u2060";
 const COMMAND_MASK_PATTERN = /\u2060|\uE000\uFF9E*/gu;
 const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
+function mermaidTransform() {
+	return (text: string, width: number) =>
+		transformMermaidBlocks(text, {
+			enabled: true,
+			maxWidth: width,
+			theme: {
+				border: (line) => theme.fg("dim", line),
+				edge: (line) => theme.fg("accent", line),
+				title: (line) => theme.bold(theme.fg("dim", line)),
+			},
+		});
+}
+
 class SlashCommandMarkdown implements Component {
 	private readonly markdown: Markdown;
 	private readonly commandGraphemes: string[];
 
-	constructor(text: string, markdownTheme: MarkdownTheme) {
+	constructor(text: string, markdownTheme: MarkdownTheme, mermaidRendering = false) {
 		const parsed = parseSlashCommand(text);
 		const commandEnd = parsed ? parsed.name.length + 1 : text.length;
 		this.commandGraphemes = [...graphemeSegmenter.segment(text.slice(0, commandEnd))].map(({ segment }) => segment);
@@ -28,9 +42,16 @@ class SlashCommandMarkdown implements Component {
 					: COMMAND_MASK_BASE + COMMAND_MASK_EXTRA_WIDTH.repeat(width - 1);
 			})
 			.join("");
-		this.markdown = new Markdown(`${placeholder}${text.slice(commandEnd)}`, 0, 0, markdownTheme, {
-			color: (content: string) => theme.fg("userMessageText", content),
-		});
+		this.markdown = new Markdown(
+			`${placeholder}${text.slice(commandEnd)}`,
+			0,
+			0,
+			markdownTheme,
+			{
+				color: (content: string) => theme.fg("userMessageText", content),
+			},
+			mermaidRendering ? mermaidTransform() : undefined,
+		);
 	}
 
 	render(width: number): string[] {
@@ -63,15 +84,23 @@ export class UserMessageComponent extends Container {
 		text: string,
 		markdownTheme: MarkdownTheme = getMarkdownTheme(),
 		isRecognizedSlashCommand: (name: string) => boolean = () => false,
+		mermaidRendering = false,
 	) {
 		super();
 		this.contentBox = new Box(2, 1, (content: string) => theme.getUserMessageBackgroundColor()(content));
 		this.contentBox.addChild(
 			isLeadingSlashCommand(text, isRecognizedSlashCommand)
-				? new SlashCommandMarkdown(text, markdownTheme)
-				: new Markdown(text, 0, 0, markdownTheme, {
-						color: (content: string) => theme.fg("userMessageText", content),
-					}),
+				? new SlashCommandMarkdown(text, markdownTheme, mermaidRendering)
+				: new Markdown(
+						text,
+						0,
+						0,
+						markdownTheme,
+						{
+							color: (content: string) => theme.fg("userMessageText", content),
+						},
+						mermaidRendering ? mermaidTransform() : undefined,
+					),
 		);
 		this.addChild(this.contentBox);
 	}

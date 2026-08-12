@@ -186,6 +186,7 @@ export class Markdown implements Component {
 	private defaultTextStyle?: DefaultTextStyle;
 	private theme: MarkdownTheme;
 	private defaultStylePrefix?: string;
+	private readonly transform?: (text: string, width: number) => string;
 
 	// Cache for rendered output
 	private cachedText?: string;
@@ -204,12 +205,14 @@ export class Markdown implements Component {
 		paddingY: number,
 		theme: MarkdownTheme,
 		defaultTextStyle?: DefaultTextStyle,
+		transform?: (text: string, width: number) => string,
 	) {
 		this.text = text;
 		this.paddingX = paddingX;
 		this.paddingY = paddingY;
 		this.theme = theme;
 		this.defaultTextStyle = defaultTextStyle;
+		this.transform = transform;
 	}
 
 	setText(text: string): void {
@@ -233,8 +236,12 @@ export class Markdown implements Component {
 	}
 
 	render(width: number): string[] {
+		// The optional transform (e.g. mermaid -> Unicode art) is width-aware and
+		// runs before parsing; the cache keys on its output so width changes and
+		// streaming appends re-render correctly.
+		const preParseText = this.transform ? this.transform(this.text, width) : this.text;
 		// Check cache
-		if (this.cachedLines && this.cachedText === this.text && this.cachedWidth === width) {
+		if (this.cachedLines && this.cachedText === preParseText && this.cachedWidth === width) {
 			return this.cachedLines;
 		}
 
@@ -246,14 +253,14 @@ export class Markdown implements Component {
 			const result: string[] = [];
 			this.selectionRegions = [];
 			// Update cache
-			this.cachedText = this.text;
+			this.cachedText = preParseText;
 			this.cachedWidth = width;
 			this.cachedLines = result;
 			return result;
 		}
 
 		// Replace tabs with 3 spaces for consistent rendering
-		const normalizedText = this.text.replace(/\t/g, "   ");
+		const normalizedText = preParseText.replace(/\t/g, "   ");
 
 		// Parse markdown to HTML-like tokens
 		const tokens = pickMarkdownParser(normalizedText).lexer(normalizedText);

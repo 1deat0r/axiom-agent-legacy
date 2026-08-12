@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
-import { homedir } from "os";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { homedir, tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SettingsManager } from "../src/core/settings-manager.js";
@@ -577,5 +577,33 @@ describe("SettingsManager", () => {
 
 			expect(manager.getTelemetryEnabled()).toBe(false);
 		});
+	});
+});
+
+describe("mermaid rendering setting", () => {
+	function managerWithHome(): { manager: SettingsManager; dir: string } {
+		const dir = mkdtempSync(join(tmpdir(), "axiom-settings-mermaid-"));
+		return { manager: SettingsManager.create(dir, join(dir, "agent")), dir };
+	}
+
+	it("defaults to enabled", () => {
+		const { manager, dir } = managerWithHome();
+		try {
+			expect(manager.getMermaidRendering()).toBe(true);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("persists the toggle through the global settings", () => {
+		const { manager, dir } = managerWithHome();
+		try {
+			manager.setMermaidRendering(false);
+			expect(manager.getMermaidRendering()).toBe(false);
+			manager.setMermaidRendering(true);
+			expect(manager.getMermaidRendering()).toBe(true);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 });

@@ -151,6 +151,7 @@ export interface Settings {
 	prompts?: string[]; // Array of local prompt template paths or directories
 	themes?: string[]; // Array of local theme file paths or directories
 	enableSkillCommands?: boolean; // default: true - register skills as /skill:name commands
+	mermaidRendering?: boolean; // default: true - render mermaid code blocks as diagrams
 	bundledSkills?: BundledSkillsSettings; // Configure built-in skills shipped with Axiom
 	enableBuiltinSkills?: boolean; // default: true - load built-in skills shipped with axiom
 	terminal?: TerminalSettings;
@@ -1074,6 +1075,17 @@ export class SettingsManager {
 
 	getEnableSkillCommands(): boolean {
 		return this.settings.enableSkillCommands ?? true;
+	}
+
+	/** Render mermaid code blocks as diagrams in the transcript (default on). */
+	getMermaidRendering(): boolean {
+		return this.settings.mermaidRendering ?? true;
+	}
+
+	setMermaidRendering(enabled: boolean): void {
+		this.globalSettings.mermaidRendering = enabled;
+		this.markModified("mermaidRendering");
+		this.save();
 	}
 
 	setEnableSkillCommands(enabled: boolean): void {

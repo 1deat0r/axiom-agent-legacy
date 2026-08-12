@@ -5745,6 +5745,7 @@ export class InteractiveMode {
 				precededByToolActivity:
 					this.chatContainer.children.at(-1) instanceof ToolExecutionComponent ||
 					this.chatContainer.children.at(-1) instanceof AgentMessageComponent,
+				mermaidRendering: this.settingsManager.getMermaidRendering(),
 			},
 		);
 		this.streamingMessage = message;
@@ -6235,8 +6236,11 @@ export class InteractiveMode {
 			this.chatContainer.addChild(new Spacer(1));
 		}
 		this.chatContainer.addChild(
-			new UserMessageComponent(text, this.getMarkdownThemeWithSettings(), (name) =>
-				this.isRecognizedSlashCommand(name),
+			new UserMessageComponent(
+				text,
+				this.getMarkdownThemeWithSettings(),
+				(name) => this.isRecognizedSlashCommand(name),
+				this.settingsManager.getMermaidRendering(),
 			),
 		);
 	}
@@ -6363,6 +6367,7 @@ export class InteractiveMode {
 								skillBlock.userMessage,
 								this.getMarkdownThemeWithSettings(),
 								(name) => this.isRecognizedSlashCommand(name),
+								this.settingsManager.getMermaidRendering(),
 							);
 							this.chatContainer.addChild(userComponent);
 						}
@@ -6371,6 +6376,7 @@ export class InteractiveMode {
 							textContent,
 							this.getMarkdownThemeWithSettings(),
 							(name) => this.isRecognizedSlashCommand(name),
+							this.settingsManager.getMermaidRendering(),
 						);
 						this.chatContainer.addChild(userComponent);
 					}
@@ -6391,6 +6397,7 @@ export class InteractiveMode {
 						precededByToolActivity:
 							this.chatContainer.children.at(-1) instanceof ToolExecutionComponent ||
 							this.chatContainer.children.at(-1) instanceof AgentMessageComponent,
+						mermaidRendering: this.settingsManager.getMermaidRendering(),
 					},
 				);
 				this.chatContainer.addChild(assistantComponent);
@@ -7499,6 +7506,7 @@ export class InteractiveMode {
 					blockImages: this.settingsManager.getBlockImages(),
 					enableSkillCommands: this.settingsManager.getEnableSkillCommands(),
 					enableBuiltinSkills: this.settingsManager.getEnableBuiltinSkills(),
+					mermaidRendering: this.settingsManager.getMermaidRendering(),
 					steeringMode: state.steeringMode,
 					followUpMode: state.followUpMode,
 					transport: this.settingsManager.getTransport(),
@@ -7549,6 +7557,9 @@ export class InteractiveMode {
 					onEnableBuiltinSkillsChange: (enabled) => {
 						this.settingsManager.setEnableBuiltinSkills(enabled);
 						void this.handleReloadCommand();
+					},
+					onMermaidRenderingChange: (enabled) => {
+						this.settingsManager.setMermaidRendering(enabled);
 					},
 					onSteeringModeChange: (mode) => {
 						this.patchConnectionState({ steeringMode: mode });
