@@ -75,3 +75,20 @@ Checklist:
 - Edge cases handled: empty task (throws), timeout (ok:false + stop), error (ok:false + stop),
   no textual summary (NO_SUMMARY_TEXT fallback), timeoutMs clamp.
 PASS. Proceeding to external review of impl.
+
+## External review (impl) — round 1 — DENY 84/100
+Reviewer: RLM subagent delegate-impl-reviewer. Correctness 4, Fit 4, Testability 4, Risk 4,
+Clarity 5 -> 84/100 DENY. Two exact fixes:
+1. `model` param declared + echoed into helper.model but NOT applied to the helper.
+2. timeout clamp mishandles non-finite (NaN -> setTimeout ~0 instant false timeout).
+FIXED in commit 9f4fe96fb: thread model via parseModelRef into createRpcClientBridge on the default
+factory (+ test), guard clamp with Number.isFinite (NaN/Infinity -> default) and floor negatives to 1
+(+ tests).
+
+## External review (impl) — round 2 — APPROVE 96/100
+Reviewer: RLM subagent delegate-impl-reviewer-2. Both fixes verified in source + independent test run
+(22 passed / 1 live-gated skipped). Correctness 5, Fit 5, Testability 5, Risk 4 (real helper-process
+path only live-gated), Clarity 5 -> 96/100 APPROVE. No new blocking issues.
+
+## Docs + summary
+ADR-0028, handoff-delegate-tool.md, summary-delegate-tool.html built from this log.

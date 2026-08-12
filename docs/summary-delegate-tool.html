@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Axiom — Delegate tool (feature #5, first step)</title>
+<style>
+  :root{--accent:#7c3aed;}
+  *{box-sizing:border-box}
+  body{margin:0 auto;max-width:760px;padding:24px 16px 48px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1a1a1a;line-height:1.5}
+  header{border-bottom:2px solid var(--accent);padding-bottom:12px;margin-bottom:20px}
+  header h1{margin:0;font-size:1.3rem;color:var(--accent)}
+  header .meta{font-size:.8rem;color:#555;margin-top:6px;font-family:ui-monospace,Menlo,monospace}
+  h2{font-size:1rem;color:var(--accent);margin:28px 0 8px;border-bottom:1px solid #ddd;padding-bottom:4px}
+  p,li{font-size:.92rem}
+  ul{margin:4px 0 8px;padding-left:20px}
+  code{font-family:ui-monospace,Menlo,monospace;background:#f4f2fb;border-radius:4px;padding:1px 5px;font-size:.82rem}
+  table{border-collapse:collapse;width:100%;font-size:.85rem;margin:8px 0}
+  th,td{border:1px solid #ddd;padding:5px 8px;text-align:left;vertical-align:top}
+  th{background:#f7f5ff;color:var(--accent)}
+  .badge{display:inline-block;font-weight:700;padding:1px 7px;border-radius:10px;color:#fff;font-size:.75rem}
+  .ok{background:#16a34a}.deny{background:#dc2626}.skip{background:#94a3b8}
+  @media print{body{max-width:100%}h2{page-break-after:avoid}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Axiom — Delegate tool (feature #5: Delegate + script-as-tool RPC)</h1>
+  <div class="meta">Generated 2026-08-12 · model: Axiom coding agent (feature loop v2) · reviewers: RLM subagents (delegate-plan-reviewer, delegate-impl-reviewer[2]) · branch feat/delegate-rpc</div>
+</header>
+
+<h2>Goal &amp; assumptions</h2>
+<p>A <code>delegate</code> tool that spawns an <b>isolated helper process</b> (existing <code>--mode rpc</code> / <code>RpcClient</code> bridge), runs one bounded task inside it, and returns to the parent session <b>only a compact result block</b> <code>{ok, summary, tokens, cost, helper?, error?}</code> — a multi-step pipeline collapses into one zero-context-cost turn; the helper's intermediate calls never enter the parent context. Assumption: &ldquo;helper process&rdquo; = the existing RPC bridge (least new surface, literal process spawn), not the async RLM message model (kept for fire-and-forget).</p>
+
+<h2>Plan as executed</h2>
+<ul>
+  <li><code>extensions/delegate/types.ts</code> — compact block + params types.</li>
+  <li><code>extensions/delegate/result.ts</code> — pure <code>capSummary</code>/<code>toDelegateResult</code> (no-transcript guarantee).</li>
+  <li><code>extensions/delegate/bridge.ts</code> — narrow injected <code>RpcDelegateBridge</code> + <code>createRpcClientBridge</code> over <code>RpcClient</code>; <code>parseModelRef</code>.</li>
+  <li><code>extensions/delegate/index.ts</code> — <code>delegate</code> tool (injectable bridge, timeout clamp, finally-<code>stop</code>).</li>
+  <li><code>extensions/index.ts</code> — registered in <code>builtInExtensions</code>.</li>
+  <li><code>test/extensions/delegate.test.ts</code> — 22 neutral (stub bridge) + 1 live-gated.</li>
+  <li>Docs — <code>ADR-0028</code>, handoff, running log, this page.</li>
+</ul>
+
+<h2>Key decisions</h2>
+<ul>
+  <li>Reuse the existing <code>RpcClient</code>/<code>--mode rpc</code> process bridge rather than extending the async RLM message model.</li>
+  <li>Per-call fresh helper process: start → runTask → <code>stop()</code> in <code>finally</code> (no cross-call state, no orphan on error/timeout).</li>
+  <li>Compact block reports only <b>recorded</b> tokens/cost from <code>SessionStats</code> (never guessed — ADR-0010 ethos).</li>
+  <li>Injected bridge keeps neutral tests deterministic (no process, no keys); genuine process path is live-gated.</li>
+  <li>Honor the requested <code>model</code> param via <code>parseModelRef</code> (not merely echoed).</li>
+</ul>
+
+<h2>Verification evidence</h2>
+<table>
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td><code>delegate.test.ts</code> (stub bridge)</td><td>22 passed / 1 skipped <span class="badge ok">green</span></td></tr>
+  <tr><td>live-gated real bridge (needs API keys)</td><td>1 skipped in neutral suite <span class="badge skip">skipped</span></td></tr>
+  <tr><td><code>tsgo --noEmit</code></td><td>clean <span class="badge ok">green</span></td></tr>
+  <tr><td><code>biome check</code> (changed files)</td><td>clean <span class="badge ok">green</span></td></tr>
+  <tr><td>sensitive ext tests (trigger-compact, compaction-extensions, interactive-mode-status)</td><td>152 passed / 8 skipped, no regression <span class="badge ok">green</span></td></tr>
+</table>
+<p>Behavior tests that would fail without the change: capSummary truncation (no transcript), ok/error shape with <b>no raw messages</b> in the block, timeout with a never-resolving stub returns <code>ok:false</code> and <code>stop()</code> exactly once (no orphan), per-call fresh bridge (built===2), model threading, and clamp of NaN/Infinity/negative timeouts.</p>
+
+<h2>Review history</h2>
+<table>
+  <tr><th>Stage</th><th>Round</th><th>Score</th><th>Verdict</th><th>What was fixed</th></tr>
+  <tr><td>Plan</td><td>1</td><td>94/100</td><td class="badge ok">APPROVE</td><td>— (folded 4 non-blocking notes below)</td></tr>
+  <tr><td>Impl</td><td>1</td><td>84/100</td><td class="badge deny">DENY</td><td>1) <code>model</code> now threaded into helper via <code>parseModelRef</code>; 2) clamp guards <code>Number.isFinite</code> (NaN/Infinity→default), negatives floor to 1ms.</td></tr>
+  <tr><td>Impl</td><td>2</td><td>96/100</td><td class="badge ok">APPROVE</td><td>— both fixes verified in source + independent test run; no new issues.</td></tr>
+</table>
+<p>Rubric: Correctness · Fit · Testability · Risk · Clarity (5×20=100). Plan notes folded in: per-call reset = one fresh process; use existing <code>getLastAssistantText()</code>; define <code>DelegateTokenAccounting</code> (= <code>SessionStats.tokens</code> + cost) and <code>summaryMaxChars=2000</code>; fallback for tool-only final turns = &ldquo;(no textual summary captured)&rdquo;.</p>
+
+<h2>Final state</h2>
+<p>The <code>delegate</code> tool ships on branch <code>feat/delegate-rpc</code> (commits <code>43d31b45a</code>, <code>9f4fe96fb</code>). Neutral suite green, biome + tsgo clean. Live process-spawn path is operator/pass-gated and the live-gated test runs where API keys exist. Follow-ups (honest): propagate the parent's live provider/model selection; pollute-free live cross-provider pass; batch/parallel delegation (<code>async_delegation</code>); surface <code>helper.sessionId</code> + files written.</p>
+
+</body>
+</html>
