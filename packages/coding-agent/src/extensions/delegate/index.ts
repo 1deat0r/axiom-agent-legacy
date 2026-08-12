@@ -81,7 +81,7 @@ export function createDelegateExtension(deps?: Partial<DelegateDeps>): (pi: Exte
 				"receive a short summary plus honest token/cost accounting. " +
 				"Parameters: task (required instruction), optional name, model, timeoutMs.",
 			parameters: DelegateParamsSchema,
-			execute: async (_toolCallId, params: DelegateParams) => {
+			execute: async (_toolCallId, params: DelegateParams, _signal, _onUpdate, ctx) => {
 				const task = (params.task ?? "").trim();
 				if (!task) {
 					throw new Error("delegate requires a non-empty task");
@@ -92,9 +92,16 @@ export function createDelegateExtension(deps?: Partial<DelegateDeps>): (pi: Exte
 						: resolved.timeoutMs;
 				const timeoutMs = Math.max(1, Math.min(requested, MAX_TIMEOUT_MS));
 
+				// Resolve the helper model: an explicit `model` param wins; otherwise
+				// default to the parent's LIVE model (ctx.model) so the helper follows
+				// the session instead of drifting to the tool default.
+				const viaParam = params.model?.trim() || undefined;
+				const viaParent = ctx?.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
+				const effectiveModel = viaParam ?? viaParent;
+
 				// One fresh helper process per call (per-call reset), configured with
-				// the requested model when supplied.
-				const bridge = resolved.bridge(params.model);
+				// the resolved model when available.
+				const bridge = resolved.bridge(effectiveModel);
 				let result: DelegateResult;
 				try {
 					await bridge.start();
@@ -106,7 +113,11 @@ export function createDelegateExtension(deps?: Partial<DelegateDeps>): (pi: Exte
 							summary: run.lastAssistantText,
 							tokens: run.stats.tokens ?? emptyAccounting(),
 							cost: run.stats.cost,
-							helper: { name: params.name, model: params.model },
+							helper: {
+								name: params.name,
+								model: effectiveModel,
+								sessionId: run.stats.sessionId,
+							},
 						},
 						resolved.summaryMaxChars,
 					);

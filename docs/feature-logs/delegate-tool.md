@@ -100,3 +100,22 @@ known-fails (daemon-serialized-refine 1, 4603-worker-recovery 4,
 kernel-agent-message-skill (agent_message broadcast receipts, 30s timeout), is a
 parallel-load flake: it references none of this change and passes 7/7 standalone
 (2.85s). NO new regressions. biome clean, tsgo clean, delegate suite 22 green.
+
+## Continuation — closing the live-model + identity gap (feature #5, still open)
+First step was complete; feature #5's later steps remain. Continue with sandbox-doable
+increments toward full implementation:
+- (A) Propagate the PARENT's live provider/model into the helper by default (ctx.model),
+      falling back to an explicit `model` param when supplied — fixes the residual gap the
+      impl-reviewer docked. Surfaced as helper.model = the model actually used.
+- (B) Surface helper.sessionId (from helper SessionStats) in the compact block.
+- (C, later) batch/parallel async_delegation + delegation_output_schema.
+
+## Increment (A)+(B) — live model propagation + helper identity
+- execute now reads ctx (ExtensionContext) and resolves the helper model: explicit `model`
+  param wins, else defaults to the parent's LIVE model (ctx.model provider/id). Surfaced as
+  helper.model = the model actually used. helper.sessionId surfaced from helper SessionStats.
+- tests: 24 neutral passed / 1 live-gated skipped; tsgo clean; biome clean.
+- self-review: parent-live-model fallback + sessionId surfacing each have a test that fails
+  without the change; explicit param wins; empty model param falls through to parent; additive
+  (execute ctx is optional in tests). No dead code.
+COMMIT: git commit the increment.

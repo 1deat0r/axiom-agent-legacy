@@ -113,7 +113,10 @@ describe("toDelegateResult", () => {
 // ============================================================================
 
 function fakePi() {
-	const tools: Array<{ name: string; execute?: (id: string, p: unknown) => Promise<unknown> }> = [];
+	const tools: Array<{
+		name: string;
+		execute?: (id: string, p: unknown, signal?: unknown, onUpdate?: unknown, ctx?: unknown) => Promise<unknown>;
+	}> = [];
 	const pi = {
 		registerTool: (tool: { name: string; execute: (id: string, p: unknown) => Promise<unknown> }) => {
 			tools.push(tool);
@@ -275,6 +278,42 @@ describe("createDelegateExtension", () => {
 		expect(stub.runCalls[1]!.timeoutMs).toBe(DEFAULT_TIMEOUT_MS); // non-finite -> default
 		await tool.execute!("c3", { task: "t", timeoutMs: -5 });
 		expect(stub.runCalls[2]!.timeoutMs).toBe(1); // negatives floored to 1
+	});
+
+	it("falls back to the parent's live model via ctx when no model param is given", async () => {
+		const { pi, tools } = fakePi();
+		const stub = new StubBridge();
+		let seen: string | undefined;
+		createDelegateExtension({
+			bridge: (model) => {
+				seen = model;
+				return stub;
+			},
+		})(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		const out = (await tool.execute!("c1", { task: "t" }, undefined, undefined, {
+			model: { provider: "anthropic", id: "claude-sonnet-4-5" },
+		})) as { details: { helper: { model: string | undefined; sessionId: string | undefined } } };
+		expect(seen).toBe("anthropic/claude-sonnet-4-5");
+		expect(out.details.helper!.model).toBe("anthropic/claude-sonnet-4-5");
+		expect(out.details.helper!.sessionId).toBe("s");
+	});
+
+	it("an explicit model param wins over the parent's live model", async () => {
+		const { pi, tools } = fakePi();
+		const stub = new StubBridge();
+		let seen: string | undefined;
+		createDelegateExtension({
+			bridge: (model) => {
+				seen = model;
+				return stub;
+			},
+		})(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		await tool.execute!("c1", { task: "t", model: "openai/gpt-4o" }, undefined, undefined, {
+			model: { provider: "anthropic", id: "claude-sonnet-4-5" },
+		});
+		expect(seen).toBe("openai/gpt-4o");
 	});
 
 	it("the default export wires real defaults", () => {
