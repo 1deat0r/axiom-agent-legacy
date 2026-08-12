@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { AgentCronJob } from "../../src/core/cron-jobs.js";
+import { sessionIdForChannel } from "../../src/gateway/completion.js";
 import { GatewayCron } from "../../src/gateway/cron.js";
 import type { CompletionRunner, GatewayTransport } from "../../src/gateway/types.js";
 
@@ -59,6 +60,9 @@ describe("gateway cron manager", () => {
 			const added = newCron(dir, h).addJob({ channelId: "100", scheduleText: "in 5m", prompt: "remind me" });
 			expect(added.channelId).toBe("100");
 			expect(added.source).toBe("cron");
+			// Cron runs use a namespaced session so a due run never collides with
+			// the channel's interactive session (process isolation, ADR-0014).
+			expect(added.sessionId).toBe(`cron-${sessionIdForChannel("100")}`);
 			expect(Number.isNaN(Date.parse(added.nextRunAt ?? ""))).toBe(false);
 			expect(added.runCount).toBe(0);
 			expect(

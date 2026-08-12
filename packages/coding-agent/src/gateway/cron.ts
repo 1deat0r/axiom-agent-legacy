@@ -89,7 +89,12 @@ export class GatewayCron {
 	}
 
 	addJob(input: { channelId: string; scheduleText: string; prompt: string; label?: string }): AgentCronJob {
-		const sessionId = sessionIdForChannel(input.channelId);
+		// Cron runs use their own namespaced session (cron-<channel>) so a due
+		// job never boots a second agent process on the channel's interactive
+		// session (process isolation, ADR-0014). Recurring runs of the same
+		// channel's jobs still share that cron-namespaced context among
+		// themselves; interactive turns use the distinct gw-<channel> session.
+		const sessionId = `cron-${sessionIdForChannel(input.channelId)}`;
 		const job = this.store.create({
 			activeSessionId: sessionId,
 			sessionId,
