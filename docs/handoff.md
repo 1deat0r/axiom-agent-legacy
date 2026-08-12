@@ -27,6 +27,12 @@ ledger + fan-out continuity (ADR-0022).
   by both the router and the cron manager.
 - `src/gateway/cron.ts` (+ CLI) — scheduled `/cron` run deliveries now record
   into the same shared ledger (cron spine feeds the ledger).
+- `src/gateway/{gateway,types,config}.ts` + CLI — cross-transport fan-out
+  (ADR-0023): `deliverTo` entries may name a `transport`; the gateway holds
+  extra named send-only fan-out transports and `deliverToAll` routes each
+  target to the right platform (unknown names degrade to the active), ledger
+  labelled by the delivering transport. CLI builds sibling transports from
+  present tokens.
 - Tests: discord-transport (17), slack-transport (19), gateway-command (22),
   gateway-discord (3), gateway-slack (3), delivery-ledger (5), gateway-ledger
   (3), config deliverTo (+1). Full gateway dir 18 files / 143 tests.
@@ -64,7 +70,6 @@ provider. Not fabricated; both transports are exercised by their test suites onl
 ## Notes / follow-ups
 - Baseline is merged and current (e1f071cbd, cron-gateway included) — the branch
   is no longer behind the baseline tip.
-- Issue #3 remaining scope: cross-platform multi-transport fan-out; the cron
-  spine feeding `deliverTo` (once rebased onto the cron baseline); websocket /
-  Socket Mode low-latency receive; the roadmap's relay/mirror + TTS consumer;
-  and a live pass.
+- Issue #3 remaining scope: websocket / Socket Mode low-latency receive; the
+  roadmap's relay/mirror + TTS consumer; a live cross-platform pass (operator-
+  gated: needs tokens for more than one platform); and CI on this branch.

@@ -40,3 +40,11 @@ the same channel index + sender allowlist (issue #3 "Gateway breadth" first step
 ## Session 4 — routine baseline merge + cron spine feeds the ledger (ADR-0022)
 - [merge] Merged baseline/prime-v0.7.2 (cron-gateway) into feat/discord-gateway: resolved 4 additive conflicts (types.ts, gateway.ts, commands/index.ts, gateway-command.ts). Gateway dir 19 files / 161 tests green; branch now current with baseline e1f071cbd.
 - [impl] GatewayCron now records each scheduled-run delivery in the shared ledger (options ledger + transportName); CLI hoists ONE FileDeliveryLedger shared by Gateway + GatewayCron. Cron ledger tests +2. Full gateway dir 19 files / 163 tests green; biome + tsgo clean.
+
+## Session 5 — cross-transport fan-out (ADR-0023)
+- [plan] Schema: deliverTo entries may name a `transport` (default = active). Gateway holds extra named fan-out transports (send-only): deliverToAll routes each target to the named transport, ledger labelled per transport. CLI builds sibling transports from env tokens when present. Tests inject fake sibling transports (deterministic); cross-transport fan-out is real when multiple tokens are configured, inert-by-config otherwise (no dead code behind a fake).
+- [impl] config deliverTo transport selector + types; gateway.ts transports map + per-target deliverVia (labelled by actual transport, unknown degrades to active); CLI buildFanOutTransports from present sibling tokens (send-only, never connected).
+- [impl] Tests red-first: cross-transport routing + ledger labelling + unknown-target degrade + CLI sibling construction (gateway-ledger +2, gateway-command +2). Full gateway dir 19 files / 167 tests green; biome + tsgo clean. One real red->green: ledger must label the ACTUAL transport on unknown-target fallback (fix delivered).
+- [review] Self-review: no TODOs/dead/debug; edge cases (unknown target degrade, phantom-name prevent, back-compat config, false sibling exclusion) tested.
+- [review] External review (skeptical-se): Correctness 5, Fit 5, Testability 5, Risk 4, Clarity 5 = 24/25 (96). Approved round 1.
+- [docs] ADR-0023 written; handoff + summary regenerated from this log.
