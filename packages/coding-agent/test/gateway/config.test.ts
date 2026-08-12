@@ -13,6 +13,26 @@ describe("gateway config", () => {
 			await rm(dir, { recursive: true, force: true });
 		}
 	});
+	it("parses the deliverTo fan-out channels and defaults them empty otherwise", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-config-"));
+		try {
+			await mkdir(join(dir, "gateway"), { recursive: true });
+			await writeFile(
+				join(dir, "gateway", "config.json"),
+				JSON.stringify({
+					senders: ["U-OWNER"],
+					deliverTo: [{ channel: "C1" }, { channel: "C2" }, { channel: 7 }],
+				}),
+			);
+			const cfg = loadGatewayConfig(dir);
+			expect(cfg.deliverTo).toEqual([{ channel: "C1" }, { channel: "C2" }]); // non-string dropped
+			// Back-compat: a config with only senders has an empty deliverTo.
+			await writeFile(join(dir, "gateway", "config.json"), JSON.stringify({ senders: ["+1"] }));
+			expect(loadGatewayConfig(dir).deliverTo).toEqual([]);
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
 	it("loads the senders allowlist", async () => {
 		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-config-"));
 		try {
