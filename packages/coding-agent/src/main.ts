@@ -115,6 +115,7 @@ import { ExtensionSelectorComponent } from "./modes/interactive/components/exten
 import { shouldRunOnboarding } from "./modes/interactive/onboarding.js";
 import { initTheme, preloadCodeHighlighter, stopThemeWatcher } from "./modes/interactive/theme/theme.js";
 import { handleConfigCommand } from "./package-manager-cli.js";
+import { AXIOM_LOGO } from "./themes/prime-logo.js";
 import { isLocalPath } from "./utils/paths.js";
 
 /**
@@ -1136,7 +1137,7 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	if (parsed.version) {
-		console.log(VERSION);
+		console.log(`${AXIOM_LOGO}\naxiom ${VERSION}`);
 		process.exit(0);
 	}
 	if (parsed.help) {
