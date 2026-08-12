@@ -565,7 +565,6 @@ describe("ENG-4482 heartbeat injected prompt UI", () => {
 			mode.editor = { addToHistory };
 			mode.getMarkdownThemeWithSettings = () => getMarkdownTheme();
 			mode.uiServices = { settingsManager: { getMermaidRendering: () => false } };
-			mode.uiServices = { settingsManager: { getMermaidRendering: () => false } };
 			const message: AgentMessage = {
 				role: "user",
 				content: [{ type: "text", text: heartbeat.prompt }],

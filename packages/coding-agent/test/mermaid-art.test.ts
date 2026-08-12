@@ -164,6 +164,85 @@ describe("mermaid-art renderer", () => {
 		expect(art!.roles).toContain("edge");
 	});
 
+	it("routes back edges around the diagram without crossing boxes", () => {
+		const art = renderMermaid("graph TD\nA --> B\nB --> C\nC --> A");
+		expect(art).not.toBeNull();
+		const text = art!.lines.join("\n");
+		// The arrowhead lands on B's right edge; the lane runs outside.
+		expect(text).toContain("│ B │◀└");
+		expect(text).toContain("┌───└");
+		// No horizontal run may pass through a box interior.
+		expect(text).not.toContain("─B─");
+	});
+
+	it("keeps labels on both directions of a back edge", () => {
+		const art = renderMermaid("graph TD\nA[Ask] -->|question| B[Answer]\nB -->|response| A");
+		expect(art).not.toBeNull();
+		const text = art!.lines.join("\n");
+		expect(text).toContain("question");
+		expect(text).toContain("response");
+	});
+
+	it("labels never overwrite box borders (LR pipeline)", () => {
+		const art = renderMermaid(
+			"graph LR\nA[Commit] --> B{CI Pass?}\nB -->|yes| C[Deploy]\nB -->|no| D[Fix]\nD --> A\nC --> E[Notify]",
+		);
+		expect(art).not.toBeNull();
+		const text = art!.lines.join("\n");
+		// "yes" must not sit on the diamond's top border row.
+		const topRow = art!.lines.find((l) => l.includes("╭"));
+		expect(topRow).toBeDefined();
+		expect(topRow).not.toContain("yes");
+		expect(text).toContain("yes");
+		expect(text).toContain("no");
+		// Back edge enters the diamond from the left, arrowhead on the border.
+		expect(text).toContain("└─▶│ CI Pass?");
+		// The C->E corner over D->A's line becomes a junction.
+		expect(text).toContain("┬");
+	});
+
+	it("same-rank branch keeps both routes readable via a junction", () => {
+		const art = renderMermaid("graph TD\nA[One] --> B[Two]\nA --- C[Three]");
+		expect(art).not.toBeNull();
+		expect(art!.lines.join("\n")).toContain("├");
+	});
+
+	it("routes rank-skipping edges outside without crossing intermediate boxes", () => {
+		const art = renderMermaid("graph TD\nA --> B\nB --> C\nA --> C");
+		expect(art).not.toBeNull();
+		const text = art!.lines.join("\n");
+		expect(text).toContain("│ B │");
+		expect(text).not.toContain("─B─");
+		expect(text.match(/▼/g)?.length).toBeGreaterThanOrEqual(2);
+	});
+
+	it("flattens nested subgraphs without stray end warnings", () => {
+		const graph = parseMermaidGraph(
+			"graph TD\nsubgraph outer[Outer]\n  A --> B\n  subgraph inner[Inner]\n    C --> D\n  end\nend",
+		);
+		expect(graph?.subgraphs).toHaveLength(1);
+		expect(graph?.subgraphs[0]).toMatchObject({ id: "outer", title: "Outer" });
+		expect(graph?.subgraphs[0]?.nodes).toEqual(["A", "B", "C", "D"]);
+		expect(graph?.warnings).toContain("nested subgraphs are not drawn; flattening");
+		expect(graph?.warnings).not.toContain("unexpected 'end'");
+	});
+
+	it("re-checks width after frames and outside lanes grow the grid", () => {
+		const art = renderMermaid("graph TD\nsubgraph s[Very Long Service Name]\n  A[API]\nend\nB --> A", {
+			maxWidth: 12,
+		});
+		expect(art).toBeNull();
+	});
+
+	it("LR advancing edge arrowheads sit on the target's left border", () => {
+		const art = renderMermaid("graph LR\nA --> B\nA --> C");
+		expect(art).not.toBeNull();
+		const text = art!.lines.join("\n");
+		// The arrowhead touches the lower target box's left border.
+		expect(text).toMatch(/▶│ C │/);
+		expect(text).toMatch(/─▶│ B │/);
+	});
+
 	it("returns null for unsupported input via one-shot", () => {
 		expect(renderMermaid("sequenceDiagram\nA->>B: hi")).toBeNull();
 	});

@@ -154,6 +154,10 @@ function parseBody(lines: string[], direction: MermaidDirection): MermaidGraph {
 	const warnings: string[] = [];
 
 	let currentSubgraph: { id: string; title: string; nodes: string[] } | undefined;
+	// Depth of nested subgraph blocks currently open inside currentSubgraph.
+	// Nested blocks are flattened into the outer subgraph but their `end`
+	// lines must not close it early (and must not warn).
+	let nestedDepth = 0;
 	const nodeOrder: string[] = [];
 
 	const addNode = (node: MermaidNode) => {
@@ -174,6 +178,10 @@ function parseBody(lines: string[], direction: MermaidDirection): MermaidGraph {
 		const subgraphStart = /^subgraph\s+([A-Za-z][A-Za-z0-9_-]*)(?:\s*\[([^\]]*)\])?\s*$/.exec(line);
 		if (subgraphStart) {
 			if (currentSubgraph) {
+				// Nested subgraphs are not drawn as separate frames; their
+				// nodes flatten into the enclosing subgraph, and their `end`
+				// is consumed by nestedDepth rather than closing the outer.
+				nestedDepth++;
 				warnings.push("nested subgraphs are not drawn; flattening");
 			} else {
 				currentSubgraph = {
@@ -185,7 +193,9 @@ function parseBody(lines: string[], direction: MermaidDirection): MermaidGraph {
 			continue;
 		}
 		if (/^end\s*$/.test(line)) {
-			if (currentSubgraph) {
+			if (nestedDepth > 0) {
+				nestedDepth--;
+			} else if (currentSubgraph) {
 				subgraphs.push(currentSubgraph);
 				currentSubgraph = undefined;
 			} else {
