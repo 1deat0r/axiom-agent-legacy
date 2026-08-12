@@ -23,7 +23,7 @@ th{background:#f0f3f5}
 <div class="meta">feature summary &middot; 2026-08-12 (UTC) &middot; Claude Fable 5 (top-level coding agent), Feature Implementation Loop v2</div></header>
 
 <h2>Goal &amp; assumptions</h2>
-<p>Axiom's first living surface on the prime-agent v0.7.2 baseline: the agent, riding a profile's SOUL.md, is reachable over <b>Signal</b> (signal-cli); the user messages it and it replies as a project manager (gateway-local commands manage profiles/SOUL.md and per-profile projects). One sender = one session.</p>
+<p>Axiom's first living surface on the axiom v0.7.2 baseline: the agent, riding a profile's SOUL.md, is reachable over <b>Signal</b> (signal-cli); the user messages it and it replies as a project manager (gateway-local commands manage profiles/SOUL.md and per-profile projects). One sender = one session.</p>
 <p><b>Success criterion:</b> <code>axiom gateway --transport signal --profile &lt;name&gt;</code> boots the profile identity, maps each sender to a session, routes to agent replies or gateway commands, sends raw-text replies over signal-cli — tests + <code>npm run check</code>+<code>tsgo</code> green; live signal-cli link operator-blocked.</p>
 <ul>
 <li>Fresh port of ADR-0001/0004/0006 (gateway, never built before) — a surface, not an extension.</li>

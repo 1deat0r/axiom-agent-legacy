@@ -4,7 +4,7 @@ Axiom saves conversations as sessions so you can continue work, branch from earl
 
 ## Session Storage
 
-Sessions auto-save to `~/.prime/agent/sessions/`. Each session is a JSONL file with a tree structure.
+Sessions auto-save to `~/.axiom/agent/sessions/`. Each session is a JSONL file with a tree structure.
 
 ```bash
 axiom --continue          # Continue the most recent session

@@ -7,13 +7,13 @@ This page gets you from install to a useful first Axiom session.
 Install the latest stable release on Linux or macOS:
 
 ```bash
-curl -fsSL https://app.primeintellect.ai/prime-agent/install.sh | sh
+curl -fsSL https://app.primeintellect.ai/axiom/install.sh | sh
 ```
 
 To try the latest beta built from `main`:
 
 ```bash
-curl -fsSL https://app.primeintellect.ai/prime-agent/install.sh | sh -s -- beta
+curl -fsSL https://app.primeintellect.ai/axiom/install.sh | sh -s -- beta
 ```
 
 Both commands fetch versioned Axiom release artifacts and install the `axiom` command. The inherited npm workspace identifiers in the source tree are not the public install path.
@@ -28,13 +28,13 @@ axiom
 To run a source checkout instead, use Node.js 22.8.0 or newer:
 
 ```bash
-git clone https://github.com/PrimeIntellect-ai/prime-agent
+git clone https://github.com/PrimeIntellect-ai/axiom
 cd axiom
 npm ci
-./prime-agent.sh
+./axiom.sh
 ```
 
-The source runner preserves the directory from which it is invoked, so you can also call `/path/to/prime-agent/prime-agent.sh` from another project.
+The source runner preserves the directory from which it is invoked, so you can also call `/path/to/axiom/axiom.sh` from another project.
 
 ## Authenticate
 
@@ -59,7 +59,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 axiom
 ```
 
-You can also run `/login` and select an API-key provider to store the key in `~/.prime/agent/auth.json`.
+You can also run `/login` and select an API-key provider to store the key in `~/.axiom/agent/auth.json`.
 
 See [Providers](providers.md) for all supported providers, environment variables, and cloud-provider setup.
 
@@ -71,7 +71,7 @@ Once Axiom starts, type a request and press Enter:
 Summarize this repository and tell me how to run its checks.
 ```
 
-Axiom gives the model one built-in tool, `ipython`. The long-lived kernel is a control environment for reading and editing files, running project commands, inspecting data, retaining Python state, and invoking installed skills. The kernel runtime is bootstrapped automatically on first use; set `PRIME_AGENT_KERNEL_PYTHON` to use an existing Python environment with `ipykernel`.
+Axiom gives the model one built-in tool, `ipython`. The long-lived kernel is a control environment for reading and editing files, running project commands, inspecting data, retaining Python state, and invoking installed skills. The kernel runtime is bootstrapped automatically on first use; set `AXIOM_KERNEL_PYTHON` to use an existing Python environment with `ipykernel`.
 
 Axiom runs in your current working directory and can modify files there. Use git or another checkpointing workflow if you want easy rollback.
 
@@ -101,7 +101,7 @@ Axiom loads context files at startup. Add an `AGENTS.md` file to tell it how to 
 
 Axiom loads:
 
-- `~/.prime/agent/AGENTS.md` for global instructions
+- `~/.axiom/agent/AGENTS.md` for global instructions
 - `AGENTS.md` or `CLAUDE.md` from parent directories and the current directory
 
 Restart Axiom, or run `/reload`, after changing context files.
@@ -135,7 +135,7 @@ Use `/model` or Ctrl+L to choose a model. Use `/effort` to set the reasoning lev
 
 ### Continue Later
 
-Sessions are saved automatically under `~/.prime/agent/sessions/`:
+Sessions are saved automatically under `~/.axiom/agent/sessions/`:
 
 ```bash
 axiom -c                  # Continue the most recent session

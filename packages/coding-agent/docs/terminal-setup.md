@@ -24,7 +24,7 @@ That mapping sends a raw linefeed byte. Inside Axiom, that is indistinguishable 
 
 If Claude Code 2.x or newer is the only reason you added that mapping, you can remove it, unless you want to use Claude Code in tmux, where it still requires that Ghostty mapping.
 
-If you want `Shift+Enter` to keep working in tmux via that remap, add `ctrl+j` to your Axiom `newLine` keybinding in `~/.prime/agent/keybindings.json`:
+If you want `Shift+Enter` to keep working in tmux via that remap, add `ctrl+j` to your Axiom `newLine` keybinding in `~/.axiom/agent/keybindings.json`:
 
 ```json
 {
@@ -107,4 +107,4 @@ Consider using a dedicated terminal emulator for the best experience.
 
 ### macOS Control+Option+Arrow shortcuts
 
-Pending-message reordering defaults to `Control+Option+Up` and `Control+Option+Down`. Axiom accepts modern modified-arrow sequences and legacy Option-as-Meta wrapped Control+Arrow sequences. macOS VoiceOver uses Control+Option as its modifier, and system or terminal shortcuts can intercept these chords before they reach Axiom. If that happens, remap `app.message.moveEarlier` and `app.message.moveLater` in `~/.prime/agent/keybindings.json`.
+Pending-message reordering defaults to `Control+Option+Up` and `Control+Option+Down`. Axiom accepts modern modified-arrow sequences and legacy Option-as-Meta wrapped Control+Arrow sequences. macOS VoiceOver uses Control+Option as its modifier, and system or terminal shortcuts can intercept these chords before they reach Axiom. If that happens, remap `app.message.moveEarlier` and `app.message.moveLater` in `~/.axiom/agent/keybindings.json`.

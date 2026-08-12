@@ -497,7 +497,7 @@ describe("defaultLedgerDeps", () => {
 	it("listAllSessions scans the default sessions store", async () => {
 		const dir = await mkdtemp(join(tmpdir(), "axiom-ledger-"));
 		try {
-			vi.stubEnv("PRIME_AGENT_CODING_AGENT_DIR", dir);
+			vi.stubEnv("AXIOM_CODING_AGENT_DIR", dir);
 			const sessions = await defaultLedgerDeps().listAllSessions();
 			expect(Array.isArray(sessions)).toBe(true);
 			expect(sessions).toHaveLength(0);

@@ -10,10 +10,10 @@
  * via `tool_call` input mutation without replacing the tool.
  *
  * Config files (merged, project takes precedence):
- * - ~/.prime/agent/extensions/sandbox.json (global)
- * - <cwd>/.prime/agent/sandbox.json (project-local)
+ * - ~/.axiom/agent/extensions/sandbox.json (global)
+ * - <cwd>/.axiom/agent/sandbox.json (project-local)
  *
- * Example .prime/agent/sandbox.json:
+ * Example .axiom/agent/sandbox.json:
  * ```json
  * {
  *   "enabled": true,
@@ -35,8 +35,8 @@
  * - `/sandbox` - show current sandbox configuration
  *
  * Setup:
- * 1. Copy sandbox/ directory to ~/.prime/agent/extensions/
- * 2. Run `npm install` in ~/.prime/agent/extensions/sandbox/
+ * 1. Copy sandbox/ directory to ~/.axiom/agent/extensions/
+ * 2. Run `npm install` in ~/.axiom/agent/extensions/sandbox/
  *
  * Linux also requires: bubblewrap, socat, ripgrep
  */
@@ -77,7 +77,7 @@ const DEFAULT_CONFIG: SandboxConfig = {
 };
 
 function loadConfig(cwd: string): SandboxConfig {
-	const projectConfigPath = join(cwd, ".prime", "agent", "sandbox.json");
+	const projectConfigPath = join(cwd, ".axiom", "agent", "sandbox.json");
 	const globalConfigPath = join(getAgentDir(), "extensions", "sandbox.json");
 
 	let globalConfig: Partial<SandboxConfig> = {};

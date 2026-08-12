@@ -8,13 +8,13 @@ tracker rituals, the money thesis. It binds every coding-agent run here.
 
 ## The baseline
 
-This repo is a fork of **prime-agent v0.7.2** (PrimeIntellect-ai/prime-agent,
+This repo is a fork of **axiom v0.7.2** (PrimeIntellect-ai/axiom,
 MIT) — the baseline (ADR-0015). Upstream is `git remote upstream`; merge
 upstream `main` routinely. The pi-fork line (pi v0.84.1 + the twelve axiom
 commits) lives on `archive/pi-v0.84.1` (remote `upstream-pi`); its capabilities
 port per `docs/ports.md`. Both archives are seed corn, not working trunks.
 
-## Code quality (prime-agent's rules, binding here)
+## Code quality (axiom's rules, binding here)
 
 - No `any` unless absolutely necessary. Erasable TypeScript only. No inline
   imports (`await import()`, dynamic type imports). Top-level only.
@@ -30,7 +30,7 @@ port per `docs/ports.md`. Both archives are seed corn, not working trunks.
 - Before committing: `./test.sh` must pass, `npx biome check .` clean,
   `tsgo --noEmit` clean. Never run the full `npm test` directly outside
   `./test.sh` — it includes e2e paths that activate on endpoint/auth env vars.
-  `./test.sh` scrubs live-agent env (`PRIME_AGENT_INTERNAL_*`, `RLM_*`) and
+  `./test.sh` scrubs live-agent env (`AXIOM_INTERNAL_*`, `RLM_*`) and
   API keys so the suite runs neutral.
 - For a single vitest file:
   `node "$(git rev-parse --show-toplevel)/node_modules/vitest/dist/cli.js" --run test/<file>.test.ts`

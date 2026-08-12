@@ -27,10 +27,10 @@ Axiom implements the [Agent Skills standard](https://agentskills.io/specificatio
 Axiom loads skills from:
 
 - Global:
-  - `~/.prime/agent/skills/`
+  - `~/.axiom/agent/skills/`
   - `~/.agents/skills/`
 - Project:
-  - `.prime/agent/skills/`
+  - `.axiom/agent/skills/`
   - `.agents/skills/` in `cwd` and ancestor directories (up to git repo root, or filesystem root when not in a repo)
 - Packages: `skills/` directories or `pi.skills` entries in `package.json`
 - Settings: `skills` array with files or directories
@@ -38,7 +38,7 @@ Axiom loads skills from:
 - Built-in: `skills/` shipped with the axiom package (lowest precedence)
 
 Discovery rules:
-- In `~/.prime/agent/skills/` and `.prime/agent/skills/`, direct root `.md` files are discovered as individual skills
+- In `~/.axiom/agent/skills/` and `.axiom/agent/skills/`, direct root `.md` files are discovered as individual skills
 - In all skill locations, directories containing `SKILL.md` are discovered recursively
 - In `~/.agents/skills/` and project `.agents/skills/`, root `.md` files are ignored
 
@@ -65,8 +65,8 @@ variables required, and it works even if you add the key mid-session.
 Optional overrides (environment variables):
 
 ```bash
-export PRIME_AGENT_WEBSEARCH_TIMEOUT=45
-export PRIME_AGENT_WEBSEARCH_NUM_RESULTS=5
+export AXIOM_WEBSEARCH_TIMEOUT=45
+export AXIOM_WEBSEARCH_NUM_RESULTS=5
 ```
 
 A `SERPER_API_KEY` in the environment, if set, takes precedence over the stored key.
@@ -119,7 +119,7 @@ To use skills from Claude Code or OpenAI Codex, add their directories to setting
 }
 ```
 
-For project-level Claude Code skills, add to `.prime/agent/settings.json`:
+For project-level Claude Code skills, add to `.axiom/agent/settings.json`:
 
 ```json
 {
@@ -165,9 +165,9 @@ await web_search.run("prime agent skills")
 help(web_search)
 ```
 
-Python skills are installed editable into the kernel venv during kernel setup. By default this is `~/.prime/agent/kernel-venv`; set `PRIME_AGENT_KERNEL_VENV` to override it. If `pyproject.toml` changes, Axiom rebuilds the kernel venv so dependency changes are picked up.
+Python skills are installed editable into the kernel venv during kernel setup. By default this is `~/.axiom/agent/kernel-venv`; set `AXIOM_KERNEL_VENV` to override it. If `pyproject.toml` changes, Axiom rebuilds the kernel venv so dependency changes are picked up.
 
-If you set `PRIME_AGENT_KERNEL_PYTHON`, Axiom does not install packages into that environment. The Python must already have `ipykernel`, `prime-agent-runtime`, and the default runtime packages installed. Missing Python skill imports are disabled with a warning and calling the skill raises a `RuntimeError`.
+If you set `AXIOM_KERNEL_PYTHON`, Axiom does not install packages into that environment. The Python must already have `ipykernel`, `axiom-runtime`, and the default runtime packages installed. Missing Python skill imports are disabled with a warning and calling the skill raises a `RuntimeError`.
 
 ### Optional CLI Command
 
@@ -204,7 +204,7 @@ Axiom ships with a built-in `skill-creator` skill that teaches the agent both th
 
 ```text
 Create a project Python-backed skill named release-audit in
-.prime/agent/skills/release-audit. It should expose
+.axiom/agent/skills/release-audit. It should expose
 await release_audit(repository, target_version), include concise SKILL.md
 instructions, declare its dependencies, and verify the callable in a fresh
 Axiom session.
@@ -218,7 +218,7 @@ To force the creation workflow explicitly, invoke the built-in skill command:
 
 Tell the agent three things:
 
-1. **Scope:** use `.prime/agent/skills/<name>/` for a project skill committed with the repository, or `~/.prime/agent/skills/<name>/` for a personal skill.
+1. **Scope:** use `.axiom/agent/skills/<name>/` for a project skill committed with the repository, or `~/.axiom/agent/skills/<name>/` for a personal skill.
 2. **Kind:** ask for a markdown skill when the capability is primarily instructions; ask for a Python-backed skill when the agent should call reusable functionality from IPython.
 3. **Contract:** describe the intended Python call, inputs, output, dependencies, credentials, and verification behavior.
 

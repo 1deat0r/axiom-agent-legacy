@@ -4,7 +4,7 @@
 
 Extensions are TypeScript modules that extend Axiom's behavior. They can subscribe to lifecycle events, register custom tools callable by the LLM, add commands, and more.
 
-> **Placement for /reload:** Put extensions in `~/.prime/agent/extensions/` (global) or `.prime/agent/extensions/` (project-local) for auto-discovery. Use `axiom -e ./path.ts` only for quick tests. Extensions in auto-discovered locations can be hot-reloaded with `/reload`.
+> **Placement for /reload:** Put extensions in `~/.axiom/agent/extensions/` (global) or `.axiom/agent/extensions/` (project-local) for auto-discovery. Use `axiom -e ./path.ts` only for quick tests. Extensions in auto-discovered locations can be hot-reloaded with `/reload`.
 
 **Key capabilities:**
 - **Custom tools** - Register tools the LLM can call via `pi.registerTool()`
@@ -54,7 +54,7 @@ See [examples/extensions/](../examples/extensions/) for working implementations.
 
 ## Quick Start
 
-Create `~/.prime/agent/extensions/my-extension.ts`:
+Create `~/.axiom/agent/extensions/my-extension.ts`:
 
 ```typescript
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -113,10 +113,10 @@ Extensions are auto-discovered from:
 
 | Location | Scope |
 |----------|-------|
-| `~/.prime/agent/extensions/*.ts` | Global (all projects) |
-| `~/.prime/agent/extensions/*/index.ts` | Global (subdirectory) |
-| `.prime/agent/extensions/*.ts` | Project-local |
-| `.prime/agent/extensions/*/index.ts` | Project-local (subdirectory) |
+| `~/.axiom/agent/extensions/*.ts` | Global (all projects) |
+| `~/.axiom/agent/extensions/*/index.ts` | Global (subdirectory) |
+| `.axiom/agent/extensions/*.ts` | Project-local |
+| `.axiom/agent/extensions/*/index.ts` | Project-local (subdirectory) |
 
 Additional paths via `settings.json`:
 
@@ -221,14 +221,14 @@ This pattern makes the fetched models available during normal startup and to `ax
 **Single file** - simplest, for small extensions:
 
 ```
-~/.prime/agent/extensions/
+~/.axiom/agent/extensions/
 └── my-extension.ts
 ```
 
 **Directory with index.ts** - for multi-file extensions:
 
 ```
-~/.prime/agent/extensions/
+~/.axiom/agent/extensions/
 └── my-extension/
     ├── index.ts        # Entry point (exports default function)
     ├── tools.ts        # Helper module
@@ -238,7 +238,7 @@ This pattern makes the fetched models available during normal startup and to `ax
 **Package with dependencies** - for extensions that need npm packages:
 
 ```
-~/.prime/agent/extensions/
+~/.axiom/agent/extensions/
 └── my-extension/
     ├── package.json    # Declares dependencies and entry points
     ├── package-lock.json
@@ -1846,7 +1846,7 @@ See [examples/extensions/tool-override.ts](../examples/extensions/tool-override.
 **Your implementation must match the exact result shape**, including the `details` type. The UI and session logic depend on these shapes for rendering and state tracking.
 
 Built-in tool implementations:
-- [ipython.ts](https://github.com/PrimeIntellect-ai/prime-agent/blob/main/packages/coding-agent/src/core/tools/ipython.ts) - `IpythonToolDetails`
+- [ipython.ts](https://github.com/PrimeIntellect-ai/axiom/blob/main/packages/coding-agent/src/core/tools/ipython.ts) - `IpythonToolDetails`
 - [bash.ts](../src/core/tools/bash.ts) - `BashToolDetails`
 - [edit.ts](../src/core/tools/edit.ts)
 

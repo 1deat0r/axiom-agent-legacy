@@ -338,23 +338,23 @@ const { session } = await createAgentSession({
   cwd: process.cwd(), // default
   
   // Global config directory
-  agentDir: "~/.prime/agent", // default (expands ~)
+  agentDir: "~/.axiom/agent", // default (expands ~)
 });
 ```
 
 `cwd` is used by `DefaultResourceLoader` for:
-- Project extensions (`.prime/agent/extensions/`)
+- Project extensions (`.axiom/agent/extensions/`)
 - Project skills:
-  - `.prime/agent/skills/`
+  - `.axiom/agent/skills/`
   - `.agents/skills/` in `cwd` and ancestor directories (up to git repo root, or filesystem root when not in a repo)
-- Project prompts (`.prime/agent/prompts/`)
+- Project prompts (`.axiom/agent/prompts/`)
 - Context files (`AGENTS.md` walking up from cwd)
 - Session storage resolution
 
 `agentDir` is used by `DefaultResourceLoader` for:
 - Global extensions (`extensions/`)
 - Global skills:
-  - `skills/` under `agentDir` (for example `~/.prime/agent/skills/`)
+  - `skills/` under `agentDir` (for example `~/.axiom/agent/skills/`)
   - `~/.agents/skills/`
 - Global prompts (`prompts/`)
 - Global context file (`AGENTS.md`)
@@ -418,7 +418,7 @@ API key resolution priority (handled by AuthStorage):
 ```typescript
 import { AuthStorage, ModelRegistry } from "@earendil-works/pi-coding-agent";
 
-// Default: uses ~/.prime/agent/auth.json and ~/.prime/agent/models.json
+// Default: uses ~/.axiom/agent/auth.json and ~/.axiom/agent/models.json
 const authStorage = AuthStorage.create();
 const modelRegistry = ModelRegistry.create(authStorage);
 
@@ -544,7 +544,7 @@ Custom tools passed via `customTools` are combined with extension-registered too
 
 ### Extensions
 
-Extensions are loaded by the `ResourceLoader`. `DefaultResourceLoader` discovers extensions from `~/.prime/agent/extensions/`, `.prime/agent/extensions/`, and `settings.json` extension sources.
+Extensions are loaded by the `ResourceLoader`. `DefaultResourceLoader` discovers extensions from `~/.axiom/agent/extensions/`, `.axiom/agent/extensions/`, and `settings.json` extension sources.
 
 ```typescript
 import { createAgentSession, DefaultResourceLoader } from "@earendil-works/pi-coding-agent";
@@ -802,8 +802,8 @@ const { session } = await createAgentSession({
 **Project-specific settings:**
 
 Settings load from two locations and merge:
-1. Global: `~/.prime/agent/settings.json`
-2. Project: `<cwd>/.prime/agent/settings.json`
+1. Global: `~/.axiom/agent/settings.json`
+2. Project: `<cwd>/.axiom/agent/settings.json`
 
 Project overrides global. Nested objects merge keys. Setters modify global settings by default.
 

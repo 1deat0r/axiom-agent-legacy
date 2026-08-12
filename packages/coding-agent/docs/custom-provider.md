@@ -330,7 +330,7 @@ interface OAuthLoginCallbacks {
 
 ### OAuthCredentials
 
-Credentials are persisted in `~/.prime/agent/auth.json`:
+Credentials are persisted in `~/.axiom/agent/auth.json`:
 
 ```typescript
 interface OAuthCredentials {

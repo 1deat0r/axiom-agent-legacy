@@ -7,7 +7,7 @@ See the repository [AGENTS.md](../../../AGENTS.md) for the current contribution 
 Axiom requires Node.js 22.8.0 or newer.
 
 ```bash
-git clone https://github.com/PrimeIntellect-ai/prime-agent
+git clone https://github.com/PrimeIntellect-ai/axiom
 cd axiom
 npm ci
 ```
@@ -15,7 +15,7 @@ npm ci
 Run from source:
 
 ```bash
-/path/to/prime-agent/prime-agent.sh
+/path/to/axiom/axiom.sh
 ```
 
 The script can be called from any directory and preserves the caller's working directory. Use that behavior to run a source checkout against a separate test project.
@@ -24,16 +24,16 @@ The script can be called from any directory and preserves the caller's working d
 
 Axiom is the product, public CLI, release artifact, and repository name. The monorepo still retains inherited `@earendil-works/pi-*` npm workspace names, a source-package `pi` bin entry, the `pi` package manifest key, and some `PI_*` compatibility environment variables. These names are source and compatibility details, not a signal that contributors should install or develop against pi-mono.
 
-Public releases are currently versioned tarball artifacts installed by the stable and beta installer scripts. `scripts/pack-prime-agent-release.mjs` rewrites the coding-agent package name, executable, config metadata, and internal dependency URLs for that distribution. Do not document the inherited npm workspace package as the public Axiom install path.
+Public releases are currently versioned tarball artifacts installed by the stable and beta installer scripts. `scripts/pack-axiom-release.mjs` rewrites the coding-agent package name, executable, config metadata, and internal dependency URLs for that distribution. Do not document the inherited npm workspace package as the public Axiom install path.
 
 ## Local Configuration
 
-User configuration lives under `~/.prime/agent/`. Project-local settings, prompts, themes, extensions, skills, and system-prompt files live under `.prime/agent/` in the project root. Override the user config directory with `PRIME_AGENT_CODING_AGENT_DIR` and the session directory with `PRIME_AGENT_SESSION_DIR`.
+User configuration lives under `~/.axiom/agent/`. Project-local settings, prompts, themes, extensions, skills, and system-prompt files live under `.axiom/agent/` in the project root. Override the user config directory with `AXIOM_CODING_AGENT_DIR` and the session directory with `AXIOM_SESSION_DIR`.
 
 Use an isolated config directory when manually exercising daemon behavior so development sessions do not collide with normal sessions:
 
 ```bash
-PRIME_AGENT_CODING_AGENT_DIR=/tmp/prime-agent-dev /path/to/prime-agent/prime-agent.sh
+AXIOM_CODING_AGENT_DIR=/tmp/axiom-dev /path/to/axiom/axiom.sh
 ```
 
 ## Daemon Protocol Changes
@@ -52,7 +52,7 @@ Do not resolve packaged assets directly from `__dirname`.
 
 ## Debugging
 
-The hidden `/debug` command writes `~/.prime/agent/prime-agent-debug.log` with rendered TUI lines, their visible widths, and the current agent messages. Daemon, worker, client, and provider diagnostic logs live under `~/.prime/agent/logs/`.
+The hidden `/debug` command writes `~/.axiom/agent/axiom-debug.log` with rendered TUI lines, their visible widths, and the current agent messages. Daemon, worker, client, and provider diagnostic logs live under `~/.axiom/agent/logs/`.
 
 Useful service commands:
 

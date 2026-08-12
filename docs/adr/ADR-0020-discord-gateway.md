@@ -3,7 +3,7 @@
 **Status:** accepted (autonomous decision, owner-empowered, 2026-08-12)
 **Relates to:** ADR-0017 (Telegram — the module-for-module template this reuses),
 ADR-0016 (Signal — first transport), ADR-0001/0004/0006 (gateway architecture),
-ADR-0015 (prime-agent baseline). First step of issue #3 "Gateway breadth —
+ADR-0015 (axiom baseline). First step of issue #3 "Gateway breadth —
 more transports + continuity".
 
 ## Context

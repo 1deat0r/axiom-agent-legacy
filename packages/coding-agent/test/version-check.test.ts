@@ -10,7 +10,7 @@ import {
 const defaultPrimeAgentDownloadBaseUrl = "https://pub-728493de92a943e2a9b2d17b4719f318.r2.dev";
 const originalSkipVersionCheck = process.env.PI_SKIP_VERSION_CHECK;
 const originalOffline = process.env.PI_OFFLINE;
-const originalPrimeAgentDownloadBaseUrl = process.env.PRIME_AGENT_DOWNLOAD_BASE_URL;
+const originalPrimeAgentDownloadBaseUrl = process.env.AXIOM_DOWNLOAD_BASE_URL;
 
 function restoreEnv(name: string, value: string | undefined): void {
 	if (value === undefined) {
@@ -24,7 +24,7 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 	restoreEnv("PI_SKIP_VERSION_CHECK", originalSkipVersionCheck);
 	restoreEnv("PI_OFFLINE", originalOffline);
-	restoreEnv("PRIME_AGENT_DOWNLOAD_BASE_URL", originalPrimeAgentDownloadBaseUrl);
+	restoreEnv("AXIOM_DOWNLOAD_BASE_URL", originalPrimeAgentDownloadBaseUrl);
 });
 
 describe("version checks", () => {
@@ -45,7 +45,7 @@ describe("version checks", () => {
 		await expect(checkForNewPiVersion("1.2.2")).resolves.toBe("1.2.3");
 	});
 
-	it("uses the Prime Agent release manifest with a Prime Agent user agent", async () => {
+	it("uses the Axiom release manifest with a Axiom user agent", async () => {
 		const fetchMock = vi.fn(async () => Response.json({ version: "v1.2.4" }));
 		vi.stubGlobal("fetch", fetchMock);
 
@@ -54,7 +54,7 @@ describe("version checks", () => {
 			`${defaultPrimeAgentDownloadBaseUrl}/latest.json`,
 			expect.objectContaining({
 				headers: expect.objectContaining({
-					"User-Agent": expect.stringMatching(/^prime-agent\/1\.2\.3 /),
+					"User-Agent": expect.stringMatching(/^axiom\/1\.2\.3 /),
 					accept: "application/json",
 				}),
 			}),
@@ -72,16 +72,16 @@ describe("version checks", () => {
 	it("returns the active package and tarball install spec from the release manifest", async () => {
 		const fetchMock = vi.fn(async () =>
 			Response.json({
-				package: "prime-agent",
-				tarball: "releases/v1.2.4/prime-agent-1.2.4.tgz",
+				package: "axiom",
+				tarball: "releases/v1.2.4/axiom-1.2.4.tgz",
 				version: "v1.2.4",
 			}),
 		);
 		vi.stubGlobal("fetch", fetchMock);
 
 		await expect(getLatestPiRelease("1.2.3")).resolves.toEqual({
-			installSpec: `${defaultPrimeAgentDownloadBaseUrl}/releases/v1.2.4/prime-agent-1.2.4.tgz`,
-			packageName: "prime-agent",
+			installSpec: `${defaultPrimeAgentDownloadBaseUrl}/releases/v1.2.4/axiom-1.2.4.tgz`,
+			packageName: "axiom",
 			version: "1.2.4",
 		});
 	});

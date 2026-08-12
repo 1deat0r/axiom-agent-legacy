@@ -3,7 +3,7 @@
 **Status:** accepted (autonomous decision, owner-empowered, 2026-08-12)
 **Relates to:** ADR-0022 (delivery ledger + within-transport fan-out), ADR-0017/
 0020/0021 (transports), ADR-0001/0006 (gateway architecture), ADR-0015
-(prime-agent baseline). Issue #3 "Gateway breadth — more transports +
+(axiom baseline). Issue #3 "Gateway breadth — more transports +
 continuity": closes the "fan out to every channel" (platform-wise) gap.
 
 ## Context

@@ -9,7 +9,7 @@ flowchart TD
     session["AgentSession · TypeScript<br/>IPython tool + host request handlers"]
     manager["KernelManager · TypeScript<br/>execution + comm dispatch"]
     kernel["IPython kernel process · Python"]
-    runtime["prime-agent-runtime<br/>rlm module + Python skills"]
+    runtime["axiom-runtime<br/>rlm module + Python skills"]
     code["Model-executed Python code"]
 
     session -->|"owns"| manager
@@ -67,7 +67,7 @@ sequenceDiagram
 | `src/core/tools/ipython.ts` | Agent tool wrapper, lazy kernel provisioning, namespace bootstrap, and output shaping. |
 | `src/core/agent-session.ts` | RLM policy, child creation, registry, usage attribution, cancellation, and goal handlers. |
 | `src/core/rlm-runtime.ts` | Typed request/spawn-handle validation for `rlm.run`, model discovery, list, and delete. |
-| `prime-agent-runtime/src/rlm/` | Python shim, handle types, callable `rlm`, and session-backed harness state. |
+| `axiom-runtime/src/rlm/` | Python shim, handle types, callable `rlm`, and session-backed harness state. |
 
 The Python side does not call providers or implement an agent loop.
 
@@ -75,11 +75,11 @@ The Python side does not call providers or implement an agent loop.
 
 The kernel is created lazily on first IPython use. Python resolution is:
 
-1. `PRIME_AGENT_KERNEL_PYTHON`, when it can import `ipykernel`;
-2. `~/.prime/agent/kernel-venv/bin/python`, bootstrapped with `uv`; or
-3. the XDG data location when `~/.prime` is not writable.
+1. `AXIOM_KERNEL_PYTHON`, when it can import `ipykernel`;
+2. `~/.axiom/agent/kernel-venv/bin/python`, bootstrapped with `uv`; or
+3. the XDG data location when `~/.axiom/agent` is not writable.
 
-The managed environment includes Python 3.11, `ipykernel`, and `prime-agent-runtime`. A bootstrap marker detects stale environments.
+The managed environment includes Python 3.11, `ipykernel`, and `axiom-runtime`. A bootstrap marker detects stale environments.
 
 Startup creates a temporary Jupyter connection file with loopback TCP ports and an HMAC key, starts `python -m ipykernel_launcher`, connects shell, IOPub, and control sockets, waits for subscription propagation, and probes readiness with `kernel_info_request`.
 
@@ -124,7 +124,7 @@ The Python shim therefore registers comm handlers on the control channel, and th
 
 ## Python API
 
-`prime-agent-runtime` exports:
+`axiom-runtime` exports:
 
 ```python
 rlm
@@ -208,7 +208,7 @@ On reload, the aggregate is reapplied to the parent message. Context-tree report
 
 `rlm.harness` is a persisted state ledger for prompt notes, memories, reusable skill descriptions, sub-agent specifications, and refinement events. It is not a second execution engine.
 
-Session-local state lives in the session artifact directory under `harness/harness_state.json`. Explicitly global entries live under `~/.prime/agent/harness/`. The Python store reloads after external modification so host-side `/refine` writes and kernel writes do not overwrite each other.
+Session-local state lives in the session artifact directory under `harness/harness_state.json`. Explicitly global entries live under `~/.axiom/agent/harness/`. The Python store reloads after external modification so host-side `/refine` writes and kernel writes do not overwrite each other.
 
 `/refine` runs a dedicated review over the current trajectory and applies small create/update/delete edits. Rollback uses recorded before/after snapshots. The base system prompt remains immutable; refinements are supplemental state.
 
@@ -229,7 +229,7 @@ Goal state, persistence, token and wall-clock accounting, and continuation promp
 For a persisted root session, the relevant layout is:
 
 ```text
-~/.prime/agent/
+~/.axiom/agent/
   sessions/
     <root-session-id>.jsonl
   session-artifacts/

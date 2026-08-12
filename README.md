@@ -12,7 +12,7 @@ Axiom: A Self-Improving RLM Agent
   </a>
 </p>
 
-Axiom is an open-source coding and research agent for general and long-running work, forked from [Prime Agent](https://github.com/PrimeIntellect-ai/prime-agent). It is designed around two core abstractions:
+Axiom is an open-source coding and research agent for general and long-running work, forked from [Axiom](https://github.com/PrimeIntellect-ai/axiom). It is designed around two core abstractions:
 
 - The **[Recursive Language Model (RLM)](https://www.primeintellect.ai/blog/rlm)** treats context as variables (*prompt-as-a-variable*) and tools like recursive subagents as function calls (*programmatic tool /sub-agent calling*) inside a persistent REPL.
 - The **[Continual Harness](https://arxiv.org/abs/2605.09998)** stores supplemental prompts, memories, skill descriptions, and reusable subagent specifications as durable state that Axiom can refine through small, evidence-backed updates, local to the session by default.
@@ -83,7 +83,7 @@ Axiom ships a cross-platform messaging gateway (Telegram, Discord, Slack) so you
 
 ## Acknowledgements
 
-Axiom is a fork of **Prime Agent** (MIT) and shares its RLM/continual-harness lineage from [`pi`](https://github.com/earendil-works/pi). We thank the Prime Intellect and `pi` authors for their valuable work.
+Axiom is a fork of **Axiom** (MIT) and shares its RLM/continual-harness lineage from [`pi`](https://github.com/earendil-works/pi). We thank the Prime Intellect and `pi` authors for their valuable work.
 
 ## License
 

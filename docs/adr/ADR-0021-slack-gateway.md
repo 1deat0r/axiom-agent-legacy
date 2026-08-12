@@ -4,7 +4,7 @@
 **Relates to:** ADR-0020 (Discord — the per-channel cursor template this
 reuses), ADR-0017 (Telegram — the HTTP transport shape), ADR-0016 (Signal —
 first transport), ADR-0001/0004/0006 (gateway architecture), ADR-0015
-(prime-agent baseline). Issue #3 "Gateway breadth — more transports".
+(axiom baseline). Issue #3 "Gateway breadth — more transports".
 
 ## Context
 

@@ -80,7 +80,7 @@ Configure delivery in [Settings](settings.md) with `steeringMode` and `followUpM
 
 ## Sessions
 
-Sessions are saved automatically as flat JSONL files under `~/.prime/agent/sessions/`. Each session header records its working directory, which the session picker uses for project-scoped views.
+Sessions are saved automatically as flat JSONL files under `~/.axiom/agent/sessions/`. Each session header records its working directory, which the session picker uses for project-scoped views.
 
 ```bash
 axiom -c                  # Continue most recent session
@@ -135,7 +135,7 @@ Children inherit the parent model unless the user requests another model. They r
 
 Axiom loads `AGENTS.md` or `CLAUDE.md` at startup from:
 
-- `~/.prime/agent/AGENTS.md` for global instructions
+- `~/.axiom/agent/AGENTS.md` for global instructions
 - parent directories, walking up from the current working directory
 - the current directory
 
@@ -145,8 +145,8 @@ Use context files for project conventions, commands, safety rules, and preferenc
 
 Replace the default system prompt with:
 
-- `.prime/agent/SYSTEM.md` for a project
-- `~/.prime/agent/SYSTEM.md` globally
+- `.axiom/agent/SYSTEM.md` for a project
+- `~/.axiom/agent/SYSTEM.md` globally
 
 Append to the default prompt without replacing it with `APPEND_SYSTEM.md` in either location.
 
@@ -351,21 +351,21 @@ axiom --tools ipython -p "Review the code"
 
 | Variable | Description |
 |----------|-------------|
-| `PRIME_AGENT_CODING_AGENT_DIR` | Override config directory; default is `~/.prime/agent` |
-| `PRIME_AGENT_SESSION_DIR` | Override session storage directory; overridden by `--session-dir` |
-| `PRIME_AGENT_CODING_AGENT_SESSION_DIR` | Legacy alias for `PRIME_AGENT_SESSION_DIR` |
+| `AXIOM_CODING_AGENT_DIR` | Override config directory; default is `~/.axiom/agent` |
+| `AXIOM_SESSION_DIR` | Override session storage directory; overridden by `--session-dir` |
+| `AXIOM_CODING_AGENT_SESSION_DIR` | Legacy alias for `AXIOM_SESSION_DIR` |
 | `PI_PACKAGE_DIR` | Override package directory, useful for Nix/Guix store paths |
 | `PI_OFFLINE` | Disable startup network operations, including update checks and package update checks |
 | `PI_SKIP_VERSION_CHECK` | Skip the Axiom version update check at startup. This prevents the release manifest request |
-| `PRIME_AGENT_DOWNLOAD_BASE_URL` | Override the Axiom release manifest and tarball base URL |
+| `AXIOM_DOWNLOAD_BASE_URL` | Override the Axiom release manifest and tarball base URL |
 | `PI_CACHE_RETENTION` | Set to `long` for extended prompt cache where supported |
 | `PRIME_API_KEY` | Prime Inference API key; also used for trace sharing when it has `agent_traces` scope |
-| `PRIME_AGENT_TRACES_API_KEY` | Prime API key used only for opt-in trace sharing |
-| `PRIME_AGENT_TRACES_BASE_URL` | Override the Axiom trace upload API base URL |
-| `PRIME_AGENT_KERNEL_PYTHON` | Use an existing Python environment with `ipykernel` instead of bootstrapping `~/.prime/agent/kernel-venv` |
+| `AXIOM_TRACES_API_KEY` | Prime API key used only for opt-in trace sharing |
+| `AXIOM_TRACES_BASE_URL` | Override the Axiom trace upload API base URL |
+| `AXIOM_KERNEL_PYTHON` | Use an existing Python environment with `ipykernel` instead of bootstrapping `~/.axiom/agent/kernel-venv` |
 | `VISUAL`, `EDITOR` | External editor for Ctrl+G |
 
-The remaining `PI_*` variables are compatibility names still read by the current runtime. They do not change the application name, command, or default `~/.prime/agent` configuration path.
+The remaining `PI_*` variables are compatibility names still read by the current runtime. They do not change the application name, command, or default `~/.axiom/agent` configuration path.
 
 ## Design Principles
 

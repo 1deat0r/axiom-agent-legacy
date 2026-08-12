@@ -213,13 +213,13 @@ export function getEnvApiKey(provider: string): string | undefined {
 	return undefined;
 }
 
-// PRIME_TEAM_ID env var, falling back to team_id in ~/.prime/config.json.
+// PRIME_TEAM_ID env var, falling back to team_id in ~/.axiom/config.json.
 export function getPrimeTeamId(): string | undefined {
 	const fromEnv = process.env.PRIME_TEAM_ID || getProcEnv("PRIME_TEAM_ID");
 	if (fromEnv?.trim()) return fromEnv.trim();
 
 	if (!_existsSync || !_readFileSync || !_homedir || !_join) return undefined;
-	const configPath = _join(_homedir(), ".prime", "config.json");
+	const configPath = _join(_homedir(), ".axiom", "config.json");
 	if (!_existsSync(configPath)) return undefined;
 	try {
 		const parsed = JSON.parse(_readFileSync(configPath, "utf-8")) as unknown;

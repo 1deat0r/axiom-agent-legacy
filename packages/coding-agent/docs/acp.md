@@ -50,7 +50,7 @@ Axiom has capabilities ACP has no field for: subagents, autonomous quality gates
 {
   "sessionUpdate": "session_info_update",
   "_meta": {
-    "ai.primeintellect.prime-agent": {
+    "ai.axiom": {
       "subagents": [{ "id": "sub-1", "sessionName": "reviewer", "status": "running" }]
     }
   }

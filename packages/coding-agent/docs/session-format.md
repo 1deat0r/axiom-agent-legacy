@@ -5,14 +5,14 @@ Sessions are stored as JSONL (JSON Lines) files. Each line is a JSON object with
 ## File Location
 
 ```
-~/.prime/agent/sessions/<session-id>.jsonl
+~/.axiom/agent/sessions/<session-id>.jsonl
 ```
 
 The header records the working directory. Current releases keep sessions in a flat directory; older per-project directories are migrated automatically.
 
 ## Deleting Sessions
 
-Sessions can be removed by deleting their `.jsonl` files under `~/.prime/agent/sessions/`.
+Sessions can be removed by deleting their `.jsonl` files under `~/.axiom/agent/sessions/`.
 
 Axiom also supports deleting sessions interactively from `/resume` (select a session and press `Ctrl+D`, then confirm). When available, Axiom uses the `trash` CLI to avoid permanent deletion.
 

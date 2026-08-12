@@ -19,15 +19,15 @@ import { formatDaemonListTable } from "./daemon-ps-format.js";
 import { promptYesNo } from "./daemon-stop-confirm.js";
 
 /**
- * `daemon ps` discovers every prime-agent daemon on the machine, not just the
+ * `daemon ps` discovers every axiom daemon on the machine, not just the
  * one on a single socket. Discovery has two sources merged by socket path:
  *
- *  1. The OS list of listening unix sockets owned by a prime-agent process
+ *  1. The OS list of listening unix sockets owned by a axiom process
  *     (`ss -lxp` on Linux, `lsof` on macOS). Daemons set process.title to
  *     APP_NAME and carry nothing useful in argv, so the socket→pid mapping the
  *     kernel keeps is the only reliable way to find daemons on arbitrary
  *     `--daemon-socket` paths. This is the same data as `ss -lxp | grep
- *     prime-agent`, just parsed.
+ *     axiom`, just parsed.
  *  2. A sweep of the default socket dir, which catches orphaned socket *files*
  *     left behind by daemons that are no longer running.
  *
@@ -91,7 +91,7 @@ function processNameMatches(name: string, appName: string): boolean {
 	return name === appName || appName.slice(0, MAX_COMM_LENGTH) === name;
 }
 
-/** Parse `ss -lxp` output into the prime-agent daemons listening on unix sockets. */
+/** Parse `ss -lxp` output into the axiom daemons listening on unix sockets. */
 export function parseSsListeners(stdout: string, appName: string): DiscoveredDaemonProcess[] {
 	const daemons: DiscoveredDaemonProcess[] = [];
 	for (const line of stdout.split("\n")) {
@@ -458,7 +458,7 @@ export function planReap(daemons: readonly DaemonInfo[], force: boolean): ReapAc
 		}
 		if (daemon.status === "unreachable") {
 			if (!force || daemon.pid === undefined) {
-				return { kind: "skip", daemon, reason: 'unreachable; use "prime-agent shutdown --force" to stop it' };
+				return { kind: "skip", daemon, reason: 'unreachable; use "axiom shutdown --force" to stop it' };
 			}
 			if ((pidCounts.get(daemon.pid) ?? 0) > 1) {
 				return {
@@ -524,7 +524,7 @@ export async function runShutdownAll(json: boolean, force: boolean): Promise<voi
 						stopped: [],
 						failed: daemons.map(({ socketPath }) => ({
 							socketPath,
-							reason: 'confirmation required; use "prime-agent shutdown --force --json"',
+							reason: 'confirmation required; use "axiom shutdown --force --json"',
 						})),
 					},
 					null,
@@ -533,9 +533,7 @@ export async function runShutdownAll(json: boolean, force: boolean): Promise<voi
 			);
 			return;
 		case "tty-error":
-			throw new Error(
-				'Shutdown requires confirmation in an interactive terminal. Use "prime-agent shutdown --force".',
-			);
+			throw new Error('Shutdown requires confirmation in an interactive terminal. Use "axiom shutdown --force".');
 		case "prompt": {
 			const confirmed = await promptYesNo(
 				"Stop every agent and background service? Active work will be interrupted.",

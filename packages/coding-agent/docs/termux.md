@@ -17,12 +17,12 @@ pkg update && pkg upgrade
 pkg install nodejs termux-api git ripgrep
 
 # Clone and install Axiom from source
-git clone https://github.com/PrimeIntellect-ai/prime-agent.git
+git clone https://github.com/PrimeIntellect-ai/axiom.git
 cd axiom
 npm ci
 
 # Run Axiom
-./prime-agent.sh
+./axiom.sh
 ```
 
 ## Clipboard Support
@@ -33,7 +33,7 @@ Image clipboard is not supported on Termux (the `ctrl+v` image paste feature wil
 
 ## Example AGENTS.md for Termux
 
-Create `~/.prime/agent/AGENTS.md` to help the agent understand the Termux environment:
+Create `~/.axiom/agent/AGENTS.md` to help the agent understand the Termux environment:
 
 ```markdown
 # Agent Environment: Termux on Android

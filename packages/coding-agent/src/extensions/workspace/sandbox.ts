@@ -47,8 +47,8 @@ export interface SandboxMountOptions {
 	projectRoot: string;
 	/** AXIOM_HOME (default ~/.axiom): profiles, ledger, session state. */
 	axiomHome: string;
-	/** Prime agent dir (default ~/.prime): kernel venv, skills, agent state. */
-	primeHome: string;
+	/** Agent home (default ~/.axiom/agent): kernel venv, skills, agent state. */
+	agentHome: string;
 	/** Extra absolute dirs to shadow (in addition to built-in secrets). */
 	shadowDirs?: readonly string[];
 }
@@ -81,8 +81,8 @@ export function buildSandboxMountArgs(o: SandboxMountOptions): string[] {
 		o.axiomHome,
 		o.axiomHome,
 		"--bind",
-		o.primeHome,
-		o.primeHome,
+		o.agentHome,
+		o.agentHome,
 	];
 	for (const d of o.shadowDirs ?? []) {
 		args.push("--tmpfs", d);
@@ -105,10 +105,10 @@ export function assembleProgramArgv(
 export function resolveConfinementPaths(
 	home: string,
 	env: NodeJS.ProcessEnv = process.env,
-): { axiomHome: string; primeHome: string } {
+): { axiomHome: string; agentHome: string } {
 	return {
 		axiomHome: env.AXIOM_HOME ?? join(home, ".axiom"),
-		primeHome: join(home, ".prime"),
+		agentHome: join(home, ".axiom", "agent"),
 	};
 }
 

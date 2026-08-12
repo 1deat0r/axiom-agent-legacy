@@ -8,8 +8,8 @@ Prompt templates are Markdown snippets that expand into full prompts. Type `/nam
 
 Axiom loads prompt templates from:
 
-- Global: `~/.prime/agent/prompts/*.md`
-- Project: `.prime/agent/prompts/*.md`
+- Global: `~/.axiom/agent/prompts/*.md`
+- Project: `.axiom/agent/prompts/*.md`
 - Packages: `prompts/` directories or `pi.prompts` entries in `package.json`
 - Settings: `prompts` array with files or directories
 - CLI: `--prompt-template <path>` (repeatable)

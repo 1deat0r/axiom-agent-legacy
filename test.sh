@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-AUTH_FILE="$HOME/.prime/agent/auth.json"
-AUTH_BACKUP="$HOME/.prime/agent/auth.json.bak"
+AUTH_FILE="$HOME/.axiom/agent/auth.json"
+AUTH_BACKUP="$HOME/.axiom/agent/auth.json.bak"
 
 # Restore auth.json on exit (success or failure)
 cleanup() {
@@ -35,14 +35,14 @@ unset AWS_CONTAINER_CREDENTIALS_RELATIVE_URI AWS_CONTAINER_CREDENTIALS_FULL_URI
 unset AWS_WEB_IDENTITY_TOKEN_FILE BEDROCK_EXTENSIVE_MODEL_TEST FIREWORKS_API_KEY
 
 # Ambient live-agent env leaks into the suite and changes behavior deterministically:
-# PRIME_AGENT_INTERNAL_DAEMON_SUPERVISOR_SOCKET makes the self-update paths see a
+# AXIOM_INTERNAL_DAEMON_SUPERVISOR_SOCKET makes the self-update paths see a
 # live daemon with busy sessions; RLM_* env flips the rlm max-depth default to "env".
 # Scrub them so the suite runs against a neutral environment (upstream CI has none).
-unset PRIME_AGENT_INTERNAL_DAEMON_SUPERVISOR_SOCKET
-unset PRIME_AGENT_INTERNAL_DAEMON_WORKER PRIME_AGENT_INTERNAL_DAEMON_WORKER_TOKEN
-unset PRIME_AGENT_INTERNAL_DAEMON_WORKER_ACTIVE_SESSION_ID
-unset PRIME_AGENT_INTERNAL_DAEMON_WORKER_RECOVERY_JOURNAL
-unset PRIME_AGENT_INTERNAL_ORPHAN_PROCESS_JOURNAL
+unset AXIOM_INTERNAL_DAEMON_SUPERVISOR_SOCKET
+unset AXIOM_INTERNAL_DAEMON_WORKER AXIOM_INTERNAL_DAEMON_WORKER_TOKEN
+unset AXIOM_INTERNAL_DAEMON_WORKER_ACTIVE_SESSION_ID
+unset AXIOM_INTERNAL_DAEMON_WORKER_RECOVERY_JOURNAL
+unset AXIOM_INTERNAL_ORPHAN_PROCESS_JOURNAL
 unset RLM_DEPTH RLM_MAX_DEPTH RLM_SESSION_DIR
 unset RLM_GLOBAL_HARNESS_STATE_DIR RLM_HARNESS_STATE_DIR
 # Live gateway credentials must never leak into the suite (a set token would

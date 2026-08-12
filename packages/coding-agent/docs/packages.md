@@ -34,7 +34,7 @@ axiom update                        # update Axiom
 axiom update --force                # reinstall Axiom even if current
 ```
 
-By default, `package install` and `package remove` write to global settings (`~/.prime/agent/settings.json`). Use `--local` to write to project settings (`.prime/agent/settings.json`) instead. Project settings can be shared with your team, and Axiom installs any missing packages automatically on startup.
+By default, `package install` and `package remove` write to global settings (`~/.axiom/agent/settings.json`). Use `--local` to write to project settings (`.axiom/agent/settings.json`) instead. Project settings can be shared with your team, and Axiom installs any missing packages automatically on startup.
 
 To try a package without installing it, use `--extension` or `-e`. This installs to a temporary directory for the current run only:
 
@@ -56,7 +56,7 @@ npm:pkg
 
 - Versioned specs are pinned and skipped by `axiom package update`.
 - Global installs use `npm install -g`.
-- Project installs go under `.prime/agent/npm/`.
+- Project installs go under `.axiom/agent/npm/`.
 - Set `npmCommand` in `settings.json` to pin npm package lookup and install operations to a specific wrapper command such as `mise` or `asdf`.
 
 Example:
@@ -82,7 +82,7 @@ ssh://git@github.com/user/repo@v1
 - SSH URLs use your configured SSH keys automatically (respects `~/.ssh/config`).
 - For non-interactive runs (for example CI), you can set `GIT_TERMINAL_PROMPT=0` to disable credential prompts and set `GIT_SSH_COMMAND` (for example `ssh -o BatchMode=yes -o ConnectTimeout=5`) to fail fast.
 - Refs pin the package and skip `axiom package update`.
-- Cloned to `~/.prime/agent/git/<host>/<path>` (global) or `.prime/agent/git/<host>/<path>` (project).
+- Cloned to `~/.axiom/agent/git/<host>/<path>` (global) or `.axiom/agent/git/<host>/<path>` (project).
 - Runs `npm install` after clone or pull if `package.json` exists.
 
 **SSH examples:**
@@ -210,7 +210,7 @@ Filter what a package loads using the object form in settings:
 
 ## Enable and Disable Resources
 
-Use `axiom config` to enable or disable extensions, skills, prompt templates, and themes from installed packages and local directories. This works for both global (`~/.prime/agent`) and project (`.prime/agent/`) scopes.
+Use `axiom config` to enable or disable extensions, skills, prompt templates, and themes from installed packages and local directories. This works for both global (`~/.axiom/agent`) and project (`.axiom/agent/`) scopes.
 
 ## Scope and Deduplication
 

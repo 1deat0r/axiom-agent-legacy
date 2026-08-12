@@ -44,7 +44,7 @@ class NotEnabled(RuntimeError):
         self.server = server
         super().__init__(
             f"The '{server}' integration is not enabled: no credentials found. "
-            f"Tell the user to run `/mcp login {server}` in Prime Agent to connect it. "
+            f"Tell the user to run `/mcp login {server}` in Axiom to connect it. "
             f"Do not ask them to set environment variables."
         )
 
@@ -54,11 +54,11 @@ class McpToolError(RuntimeError):
 
 
 def _agent_dir() -> Path:
-    """Resolve the Prime Agent config dir the same way the rest of the runtime does."""
+    """Resolve the Axiom config dir the same way the rest of the runtime does."""
     raw = (
-        os.environ.get("PRIME_AGENT_CODING_AGENT_DIR")
+        os.environ.get("AXIOM_CODING_AGENT_DIR")
         or os.environ.get("PI_CODING_AGENT_DIR")
-        or str(Path.home() / ".prime" / "agent")
+        or str(Path.home() / ".axiom" / "agent")
     )
     # resolve() so a relative env override reads auth.json from the right place,
     # not relative to the kernel's cwd.

@@ -1,6 +1,6 @@
 # Keybindings
 
-All keyboard shortcuts can be customized via `~/.prime/agent/keybindings.json`. Each action can be bound to one or more keys.
+All keyboard shortcuts can be customized via `~/.axiom/agent/keybindings.json`. Each action can be bound to one or more keys.
 
 The config file uses the same namespaced keybinding ids that Axiom uses internally and that extension authors use in `keyHint()` and injected `keybindings` managers.
 
@@ -168,7 +168,7 @@ Used inside the scoped models selector (opened via `/scoped-models`).
 
 ## Custom Configuration
 
-Create `~/.prime/agent/keybindings.json`:
+Create `~/.axiom/agent/keybindings.json`:
 
 ```json
 {
