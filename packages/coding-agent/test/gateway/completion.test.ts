@@ -261,3 +261,67 @@ describe("CliCompletionRunner timeout", () => {
 		}
 	});
 });
+
+describe("CliCompletionRunner per-call projectRoot override", () => {
+	it.skipIf(!bwrapUsable)("per-call projectRoot overrides an unset constructor root and anchors the run", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-ovr-"));
+		try {
+			const projectRoot = join(dir, "project");
+			await mkdir(projectRoot, { recursive: true });
+			const bin = join(projectRoot, "axiom.mjs");
+			await writeShimAt(bin, "ok");
+			const out = join(projectRoot, "out");
+			await mkdir(out, { recursive: true });
+			process.env.SHIM_ARGV = join(out, "argv.json");
+			process.env.SHIM_META = join(out, "meta.json");
+			// NO constructor projectRoot: the per-call input carries it.
+			const runner = new CliCompletionRunner({ bin, printFlag: "-p" });
+			const result = await runner.runCompletion({
+				sessionId: "gw-o",
+				prompt: "hi",
+				profile: { name: "default" },
+				projectRoot,
+			});
+			expect(result.error).toBeUndefined();
+			const meta = JSON.parse(await readFile(join(out, "meta.json"), "utf8")) as {
+				cwd: string;
+				root: string | null;
+				confined: string | null;
+			};
+			expect(meta.cwd).toBe(projectRoot);
+			expect(meta.root).toBe(projectRoot);
+			expect(meta.confined).toBe("1");
+			expect(result.reply).toContain("[sandbox-confined]");
+		} finally {
+			delete process.env.SHIM_ARGV;
+			delete process.env.SHIM_META;
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("fails CLOSED when a per-call projectRoot anchors a run with no bubblewrap", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-npo-"));
+		const prevPath = process.env.PATH;
+		try {
+			const projectRoot = join(dir, "project");
+			await mkdir(projectRoot, { recursive: true });
+			const bin = join(projectRoot, "shim.mjs");
+			await writeShimAt(bin, "ok");
+			process.env.PATH = "";
+			const runner = new CliCompletionRunner({ bin, printFlag: "-p" });
+			const out = await runner.runCompletion({
+				sessionId: "gw-o",
+				prompt: "hi",
+				profile: { name: "default" },
+				projectRoot,
+			});
+			expect(out.reply).toBe("");
+			expect(out.error).toMatch(/bubblewrap/i);
+			expect(out.error).toMatch(/unconfined/i);
+		} finally {
+			if (prevPath === undefined) delete process.env.PATH;
+			else process.env.PATH = prevPath;
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+});

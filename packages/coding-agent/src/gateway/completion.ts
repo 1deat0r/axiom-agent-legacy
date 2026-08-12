@@ -117,7 +117,14 @@ export class CliCompletionRunner implements CompletionRunner {
 		prompt: string;
 		profile: GatewayProfile;
 		model?: { provider: string; model: string };
+		projectRoot?: string;
+
 	}): Promise<{ reply: string; sessionId: string; error?: string }> {
+		// Per-call override wins over the boot-time anchor; BOTH thread through
+		// every anchoring point below (bwrap mount, cwd, AXIOM_PROJECT_ROOT,
+		// [sandbox-confined] prefix) so an override can never silently run
+		// unconfined.
+		const root = input.projectRoot ?? this.projectRoot;
 		// Always pass --profile so the spawned agent resolves the profile home
 		// (~/.axiom/profiles/<name>, incl. 'default') and reads that profile's
 		// provider settings (e.g. ~/.axiom/profiles/default/settings.json).
@@ -145,7 +152,7 @@ export class CliCompletionRunner implements CompletionRunner {
 			let spawnargv: string[];
 			let childEnv: NodeJS.ProcessEnv | undefined;
 			let confined = false;
-			if (this.projectRoot) {
+			if (root) {
 				const bwrap = this.confinement?.bwrap ?? resolveBwrap(process.env);
 				if (!bwrap) {
 					throw new Error(
@@ -167,13 +174,13 @@ export class CliCompletionRunner implements CompletionRunner {
 				}
 				const mount = buildSandboxMountArgs({
 					home,
-					projectRoot: this.projectRoot,
+					projectRoot: root,
 					axiomHome,
 					agentHome,
 					shadowDirs: this.confinement?.shadowDirs ?? defaultShadowDirs(home),
 				});
 				spawnargv = assembleProgramArgv(bwrap, mount, this.bin, args);
-				childEnv = confinementEnv({ ...process.env, AXIOM_PROJECT_ROOT: this.projectRoot });
+				childEnv = confinementEnv({ ...process.env, AXIOM_PROJECT_ROOT: root });
 				confined = true;
 			} else {
 				spawnargv = [this.bin, ...args];
@@ -186,7 +193,7 @@ export class CliCompletionRunner implements CompletionRunner {
 				// is stdin ignored, stdout+stderr piped so we can collect the reply.
 				const child = spawn(spawnargv[0], spawnargv.slice(1), {
 					stdio: ["ignore", "pipe", "pipe"],
-					cwd: this.projectRoot,
+					cwd: root,
 					env: childEnv,
 				});
 				let collected = "";
@@ -234,14 +241,15 @@ export class CliCompletionRunner implements CompletionRunner {
 
 /** A canned, injectable completion runner for router/e2e tests. */
 export function fakeCompletionRunner(): CompletionRunner & {
-	calls: Array<{ sessionId: string; prompt: string; model: { provider: string; model: string } | undefined }>;
+	calls: Array<{ sessionId: string; prompt: string; model: { provider: string; model: string } | undefined; projectRoot?: string }>;
 } {
 	const runner: CompletionRunner & {
-		calls: Array<{ sessionId: string; prompt: string; model: { provider: string; model: string } | undefined }>;
+		calls: Array<{ sessionId: string; prompt: string; model: { provider: string; model: string } | undefined; projectRoot?: string }>;
 	} = {
 		calls: [],
 		async runCompletion(input) {
-			this.calls.push({ sessionId: input.sessionId, prompt: input.prompt, model: input.model });
+			this.calls.push({ sessionId: input.sessionId, prompt: input.prompt, model: input.model, projectRoot: input.projectRoot });
+
 			return { reply: `axiom reply to: ${input.prompt}`, sessionId: input.sessionId };
 		},
 	};

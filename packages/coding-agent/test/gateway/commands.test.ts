@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { InMemoryActiveModelStore } from "../../src/gateway/active-model.js";
+import { MemoryActiveProjectStore } from "../../src/gateway/active-project.js";
 import { dispatchCommand } from "../../src/gateway/commands/index.js";
 import { defaultGatewayConfig, isAllowedSender } from "../../src/gateway/config.js";
 
@@ -214,3 +215,107 @@ function jobWithId(id: string): import("../../src/core/cron-jobs.js").AgentCronJ
 		runCount: 0,
 	};
 }
+
+describe("projects menu + live switching", () => {
+	it("renders a menu with the active project marked", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-menu-"));
+		try {
+			dispatchCommand("/projects add alpha", ctx(dir));
+			dispatchCommand("/projects add beta", ctx(dir));
+			const store = new MemoryActiveProjectStore();
+			store.set("+1", "alpha");
+			const c = { ...ctx(dir), channelId: "+1", activeProject: "alpha", activeProjects: store };
+			const out = dispatchCommand("/projects", c);
+			expect(out).toContain("active: alpha");
+			expect(out).toContain("alpha");
+			expect(out).toContain("beta");
+			expect(out).toContain("/projects use");
+			expect(out).toContain("/projects rm");
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("shows active: none when no channel context (dispatch without a channel)", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-menu-"));
+		try {
+			dispatchCommand("/projects add alpha", ctx(dir));
+			expect(dispatchCommand("/projects", ctx(dir))).toContain("active: none");
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("use switches the chat's active project and persists it", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-use-"));
+		try {
+			dispatchCommand("/projects add alpha", ctx(dir));
+			const store = new MemoryActiveProjectStore();
+			const c = { ...ctx(dir), channelId: "+1", activeProjects: store };
+			const out = dispatchCommand("/projects use alpha", c);
+			expect(out).toContain("anchored");
+			expect(store.get("+1")).toBe("alpha");
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("use rejects unknown projects, invalid names, and channel-less dispatches", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-use-"));
+		try {
+			dispatchCommand("/projects add alpha", ctx(dir));
+			const store = new MemoryActiveProjectStore();
+			const c = { ...ctx(dir), channelId: "+1", activeProjects: store };
+			expect(dispatchCommand("/projects use nope", c)).toContain("no project");
+			expect(dispatchCommand("/projects use Bad_Name", c)).toContain("invalid");
+			expect(dispatchCommand("/projects use alpha", ctx(dir))).toContain("usage");
+			expect(store.get("+1")).toBeUndefined();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("rm clears active mappings across channels, bumps generation, and drops sessions", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-rm-"));
+		try {
+			dispatchCommand("/projects add alpha", ctx(dir));
+			const store = new MemoryActiveProjectStore();
+			store.set("+1", "alpha");
+			store.set("+2", "alpha");
+			const dropped: string[] = [];
+			const c = {
+				...ctx(dir),
+				channelId: "+1",
+				activeProject: "alpha",
+				activeProjects: store,
+				dropProjectSessions: (p: string) => dropped.push(p),
+			};
+			const out = dispatchCommand("/projects rm alpha", c);
+			expect(out).toContain("removed");
+			expect(store.get("+1")).toBeUndefined();
+			expect(store.get("+2")).toBeUndefined();
+			expect(store.generation("alpha")).toBe(1);
+			expect(dropped).toEqual(["alpha"]);
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("rm rejects traversal and outside-root names", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-rm-"));
+		try {
+			expect(dispatchCommand("/projects rm ..", ctx(dir))).toContain("invalid");
+			expect(dispatchCommand("/projects rm /etc/passwd", ctx(dir))).toContain("invalid");
+			expect(dispatchCommand("/projects rm a/b", ctx(dir))).toContain("invalid");
+			expect(dispatchCommand("/projects rm alpha", ctx(dir))).toContain("no project");
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("help advertises live project switching", () => {
+	it("/help lists /projects use", () => {
+		expect(dispatchCommand("/help", ctx("/tmp"))).toContain("/projects use");
+	});
+});

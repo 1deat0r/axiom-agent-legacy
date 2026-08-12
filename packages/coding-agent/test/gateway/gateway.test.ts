@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { activeModelPath, FileActiveModelStore } from "../../src/gateway/active-model.js";
+import { MemoryActiveProjectStore } from "../../src/gateway/active-project.js";
 import { MemoryChannelIndex } from "../../src/gateway/channel-index.js";
 import { fakeCompletionRunner, sessionIdForChannel } from "../../src/gateway/completion.js";
 import { GatewayCron } from "../../src/gateway/cron.js";
@@ -386,6 +387,243 @@ describe("Gateway /model hotswap", () => {
 			push({ channelId: "+1", sender: "+1", text: "hello again", isCommand: false, timestamp: 2 });
 			await new Promise((r) => setTimeout(r, 20));
 			expect(completion.calls.at(-1)!.model).toEqual({ provider: "", model: "deepseek-v4-pro" });
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("Gateway live project switching", () => {
+	async function projHome(prefix: string, projects: string[]): Promise<string> {
+		const dir = await home(prefix);
+		for (const p of projects) {
+			await import("node:fs/promises").then((fs) => fs.mkdir(join(dir, "projects", p), { recursive: true }));
+		}
+		return dir;
+	}
+
+	it("(a,b,c) use switches and resumes project-scoped sessions per channel", async () => {
+		const dir = await projHome("axiom-gw-sw-", ["alpha", "beta"]);
+		try {
+			const { t, push } = fakeTransport();
+			const completion = fakeCompletionRunner();
+			const index = new MemoryChannelIndex();
+			const g = new Gateway({
+				transport: t,
+				index,
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+			});
+			await g.start();
+			push({ channelId: "+1", sender: "+1", text: "hello", isCommand: false, timestamp: 1 });
+			push({ channelId: "+1", sender: "+1", text: "/projects use alpha", isCommand: true, timestamp: 2 });
+			push({ channelId: "+1", sender: "+1", text: "in alpha", isCommand: false, timestamp: 3 });
+			push({ channelId: "+1", sender: "+1", text: "/projects use beta", isCommand: true, timestamp: 4 });
+			push({ channelId: "+1", sender: "+1", text: "in beta", isCommand: false, timestamp: 5 });
+			push({ channelId: "+1", sender: "+1", text: "/projects use alpha", isCommand: true, timestamp: 6 });
+			push({ channelId: "+1", sender: "+1", text: "back in alpha", isCommand: false, timestamp: 7 });
+			await new Promise((r) => setTimeout(r, 40));
+			const unanchored = sessionIdForChannel("+1");
+			const alpha = sessionIdForChannel("+1:alpha:0");
+			const beta = sessionIdForChannel("+1:beta:0");
+			expect(completion.calls.map((c) => c.sessionId)).toEqual([
+				unanchored,
+				alpha,
+				beta,
+				alpha, // (c) resumes A's session
+			]);
+			// (a) the anchored runs pass the project root through.
+			expect(completion.calls[1]!.projectRoot).toBe(join(dir, "projects", "alpha"));
+			expect(completion.calls[2]!.projectRoot).toBe(join(dir, "projects", "beta"));
+			expect(completion.calls[3]!.projectRoot).toBe(join(dir, "projects", "alpha"));
+			expect(completion.calls[0]!.projectRoot).toBeUndefined();
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("(d) unset active project keeps the unanchored channel session (back-compat)", async () => {
+		const dir = await projHome("axiom-gw-bc-", ["alpha"]);
+		try {
+			const { t, push } = fakeTransport();
+			const completion = fakeCompletionRunner();
+			const g = new Gateway({
+				transport: t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+			});
+			await g.start();
+			push({ channelId: "+1", sender: "+1", text: "hi", isCommand: false, timestamp: 1 });
+			push({ channelId: "+1", sender: "+1", text: "again", isCommand: false, timestamp: 2 });
+			await new Promise((r) => setTimeout(r, 30));
+			expect(completion.calls.map((c) => c.sessionId)).toEqual([
+				sessionIdForChannel("+1"),
+				sessionIdForChannel("+1"),
+			]);
+			expect(completion.calls.every((c) => c.projectRoot === undefined)).toBe(true);
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("(e) two channels keep independent active projects", async () => {
+		const dir = await projHome("axiom-gw-2c-", ["alpha", "beta"]);
+		try {
+			const { t, push } = fakeTransport();
+			const completion = fakeCompletionRunner();
+			const g = new Gateway({
+				transport: t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1", "+2"],
+			});
+			await g.start();
+			push({ channelId: "+1", sender: "+1", text: "/projects use alpha", isCommand: true, timestamp: 1 });
+			push({ channelId: "+2", sender: "+2", text: "/projects use beta", isCommand: true, timestamp: 2 });
+			push({ channelId: "+1", sender: "+1", text: "m1", isCommand: false, timestamp: 3 });
+			push({ channelId: "+2", sender: "+2", text: "m2", isCommand: false, timestamp: 4 });
+			await new Promise((r) => setTimeout(r, 40));
+			expect(completion.calls[0]!.sessionId).toBe(sessionIdForChannel("+1:alpha:0"));
+			expect(completion.calls[0]!.projectRoot).toBe(join(dir, "projects", "alpha"));
+			expect(completion.calls[1]!.sessionId).toBe(sessionIdForChannel("+2:beta:0"));
+			expect(completion.calls[1]!.projectRoot).toBe(join(dir, "projects", "beta"));
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("(f) rm via the command clears store + composite index; messages fall back to unanchored", async () => {
+		const dir = await projHome("axiom-gw-rm2-", ["alpha"]);
+		try {
+			const { t, sent, push } = fakeTransport();
+			const completion = fakeCompletionRunner();
+			const index = new MemoryChannelIndex();
+			const g = new Gateway({
+				transport: t,
+				index,
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+			});
+			await g.start();
+			push({ channelId: "+1", sender: "+1", text: "/projects use alpha", isCommand: true, timestamp: 1 });
+			push({ channelId: "+1", sender: "+1", text: "in alpha", isCommand: false, timestamp: 2 });
+			push({ channelId: "+1", sender: "+1", text: "/projects rm alpha", isCommand: true, timestamp: 3 });
+			push({ channelId: "+1", sender: "+1", text: "after rm", isCommand: false, timestamp: 4 });
+			await new Promise((r) => setTimeout(r, 40));
+			expect(completion.calls[1]!.sessionId).toBe(sessionIdForChannel("+1")); // unanchored again
+			expect(completion.calls[1]!.projectRoot).toBeUndefined();
+			expect(index.get("+1:alpha:0")).toBeNull(); // composite entry dropped
+			expect(sent.some((s) => s.text.includes("removed"))).toBe(true);
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("(f2) out-of-band delete self-heals: clears store + composite index, runs unanchored", async () => {
+		const dir = await projHome("axiom-gw-rm3-", ["alpha"]);
+		try {
+			const { t, push } = fakeTransport();
+			const completion = fakeCompletionRunner();
+			const index = new MemoryChannelIndex();
+			const g = new Gateway({
+				transport: t,
+				index,
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+			});
+			await g.start();
+			push({ channelId: "+1", sender: "+1", text: "/projects use alpha", isCommand: true, timestamp: 1 });
+			push({ channelId: "+1", sender: "+1", text: "in alpha", isCommand: false, timestamp: 2 });
+			await new Promise((r) => setTimeout(r, 30));
+			expect(completion.calls[0]!.sessionId).toBe(sessionIdForChannel("+1:alpha:0"));
+			// Out-of-band deletion (not via /projects rm).
+			await import("node:fs/promises").then((fs) =>
+				fs.rm(join(dir, "projects", "alpha"), { recursive: true, force: true }),
+			);
+			push({ channelId: "+1", sender: "+1", text: "after delete", isCommand: false, timestamp: 3 });
+			await new Promise((r) => setTimeout(r, 30));
+			expect(completion.calls[1]!.sessionId).toBe(sessionIdForChannel("+1"));
+			expect(completion.calls[1]!.projectRoot).toBeUndefined();
+			expect(index.get("+1:alpha:0")).toBeNull();
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("(g) rm -> add -> use starts a FRESH session (generation in the key)", async () => {
+		const dir = await projHome("axiom-gw-fr-", ["alpha"]);
+		try {
+			const { t, push } = fakeTransport();
+			const completion = fakeCompletionRunner();
+			const g = new Gateway({
+				transport: t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+			});
+			await g.start();
+			push({ channelId: "+1", sender: "+1", text: "/projects use alpha", isCommand: true, timestamp: 1 });
+			push({ channelId: "+1", sender: "+1", text: "gen0", isCommand: false, timestamp: 2 });
+			push({ channelId: "+1", sender: "+1", text: "/projects rm alpha", isCommand: true, timestamp: 3 });
+			push({ channelId: "+1", sender: "+1", text: "/projects add alpha", isCommand: true, timestamp: 4 });
+			push({ channelId: "+1", sender: "+1", text: "/projects use alpha", isCommand: true, timestamp: 5 });
+			push({ channelId: "+1", sender: "+1", text: "gen1", isCommand: false, timestamp: 6 });
+			await new Promise((r) => setTimeout(r, 50));
+			expect(completion.calls[0]!.sessionId).toBe(sessionIdForChannel("+1:alpha:0"));
+			expect(completion.calls[1]!.sessionId).toBe(sessionIdForChannel("+1:alpha:1"));
+			expect(completion.calls[1]!.sessionId).not.toBe(completion.calls[0]!.sessionId);
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("Gateway hand-edited store guard", () => {
+	it("(h) an invalid stored project name self-heals to unanchored", async () => {
+		const dir = await home("axiom-gw-he-");
+		await import("node:fs/promises").then((fs) => fs.mkdir(join(dir, "projects", "alpha"), { recursive: true }));
+		try {
+			const { t, push } = fakeTransport();
+			const completion = fakeCompletionRunner();
+			const index = new MemoryChannelIndex();
+			const store = new MemoryActiveProjectStore();
+			store.set("+1", ".."); // hand-edited value that /projects use rejects
+			const g = new Gateway({
+				transport: t,
+				index,
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+				activeProjects: store,
+			});
+			await g.start();
+			push({ channelId: "+1", sender: "+1", text: "hi", isCommand: false, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 30));
+			expect(completion.calls[0]!.sessionId).toBe(sessionIdForChannel("+1"));
+			expect(completion.calls[0]!.projectRoot).toBeUndefined();
+			expect(store.get("+1")).toBeUndefined();
+			expect(index.get("+1:..:0")).toBeNull();
 			await g.stop();
 		} finally {
 			await rm(dir, { recursive: true, force: true });

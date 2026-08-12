@@ -3,10 +3,12 @@
  * onto the axiom v0.7.2 baseline). One sender channels to one session.
  */
 import type { AgentCronJob } from "../core/cron-jobs.js";
-/** A normalized, platform-agnostic inbound or outbound message. */
 import type { ActiveModelStore } from "./active-model.js";
+import type { ActiveProjectStore } from "./active-project.js";
 import type { DeliveryLedger } from "./delivery-ledger.js";
 import type { UpdateApply, UpdateCheck } from "./self-update.js";
+
+/** A normalized, platform-agnostic inbound or outbound message. */
 
 export interface GatewayMessage {
 	channelId: string;
@@ -43,6 +45,9 @@ export interface CompletionRunner {
 		profile: GatewayProfile;
 		/** Optional active-model override (provider/model) from /model. */
 		model?: { provider: string; model: string };
+		/** Per-run anchor override; wins over the runner's boot-time root. */
+		projectRoot?: string;
+
 	}): Promise<{
 		reply: string;
 		sessionId: string;
@@ -84,6 +89,13 @@ export interface GatewayCommandContext {
 	restartRequested?: boolean;
 	/** Deliver a follow-up to the channel the command arrived on. */
 	deliver?: (text: string) => Promise<void>;
+	/** The channel's current active project (gateway-resolved; undefined when unset). */
+	activeProject?: string;
+	/** Per-channel active-project store, so commands can switch/clear live. */
+	activeProjects?: ActiveProjectStore;
+	/** Ask the gateway to drop every session mapping for a project (used by /projects rm). */
+	dropProjectSessions?(project: string): void;
+
 	/** Sessions archive directory for cross-session recall (/search). */
 	sessionsDir?: string;
 	/** Persistent sqlite FTS index file for cross-session recall. */
