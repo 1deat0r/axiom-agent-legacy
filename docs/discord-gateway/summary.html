@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Axiom · Discord gateway</title>
+<style>
+:root{--bg:#0e1117;--panel:#161b24;--card:#1a212d;--ink:#e6e9ef;--muted:#9aa4b2;
+--faint:#6b7686;--line:#2a3342;--accent:#7aa2ff;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+color:var(--ink);background:linear-gradient(180deg,#0d1118,#0b0e14 260px) fixed;line-height:1.55;padding:0 18px 48px}
+.wrap{max-width:880px;margin:0 auto}header{margin:30px 0 6px}
+.pill{font-family:var(--mono);font-size:.72rem;color:var(--accent);border:1px solid var(--line);padding:3px 10px;border-radius:20px}
+h1{font-size:1.7rem;line-height:1.15;margin:10px 0 4px}h1 em{color:var(--accent);font-style:normal}
+.sub{color:var(--muted);max-width:820px}.meta{color:var(--faint);font-size:.78rem;font-family:var(--mono);margin-top:10px}
+h2{font-size:1.15rem;margin:38px 0 4px;display:flex;align-items:center;gap:10px}
+h2 .num{font-family:var(--mono);color:var(--accent);font-size:.85rem;border:1px solid var(--line2);border-radius:6px;padding:2px 8px}
+h2 .rule{flex:1;height:1px;background:var(--line)}
+.lede{color:var(--muted);font-size:.9rem;margin:0 0 12px}
+code{font-family:var(--mono);font-size:.84em;background:#222b3a;padding:1px 6px;border-radius:5px;color:#d7e3ee}
+li{margin:5px 0;color:var(--muted)}
+.ver li, .dec li{font-size:.9rem}.assum li{font-size:.9rem}
+table{border-collapse:collapse;width:100%;font-size:.84rem}
+th,td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+thead th{color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.5px}
+td.te{font-family:var(--mono);white-space:nowrap;color:var(--accent)}
+.fin{font-size:.92rem}
+footer{margin-top:44px;border-top:1px solid var(--line);padding-top:14px;color:var(--faint);font-size:.76rem}
+@media print{body{background:#fff;color:#111}h2{break-after:avoid}}
+</style></head><body><div class="wrap">
+<header><span class="pill">AXIOM · GATEWAY</span>
+<h1>Discord transport <em>— summary</em></h1>
+<p class="sub">Add a Discord transport to the axiom gateway reusing the Telegram transport&#x27;s shape, wired into the SAME channel index + sender allowlist, so &lt;code&gt;axiom gateway --transport discord --discord-token X&lt;/code&gt; boots it. First step of issue #3 (Gateway breadth — more transports + continuity).</p>
+<div class="meta">ts 2026-08-12 17:20 UTC · model Claude (axiom coding agent) · branch feat/discord-gateway · base 01948fe39</div></header>
+
+<h2><span class="num">1</span>Goal &amp; assumptions<span class="rule"></span></h2><ul class="assum"><li><b>Discord receive is REST long-poll (per-channel &lt;code&gt;getMessages?after=cursor&lt;/code&gt;), not websocket — mirrors Telegram&#x27;s getUpdates long-poll; websocket low-latency is a follow-up.</b></li><li><b>channelId = Discord channel id; sender = author id (snowflake) — gated by the shared config.json allowlist; channel index maps channel→session.</b></li><li><b>Bot polls every message-capable channel it can see (DM + guild text/news), like Telegram&#x27;s deliver-everything.</b></li><li><b>Delivery ledger / Slack / fan-out: out of scope for this first step.</b></li></ul>
+<h2><span class="num">2</span>Plan as executed<span class="rule"></span></h2><ol class="plan"><li><b>1. Transport + boundary + stores</b> — discord.ts (DiscordClient, DiscordTransport, cursor stores, HttpDiscordClient, chunk reuse)</li><li><b>2. Transport tests (red first)</b> — discord-transport.test.ts — 17 tests; a real red: isolation test exposed 1ms-interval recovery, hardened the fake</li><li><b>3. CLI wiring</b> — gateway-command.ts: --transport discord / --discord-token / AXIOM_DISCORD_BOT_TOKEN / help / buildTransport; +4 CLI tests</li><li><b>4. Router over Discord</b> — gateway-discord.test.ts — author allowlist, channel index, commands (3 tests)</li><li><b>5. Docs</b> — ADR-0020, handoff, this summary</li></ol>
+<h2><span class="num">3</span>Key decisions<span class="rule"></span></h2><ul class="dec"><li>Selection: <code>--transport discord</code> + <code>--discord-token</code>/<code>AXIOM_DISCORD_BOT_TOKEN</code>; unknown value errors; missing token fails fast; default stays signal.</li><li>Boundary: <code>DiscordClient</code> (sendMessage / listChannels / getMessages) with an AbortSignal; HttpDiscordClient exercised only against a local server.</li><li>Receive: per-channel snowflake cursor long-poll; cursor persisted to <code>&lt;AXIOM_HOME&gt;/gateway/discord-cursor.json</code> for no-replay.</li><li>Identity: channelId = channel id (drives channel index); sender = author id (drives the allowlist gate).</li><li>Per-channel isolation: a channel 403/429/5xx is logged (throttled) and skipped; only 401 (bad token) is fatal.</li><li>Chunking: reuse the Telegram chunker at Discord's 2000-char cap.</li></ul>
+<h2><span class="num">4</span>Verification evidence<span class="rule"></span></h2><ul class="ver"><li>Unit (injected fake): send+chunk order/length ≤2000; deliver identity; cursor no-replay (persisted across runs); transient→recovers; per-channel 403 isolated; fatal-401 stops; cursor-write failure warns+continues; disconnect aborts; skips author/content-less.</li><li>Mock (local node:http server, never live): HttpClient routes/Bot auth/body/parse; 401 surfaced fatal.</li><li>CLI mock: flag/env/missing-token + buildTransport returns DiscordTransport.</li><li>Router: Discord author allowlist gates model; channel index maps channel→session; commands local.</li><li>Floor: biome clean, root+package tsgo --noEmit clean, gateway dir 14 files / 108 tests pass.</li><li>test.sh: 4451 tests, 15 fail — ALL pre-existing sandbox/environment baseline daemon suites, verified identical on a pristine baseline worktree (4603 EXDEV, daemon-serialized-refine); 4685 was FORCE_COLOR stderr noise (passes scrubbed); kernel-heartbeat timing-flaky.</li></ul>
+<h2><span class="num">5</span>Review history<span class="rule"></span></h2><table><thead><tr><th>Round</th><th>Scores</th><th>What was fixed</th></tr></thead><tbody><tr><td class="k">Round 1</td><td class="te">24/25 (96) — Correctness 5, Fit 5, Testability 5, Risk 4, Clarity 5</td><td>Approved round 1. Fixes in-round: hardened the fake for per-channel isolation; removed a dead line; autoformatted via biome.</td></tr></tbody></table>
+<h2><span class="num">6</span>Final state<span class="rule"></span></h2><p class="fin">Merged feature complete and green on an isolated worktree. Live pass is operator-gated (bot token + owner user-id allowlist + provider). Follow-ups recorded: baseline merge to current tip e1f071cbd; Slack, websocket receive, delivery ledger.</p>
+
+<footer>Single-file, inline CSS only. Generated from the running log — never from memory.</footer>
+</div></body></html>
