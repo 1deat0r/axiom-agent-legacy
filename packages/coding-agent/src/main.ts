@@ -23,6 +23,7 @@ import {
 } from "./cli/daemon-launch.js";
 import { confirmDaemonSessionLoss, type DaemonSessionLossCopy, pluralizeSessions } from "./cli/daemon-stop-confirm.js";
 import { processFileArguments } from "./cli/file-processor.js";
+import { handleGatewayCommand } from "./cli/gateway-command.js";
 import { buildInitialMessage } from "./cli/initial-message.js";
 import { listModels } from "./cli/list-models.js";
 import { installOwnedSessionRecoveryTracking, isOwnedSessionWorkerProcess } from "./cli/owned-session-worker.js";
@@ -1089,6 +1090,10 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	if (await handleProfileCommand(args)) {
+		return;
+	}
+
+	if (await handleGatewayCommand(args)) {
 		return;
 	}
 

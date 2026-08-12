@@ -1,0 +1,65 @@
+/**
+ * Gateway types (the axiom messaging gateway, ADR-0001/0004/0006, first port
+ * onto the prime-agent v0.7.2 baseline). One sender channels to one session.
+ */
+
+/** A normalized, platform-agnostic inbound or outbound message. */
+export interface GatewayMessage {
+	channelId: string;
+	sender: string;
+	text: string;
+	isCommand: boolean;
+	timestamp: number;
+}
+
+/** A typed outbound delivery address. */
+export interface GatewayRecipient {
+	channelId: string;
+	recipient: string;
+}
+
+/** ADR-0001 transport contract. */
+export interface GatewayTransport {
+	connect(): Promise<void>;
+	disconnect(): Promise<void>;
+	send(to: GatewayRecipient, text: string): Promise<void>;
+	onMessage(handler: (msg: GatewayMessage) => void): void;
+}
+
+/** The profile a gateway run boots under (SOUL.md rides the prompt). */
+export interface GatewayProfile {
+	name: string;
+}
+
+/** Runs one agent completion and returns the reply + the channel's session id. */
+export interface CompletionRunner {
+	runCompletion(input: { sessionId: string; prompt: string; profile: GatewayProfile }): Promise<{
+		reply: string;
+		sessionId: string;
+		error?: string;
+	}>;
+}
+
+/** A gateway-local command handler (never reaches the model). */
+export interface GatewayCommand {
+	name: string;
+	summary: string;
+	handler(args: string[], ctx: GatewayCommandContext): Promise<string> | string;
+}
+
+export interface GatewayCommandContext {
+	profile: string;
+	axiomHomeDir: string;
+	projectHome: string;
+}
+
+/** The resolved command reply for one inbound command message. */
+export interface CommandResult {
+	reply: string;
+}
+
+/** Gateway configuration under the profile home. */
+export interface GatewayConfig {
+	/** Allowlisted senders — only these may reach the model/commands. */
+	senders: string[];
+}
