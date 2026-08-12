@@ -13,14 +13,14 @@ import type { OverlayHandle, TUI } from "@earendil-works/pi-tui";
 import { getAuthPath, getDocsPath } from "../../config.js";
 import type { ModelRegistry } from "../../core/model-registry.js";
 import {
+	AXIOM_TRACES_PROVIDER_ID,
+	AXIOM_TRACES_PROVIDER_NAME,
 	checkPrimeAgentTracesAccess,
 	checkPrimeInferenceAccess,
 	fetchPrimeTeams,
 	loadPrimeCliConfig,
 	loginPrimeAgentTraces,
 	loginPrimeInference,
-	PRIME_AGENT_TRACES_PROVIDER_ID,
-	PRIME_AGENT_TRACES_PROVIDER_NAME,
 	PRIME_INFERENCE_PROVIDER_ID,
 	PRIME_INFERENCE_PROVIDER_NAME,
 	type PrimeTeam,
@@ -28,6 +28,7 @@ import {
 } from "../../core/prime-inference-auth.js";
 import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "../../core/provider-display-names.js";
 import { SERPER_CREDENTIAL_ID, SERPER_CREDENTIAL_NAME } from "../../core/websearch-credential.js";
+import { AxiomTeamSelectorComponent } from "./components/axiom-team-selector.js";
 import { showFullPaneOverlay } from "./components/centered-overlay.js";
 import { ExtensionSelectorComponent } from "./components/extension-selector.js";
 import { LoginDialogComponent } from "./components/login-dialog.js";
@@ -37,7 +38,6 @@ import {
 	compareAuthSelectorProviders,
 	OAuthSelectorComponent,
 } from "./components/oauth-selector.js";
-import { PrimeTeamSelectorComponent } from "./components/prime-team-selector.js";
 import { theme } from "./theme/theme.js";
 
 export type AuthenticationResult =
@@ -414,7 +414,7 @@ export class ProviderAuthFlows {
 				handle?.hide();
 				this.host.ui.requestRender();
 			};
-			const selector = new PrimeTeamSelectorComponent(
+			const selector = new AxiomTeamSelectorComponent(
 				teams,
 				currentTeamId,
 				(team) => {
@@ -515,17 +515,13 @@ export class ProviderAuthFlows {
 	}
 
 	private async completePrimeAgentTracesLogin(apiKey: string, closeDialog: () => void): Promise<AuthenticationResult> {
-		this.host.modelRegistry.authStorage.set(PRIME_AGENT_TRACES_PROVIDER_ID, {
+		this.host.modelRegistry.authStorage.set(AXIOM_TRACES_PROVIDER_ID, {
 			type: "api_key",
 			key: apiKey,
 		});
 
 		closeDialog();
-		return await this.completeProviderAuthentication(
-			PRIME_AGENT_TRACES_PROVIDER_ID,
-			PRIME_AGENT_TRACES_PROVIDER_NAME,
-			"api_key",
-		);
+		return await this.completeProviderAuthentication(AXIOM_TRACES_PROVIDER_ID, AXIOM_TRACES_PROVIDER_NAME, "api_key");
 	}
 
 	async runPrimeInferenceLogin(): Promise<AuthenticationResult> {
@@ -650,11 +646,11 @@ export class ProviderAuthFlows {
 	async runPrimeAgentTracesLogin(): Promise<AuthenticationResult> {
 		const dialog = new LoginDialogComponent(
 			this.host.ui,
-			PRIME_AGENT_TRACES_PROVIDER_ID,
+			AXIOM_TRACES_PROVIDER_ID,
 			(_success, _message) => {
 				// Completion handled below.
 			},
-			PRIME_AGENT_TRACES_PROVIDER_NAME,
+			AXIOM_TRACES_PROVIDER_NAME,
 		);
 
 		const handle = showFullPaneOverlay(this.host.ui, dialog, {
@@ -725,7 +721,7 @@ export class ProviderAuthFlows {
 
 			if (result.source === "manual") {
 				browserAbort.abort();
-				dialog.showProgress("Checking Prime Agent trace access...");
+				dialog.showProgress("Checking Axiom trace access...");
 				const access = await checkPrimeAgentTracesAccess(result.apiKey, resolvePrimeAgentTracesBaseUrl(), {
 					signal: dialog.signal,
 				});
@@ -735,7 +731,7 @@ export class ProviderAuthFlows {
 				}
 				if (!access.ok) {
 					const status = access.status === undefined ? "" : `HTTP ${access.status}: `;
-					throw new Error(`Prime API key does not have Prime Agent trace access (${status}${access.message})`);
+					throw new Error(`Prime API key does not have Axiom trace access (${status}${access.message})`);
 				}
 			}
 
@@ -744,7 +740,7 @@ export class ProviderAuthFlows {
 			closeDialog();
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			if (!dialog.signal.aborted && errorMsg !== "Login cancelled") {
-				this.host.showError(`Failed to login to ${PRIME_AGENT_TRACES_PROVIDER_NAME}: ${errorMsg}`);
+				this.host.showError(`Failed to login to ${AXIOM_TRACES_PROVIDER_NAME}: ${errorMsg}`);
 				return { status: "failed" };
 			}
 			return { status: "cancelled" };

@@ -19,7 +19,7 @@ const PREFERRED_VISIBLE_TEAMS = 8;
 const TEAM_LIST_RESERVED_ROWS = 7;
 const TEAM_SCROLL_INDICATOR_ROWS = 1;
 
-export class PrimeTeamSelectorComponent extends Container implements Focusable {
+export class AxiomTeamSelectorComponent extends Container implements Focusable {
 	private readonly searchInput: MenuSearchInput;
 	private readonly listContainer: Container;
 	private readonly allOptions: PrimeTeamOption[];

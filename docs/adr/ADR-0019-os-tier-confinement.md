@@ -24,7 +24,7 @@ user-namespace + mount-namespace boundary, kernel-enforced, no root required):
   outside the sanctioned writable surfaces.
 - writable **bind-mounts** — the project root (the work area, also `--chdir`)
   and the persistent stores `AXIOM_HOME` (default `~/.axiom`: profiles, ledger,
-  session) and the prime agent dir (`~/.prime`: kernel venv) are re-exposed
+  session) and the agent home (`~/.axiom/agent`: kernel venv) are re-exposed
   writable.
 - `--tmpfs /tmp /run /var` — writable scratch that is NOT the host's dirs.
 - `--tmpfs <home>/.ssh .aws .gnupg .netrc` — **credential stores** are shadowed

@@ -10,7 +10,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { KeybindingsManager } from "../src/core/keybindings.js";
 import { LoginDialogComponent } from "../src/modes/interactive/components/login-dialog.js";
 import { initTheme } from "../src/modes/interactive/theme/theme.js";
-import { AXIOM_LOGO } from "../src/themes/prime-logo.js";
+import { AXIOM_LOGO } from "../src/themes/axiom-logo.js";
 
 const mocks = vi.hoisted(() => ({
 	copyToClipboard: vi.fn(),

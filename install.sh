@@ -4,17 +4,17 @@ set -eu
 
 # Keep these sentinels split so release publishing only rewrites the configured
 # values below; local or unpublished copies still need unreplaced values to compare.
-prime_agent_unconfigured_base_url="__PRIME_AGENT_DOWNLOAD_BASE""_URL__"
-prime_agent_unconfigured_default_release_channel="__PRIME_AGENT_DEFAULT_RELEASE_""CHANNEL__"
-prime_agent_base_url="${PRIME_AGENT_DOWNLOAD_BASE_URL:-__PRIME_AGENT_DOWNLOAD_BASE_URL__}"
+prime_agent_unconfigured_base_url="__AXIOM_DOWNLOAD_BASE""_URL__"
+prime_agent_unconfigured_default_release_channel="__AXIOM_DEFAULT_RELEASE_""CHANNEL__"
+prime_agent_base_url="${AXIOM_DOWNLOAD_BASE_URL:-__AXIOM_DOWNLOAD_BASE_URL__}"
 prime_agent_base_url="${prime_agent_base_url%/}"
-prime_agent_default_release_channel="__PRIME_AGENT_DEFAULT_RELEASE_CHANNEL__"
+prime_agent_default_release_channel="__AXIOM_DEFAULT_RELEASE_CHANNEL__"
 if [ "$prime_agent_default_release_channel" = "$prime_agent_unconfigured_default_release_channel" ]; then
 	prime_agent_default_release_channel=stable
 fi
-prime_agent_release_channel="${PRIME_AGENT_RELEASE_CHANNEL:-$prime_agent_default_release_channel}"
-prime_agent_package="${PRIME_AGENT_PACKAGE:-prime-agent}"
-prime_agent_cmd="${PRIME_AGENT_CMD:-prime-agent}"
+prime_agent_release_channel="${AXIOM_RELEASE_CHANNEL:-$prime_agent_default_release_channel}"
+prime_agent_package="${AXIOM_PACKAGE:-axiom}"
+prime_agent_cmd="${AXIOM_CMD:-axiom}"
 prime_agent_esc=$(printf '\033')
 prime_agent_original_path="${PATH:-}"
 prime_agent_reset="${prime_agent_esc}[0m"
@@ -61,16 +61,16 @@ prime_agent_animation_frame=0
 main() {
 	if [ "$prime_agent_base_url" = "$prime_agent_unconfigured_base_url" ]; then
 		printf 'error: installer download URL is not configured.\n' >&2
-		printf 'Set PRIME_AGENT_DOWNLOAD_BASE_URL or use the installer published by the release workflow.\n' >&2
+		printf 'Set AXIOM_DOWNLOAD_BASE_URL or use the installer published by the release workflow.\n' >&2
 		exit 1
 	fi
 
 	prime_agent_install_traps
 	prime_agent_init_screen
 	if [ "$prime_agent_screen_enabled" = 1 ]; then
-		prime_agent_screen "Installing Prime Agent" "" "" ""
+		prime_agent_screen "Installing Axiom" "" "" ""
 	else
-		printf '\n\033[1m  Installing Prime Agent\033[0m\n\033[2m  npm global install\033[0m\n\n'
+		printf '\n\033[1m  Installing Axiom\033[0m\n\033[2m  npm global install\033[0m\n\n'
 	fi
 
 	start_preflight_checks
@@ -114,22 +114,22 @@ main() {
 	rm -rf "$download_dir"
 	prime_agent_download_dir=
 
-	if [ "${PRIME_AGENT_NODE_INSTALLED_STANDALONE:-0}" = 1 ]; then
-		prime_agent_screen "Prime Agent installed" "" "Checking your shell PATH." ""
+	if [ "${AXIOM_NODE_INSTALLED_STANDALONE:-0}" = 1 ]; then
+		prime_agent_screen "Axiom installed" "" "Checking your shell PATH." ""
 		configure_standalone_node_path
 	elif command -v "$prime_agent_cmd" >/dev/null 2>&1; then
 		if [ "$prime_agent_screen_enabled" = 1 ]; then
-			prime_agent_screen "Prime Agent installed" "" "Run it with: $prime_agent_cmd" ""
+			prime_agent_screen "Axiom installed" "" "Run it with: $prime_agent_cmd" ""
 		else
-			printf '\nPrime Agent was installed successfully.\n'
+			printf '\nAxiom was installed successfully.\n'
 			printf '\nRun it with: %s\n' "$prime_agent_cmd"
 		fi
 	else
 		if [ "$prime_agent_screen_enabled" = 1 ]; then
-			prime_agent_screen "Prime Agent installed" "" "PATH update needed for $prime_agent_cmd." ""
+			prime_agent_screen "Axiom installed" "" "PATH update needed for $prime_agent_cmd." ""
 			prime_agent_restore_terminal
 		else
-			printf '\nPrime Agent was installed successfully.\n'
+			printf '\nAxiom was installed successfully.\n'
 		fi
 		cat <<EOF
 The $prime_agent_cmd command was installed, but it is not on your PATH yet.
@@ -144,7 +144,7 @@ EOF
 
 create_temp_dir() {
 	if command -v mktemp >/dev/null 2>&1; then
-		if tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/prime-agent-install.XXXXXX" 2>/dev/null); then
+		if tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/axiom-install.XXXXXX" 2>/dev/null); then
 			printf '%s' "$tmp_dir"
 			return
 		fi
@@ -185,7 +185,7 @@ prime_agent_restore_terminal() {
 }
 
 prime_agent_init_screen() {
-	if [ "${PRIME_AGENT_INSTALLER_PLAIN:-0}" = 1 ]; then
+	if [ "${AXIOM_INSTALLER_PLAIN:-0}" = 1 ]; then
 		return
 	fi
 	if [ ! -t 1 ]; then
@@ -584,7 +584,7 @@ prime_agent_set_title_line() {
 	prime_agent_content_text=$(prime_agent_fit_ascii "$1" "$max_width")
 	prime_agent_content_width=${#prime_agent_content_text}
 	case "$prime_agent_content_text" in
-		*"Prime Agent"*)
+		*"Axiom"*)
 			prime_agent_content_text=$(prime_agent_style_prime_agent_title "$prime_agent_content_text")
 			prime_agent_content_style=
 			;;
@@ -600,9 +600,9 @@ prime_agent_style_prime_agent_title() {
 	styled=
 	while :; do
 		case "$text" in
-			*"Prime Agent"*)
-				before=${text%%Prime Agent*}
-				rest=${text#*Prime Agent}
+			*"Axiom"*)
+				before=${text%%Axiom*}
+				rest=${text#*Axiom}
 				styled="${styled}${prime_agent_bold}${prime_agent_color_primary}${before}"
 				styled="${styled}${prime_agent_bold}${prime_agent_color_primary}PRIME Agent${prime_agent_reset}"
 				text="$rest"
@@ -896,16 +896,16 @@ run_preflight_checks() {
 	if command -v node >/dev/null 2>&1; then
 		node_version=$(node --version)
 		if ! node -e 'const [major, minor, patch] = process.versions.node.split(".").map(Number); process.exit(major > 20 || (major === 20 && (minor > 6 || (minor === 6 && patch >= 0))) ? 0 : 1)' >/dev/null; then
-			printf 'error: Prime Agent requires Node.js 20.6.0 or newer. Found %s.\n' "$node_version"
+			printf 'error: Axiom requires Node.js 20.6.0 or newer. Found %s.\n' "$node_version"
 			status=1
 		fi
 	else
-		printf 'error: Node.js 20.6.0 or newer is required to install Prime Agent.\n'
+		printf 'error: Node.js 20.6.0 or newer is required to install Axiom.\n'
 		status=1
 	fi
 
 	if ! command -v npm >/dev/null 2>&1; then
-		printf 'error: npm is required to install Prime Agent.\n'
+		printf 'error: npm is required to install Axiom.\n'
 		status=1
 	fi
 
@@ -934,20 +934,20 @@ resolve_prime_agent_version() {
 		release_channel="$prime_agent_release_channel"
 	fi
 
-	if [ "${PRIME_AGENT_VERSION:-}" ]; then
-		normalize_version "$PRIME_AGENT_VERSION"
+	if [ "${AXIOM_VERSION:-}" ]; then
+		normalize_version "$AXIOM_VERSION"
 		return
 	fi
 
 	if ! command -v curl >/dev/null 2>&1; then
-		printf 'error: curl is required to resolve the latest Prime Agent version.\n' >&2
+		printf 'error: curl is required to resolve the latest Axiom version.\n' >&2
 		exit 1
 	fi
 
 	case "$release_channel" in
 		stable|beta) ;;
 		*)
-			printf 'error: invalid Prime Agent release channel: %s\n' "$release_channel" >&2
+			printf 'error: invalid Axiom release channel: %s\n' "$release_channel" >&2
 			exit 1
 			;;
 	esac
@@ -960,13 +960,13 @@ resolve_prime_agent_version() {
 		"Checking the $release_channel release channel." \
 		curl -fsSL "$prime_agent_base_url/$release_channel" -o "$channel_path"; then
 		rm -rf "$channel_dir"
-		printf 'error: could not resolve latest Prime Agent version from %s/%s\n' "$prime_agent_base_url" "$release_channel" >&2
+		printf 'error: could not resolve latest Axiom version from %s/%s\n' "$prime_agent_base_url" "$release_channel" >&2
 		exit 1
 	fi
 	channel_version="$(tr -d '[:space:]' <"$channel_path")"
 	rm -rf "$channel_dir"
 	if [ -z "$channel_version" ]; then
-		printf 'error: could not resolve latest Prime Agent version from %s/%s\n' "$prime_agent_base_url" "$release_channel" >&2
+		printf 'error: could not resolve latest Axiom version from %s/%s\n' "$prime_agent_base_url" "$release_channel" >&2
 		exit 1
 	fi
 	normalize_version "$channel_version"
@@ -976,11 +976,11 @@ normalize_version() {
 	version="${1#v}"
 	case "$version" in
 		"")
-			printf 'error: empty Prime Agent version.\n' >&2
+			printf 'error: empty Axiom version.\n' >&2
 			exit 1
 			;;
 		*[!0-9A-Za-z.-]*)
-			printf 'error: invalid Prime Agent version: %s\n' "$1" >&2
+			printf 'error: invalid Axiom version: %s\n' "$1" >&2
 			exit 1
 			;;
 	esac
@@ -1002,7 +1002,7 @@ install_node_npm_interactive() {
 
 	if prime_agent_prompt_yes_no \
 		"Install Node.js and npm with $label?" \
-		"Required before Prime Agent can be installed." \
+		"Required before Axiom can be installed." \
 		"Install? [Y/n]"; then
 		install_node_npm "$method" "$label"
 		return
@@ -1088,7 +1088,7 @@ install_node_npm() {
 Resolving Node.js packages.
 Downloading Node.js runtime.
 Installing npm.
-Preparing Prime Agent setup."
+Preparing Axiom setup."
 		prime_agent_run_quiet_with_animation_steps \
 			"Installing Node.js and npm" \
 			"Installing Node.js and npm" \
@@ -1098,11 +1098,11 @@ Preparing Prime Agent setup."
 
 	if [ "$method" = standalone ]; then
 		load_standalone_node
-		PRIME_AGENT_NODE_INSTALLED_STANDALONE=1
+		AXIOM_NODE_INSTALLED_STANDALONE=1
 	fi
 	hash -r
 	if [ "$prime_agent_screen_enabled" = 1 ]; then
-		prime_agent_screen "Node.js and npm installed" "" "Continuing Prime Agent setup." ""
+		prime_agent_screen "Node.js and npm installed" "" "Continuing Axiom setup." ""
 	else
 		printf '\nNode.js and npm are installed.\n\n'
 	fi
@@ -1262,16 +1262,16 @@ ensure_node_standalone_extract_tools() {
 }
 
 load_standalone_node() {
-	PRIME_AGENT_STANDALONE_NODE_BIN="$(node_standalone_base_dir)/current/bin"
-	PATH="$PRIME_AGENT_STANDALONE_NODE_BIN:$PATH"
-	export PRIME_AGENT_STANDALONE_NODE_BIN PATH
+	AXIOM_STANDALONE_NODE_BIN="$(node_standalone_base_dir)/current/bin"
+	PATH="$AXIOM_STANDALONE_NODE_BIN:$PATH"
+	export AXIOM_STANDALONE_NODE_BIN PATH
 }
 
 node_standalone_base_dir() {
 	if [ -n "${XDG_DATA_HOME:-}" ]; then
-		printf '%s/prime-agent-node' "$XDG_DATA_HOME"
+		printf '%s/axiom-node' "$XDG_DATA_HOME"
 	else
-		printf '%s/.local/share/prime-agent-node' "$HOME"
+		printf '%s/.local/share/axiom-node' "$HOME"
 	fi
 }
 
@@ -1311,9 +1311,9 @@ run_with_sudo() {
 configure_standalone_node_path() {
 	if original_prime_agent_path=$(resolve_prime_agent_with_original_path); then
 		case "$original_prime_agent_path" in
-			"$PRIME_AGENT_STANDALONE_NODE_BIN/"*)
+			"$AXIOM_STANDALONE_NODE_BIN/"*)
 				if [ "$prime_agent_screen_enabled" = 1 ]; then
-					prime_agent_screen "Prime Agent installed" "" "Run it with: $prime_agent_cmd" ""
+					prime_agent_screen "Axiom installed" "" "Run it with: $prime_agent_cmd" ""
 				else
 					printf '\nRun it with: %s\n' "$prime_agent_cmd"
 				fi
@@ -1321,14 +1321,14 @@ configure_standalone_node_path() {
 				;;
 		esac
 		if [ "$prime_agent_screen_enabled" = 1 ]; then
-			prime_agent_screen "Prime Agent installed" "" "PATH update needed for $prime_agent_cmd." ""
+			prime_agent_screen "Axiom installed" "" "PATH update needed for $prime_agent_cmd." ""
 		else
 			printf '%s was installed, but your shell is not using that install yet.\n' "$prime_agent_cmd"
 			printf 'Your shell currently resolves %s to: %s\n' "$prime_agent_cmd" "$original_prime_agent_path"
 		fi
 	else
 		if [ "$prime_agent_screen_enabled" = 1 ]; then
-			prime_agent_screen "Prime Agent installed" "" "PATH update needed for $prime_agent_cmd." ""
+			prime_agent_screen "Axiom installed" "" "PATH update needed for $prime_agent_cmd." ""
 		else
 			printf '%s was installed, but your shell is not using that install yet.\n' "$prime_agent_cmd"
 		fi
@@ -1345,9 +1345,9 @@ configure_standalone_node_path() {
 
 	if shell_profile_has_standalone_node_path "$profile"; then
 		if [ "$prime_agent_screen_enabled" = 1 ]; then
-			prime_agent_screen "Prime Agent installed" "" "Run: $(prime_agent_source_profile_command "$profile")" ""
+			prime_agent_screen "Axiom installed" "" "Run: $(prime_agent_source_profile_command "$profile")" ""
 		else
-			printf '%s already contains %s.\n' "$profile" "$PRIME_AGENT_STANDALONE_NODE_BIN"
+			printf '%s already contains %s.\n' "$profile" "$AXIOM_STANDALONE_NODE_BIN"
 			printf 'Restart your shell or run: %s\n' "$(prime_agent_source_profile_command "$profile")"
 		fi
 		return 0
@@ -1369,8 +1369,8 @@ resolve_prime_agent_with_original_path() {
 }
 
 detect_shell_profile() {
-	if [ -n "${PRIME_AGENT_SHELL_PROFILE:-}" ]; then
-		printf '%s' "$PRIME_AGENT_SHELL_PROFILE"
+	if [ -n "${AXIOM_SHELL_PROFILE:-}" ]; then
+		printf '%s' "$AXIOM_SHELL_PROFILE"
 		return 0
 	fi
 	if [ -z "${HOME:-}" ]; then
@@ -1400,7 +1400,7 @@ detect_shell_profile() {
 
 shell_profile_has_standalone_node_path() {
 	profile="$1"
-	[ -f "$profile" ] && grep -F "$PRIME_AGENT_STANDALONE_NODE_BIN" "$profile" >/dev/null 2>&1
+	[ -f "$profile" ] && grep -F "$AXIOM_STANDALONE_NODE_BIN" "$profile" >/dev/null 2>&1
 }
 
 prompt_add_standalone_node_path() {
@@ -1421,13 +1421,13 @@ prompt_add_standalone_node_path() {
 
 	mkdir -p "$(dirname "$profile")"
 	{
-		printf '\n# Prime Agent standalone Node.js\n'
+		printf '\n# Axiom standalone Node.js\n'
 		printf '%s\n' "$path_line"
 	} >>"$profile"
 	if [ "$prime_agent_screen_enabled" = 1 ]; then
-		prime_agent_screen "Prime Agent installed" "" "Run: $(prime_agent_source_profile_command "$profile")" ""
+		prime_agent_screen "Axiom installed" "" "Run: $(prime_agent_source_profile_command "$profile")" ""
 	else
-		printf 'Added %s to %s.\n' "$PRIME_AGENT_STANDALONE_NODE_BIN" "$profile"
+		printf 'Added %s to %s.\n' "$AXIOM_STANDALONE_NODE_BIN" "$profile"
 		printf 'Restart your shell or run: %s\n' "$(prime_agent_source_profile_command "$profile")"
 	fi
 }
@@ -1439,7 +1439,7 @@ print_standalone_path_manual_instructions() {
 }
 
 standalone_node_path_line() {
-	printf 'export PATH="%s:$PATH"' "$PRIME_AGENT_STANDALONE_NODE_BIN"
+	printf 'export PATH="%s:$PATH"' "$AXIOM_STANDALONE_NODE_BIN"
 }
 
 prime_agent_shell_quote() {
@@ -1461,19 +1461,19 @@ download_prime_agent_package() {
 	checksums_path="$download_dir/SHA256SUMS"
 
 	if ! command -v curl >/dev/null 2>&1; then
-		printf 'error: curl is required to download Prime Agent.\n' >&2
+		printf 'error: curl is required to download Axiom.\n' >&2
 		exit 1
 	fi
 
 	prime_agent_run_quiet_with_animation \
 		"Downloading checksums" \
 		"Downloading release checksums" \
-		"Prime Agent v$version" \
+		"Axiom v$version" \
 		curl -fsSL "$checksums_url" -o "$checksums_path"
 
 	prime_agent_run_quiet_with_animation \
-		"Downloading Prime Agent" \
-		"Downloading Prime Agent v$version" \
+		"Downloading Axiom" \
+		"Downloading Axiom v$version" \
 		"Fetching the verified package." \
 		curl -fsSL "$tarball_url" -o "$tarball_path"
 
@@ -1496,17 +1496,17 @@ verify_prime_agent_package_checksum() {
 	if command -v sha256sum >/dev/null 2>&1; then
 		prime_agent_run_quiet_with_animation \
 			"Verifying download" \
-			"Verifying Prime Agent download" \
+			"Verifying Axiom download" \
 			"Checking SHA-256." \
 			prime_agent_run_checksum_check "$checksum_dir" "$(basename "$selected_checksums_path")" sha256sum
 	elif command -v shasum >/dev/null 2>&1; then
 		prime_agent_run_quiet_with_animation \
 			"Verifying download" \
-			"Verifying Prime Agent download" \
+			"Verifying Axiom download" \
 			"Checking SHA-256." \
 			prime_agent_run_checksum_check "$checksum_dir" "$(basename "$selected_checksums_path")" shasum
 	else
-		printf 'error: sha256sum or shasum is required to verify the Prime Agent download.\n' >&2
+		printf 'error: sha256sum or shasum is required to verify the Axiom download.\n' >&2
 		exit 1
 	fi
 }
@@ -1530,7 +1530,7 @@ confirm_install() {
 	tarball_url="$2"
 
 	if prime_agent_prompt_yes_no \
-		"Install Prime Agent v$version globally with npm?" \
+		"Install Axiom v$version globally with npm?" \
 		"Downloads the verified release and runs npm install -g." \
 		"Install? [Y/n]"; then
 		return 0
@@ -1553,7 +1553,7 @@ confirm_install() {
 }
 
 confirm_kernel_runtime_setup() {
-	case "${PRIME_AGENT_BOOTSTRAP_KERNEL_ON_INSTALL:-}" in
+	case "${AXIOM_BOOTSTRAP_KERNEL_ON_INSTALL:-}" in
 		1)
 			prime_agent_bootstrap_kernel_on_install=1
 			return
@@ -1566,7 +1566,7 @@ confirm_kernel_runtime_setup() {
 
 	if prime_agent_prompt_yes_no \
 		"Prepare IPython runtime now?" \
-		"Installs uv, Python 3.11, ipykernel, and Prime Agent runtime." \
+		"Installs uv, Python 3.11, ipykernel, and Axiom runtime." \
 		"Prepare? [Y/n]"; then
 		prime_agent_bootstrap_kernel_on_install=1
 		return
@@ -1599,10 +1599,10 @@ Preloading search tools.
 Preparing IPython kernel.
 Finalizing npm install."
 		prime_agent_run_quiet_with_animation_steps \
-			"Installing Prime Agent" \
-			"Installing Prime Agent" \
+			"Installing Axiom" \
+			"Installing Axiom" \
 			"$npm_install_details" \
-			env PRIME_AGENT_BOOTSTRAP_TOOLS_ON_INSTALL=1 PRIME_AGENT_BOOTSTRAP_KERNEL_ON_INSTALL=1 PRIME_AGENT_INSTALL_UV=1 npm install -g --no-fund --no-audit --loglevel=error --progress=false "$tarball_path"
+			env AXIOM_BOOTSTRAP_TOOLS_ON_INSTALL=1 AXIOM_BOOTSTRAP_KERNEL_ON_INSTALL=1 AXIOM_INSTALL_UV=1 npm install -g --no-fund --no-audit --loglevel=error --progress=false "$tarball_path"
 	else
 		npm_install_details="Preparing global install.
 Linking command binaries.
@@ -1610,10 +1610,10 @@ Installing runtime packages.
 Preloading search tools.
 Finalizing npm install."
 		prime_agent_run_quiet_with_animation_steps \
-			"Installing Prime Agent" \
-			"Installing Prime Agent" \
+			"Installing Axiom" \
+			"Installing Axiom" \
 			"$npm_install_details" \
-			env PRIME_AGENT_BOOTSTRAP_TOOLS_ON_INSTALL=1 npm install -g --no-fund --no-audit --loglevel=error --progress=false "$tarball_path"
+			env AXIOM_BOOTSTRAP_TOOLS_ON_INSTALL=1 npm install -g --no-fund --no-audit --loglevel=error --progress=false "$tarball_path"
 	fi
 }
 

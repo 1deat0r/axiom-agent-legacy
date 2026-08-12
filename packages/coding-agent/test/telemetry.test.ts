@@ -101,7 +101,7 @@ afterEach(() => {
 
 describe("telemetry identity and transport", () => {
 	it("creates a private stable installation ID", () => {
-		const agentDir = mkdtempSync(join(tmpdir(), "prime-agent-telemetry-"));
+		const agentDir = mkdtempSync(join(tmpdir(), "axiom-telemetry-"));
 		const randomId = uuidGenerator();
 
 		const first = getOrCreateTelemetryInstallationId(agentDir, randomId);
@@ -117,7 +117,7 @@ describe("telemetry identity and transport", () => {
 	});
 
 	it("replaces invalid persisted installation state", () => {
-		const agentDir = mkdtempSync(join(tmpdir(), "prime-agent-telemetry-"));
+		const agentDir = mkdtempSync(join(tmpdir(), "axiom-telemetry-"));
 		const path = join(agentDir, "telemetry.json");
 		writeFileSync(path, "not-json");
 		const randomId = uuidGenerator();
@@ -132,7 +132,7 @@ describe("telemetry identity and transport", () => {
 	});
 
 	it("does not follow a telemetry state symlink", async () => {
-		const agentDir = mkdtempSync(join(tmpdir(), "prime-agent-telemetry-"));
+		const agentDir = mkdtempSync(join(tmpdir(), "axiom-telemetry-"));
 		const targetPath = join(agentDir, "target.json");
 		const telemetryPath = join(agentDir, "telemetry.json");
 		writeFileSync(targetPath, "do not overwrite");
@@ -147,7 +147,7 @@ describe("telemetry identity and transport", () => {
 	});
 
 	it("batches events through the configured Prime endpoint", async () => {
-		const agentDir = mkdtempSync(join(tmpdir(), "prime-agent-telemetry-"));
+		const agentDir = mkdtempSync(join(tmpdir(), "axiom-telemetry-"));
 		const requests: Array<{ url: string; init: RequestInit }> = [];
 		const fetchMock: typeof fetch = async (input, init) => {
 			requests.push({ url: String(input), init: init ?? {} });
@@ -188,7 +188,7 @@ describe("telemetry identity and transport", () => {
 
 	it("never throws when the analytics endpoint fails", async () => {
 		const client = new TelemetryClient({
-			agentDir: mkdtempSync(join(tmpdir(), "prime-agent-telemetry-")),
+			agentDir: mkdtempSync(join(tmpdir(), "axiom-telemetry-")),
 			fetch: async () => {
 				throw new Error("network failed");
 			},
@@ -202,7 +202,7 @@ describe("telemetry identity and transport", () => {
 	it("drains every queued batch before flush resolves", async () => {
 		const batchSizes: number[] = [];
 		const client = new TelemetryClient({
-			agentDir: mkdtempSync(join(tmpdir(), "prime-agent-telemetry-")),
+			agentDir: mkdtempSync(join(tmpdir(), "axiom-telemetry-")),
 			fetch: async (_input, init) => {
 				const body = JSON.parse(String(init?.body)) as { events: TelemetryEvent[] };
 				batchSizes.push(body.events.length);
@@ -222,7 +222,7 @@ describe("telemetry identity and transport", () => {
 	});
 
 	it("never throws when the local telemetry state cannot be written", async () => {
-		const parent = mkdtempSync(join(tmpdir(), "prime-agent-telemetry-"));
+		const parent = mkdtempSync(join(tmpdir(), "axiom-telemetry-"));
 		const agentDir = join(parent, "not-a-directory");
 		writeFileSync(agentDir, "occupied");
 		const client = new TelemetryClient({ agentDir, randomId: uuidGenerator() });
@@ -243,10 +243,10 @@ describe("telemetry controls", () => {
 		expect(isTelemetryEnabled(settings)).toBe(false);
 
 		vi.stubEnv("DO_NOT_TRACK", "0");
-		vi.stubEnv("PRIME_AGENT_TELEMETRY", "0");
+		vi.stubEnv("AXIOM_TELEMETRY", "0");
 		expect(isTelemetryEnabled(settings)).toBe(false);
 
-		vi.stubEnv("PRIME_AGENT_TELEMETRY", "1");
+		vi.stubEnv("AXIOM_TELEMETRY", "1");
 		vi.stubEnv("PI_OFFLINE", "true");
 		expect(isTelemetryEnabled(settings)).toBe(false);
 	});
@@ -255,7 +255,7 @@ describe("telemetry controls", () => {
 		const settings = SettingsManager.inMemory({ telemetry: { enabled: true } });
 		vi.stubEnv("NODE_ENV", "test");
 		expect(isTelemetryEnabled(settings)).toBe(false);
-		vi.stubEnv("PRIME_AGENT_TELEMETRY", "1");
+		vi.stubEnv("AXIOM_TELEMETRY", "1");
 		expect(isTelemetryEnabled(settings)).toBe(true);
 	});
 
@@ -277,7 +277,7 @@ describe("telemetry controls", () => {
 
 describe("agent telemetry aggregation", () => {
 	it("captures only allowlisted built-in command names", async () => {
-		vi.stubEnv("PRIME_AGENT_TELEMETRY", "1");
+		vi.stubEnv("AXIOM_TELEMETRY", "1");
 		const sink = new FakeTelemetrySink();
 
 		await captureAgentCommandUsed({
@@ -304,7 +304,7 @@ describe("agent telemetry aggregation", () => {
 	});
 
 	it("captures onboarding completion with categorized auth and provider data", async () => {
-		vi.stubEnv("PRIME_AGENT_TELEMETRY", "1");
+		vi.stubEnv("AXIOM_TELEMETRY", "1");
 		const sink = new FakeTelemetrySink();
 
 		await captureOnboardingCompleted({
@@ -333,7 +333,7 @@ describe("agent telemetry aggregation", () => {
 	});
 
 	it("emits aggregate metrics without message or tool content", () => {
-		vi.stubEnv("PRIME_AGENT_TELEMETRY", "1");
+		vi.stubEnv("AXIOM_TELEMETRY", "1");
 		let timestamp = 1_000;
 		const now = () => timestamp;
 		const randomId = uuidGenerator();
@@ -426,7 +426,7 @@ describe("agent telemetry aggregation", () => {
 	});
 
 	it("waits for post-run compaction before finalizing run metrics", () => {
-		vi.stubEnv("PRIME_AGENT_TELEMETRY", "1");
+		vi.stubEnv("AXIOM_TELEMETRY", "1");
 		const sink = new FakeTelemetrySink();
 		const fakeSession = new FakeAgentSession();
 
@@ -459,7 +459,7 @@ describe("agent telemetry aggregation", () => {
 	});
 
 	it("keeps automatic retries in one completed run", () => {
-		vi.stubEnv("PRIME_AGENT_TELEMETRY", "1");
+		vi.stubEnv("AXIOM_TELEMETRY", "1");
 		const sink = new FakeTelemetrySink();
 		const fakeSession = new FakeAgentSession();
 
@@ -496,7 +496,7 @@ describe("agent telemetry aggregation", () => {
 	});
 
 	it("awaits the final telemetry flush during async session disposal", async () => {
-		vi.stubEnv("PRIME_AGENT_TELEMETRY", "1");
+		vi.stubEnv("AXIOM_TELEMETRY", "1");
 		const sink = new FakeTelemetrySink();
 		const fakeSession = new FakeAgentSession();
 		let releaseFlush: () => void = () => {};

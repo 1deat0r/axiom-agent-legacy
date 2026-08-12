@@ -2,7 +2,7 @@
 
 ADR-0012 records the decision to give the TUI a full-screen rendering mode
 ("the session view") that matches the terminal UX of modern agent CLIs
-(prime-agent's pi-tui vocabulary: persistent header, markdown-rendered
+(axiom's pi-tui vocabulary: persistent header, markdown-rendered
 transcript, live activity indicators, command palette with autocomplete),
 while keeping axiom's zero-dependency, core-UI-free architecture.
 

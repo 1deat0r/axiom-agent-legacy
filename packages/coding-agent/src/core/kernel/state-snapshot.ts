@@ -14,7 +14,7 @@ export const DEFAULT_SNAPSHOT_MAX_BYTES = 256 * 1024 * 1024;
 const KERNEL_STATE_BASENAME = "kernel-state";
 
 /** Marker the Python helpers print so the host can recover the JSON result line. */
-const RESULT_MARKER = "__PRIME_AGENT_KERNEL_STATE__";
+const RESULT_MARKER = "__AXIOM_KERNEL_STATE__";
 
 export interface SnapshotResult {
 	/** Top-level names successfully serialized into the payload. */

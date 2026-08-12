@@ -81,7 +81,7 @@ export interface CliCompletionOptions {
 	confinement?: {
 		bwrap?: string;
 		axiomHome?: string;
-		primeHome?: string;
+		agentHome?: string;
 		/** Extra host dirs to shadow, merged over the credential-only default. */
 		shadowDirs?: string[];
 	};
@@ -102,7 +102,7 @@ export class CliCompletionRunner implements CompletionRunner {
 	private readonly printFlag: string;
 	private readonly timeoutMs: number;
 	private readonly projectRoot?: string;
-	private readonly confinement?: { bwrap?: string; axiomHome?: string; primeHome?: string; shadowDirs?: string[] };
+	private readonly confinement?: { bwrap?: string; axiomHome?: string; agentHome?: string; shadowDirs?: string[] };
 	constructor(options: CliCompletionOptions = {}) {
 		const child = resolveCompletionChild(options.bin);
 		this.bin = child.bin;
@@ -150,11 +150,11 @@ export class CliCompletionRunner implements CompletionRunner {
 				const home = homedir();
 				const stores = resolveConfinementPaths(home, process.env);
 				const axiomHome = this.confinement?.axiomHome ?? stores.axiomHome;
-				const primeHome = this.confinement?.primeHome ?? stores.primeHome;
+				const agentHome = this.confinement?.agentHome ?? stores.agentHome;
 				// Writable store dirs must exist on the host to bind-mount.
 				try {
 					mkdirSync(axiomHome, { recursive: true });
-					mkdirSync(primeHome, { recursive: true });
+					mkdirSync(agentHome, { recursive: true });
 				} catch {
 					/* a missing store still fails closed at spawn (bind error) */
 				}
@@ -162,7 +162,7 @@ export class CliCompletionRunner implements CompletionRunner {
 					home,
 					projectRoot: this.projectRoot,
 					axiomHome,
-					primeHome,
+					agentHome,
 					shadowDirs: this.confinement?.shadowDirs ?? defaultShadowDirs(home),
 				});
 				spawnargv = assembleProgramArgv(bwrap, mount, this.bin, args);

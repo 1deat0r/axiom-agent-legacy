@@ -3,7 +3,7 @@
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 
 > **gh repo default (2026-08-12):** this repo has an `upstream` remote
-> (PrimeIntellect-ai/prime-agent, ADR-0015). `gh` resolves the repo from the branch's
+> (PrimeIntellect-ai/axiom, ADR-0015). `gh` resolves the repo from the branch's
 > upstream, then falls back to remotes — a branch with no tracking upstream
 > resolves to `upstream` (the pi repo). Fixed in this checkout via
 > `gh repo set-default mustbearnold/axiom-agent` and per-branch upstream

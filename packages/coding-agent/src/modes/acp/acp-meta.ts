@@ -1,16 +1,16 @@
 /**
- * Namespaced `_meta` payloads for prime-agent capabilities that ACP has no
+ * Namespaced `_meta` payloads for axiom capabilities that ACP has no
  * native concept for (IPython cell semantics, RLM subagents, autonomous gates,
  * goals, heartbeats, continual harness state).
  *
  * ACP reserves `_meta` on capability objects, notifications, tool calls, and
  * content blocks precisely so agents can carry non-standard data. Vanilla ACP
- * clients ignore these keys; a prime-agent-aware client (or the verifiers
+ * clients ignore these keys; a axiom-aware client (or the verifiers
  * harness) reads them. Never add non-standard fields to an ACP object root.
  */
 
-/** Reverse-domain namespace for every prime-agent `_meta` payload. */
-export const PRIME_AGENT_META_NAMESPACE = "ai.primeintellect.prime-agent";
+/** Reverse-domain namespace for every axiom `_meta` payload. */
+export const AXIOM_META_NAMESPACE = "ai.axiom";
 
 export interface PrimeAgentSubagentMeta {
 	id: string;
@@ -68,7 +68,7 @@ export interface PrimeAgentAgentMessageMeta {
 export interface PrimeAgentCwdMeta {
 	/** The cwd the client asked for. */
 	requested: string;
-	/** The cwd prime-agent is actually running in, fixed at startup. */
+	/** The cwd axiom is actually running in, fixed at startup. */
 	actual: string;
 }
 
@@ -89,7 +89,7 @@ export interface PrimeAgentSessionMeta {
 	ipython?: PrimeAgentIpythonMeta;
 }
 
-/** Wrap a prime-agent payload in its reverse-domain `_meta` envelope. */
+/** Wrap a axiom payload in its reverse-domain `_meta` envelope. */
 export function primeAgentMeta(payload: PrimeAgentSessionMeta): Record<string, unknown> {
-	return { [PRIME_AGENT_META_NAMESPACE]: payload };
+	return { [AXIOM_META_NAMESPACE]: payload };
 }

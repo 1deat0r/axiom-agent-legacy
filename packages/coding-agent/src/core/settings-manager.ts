@@ -151,8 +151,8 @@ export interface Settings {
 	prompts?: string[]; // Array of local prompt template paths or directories
 	themes?: string[]; // Array of local theme file paths or directories
 	enableSkillCommands?: boolean; // default: true - register skills as /skill:name commands
-	bundledSkills?: BundledSkillsSettings; // Configure built-in skills shipped with Prime Agent
-	enableBuiltinSkills?: boolean; // default: true - load built-in skills shipped with prime-agent
+	bundledSkills?: BundledSkillsSettings; // Configure built-in skills shipped with Axiom
+	enableBuiltinSkills?: boolean; // default: true - load built-in skills shipped with axiom
 	terminal?: TerminalSettings;
 	images?: ImageSettings;
 	enabledModels?: string[]; // Model patterns for cycling (same format as --models CLI flag)

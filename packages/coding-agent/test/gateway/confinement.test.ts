@@ -77,7 +77,7 @@ maybeDescribe("OS-tier confinement (real bwrap)", () => {
 				// containment: stores under the tmp project — touches nothing real
 				confinement: {
 					axiomHome: join(projectRoot, "stores", "axiom"),
-					primeHome: join(projectRoot, "stores", "prime"),
+					agentHome: join(projectRoot, "stores", "agent"),
 				},
 			});
 			const result = await runner.runCompletion({

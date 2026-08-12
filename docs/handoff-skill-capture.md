@@ -1,7 +1,7 @@
 # Handoff — Skills that learn procedural memory (steps 1–4: capture + security audit + auto flag + unattended hook)
 
 **Branch:** `feat/skill-capture` (isolated worktree at `.worktrees/skill-capture`)
-**Base:** baseline 68a3f31ae (prime-agent v0.7.2 fork)
+**Base:** baseline 68a3f31ae (axiom v0.7.2 fork)
 
 ## What was done
 

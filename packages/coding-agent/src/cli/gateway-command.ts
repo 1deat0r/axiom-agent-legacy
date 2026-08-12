@@ -145,10 +145,10 @@ export async function handleGatewayCommand(
 /**
  * The sessions archive directory for the active profile: named profiles keep
  * their agent dir at the profile home, the implicit `default` profile uses the
- * base agent dir (~/.prime/agent). Both hold sessions/<id>.jsonl.
+ * base agent dir (~/.axiom/agent). Both hold sessions/<id>.jsonl.
  */
 export function resolveSessionsDir(profile: string, projectHome: string): string {
-	return profile === "default" ? join(homedir(), ".prime", "agent", "sessions") : join(projectHome, "sessions");
+	return profile === "default" ? join(homedir(), ".axiom", "agent", "sessions") : join(projectHome, "sessions");
 }
 
 /**

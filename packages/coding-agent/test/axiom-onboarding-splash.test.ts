@@ -2,11 +2,11 @@ import { setKeybindings, visibleWidth } from "@earendil-works/pi-tui";
 import stripAnsi from "strip-ansi";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { KeybindingsManager } from "../src/core/keybindings.js";
-import { PrimeOnboardingSplashComponent } from "../src/modes/interactive/components/prime-onboarding-splash.js";
+import { AxiomOnboardingSplashComponent } from "../src/modes/interactive/components/axiom-onboarding-splash.js";
 import { initTheme } from "../src/modes/interactive/theme/theme.js";
-import { AXIOM_LOGO } from "../src/themes/prime-logo.js";
+import { AXIOM_LOGO } from "../src/themes/axiom-logo.js";
 
-describe("PrimeOnboardingSplashComponent", () => {
+describe("AxiomOnboardingSplashComponent", () => {
 	beforeAll(() => {
 		initTheme("dark");
 	});
@@ -20,7 +20,7 @@ describe("PrimeOnboardingSplashComponent", () => {
 	});
 
 	it("renders a minimal first-run login action", () => {
-		const component = new PrimeOnboardingSplashComponent(
+		const component = new AxiomOnboardingSplashComponent(
 			() => {},
 			() => {},
 			{ getRows: () => 36 },
@@ -68,7 +68,7 @@ describe("PrimeOnboardingSplashComponent", () => {
 
 	it("starts Prime login on confirm", () => {
 		let selected = false;
-		const component = new PrimeOnboardingSplashComponent(
+		const component = new AxiomOnboardingSplashComponent(
 			() => {
 				selected = true;
 			},
@@ -81,7 +81,7 @@ describe("PrimeOnboardingSplashComponent", () => {
 	});
 
 	it("renders a model selection action when auth is already available", () => {
-		const component = new PrimeOnboardingSplashComponent(
+		const component = new AxiomOnboardingSplashComponent(
 			() => {},
 			() => {},
 			{ getRows: () => 36, continueActionLabel: "choose a model" },
@@ -95,7 +95,7 @@ describe("PrimeOnboardingSplashComponent", () => {
 	it("shows progress and ignores input while onboarding advances", () => {
 		const onSelect = vi.fn();
 		const onCancel = vi.fn();
-		const component = new PrimeOnboardingSplashComponent(onSelect, onCancel, { getRows: () => 36 });
+		const component = new AxiomOnboardingSplashComponent(onSelect, onCancel, { getRows: () => 36 });
 
 		component.showProgress("Preparing models...");
 		component.handleInput("\r");
@@ -111,7 +111,7 @@ describe("PrimeOnboardingSplashComponent", () => {
 	it("animates the splash at an interactive cadence", () => {
 		vi.useFakeTimers();
 		let renderRequests = 0;
-		const component = new PrimeOnboardingSplashComponent(
+		const component = new AxiomOnboardingSplashComponent(
 			() => {},
 			() => {},
 			{
@@ -135,7 +135,7 @@ describe("PrimeOnboardingSplashComponent", () => {
 	});
 
 	it("centers stacked content in narrow terminals", () => {
-		const component = new PrimeOnboardingSplashComponent(
+		const component = new AxiomOnboardingSplashComponent(
 			() => {},
 			() => {},
 			{ getRows: () => 40 },

@@ -17,8 +17,8 @@ import type { OAuthAuthInfo } from "@earendil-works/pi-ai";
 
 export const PRIME_INFERENCE_PROVIDER_ID = "prime-inference";
 export const PRIME_INFERENCE_PROVIDER_NAME = "Prime Inference";
-export const PRIME_AGENT_TRACES_PROVIDER_ID = "prime-agent-traces";
-export const PRIME_AGENT_TRACES_PROVIDER_NAME = "Prime Agent Traces";
+export const AXIOM_TRACES_PROVIDER_ID = "axiom-traces";
+export const AXIOM_TRACES_PROVIDER_NAME = "Axiom Traces";
 
 const DEFAULT_PRIME_API_BASE_URL = "https://api.primeintellect.ai";
 const DEFAULT_PRIME_FRONTEND_URL = "https://app.primeintellect.ai";
@@ -87,7 +87,7 @@ export type PrimeTeam = {
 };
 
 function defaultPrimeCliConfigPath(): string {
-	return join(homedir(), ".prime", "config.json");
+	return join(homedir(), ".axiom", "config.json");
 }
 
 export function getPrimeCliConfigPath(configPath?: string): string {
@@ -238,13 +238,13 @@ export function savePrimeCliTeamSelection(
 }
 
 export function resolvePrimeAgentTracesBaseUrl(baseUrl?: string): string {
-	return normalizeBaseUrl(baseUrl ?? stringEnv("PRIME_AGENT_TRACES_BASE_URL"));
+	return normalizeBaseUrl(baseUrl ?? stringEnv("AXIOM_TRACES_BASE_URL"));
 }
 
 function resolvePrimeAgentTracesChallengeConfig(config: PrimeCliConfig): PrimeChallengeConfig {
 	return {
 		baseUrl: resolvePrimeAgentTracesBaseUrl(),
-		frontendUrl: stringEnv("PRIME_AGENT_TRACES_BASE_URL") ? config.frontendUrl : DEFAULT_PRIME_FRONTEND_URL,
+		frontendUrl: stringEnv("AXIOM_TRACES_BASE_URL") ? config.frontendUrl : DEFAULT_PRIME_FRONTEND_URL,
 	};
 }
 
@@ -706,7 +706,7 @@ export async function loginPrimeAgentTraces(
 			return { apiKey: config.apiKey, source: "prime-cli" };
 		}
 		callbacks.onProgress?.(
-			`Existing Prime CLI key cannot upload Prime Agent traces (${formatAccessFailure(access)}). Starting browser login...`,
+			`Existing Prime CLI key cannot upload Axiom traces (${formatAccessFailure(access)}). Starting browser login...`,
 		);
 	} else {
 		callbacks.onProgress?.("No Prime CLI API key found. Starting browser login...");
@@ -721,14 +721,14 @@ export async function loginPrimeAgentTraces(
 		"agent_traces",
 	);
 	throwIfCancelled(callbacks.signal);
-	callbacks.onProgress?.("Checking Prime Agent trace access...");
+	callbacks.onProgress?.("Checking Axiom trace access...");
 	const access = await checkPrimeAgentTracesAccess(apiKey, traceConfig.baseUrl, {
 		fetchFn,
 		requestTimeoutMs,
 		signal: callbacks.signal,
 	});
 	if (!access.ok) {
-		throw new Error(`Prime API key does not have Prime Agent trace access (${formatAccessFailure(access)})`);
+		throw new Error(`Prime API key does not have Axiom trace access (${formatAccessFailure(access)})`);
 	}
 
 	throwIfCancelled(callbacks.signal);

@@ -35,7 +35,7 @@ describe("IPython RLM bootstrap", () => {
 
 		expect(code).toContain("except Exception as _prime_agent_skill_error");
 		expect(code).toContain("_PrimeAgentUnavailableSkill");
-		expect(code).toContain("_PRIME_AGENT_SKILL_IMPORT_ERRORS");
+		expect(code).toContain("_AXIOM_SKILL_IMPORT_ERRORS");
 		expect(code).toContain("globals()[_prime_agent_skill_name] = _PrimeAgentUnavailableSkill");
 	});
 });
@@ -43,8 +43,8 @@ describe("IPython RLM bootstrap", () => {
 /** Find a python that can launch an ipykernel, or null to skip. */
 function resolveKernelPython(): string | null {
 	const candidates = [
-		process.env.PRIME_AGENT_KERNEL_PYTHON,
-		join(homedir(), ".prime", "agent", "kernel-venv", "bin", "python"),
+		process.env.AXIOM_KERNEL_PYTHON,
+		join(homedir(), ".axiom", "agent", "kernel-venv", "bin", "python"),
 	].filter((p): p is string => Boolean(p));
 	for (const python of candidates) {
 		if (!existsSync(python)) continue;
@@ -58,7 +58,7 @@ const python = resolveKernelPython();
 const describeIfKernel = python ? describe : describe.skip;
 
 describeIfKernel("IPython RLM bootstrap (real kernel)", () => {
-	const dir = mkdtempSync(join(tmpdir(), "prime-agent-bootstrap-"));
+	const dir = mkdtempSync(join(tmpdir(), "axiom-bootstrap-"));
 
 	afterAll(() => {
 		rmSync(dir, { recursive: true, force: true });

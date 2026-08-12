@@ -1,6 +1,6 @@
 /**
  * Gateway types (the axiom messaging gateway, ADR-0001/0004/0006, first port
- * onto the prime-agent v0.7.2 baseline). One sender channels to one session.
+ * onto the axiom v0.7.2 baseline). One sender channels to one session.
  */
 import type { AgentCronJob } from "../core/cron-jobs.js";
 import type { DeliveryLedger } from "./delivery-ledger.js";

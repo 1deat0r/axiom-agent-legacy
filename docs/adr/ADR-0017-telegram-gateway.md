@@ -2,7 +2,7 @@
 
 **Status:** accepted (autonomous decision, owner-empowered, 2026-08-12)
 **Relates to:** ADR-0016 (Signal gateway — the module-for-module template),
-ADR-0001/0004/0006 (gateway architecture), ADR-0015 (prime-agent baseline).
+ADR-0001/0004/0006 (gateway architecture), ADR-0015 (axiom baseline).
 
 ## Context
 

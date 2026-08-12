@@ -1,6 +1,6 @@
 # Axiom
 
-An agent framework forked from **prime-agent v0.7.2** (MIT, PrimeIntellect-ai;
+An agent framework forked from **Prime Agent v0.7.2** (MIT, PrimeIntellect-ai;
 the successor to earendil-works/pi by the same author) and grown past it: the
 prime baseline (agent core, multi-provider AI layer, TUI, extensions, daemon,
 RLM, subagents) plus the capabilities it does not have — cost ledger, spend
@@ -113,7 +113,7 @@ category)
 The ADR-0019 OS-tier strict tier: an anchored gateway run (projectRoot set)
 spawns the whole completion child inside a bubblewrap sandbox — host mounted
 read-only except the project root and the persistent stores (AXIOM_HOME,
-~/.prime) bound writable; /tmp /run /var and the CREDENTIAL dirs (~/.ssh,
+~/.axiom/agent) bound writable; /tmp /run /var and the CREDENTIAL dirs (~/.ssh,
 ~/.aws, ~/.gnupg, ~/.netrc) shadowed as tmpfs. Tooling dirs (~/.local, ~/.config,
 ~/.cache) stay readable so agents keep full bash/tooling and web research; a
 per-project shadowDir override tunes this. Freeform bash and the ipython kernel

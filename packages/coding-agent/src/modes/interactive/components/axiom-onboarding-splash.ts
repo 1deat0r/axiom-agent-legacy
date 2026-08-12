@@ -1,5 +1,5 @@
 import { type Component, getKeybindings, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { AXIOM_LOGO } from "../../../themes/prime-logo.js";
+import { AXIOM_LOGO } from "../../../themes/axiom-logo.js";
 import { type ThemeColor, theme } from "../theme/theme.js";
 
 interface PrimeOnboardingSplashOptions {
@@ -48,7 +48,7 @@ interface QuietZone {
 	bottom: number;
 }
 
-export class PrimeOnboardingSplashComponent implements Component {
+export class AxiomOnboardingSplashComponent implements Component {
 	private frame = 0;
 	private animationInterval?: ReturnType<typeof setInterval>;
 	private progressMessage?: string;
