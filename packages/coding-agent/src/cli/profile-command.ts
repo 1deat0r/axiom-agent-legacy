@@ -42,16 +42,6 @@ function baseHome(home: string): string {
 	return basename(parent) === "profiles" ? dirname(parent) : home;
 }
 
-/** Sorted profile names under the base home (mirror of listProjectNames). */
-export async function listProfileNames(home: string): Promise<string[]> {
-	const profilesDir = join(home, "profiles");
-	try {
-		return (await readdir(profilesDir)).filter((n) => isValidProfileName(n)).sort();
-	} catch {
-		return [];
-	}
-}
-
 export async function handleProfileCommand(args: string[], io: ProfileCommandIO = {}): Promise<boolean> {
 	if (args[0] !== "profile") return false;
 	let home = io.axiomHome;
