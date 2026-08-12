@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { InMemoryActiveModelStore } from "../../src/gateway/active-model.js";
 import { dispatchCommand } from "../../src/gateway/commands/index.js";
 import { defaultGatewayConfig, isAllowedSender } from "../../src/gateway/config.js";
 
@@ -16,6 +17,15 @@ describe("command dispatch", () => {
 		const out = dispatchCommand("/help", ctx("/tmp"));
 		expect(out).toContain("/profiles");
 		expect(out).toContain("/soul");
+	});
+	it("advertises /model in /help and shows the active override when set", () => {
+		const store = new InMemoryActiveModelStore();
+		const c = { ...ctx("/tmp"), modelStore: store };
+		expect(dispatchCommand("/help", c)).toContain("/model");
+		store.save({ provider: "deepseek", model: "deepseek-v4-pro" });
+		expect(dispatchCommand("/help", c)).toContain("active model: deepseek/deepseek-v4-pro");
+		store.clear();
+		expect(dispatchCommand("/help", c)).toContain("no model override set");
 	});
 	it("rejects an unknown command with a usage hint", () => {
 		expect(dispatchCommand("/bogus x", ctx("/tmp"))).toContain("unknown command");

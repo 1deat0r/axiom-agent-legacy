@@ -148,3 +148,14 @@ sensitive-tool fence (a configurable approved-tool ladder, opt-in, escaped via
 `AXIOM_FENCE_ALLOW`/`AXIOM_FENCE_ALLOW_HOSTS`). Freeform `bash`/`ipython` stay
 the ADR-0019 OS-sandbox tier, never string-fenced.
 _Avoid_: Firewall (a wall, not a fence — the fence is one rung of the ladder)
+
+**Model hotswap**:
+The gateway-local `/model` command (ADR-0033): a persisted per-profile
+active-model override (`{provider, model}` under
+`<AXIOM_HOME>/gateway/model-<profile>.json`) that the gateway injects as
+`--provider/--model` into every subsequent completion, so the operator can
+switch the agent's model from the chat without a restart. Provider may be
+empty ("keep the profile's provider"); `/model clear` reverts to the profile
+default. The CLI stays the model authority — availability is validated on the
+next completion, not by a gateway-side catalog.
+_Avoid_: Settings edit (the store is an override, not the profile's config)

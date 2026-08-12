@@ -67,9 +67,9 @@ export interface GatewayCommandContext {
 	profile: string;
 	axiomHomeDir: string;
 	projectHome: string;
-	/** Sessions archive directory for cross-session recall (/search). */
 	/** Per-profile active-model store (/model hotswap); optional. */
 	modelStore?: ActiveModelStore;
+	/** Sessions archive directory for cross-session recall (/search). */
 	sessionsDir?: string;
 	/** Persistent sqlite FTS index file for cross-session recall. */
 	searchIndexPath?: string;

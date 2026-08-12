@@ -17,7 +17,8 @@ const USAGE =
 	"/model <provider>/<model>  or  :         — same, one token\n" +
 	"/model clear                             — revert to the profile default";
 
-function replyFor(store: ActiveModelStore | undefined, profile: string): string {
+/** One-line status of the active model for a profile ("active model: ..."). */
+export function describeActiveModel(store: ActiveModelStore | undefined, profile: string): string {
 	if (!store) return "model switching is not wired in this gateway build.";
 	const active = store.load();
 	if (!active) return `no model override set — the '${profile}' profile uses its configured default model.`;
@@ -30,7 +31,7 @@ export const modelCommand: GatewayCommand = {
 	summary: "hot-swap the active model for this gateway (no restart)",
 	handler(args: string[], ctx: GatewayCommandContext): string {
 		if (args.length === 0) {
-			return `${replyFor(ctx.modelStore, ctx.profile)}\n\n${USAGE}`;
+			return `${describeActiveModel(ctx.modelStore, ctx.profile)}\n\n${USAGE}`;
 		}
 		if (args[0] === "clear") {
 			ctx.modelStore?.clear();
