@@ -11,3 +11,6 @@ Model: coding agent (axiom) · base main b31341e77 · worktree .worktrees/securi
   W3 (Testability) must prove WIRING, not just pure funcs: handler-level tests through fakePi invoking the real tool_call handler + inert-without-anchor test.
 - L3 external review (self-posed skeptic, daemon disabled): r1 DENIED 84/100 -> fixed 3 citations (ADR documents DNS boundary + approved-tool ladder operator story; reason names specific unsafe property; back-compat passthrough test). r2 94/100 APPROVED.
 - IMPL starts.
+- IMPL green: url 13, fence 9, wiring 6 = 28/28; biome clean (999 files); tsgo --noEmit clean (root + coding-agent).
+- Floor ./test.sh: 14 failed / 4544 passed / 59 skipped. The 14 = ONLY documented sandbox known-fails (daemon-serialized-refine 1, 4685-daemon-client-modes 9 EXDEV, 4603-worker-recovery 4 EXDEV). Passed grew 4516+28(new)=4544 -> no regressions.
+- Docs: ADR-0028, CONTEXT term, handoff-security-fence.md written.

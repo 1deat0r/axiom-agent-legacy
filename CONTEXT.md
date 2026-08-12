@@ -122,3 +122,13 @@ marked AXIOM_CONFINED=1 and replies open with [sandbox-confined]. Fail-closed
 when bwrap is absent. Follow-ups (honest): read-minimal allowlist; network
 isolation is opt-in per project, off by default (agents need the web).
 _Avoid_: Jail, container (not a full container; a mount-ns confinement)
+
+**Security fence**:
+The ADR-0028 rung-3 amplification, on the same `tool_call` seam as the root
+guard and inert unless anchored: a URL-safe fetch gate (blocks malformed,
+non-http(s), credential-bearing, and SSRF-prone URLs — loopback/private/link-
+local/ULA/v4-mapped hosts, resolved hostname SSRF pending DNS follow-up) plus a
+sensitive-tool fence (a configurable approved-tool ladder, opt-in, escaped via
+`AXIOM_FENCE_ALLOW`/`AXIOM_FENCE_ALLOW_HOSTS`). Freeform `bash`/`ipython` stay
+the ADR-0019 OS-sandbox tier, never string-fenced.
+_Avoid_: Firewall (a wall, not a fence — the fence is one rung of the ladder)
