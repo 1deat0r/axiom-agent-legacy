@@ -3,6 +3,15 @@
 Branch: `feat/session-search-recall` (isolated worktree `.worktrees/session-search`).
 Baseline: `baseline/prime-v0.7.2` @ `01948fe39`.
 
+> **Status update (continuation):** the /search first step is now part of a structurally-complete
+> feature. session-search.ts now keeps a **persistent incremental SQLite FTS5 index** (entries + sessions
+> tables, FTS5 external-content + triggers, reconciled by file size+mtime, keyed by file path) — matching
+> the card's "an FTS5 index over the SQLite session DB" and removing the per-call full rebuild. `/search`
+> gained `--offset` (scroll/paging with stable order), and a new `/sessions` command provides the
+> **discovery/browse** mode (newest-first, project-labeled, scoped like search). Committed as
+> `996b47bfd`; gateway dir 103 pass (clean env), biome + tsgo clean. LLM-summarized recall is the
+> remaining card item — a model-facing next phase (see below).
+
 ## What was done
 Implemented a gateway-local `/search <query>` command (ADR-0001: never reaches the model) that
 answers cross-session recall by full-text searching the agent's past session archive:
@@ -40,10 +49,14 @@ as one workspace.
   cannot run; production path wiring (`resolveSessionsDir`, `projectRoot` threading) is covered by unit tests
   and code review, not by a live end-to-end agent run.
 
-## Follow-ups (documented in plan/summary)
+## Follow-ups
+- **LLM-summarized recall / memory surfacing** (the card's remaining item): a model-facing next phase —
+  an agent-side `recall` tool (mirroring the memory-extension pattern) that surfaces top snippets for the
+  model to summarize/decide. Not in this run because (a) gateway commands by ADR-0001 never reach the
+  model, so a summary layer is an agent tool, not a gateway command, and (b) it needs a live model to be
+  meaningfully verified, which the sandbox cannot run. Persistence (done) + browse + scroll (done) remove
+  the infrastructure gap that unblocks it.
 - Centralize the profile→agent-dir rule instead of `resolveSessionsDir` restating it.
-- Persist/increment the FTS5 index (invalidation by size/mtime) instead of an in-memory rebuild per call.
-- Optional LLM summary layer on top (the card's later phase — explicitly out of scope for v1).
 
 ## Note on review
 The loop's external-review step was conducted as a cold "skeptical senior engineer" self-review (no separate

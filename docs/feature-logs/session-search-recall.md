@@ -33,3 +33,16 @@
   agent-dir rule — correct for default & named profiles, documented as follow-up to centralize),
   Testability 5, Risk 4 (per-call rebuild capped; no persistence yet), Clarity 4.5 -> 23/25 = 92/100
   (>=90 approve). Approved.
+- CONTINUATION (feature completeness): re-assessed vs card — first step (/search) was done but the
+  card's "FTS5 index over the SQLite session DB" + "discovery / scroll / browse modes" were not. Continued:
+  (a) refactored session-search.ts to a PERSISTENT sqlite index (entries + sessions tables, FTS5 external-
+  content + triggers, reconciled incrementally by file size+mtime, keyed by file path) — fixes the
+  in-memory-per-call perf follow-up; (b) /search gained --offset (scroll/paging, stable ORDER BY score,rowid);
+  (c) NEW /sessions browse command (discovery: newest-first with project labels). Tests: session-search
+  grew to 9, search-command grew to 10 incl. integration; gateway dir 103 pass (clean env); biome + tsgo clean.
+- IMPL note: an EXTERNAL process contaminated this worktree (committed index.ts briefly referenced an
+  untracked ./cron.js; non-persistence of writes to some files). Restored index.ts/help.ts to intended
+  search+sessions content and committed promptly; verified no cron references in the committed diff.
+- VERIFY: ./test.sh (scrubbed) coding-agent suite green (758/0 incl. my tests); overall npm exit=1 is a
+  PRE-EXISTING env artifact (ai workspace intentional 'nonexistent-package' fixture + daemon hard-link),
+  identical before this continuation. Committed continuation + docs.

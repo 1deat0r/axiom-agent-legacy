@@ -15,86 +15,81 @@
   code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.86em;
          background:#f4f5f7; padding:.05rem .3rem; border-radius:4px; }
   .ok { color:#0a7d33; font-weight:600; }
-  .warn { color:#b54708; }
-  ul { margin:.2rem 0 0; padding-left:1.2rem; }
-  li { margin:.35rem 0; }
+  ul { margin:.2rem 0 0; padding-left:1.2rem; } li { margin:.35rem 0; }
   table { border-collapse:collapse; width:100%; font-size:.86rem; margin:.4rem 0; }
-  th,td { border:1px solid #e2e4e8; padding:.35rem .5rem; text-align:left; }
-  th { background:#f4f5f7; }
-  .score b { color:var(--accent); }
+  th,td { border:1px solid #e2e4e8; padding:.35rem .5rem; text-align:left; } th { background:#f4f5f7; }
   footer { margin-top:2rem; font-size:.78rem; color:#888; border-top:1px solid #eee; padding-top:.6rem; }
-  @media print { body { padding:0; } a { color:var(--accent); } }
+  @media print { body { padding:0; } }
 </style></head><body><main>
 
 <header>
   <h1>Cross-session recall — <code>/search</code> over an FTS5 session index</h1>
-  <div class="meta">Feature Implementation Loop v2 · summary built from the running log<br>
+  <div class="meta">Feature Implementation Loop v2 · summary from the running log<br>
   snapshot: 2026-08-12 · model: claude (axiom coding-agent) · branch <code>feat/session-search-recall</code></div>
 </header>
 
 <h2>Goal &amp; assumptions</h2>
-<p>A gateway-local <code>/search &lt;query&gt;</code> command that answers "what did we decide about
-X in a past session?" by full-text (FTS5) searching the agent's session archive — scoped to the
-anchored project by default, crossing projects only via an explicit guarded <code>--all</code>, with
-every hit labeled by its project so projects never mix silently. Success: ranked hits; anchored runs
-never leak another project; <code>./test.sh</code> floor holds; biome + tsgo clean.</p>
-<p><b>Assumptions:</b> "session DB" = the repo's real archive (append-only JSONL under the profile's
-sessions dir); the vendored <code>session-backends/sqlite-node</code> is dist-only &amp; unwired, so we
-index the actual corpus. FTS5 via <code>node:sqlite</code> stdlib (no new dep). A session belongs to a
-project iff its header <code>cwd</code> is under that project's root.</p>
+<p>A gateway-local <code>/search &lt;query&gt;</code> command that answers "what did we decide about X in
+a past session?" by full-text (FTS5) searching the agent's session archive — scoped to the anchored project
+by default, crossing projects only via an explicit guarded <code>--all</code>, every hit labeled by its
+project. Plus discovery/browse and scroll. Assumption: "session DB" = the repo's real JSONL session archive;
+FTS5 via <code>node:sqlite</code> (no new dependency); a session belongs to a project iff its header
+<code>cwd</code> is under that project's root.</p>
 
 <h2>Plan as executed</h2>
 <ul>
-  <li><b>NEW</b> <code>src/gateway/session-search.ts</code> — scan archive, per-message docs, in-memory FTS5
-  trigram index, injection-safe phrase, ranking, project helpers <code>isWithin</code>/<code>projectLabelForCwd</code>.</li>
-  <li><b>NEW</b> <code>src/gateway/commands/search.ts</code> — parse <code>[--all] [--limit N] &lt;q&gt;</code>, render reply, enforce guard.</li>
-  <li><b>EDIT</b> <code>commands/index.ts</code> + <code>help.ts</code> — register/document <code>/search</code>.</li>
-  <li><b>EDIT</b> <code>types.ts</code> — <code>GatewayCommandContext</code> gains <code>sessionsDir?/projectRoot?</code>.</li>
-  <li><b>EDIT</b> <code>gateway.ts</code> — thread deps into the command context.</li>
-  <li><b>EDIT</b> <code>cli/gateway-command.ts</code> — <code>resolveSessionsDir</code> + pass <code>projectRoot</code>.</li>
-  <li><b>NEW</b> tests <code>session-search.test.ts</code> (6) + <code>search-command.test.ts</code> (6 + 1 integration).</li>
+  <li><b>NEW</b> <code>src/gateway/session-search.ts</code> — persistent FTS5 index with incremental
+  reconciliation.</li>
+  <li><b>NEW</b> <code>src/gateway/commands/search.ts</code> (<code>[--all] [--limit N] [--offset N]</code>)
+  + <code>commands/sessions.ts</code> (browse).</li>
+  <li><b>EDIT</b> <code>types.ts</code>/<code>gateway.ts</code>/<code>cli/gateway-command.ts</code> — thread
+  <code>sessionsDir</code>/<code>searchIndexPath</code>/<code>projectRoot</code>.</li>
+  <li><b>EDIT</b> <code>commands/index.ts</code>/<code>help.ts</code> — register/document.</li>
+  <li><b>NEW</b> tests: <code>session-search.test.ts</code> (9), <code>search-command.test.ts</code> (10, incl.
+  a real-router integration test).</li>
 </ul>
 
 <h2>Key decisions</h2>
 <ul>
-  <li>Build the index over the real <b>JSONL archive</b> (not the dist-only sqlite-node) — smallest correct surface.</li>
-  <li><b>In-memory FTS5 index per call</b> (<code>:memory:</code>) with caps (2000 files / 64 KB per session
-  / 4 KB per message). Persistence/incremental indexing is a documented follow-up, not v1.</li>
-  <li><b>Trigram tokenizer</b> — substring / CJK-friendly recall; enforced 3-char minimum with a friendly message.</li>
-  <li><b>Project isolation</b>: default scoped to <code>projectRoot</code>; <code>--all</code> is the only
-  cross-project path and every hit is labeled by project. Unanchored runs treat the profile as one workspace.</li>
-  <li><code>resolveSessionsDir</code> mirrors <code>main.ts</code>'s profile→agent-dir rule (default vs named profile).</li>
+  <li>Persistent <b>SQLite session-DB index</b> (entries + sessions, FTS5 external-content + triggers,
+  reconciled by size+mtime keyed by file path) — no per-call rebuild, matching the card.</li>
+  <li>Project isolation: default <code>projectRoot</code>-scoped; <code>--all</code> is the only cross-project
+  path, labeled by project.</li>
+  <li>Trigram tokenizer; 3-char minimum; stable <code>ORDER BY score, rowid</code> for scroll paging.</li>
+  <li><code>/sessions</code> = discovery/browse (newest-first, project-labeled), same scoping rules.</li>
 </ul>
 
 <h2>Verification evidence</h2>
 <ul>
-  <li><span class="ok">session-search.test.ts:</span> 6 pass — build/rank, project scoping, <code>--all</code>
-  with labels, <code>queryTooShort</code>, empty/malformed archive, <code>ftsPhrase</code> injection, isWithin/label.</li>
-  <li><span class="ok">search-command.test.ts:</span> 7 pass — arg parsing, project-scoped reply, <code>--all</code>
-  cross-project, unanchored whole-profile, too-short/no-match, no-sessionsDir, Gateway-route integration (0 model calls).</li>
-  <li><span class="ok">gateway test dir:</span> 97 pass (clean env). <span class="ok">biome clean</span>,
+  <li><span class="ok">session-search.test.ts (9)</span>: build/rank, persistence across opens, re-index on
+  change, project scoping, <code>--all</code> labels, offset paging, <code>queryTooShort</code>, empty/malformed
+  archives, injection safety, <code>listRecentSessions</code> browse, geometry helpers.</li>
+  <li><span class="ok">search-command.test.ts (10)</span>: arg parsing, project-scoped reply, <code>--all</code>,
+  unanchored, <code>--offset</code> scroll + out-of-range, too-short/no-match/missing-index, <code>/sessions</code>
+  browse + <code>--all</code>, unknown-args, and a Gateway-route integration (0 model calls).</li>
+  <li><span class="ok">gateway test dir: 103 pass</span> (clean env). <span class="ok">biome clean</span>,
   <span class="ok">tsgo --noEmit clean</span>.</li>
-  <li><code>npm test</code> (~14 min): my 2 files pass inside 322 passed suites; the 30 failures are
-  <b>pre-existing env/sandbox known-fails</b> — daemon/worker/self-update/recursion (incl. the AGENTS.md-documented
-  4603/4685 EXDEV hard-link) plus the single <code>gateway-command</code> "telegram no token" test that fails only
-  when <code>AXIOM_TELEGRAM_BOT_TOKEN</code> leaks into env (scrubbed by <code>./test.sh</code>; baseline fails identically).
-  My diff touches none of the failing test files.</li>
+  <li>Full scrubbed floor: coding-agent suite green incl. my tests; overall npm exit=1 is a pre-existing env
+  artifact (ai-workspace intentional <code>nonexistent-package</code> fixture + daemon hard-link EXDEV),
+  identical before this feature.</li>
 </ul>
 
 <h2>Review history</h2>
 <table>
-  <tr><th>Round</th><th>Dimension scores (5×20)</th><th>Total</th><th>What was fixed / verdict</th></tr>
-  <tr><td>Plan self-review</td><td>found 4 weaknesses</td><td>—</td><td>removed dead <code>searchIndexDir</code>; added
-  caps + snippet retention; verified node:sqlite under vitest; pinned profile/workspace semantics</td></tr>
-  <tr><td>Plan (final)</td><td>all ≥4/5</td><td>—</td><td>approved</td></tr>
-  <tr><td class="score">Implementation review</td><td class="score"><b>Correctness 5 · Fit 4.5 · Testability 5 · Risk 4 · Clarity 4.5</b></td>
-  <td class="score"><b>92/100</b></td><td>approve; noted follow-ups: centralize agent-dir rule, persist/index incrementally</td></tr>
+  <tr><th>Round</th><th>Scores</th><th>Total</th><th>Verdict / fixes</th></tr>
+  <tr><td>Plan self-review</td><td>4 weaknesses found</td><td>—</td><td>removed dead indexDir; caps+snippet;
+  node:sqlite-under-vitest; profile semantics</td></tr>
+  <tr><td>Implementation review</td><td>C5 · F4.5 · T5 · R4 · Cl4.5</td><td><b>92/100</b></td><td>approve</td></tr>
+  <tr><td>Continuation review</td><td>persistence done; scroll+browse added; LLM layer deferred</td><td>—</td><td>structurally
+  complete; LLM summary = explicit next phase</td></tr>
 </table>
 
 <h2>Final state</h2>
-<p><code>/search</code> is implemented, tested, and wired into the gateway and CLI. The diff is additive
-(11 files, +824/−1), monorepo-conventioned, and the full suite shows only pre-existing environment known-fails
-unrelated to this feature. See <code>docs/handoff.md</code> for the run report.</p>
+<p><code>/search</code> (persistent FTS index), scroll paging, and <code>/sessions</code> browse are
+implemented, tested, and wired into the gateway + CLI. Project isolation holds (anchored default scopes;
+<code>--all</code> guarded + labeled). Remaining card item: <b>LLM-summarized recall / memory surfacing</b>
+— a model-facing agent tool, deferred because gateway commands never reach the model (ADR-0001) and it needs
+a live model to verify. See <code>docs/handoff-session-search.md</code>.</p>
 
-<footer>Generated 2026-08-12 from the running log only: <code>docs/feature-logs/session-search-recall.md</code>.</footer>
+<footer>Generated 2026-08-12 from <code>docs/feature-logs/session-search-recall.md</code>.</footer>
 </main></body></html>
