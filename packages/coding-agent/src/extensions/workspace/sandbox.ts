@@ -5,30 +5,41 @@
  * wraps the WHOLE completion child (and with it the freeform bash tool and the
  * persistent ipython kernel, which inherit the mount namespace) in one
  * kernel-enforced boundary — there is no string-level guard on shell commands,
- * because freeform commands cannot be confined reliably (that is the ADR-0018
- * gap this closes).
+ * because freeform commands cannot be confined reliably (the ADR-0018 gap this
+ * closes).
  *
- * Mount model (order matters — a later bind overrides both the read-only host
- * and the tmpfs home):
+ * Mount model (order matters — a later bind overrides an earlier one):
  *   --ro-bind / /            : host visible but READ-ONLY
  *   --tmpfs /tmp /run /var   : writable scratch that is NOT the host's dirs
- *   --tmpfs <home>           : operator home blanked (no host reads/writes)
- *   --bind <project|stores>  : the only writable host surfaces (re-exposed)
+ *   --bind <project|stores>  : the only writable host surfaces, re-exposed
+ *   --tmpfs <secret dirs>    : shadow ~/.ssh, ~/.aws, ... so they are unreadable
  *   --proc /proc --dev /dev  : fresh namespace proc + minimal dev
  *   --chdir <projectRoot>    : the anchored work area
  *
- * Honest, deliberate scope (recorded in ADR-0019): `--ro-bind / /` keeps the
- * host READABLE (though home/tmp/var are shadowed) and network is inherited —
- * read-minimal allowlisting and network isolation are documented follow-ups.
- * If bubblewrap is absent the caller FAILS CLOSED; this module never falls
- * back to an unconfined run.
+ * The host home stays READABLE (so axiom's own CLI / node_modules under $HOME
+ * still execute) but every host path except the writable binds/tmpfs is
+ * read-only: complete WRITE confinement. Read hardening is shadowing the
+ * explicit secret dirs; a read-minimal allowlist and network isolation are
+ * documented follow-ups. If bubblewrap is absent the caller FAILS CLOSED; this
+ * module never falls back to an unconfined run.
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-/** The writable surfaces a sandboxed completion child needs. */
+/** Sensitive dirs under HOME shadowed as empty tmpfs (unreadable + writable-apart). */
+export const DEFAULT_SHADOW_REL: readonly string[] = [
+	".ssh",
+	".aws",
+	".gnupg",
+	".config",
+	".local",
+	".cache",
+	".netrc",
+];
+
+/** The writable surfaces + read-shadows a sandboxed completion child needs. */
 export interface SandboxMountOptions {
-	/** HOME to blank out (shadowed as tmpfs, then stores re-exposed). */
+	/** HOME used to derive default read-shadows. */
 	home: string;
 	/** Anchored project root — the writable work area + chdir target. */
 	projectRoot: string;
@@ -36,14 +47,22 @@ export interface SandboxMountOptions {
 	axiomHome: string;
 	/** Prime agent dir (default ~/.prime): kernel venv, skills, agent state. */
 	primeHome: string;
+	/** Extra absolute dirs to shadow (in addition to built-in secrets). */
+	shadowDirs?: readonly string[];
+}
+
+/** Resolve the built-in secret dirs for a home, keeping only those that exist. */
+export function defaultShadowDirs(home: string): string[] {
+	return DEFAULT_SHADOW_REL.map((rel) => join(home, rel)).filter((p) => existsSync(p));
 }
 
 /**
- * Build the bubblewrap mount-args (the options BEFORE the program). Returns a
- * fresh array each call so callers can mutate safely.
+ * Build the bubblewrap mount-args (options BEFORE the program). Fresh array per
+ * call. The caller supplies shadowDirs (normally defaultShadowDirs(home)) that
+ * already exist, so bwrap never mounts on a missing destination.
  */
 export function buildSandboxMountArgs(o: SandboxMountOptions): string[] {
-	return [
+	const args = [
 		"--ro-bind",
 		"/",
 		"/",
@@ -53,8 +72,6 @@ export function buildSandboxMountArgs(o: SandboxMountOptions): string[] {
 		"/run",
 		"--tmpfs",
 		"/var",
-		"--tmpfs",
-		o.home,
 		"--bind",
 		o.projectRoot,
 		o.projectRoot,
@@ -64,13 +81,12 @@ export function buildSandboxMountArgs(o: SandboxMountOptions): string[] {
 		"--bind",
 		o.primeHome,
 		o.primeHome,
-		"--proc",
-		"/proc",
-		"--dev",
-		"/dev",
-		"--chdir",
-		o.projectRoot,
 	];
+	for (const d of o.shadowDirs ?? []) {
+		args.push("--tmpfs", d);
+	}
+	args.push("--proc", "/proc", "--dev", "/dev", "--chdir", o.projectRoot);
+	return args;
 }
 
 /** Full argv for spawning the confined program: [bwrap, ...mount, program, ...args]. */
@@ -83,11 +99,7 @@ export function assembleProgramArgv(
 	return [bwrapPath, ...mountArgs, program, ...programArgs];
 }
 
-/**
- * Resolve where the child's persistent stores live, defaulting under home.
- * AXIOM_HOME overrides the axiom store; the prime agent dir is always
- * `~/.prime` (kernel-venv etc.).
- */
+/** Resolve the child's persistent stores, defaulting under home. */
 export function resolveConfinementPaths(
 	home: string,
 	env: NodeJS.ProcessEnv = process.env,
@@ -104,8 +116,8 @@ export function confinementEnv(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 }
 
 /**
- * Locate the bubblewrap binary. Honors an AXIOM_BWRAP override, else scans
- * PATH. Returns undefined when absent — callers MUST fail closed.
+ * Locate the bubblewrap binary. Honors AXIOM_BWRAP, else scans PATH. Returns
+ * undefined when absent — callers MUST fail closed.
  */
 export function resolveBwrap(env: NodeJS.ProcessEnv = process.env): string | undefined {
 	const candidates: string[] = [];
