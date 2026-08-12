@@ -87,6 +87,17 @@ describe("checkUpdate", () => {
 		expect(r.ok).toBe(false);
 		if (!r.ok) expect(r.error).toContain("fetch");
 	});
+
+	it("allows untracked files (a stray ??" + "? file must not block the update)", async () => {
+		const responses = healthyResponses();
+		responses["git -C /repo status --porcelain"] = {
+			code: 0,
+			stdout: "?? docs/hermes-improvements.html\n",
+		};
+		const { shell } = fakeShell(responses);
+		const r = await checkUpdate(shell, CFG);
+		expect(r).toEqual({ ok: true, current: "aaa", latest: "bbb", upToDate: false });
+	});
 });
 
 describe("applyUpdate", () => {
@@ -111,13 +122,16 @@ describe("applyUpdate", () => {
 		expect(calls).not.toContain("npm run build");
 	});
 
-	it("refuses when the build fails", async () => {
+	it("rolls back the ff-only merge when the build fails (never strands an unbuilt commit)", async () => {
 		const responses = healthyResponses();
 		responses["npm run build"] = { code: 2, stderr: "tsgo: error TS2304" };
-		const { shell } = fakeShell(responses);
+		responses["git -C /repo reset --hard aaa"] = { code: 0 };
+		const { shell, calls } = fakeShell(responses);
 		const r = await applyUpdate(shell, CFG);
 		expect(r.ok).toBe(false);
 		if (!r.ok) expect(r.error).toContain("build");
+		if (!r.ok) expect(r.error).toContain("rolled back");
+		expect(calls).toContain("git -C /repo reset --hard aaa");
 	});
 
 	it("refuses when fetch fails", async () => {
@@ -126,5 +140,28 @@ describe("applyUpdate", () => {
 		const { shell } = fakeShell(responses);
 		const r = await applyUpdate(shell, CFG);
 		expect(r.ok).toBe(false);
+	});
+
+	it("refuses to apply when the worktree is on the wrong branch", async () => {
+		const responses = healthyResponses();
+		responses["git -C /repo rev-parse --abbrev-ref HEAD"] = { code: 0, stdout: "feat/x\n" };
+		const { shell, calls } = fakeShell(responses);
+		const r = await applyUpdate(shell, CFG);
+		expect(r.ok).toBe(false);
+		if (!r.ok) expect(r.error).toContain("main");
+		expect(calls).not.toContain("git -C /repo merge --ff-only origin/main");
+	});
+
+	it("refuses to apply when the worktree has tracked changes", async () => {
+		const responses = healthyResponses();
+		responses["git -C /repo status --porcelain"] = {
+			code: 0,
+			stdout: " M packages/coding-agent/src/gateway/gateway.ts\n",
+		};
+		const { shell, calls } = fakeShell(responses);
+		const r = await applyUpdate(shell, CFG);
+		expect(r.ok).toBe(false);
+		if (!r.ok) expect(r.error).toContain("tracked changes");
+		expect(calls).not.toContain("git -C /repo merge --ff-only origin/main");
 	});
 });

@@ -81,13 +81,11 @@ function isClean(result: UpdateRunResult, what: string): { ok: false; error: str
 	return undefined;
 }
 
-/**
- * Fetch and compare HEAD to origin/<branch>. Refuses unless the worktree is on
- * the configured branch and clean — a live gateway tree must only move by
- * fast-forward (ADR-0034), never over uncommitted work.
- */
-export async function checkUpdate(shell: UpdateShell, config: UpdateConfig): Promise<UpdateCheck> {
-	const resolved = resolveUpdateConfig(config);
+/** Shared safety gate for any update path (ADR-0034). */
+async function verifyWorktreeGate(
+	shell: UpdateShell,
+	resolved: ResolvedUpdateConfig,
+): Promise<{ ok: true; head: string } | { ok: false; error: string }> {
 	const branch = await git(shell, resolved.repoDir, "rev-parse", "--abbrev-ref", "HEAD");
 	if (branch.code !== 0) return { ok: false, error: `not a git worktree at ${resolved.repoDir}` };
 	if (branch.stdout.trim() !== resolved.branch) {
@@ -96,21 +94,38 @@ export async function checkUpdate(shell: UpdateShell, config: UpdateConfig): Pro
 	const status = await git(shell, resolved.repoDir, "status", "--porcelain");
 	const statusErr = isClean(status, "worktree check");
 	if (statusErr) return statusErr;
-	if (status.stdout.trim() !== "") {
-		return { ok: false, error: "worktree has uncommitted changes — commit or stash them before updating" };
+	// Only TRACKED changes block an update; untracked files (`??`) can't break a
+	// fast-forward merge (git still refuses a true collision on its own).
+	const trackedChanges = status.stdout.split("\n").filter((line) => {
+		const t = line.trim();
+		return t !== "" && !t.startsWith("??");
+	});
+	if (trackedChanges.length > 0) {
+		return { ok: false, error: "worktree has uncommitted tracked changes — commit or stash before updating" };
 	}
-	const fetch = await git(shell, resolved.repoDir, "fetch", "origin");
-	const fetchErr = isClean(fetch, "fetch");
-	if (fetchErr) return fetchErr;
 	const head = await git(shell, resolved.repoDir, "rev-parse", "HEAD");
 	const headErr = isClean(head, "resolving HEAD");
 	if (headErr) return headErr;
+	return { ok: true, head: head.stdout.trim() };
+}
+
+/**
+ * Fetch and compare HEAD to origin/<branch>. Refuses unless the worktree is on
+ * the configured branch and clean — a live gateway tree must only move by
+ * fast-forward (ADR-0034), never over uncommitted work.
+ */
+export async function checkUpdate(shell: UpdateShell, config: UpdateConfig): Promise<UpdateCheck> {
+	const resolved = resolveUpdateConfig(config);
+	const gate = await verifyWorktreeGate(shell, resolved);
+	if (!gate.ok) return gate;
+	const fetch = await git(shell, resolved.repoDir, "fetch", "origin");
+	const fetchErr = isClean(fetch, "fetch");
+	if (fetchErr) return fetchErr;
 	const latest = await git(shell, resolved.repoDir, "rev-parse", `origin/${resolved.branch}`);
 	const latestErr = isClean(latest, `resolving origin/${resolved.branch}`);
 	if (latestErr) return latestErr;
-	const current = head.stdout.trim();
 	const tip = latest.stdout.trim();
-	return { ok: true, current, latest: tip, upToDate: current === tip };
+	return { ok: true, current: gate.head, latest: tip, upToDate: gate.head === tip };
 }
 
 /**
@@ -119,12 +134,11 @@ export async function checkUpdate(shell: UpdateShell, config: UpdateConfig): Pro
  */
 export async function applyUpdate(shell: UpdateShell, config: UpdateConfig): Promise<UpdateApply> {
 	const resolved = resolveUpdateConfig(config);
+	const gate = await verifyWorktreeGate(shell, resolved);
+	if (!gate.ok) return gate;
 	const fetch = await git(shell, resolved.repoDir, "fetch", "origin");
 	const fetchErr = isClean(fetch, "fetch");
 	if (fetchErr) return fetchErr;
-	const head = await git(shell, resolved.repoDir, "rev-parse", "HEAD");
-	const headErr = isClean(head, "resolving HEAD");
-	if (headErr) return headErr;
 	const latest = await git(shell, resolved.repoDir, "rev-parse", `origin/${resolved.branch}`);
 	const latestErr = isClean(latest, `resolving origin/${resolved.branch}`);
 	if (latestErr) return latestErr;
@@ -135,8 +149,13 @@ export async function applyUpdate(shell: UpdateShell, config: UpdateConfig): Pro
 	}
 	const build = await shell.run(resolved.buildCommand, { cwd: resolved.buildCwd });
 	if (build.code !== 0) {
+		// The merge advanced HEAD before the build ran; a failed build must not
+		// strand the worktree at an unbuilt commit (the next /update would then
+		// report "up to date" and never retry). Roll back to the pre-update HEAD
+		// so the old code stays authoritative and the next update retries cleanly.
+		await git(shell, resolved.repoDir, "reset", "--hard", gate.head);
 		const detail = build.stderr.trim() || build.stdout.trim() || `exit ${build.code}`;
-		return { ok: false, error: `build failed: ${detail}` };
+		return { ok: false, error: `build failed (rolled back to ${gate.head.slice(0, 8)}): ${detail}` };
 	}
-	return { ok: true, from: head.stdout.trim(), to: latest.stdout.trim() };
+	return { ok: true, from: gate.head, to: latest.stdout.trim() };
 }
