@@ -140,6 +140,11 @@ async function runPublicCommand(args: string[]): Promise<PublicCommandResult> {
 		case "config":
 			if (!requireArgumentCount(args.slice(1), 0, "config")) return HANDLED;
 			return continueWith(args);
+		case "profile":
+		case "projects":
+		case "completion":
+			// Handled by their dedicated CLI gates after routing (never a prompt).
+			return continueWith(args);
 		default:
 			return continueWith(args);
 	}

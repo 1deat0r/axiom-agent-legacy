@@ -348,3 +348,54 @@ describe("public command routing", () => {
 		expect(help).not.toContain("Built-in Tool Names:");
 	});
 });
+
+describe("profile, projects, and completion routing", () => {
+	beforeEach(() => {
+		process.exitCode = undefined;
+		vi.spyOn(console, "log").mockImplementation(() => {});
+		vi.spyOn(console, "error").mockImplementation(() => {});
+	});
+
+	afterEach(() => {
+		process.exitCode = undefined;
+		vi.restoreAllMocks();
+	});
+
+	it("passes profile, projects, and completion through to their CLI gates", async () => {
+		await expect(handlePublicCommand(["profile", "create", "coder"])).resolves.toMatchObject({
+			handled: false,
+			args: ["profile", "create", "coder"],
+			explicitAgentsView: false,
+		});
+		await expect(handlePublicCommand(["projects", "add", "alpha"])).resolves.toMatchObject({
+			handled: false,
+			args: ["projects", "add", "alpha"],
+			explicitAgentsView: false,
+		});
+		await expect(handlePublicCommand(["completion", "bash"])).resolves.toMatchObject({
+			handled: false,
+			args: ["completion", "bash"],
+			explicitAgentsView: false,
+		});
+	});
+
+	it("lists profile, projects, and completion in the top-level menu", () => {
+		const help = formatTopLevelHelp();
+		expect(help).toContain("profile");
+		expect(help).toContain("projects");
+		expect(help).toContain("completion");
+	});
+
+	it("shows command help for profile and projects", async () => {
+		await handlePublicCommand(["help", "profile"]);
+		expect(console.log).toHaveBeenCalledWith(expect.stringContaining("profile <create|list>"));
+		await handlePublicCommand(["help", "projects"]);
+		expect(console.log).toHaveBeenCalledWith(expect.stringContaining("projects"));
+		expect(console.error).not.toHaveBeenCalled();
+	});
+
+	it("routes help with options before the flag", async () => {
+		await handlePublicCommand(["projects", "add", "--help"]);
+		expect(console.log).toHaveBeenCalledWith(expect.stringContaining("projects add <name>"));
+	});
+});

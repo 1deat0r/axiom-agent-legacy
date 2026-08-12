@@ -14,6 +14,7 @@ import { ProcessTerminal, setKeybindings, TUI } from "@earendil-works/pi-tui";
 import chalk from "chalk";
 import { type Args, type Mode, parseArgs } from "./cli/args.js";
 import { formatTopLevelHelp } from "./cli/command-registry.js";
+import { handleCompletionCommand } from "./cli/completion-command.js";
 import {
 	ensureInteractiveDaemonRunning,
 	isDaemonSessionSummary,
@@ -29,6 +30,7 @@ import { buildInitialMessage } from "./cli/initial-message.js";
 import { listModels } from "./cli/list-models.js";
 import { installOwnedSessionRecoveryTracking, isOwnedSessionWorkerProcess } from "./cli/owned-session-worker.js";
 import { handleProfileCommand } from "./cli/profile-command.js";
+import { handleProjectsCommand } from "./cli/projects-command.js";
 import { handlePublicCommand } from "./cli/public-command.js";
 import {
 	looksLikeSessionPath,
@@ -1101,6 +1103,13 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	if (await handleProfileCommand(args)) {
+		return;
+	}
+	if (await handleProjectsCommand(args)) {
+		return;
+	}
+
+	if (await handleCompletionCommand(args)) {
 		return;
 	}
 

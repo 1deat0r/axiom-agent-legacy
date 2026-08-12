@@ -38,6 +38,22 @@ root home, under `projects/<name>`): a root directory that owns a run's
 working tree. Booting the gateway with `--project <name>` anchors the run
 there (cwd + AXIOM_PROJECT_ROOT) so the root guard (rung 3) confines edits.
 _Avoid_: Folder, repo, task
+**Command menu**:
+The roster of the axiom CLI's public subcommands. `COMMAND_SPECS` in
+`cli/command-registry.ts` is the single source of truth; `axiom help`, help
+routing, recognized-subcommand routing (`PUBLIC_COMMAND_NAMES`), and shell
+completion are all derived from it (ADR-0030). `profile`, `projects`, and
+`completion` are public roster entries routed to their own CLI gates, never
+to the model.
+_Avoid_: Hardcoded help text, parallel dispatch that bypasses the registry
+
+**Shell completion**:
+`axiom completion bash|zsh` printed completion for the axiom CLI, computed at
+runtime from `COMMAND_SPECS` (+ the active profile's project names) by
+`cli/completion-command.ts` (ADR-0030). It reads the roster on every `<Tab>`,
+so it cannot drift from the menu.
+_Avoid_: Static completion lists, generated scripts that go stale
+
 **Channel**:
 A conversation's stable address on a messaging platform (gateway, ADR-0001;
 signal gateway shipped ADR-0016).

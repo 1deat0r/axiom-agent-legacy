@@ -150,6 +150,53 @@ export const COMMAND_SPECS: readonly CommandSpec[] = [
 		usage: "config",
 		summary: "Configure package resources",
 	},
+	{
+		path: ["profile"],
+		usage: "profile <create|list>",
+		summary: "Manage profile identities (ADR-0014)",
+		description: "A profile is a separate axiom home with its own SOUL.md, keys, memory, and sessions.",
+	},
+	{
+		path: ["profile", "create"],
+		usage: "profile create <name>",
+		summary: "Create a profile (SOUL.md scaffolded)",
+	},
+	{
+		path: ["profile", "list"],
+		usage: "profile list",
+		summary: "List existing profiles",
+	},
+	{
+		path: ["projects"],
+		usage: "projects",
+		summary: "List projects of the active profile",
+		description: "Projects are named workspaces inside a profile (ADR-0014).",
+	},
+	{
+		path: ["projects", "add"],
+		usage: "projects add <name>",
+		summary: "Add a project to the active profile",
+	},
+	{
+		path: ["projects", "rm"],
+		usage: "projects rm <name>",
+		summary: "Remove a project from the active profile",
+	},
+	{
+		path: ["completion"],
+		usage: "completion <bash|zsh>",
+		summary: "Print a shell completion script",
+	},
+	{
+		path: ["completion", "bash"],
+		usage: "completion bash",
+		summary: "Print a bash completion script",
+	},
+	{
+		path: ["completion", "zsh"],
+		usage: "completion zsh",
+		summary: "Print a zsh completion script",
+	},
 ];
 
 export const PUBLIC_COMMAND_NAMES = new Set(
