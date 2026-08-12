@@ -2216,6 +2216,25 @@ export class SessionManager {
 		return new SessionManager(cwd, dir, undefined, true);
 	}
 
+	/**
+	 * Open or create a session keyed by a stable, externally-supplied id (e.g.
+	 * the messaging gateway's per-channel id). The id maps to a stable session
+	 * file `<sessionDir>/<id>.jsonl`, so repeated calls with the same id reopen
+	 * the same conversation and different ids stay isolated. Throws on ids that
+	 * could escape the session dir via path traversal.
+	 */
+	static openOrCreateById(id: string, cwd: string, sessionDir?: string): SessionManager {
+		if (id === "" || id.includes("/") || id.includes("\\") || id.includes("..")) {
+			throw new Error(`Invalid session id: "${id}"`);
+		}
+		const dir = sessionDir ?? getDefaultSessionDir(cwd);
+		const path = getSessionFilePath(dir, id);
+		if (existsSync(path)) {
+			return SessionManager.open(path, dir);
+		}
+		return new SessionManager(cwd, dir, path, true);
+	}
+
 	/** Create an in-memory session (no file persistence) */
 	static inMemory(cwd: string = process.cwd(), sessionDir = ""): SessionManager {
 		return new SessionManager(cwd, sessionDir, undefined, false);

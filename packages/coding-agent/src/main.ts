@@ -495,6 +495,12 @@ export async function createSessionManager(
 		return SessionManager.continueRecent(cwd, sessionDir);
 	}
 
+	if (parsed.sessionId) {
+		// Stable external session id (gateway per-channel): opens the matching
+		// <sessionDir>/<id>.jsonl conversation or creates it if absent.
+		return SessionManager.openOrCreateById(parsed.sessionId, cwd, sessionDir);
+	}
+
 	return SessionManager.create(cwd, sessionDir);
 }
 

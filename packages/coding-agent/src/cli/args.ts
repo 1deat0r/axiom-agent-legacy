@@ -24,6 +24,12 @@ export interface Args {
 	noSession?: boolean;
 	fork?: string;
 	sessionDir?: string;
+	/**
+	 * Stable, externally-supplied session id (e.g. the gateway's per-channel
+	 * id). Maps to a stable session file `<sessionDir>/<id>.jsonl` so repeated
+	 * runs with the same id reopen the same conversation.
+	 */
+	sessionId?: string;
 	/** Axiom profile name (ADR-0014): boot in the profile's own home. */
 	profile?: string;
 	models?: string[];
@@ -149,6 +155,19 @@ export function parseArgs(args: string[]): Args {
 			result.fork = args[++i];
 		} else if (arg === "--session-dir" && i + 1 < args.length) {
 			result.sessionDir = args[++i];
+		} else if (arg === "--session-id") {
+			if (i + 1 < args.length) {
+				result.sessionId = args[++i];
+			} else {
+				result.diagnostics.push({ type: "error", message: "--session-id requires a value" });
+			}
+		} else if (arg.startsWith("--session-id=")) {
+			const value = arg.slice("--session-id=".length);
+			if (value) {
+				result.sessionId = value;
+			} else {
+				result.diagnostics.push({ type: "error", message: "--session-id requires a value" });
+			}
 		} else if (arg === "--profile") {
 			if (i + 1 < args.length) {
 				result.profile = args[++i];

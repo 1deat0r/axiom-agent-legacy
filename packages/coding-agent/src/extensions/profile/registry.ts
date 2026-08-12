@@ -43,6 +43,11 @@ export function resolveProfile(
 	env: Record<string, string | undefined> = process.env,
 ): { axiomHome: string; agentDir: string | undefined } {
 	if (name === undefined) return { axiomHome: axiomHome(env), agentDir: undefined };
+	// The `default` profile is implicit (ADR-0014): it maps to the root axiom
+	// home with no redirect, so `--profile default` behaves identically to no
+	// flag. Redirecting it to ~/.axiom/profiles/default would split the shared
+	// gateway config/offset away from the operator's ~/.axiom home.
+	if (name === "default") return { axiomHome: axiomHome(env), agentDir: undefined };
 	const home = profileDir(name, axiomHome(env));
 	return { axiomHome: home, agentDir: home };
 }

@@ -60,6 +60,32 @@ describe("parseArgs", () => {
 		});
 	});
 
+	describe("--session-id flag", () => {
+		test("parses --session-id <id>", () => {
+			const result = parseArgs(["--session-id", "gw-abc"]);
+			expect(result.sessionId).toBe("gw-abc");
+			expect(result.unknownFlags.has("--session-id")).toBe(false);
+		});
+
+		test("parses --session-id=<id>", () => {
+			const result = parseArgs(["--session-id=gw-def"]);
+			expect(result.sessionId).toBe("gw-def");
+			expect(result.unknownFlags.has("--session-id")).toBe(false);
+		});
+
+		test("does not consume following options as the id", () => {
+			const result = parseArgs(["--session-id", "gw-abc", "-p", "hi"]);
+			expect(result.sessionId).toBe("gw-abc");
+			expect(result.print).toBe(true);
+		});
+
+		test("records a diagnostic when --session-id has no value", () => {
+			const result = parseArgs(["--session-id"]);
+			expect(result.sessionId).toBeUndefined();
+			expect(result.diagnostics.some((d) => d.type === "error")).toBe(true);
+		});
+	});
+
 	describe("--continue flag", () => {
 		test("parses --continue flag", () => {
 			const result = parseArgs(["--continue"]);

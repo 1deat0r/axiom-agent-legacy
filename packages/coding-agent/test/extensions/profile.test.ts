@@ -68,6 +68,11 @@ describe("profile registry", () => {
 			agentDir: "/custom/home/profiles/coder",
 		});
 	});
+
+	it("resolves the implicit default profile to the root home (no redirect)", () => {
+		const env = { [AXIOM_HOME_ENV]: "/custom/home" };
+		expect(resolveProfile("default", env)).toEqual({ axiomHome: "/custom/home", agentDir: undefined });
+	});
 });
 
 describe("soul block", () => {
