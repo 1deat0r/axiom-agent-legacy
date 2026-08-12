@@ -262,3 +262,54 @@ the gateway is verified by its suite (fake signal-cli + argv shim proving the
 account flag reaches `signal-cli -a <acct>`). Follow the one-command live test in
 `docs/gateway-live-test.md` when the account is free, and record the result as a
 live verification.
+
+---
+
+# Handoff addendum — Telegram gateway live round-trip (operator LIVE test)
+
+**Date:** 2026-08-12. **Verification kind: LIVE** (real Telegram Bot API, real
+token via env, real owner chat) — never blurred with mock.
+
+## What was verified, and how (LIVE)
+
+Booted the gateway **from source** (`npx tsx src/cli.ts gateway --transport
+telegram --profile default`) with `AXIOM_TELEGRAM_BOT_TOKEN` in the process env
+only (never committed; zero occurrences in repo or /tmp artifacts after the
+run). Token valid: `getMe` -> `@ImAxiomBot`, id 8990334461, `ok=true`.
+
+Live evidence of the round-trip:
+
+- **Received**: the gateway connected to the live Bot API and consumed the
+  owner's pending updates. `~/.axiom/gateway/telegram-offset.json` advanced to
+  `134231381`; `~/.axiom/gateway/channels.json` maps the owner's chat
+  `1190944932` -> session `gw-a149f075` (the channel was indexed on the first
+  inbound message, ADR-0006).
+- **Sent**: the completion path (source CLI print mode, default profile) for
+  the owner's text produced a **real agent reply** — reproduced verbatim by
+  running the identical completion command, it answered substantively about the
+  live gateway node (gateway RUNNING, offset current). The gateway's
+  `sendMessage` to chat `1190944932` succeeded (no `telegram send failed` line
+  in the gateway log).
+- **Live link is up**: the gateway remains running (pid 461019) and polling, so
+  the owner can message the bot and receive a reply.
+
+Honest caveat: the Bot API does not expose a bot's *outbound* messages, so the
+literal delivered text in the owner's client is not API-readable; it is
+confirmed by offset advance + channel index + no-send-failure + reproducing the
+exact reply the gateway generates for that completion.
+
+## Environment notes (recorded, not bugs)
+
+- The sandbox long-poll occasionally 409-conflicts when two pollers hit the bot
+  simultaneously (transient `getUpdates` conflict); a single clean gateway
+  instance polls cleanly. The running **Hermes gateway (pid 2742) holds the
+  shared SIGNAL account**, not the Telegram bot (no conflict with this test).
+- The source-run command is `npx tsx packages/coding-agent/src/cli.ts gateway
+  --transport telegram --profile default` (dist bundle is stale / lacks the
+  gateway).
+
+## Operator follow-up
+
+- Confirm the delivered reply visually in the owner's Telegram client; then
+  send a fresh message to interact with the live gateway.
+- To stop the live gateway: `kill 461019`.
