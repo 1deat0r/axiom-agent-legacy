@@ -1,8 +1,8 @@
-> Prime Agent can help you use the SDK. Ask it to build an integration for your use case.
+> Axiom can help you use the SDK. Ask it to build an integration for your use case.
 
 # SDK
 
-The SDK provides programmatic access to Prime Agent's capabilities. Use it to embed Prime Agent in other applications, build custom interfaces, or integrate with automated workflows.
+The SDK provides programmatic access to Axiom's capabilities. Use it to embed Axiom in other applications, build custom interfaces, or integrate with automated workflows.
 
 **Example use cases:**
 - Build a custom UI (web, desktop, mobile)
@@ -502,7 +502,7 @@ const { session } = await createAgentSession({
 ```
 
 **When you don't need factories:**
-- If you omit `tools`, Prime Agent automatically creates them with the correct `cwd`
+- If you omit `tools`, Axiom automatically creates them with the correct `cwd`
 - If you use `process.cwd()` as your `cwd`, the pre-built instances work fine
 
 **When you must use factories:**
@@ -1063,7 +1063,7 @@ See [RPC documentation](rpc.md) for the JSON protocol.
 For subprocess-based integration without building with the SDK, use the CLI directly:
 
 ```bash
-prime-agent --mode rpc --no-session
+axiom --mode rpc --no-session
 ```
 
 See [RPC documentation](rpc.md) for the JSON protocol.

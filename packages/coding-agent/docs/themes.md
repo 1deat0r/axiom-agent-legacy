@@ -1,4 +1,4 @@
-> Prime Agent can create themes. Ask it to build one for your setup.
+> Axiom can create themes. Ask it to build one for your setup.
 
 # Themes
 
@@ -16,7 +16,7 @@ Themes are JSON files that define colors for the TUI.
 
 ## Locations
 
-Prime Agent loads themes from:
+Axiom loads themes from:
 
 - Built-in: `dark`, `light`
 - Global: `~/.prime/agent/themes/*.json`
@@ -37,7 +37,7 @@ Select a theme via `/settings` or in `settings.json`:
 }
 ```
 
-On first run, Prime Agent detects your terminal background and defaults to `dark` or `light`.
+On first run, Axiom detects your terminal background and defaults to `dark` or `light`.
 
 ## Creating a Custom Theme
 
@@ -117,7 +117,7 @@ vim ~/.prime/agent/themes/my-theme.json
 
 3. Select the theme via `/settings`.
 
-**Hot reload:** When you edit the currently active custom theme file, Prime Agent reloads it automatically for immediate visual feedback.
+**Hot reload:** When you edit the currently active custom theme file, Axiom reloads it automatically for immediate visual feedback.
 
 ## Theme Format
 
@@ -270,7 +270,7 @@ Four formats are supported:
 
 ### Terminal Compatibility
 
-Prime Agent uses 24-bit RGB colors. Most modern terminals support this (iTerm2, Kitty, WezTerm, Windows Terminal, VS Code). For older terminals with only 256-color support, Prime Agent falls back to the nearest approximation.
+Axiom uses 24-bit RGB colors. Most modern terminals support this (iTerm2, Kitty, WezTerm, Windows Terminal, VS Code). For older terminals with only 256-color support, Axiom falls back to the nearest approximation.
 
 Check truecolor support:
 

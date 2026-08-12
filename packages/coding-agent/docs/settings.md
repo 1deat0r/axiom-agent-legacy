@@ -1,6 +1,6 @@
 # Settings
 
-Prime Agent uses JSON settings files with project settings overriding global settings.
+Axiom uses JSON settings files with project settings overriding global settings.
 
 | Location | Scope |
 |----------|-------|
@@ -50,25 +50,25 @@ Edit directly or use `/settings` for common options.
 
 Stable builds fetch the release manifest at `https://pub-728493de92a943e2a9b2d17b4719f318.r2.dev/latest.json`. Beta builds fetch `beta.json` and continue following beta updates. Override the base URL with `PRIME_AGENT_DOWNLOAD_BASE_URL`.
 
-Set `PI_SKIP_VERSION_CHECK=1` to disable the Prime Agent version update check. Use `--offline` or `PI_OFFLINE=1` to disable startup network operations, including update checks and package update checks.
+Set `PI_SKIP_VERSION_CHECK=1` to disable the Axiom version update check. Use `--offline` or `PI_OFFLINE=1` to disable startup network operations, including update checks and package update checks.
 
 The stable `latest.json` and beta `beta.json` manifests use the same JSON shape:
 
 ```json
 {
   "version": "0.73.1",
-  "package": "prime-agent",
+  "package": "axiom",
   "tarball": "releases/v0.73.1/prime-agent-0.73.1.tgz"
 }
 ```
 
-`version` is required. `package` is optional and may also be named `packageName`; it defaults to the current package name. `tarball` is optional; when present, Prime Agent installs that tarball instead of the package name. Relative tarball paths resolve against `PRIME_AGENT_DOWNLOAD_BASE_URL`.
+`version` is required. `package` is optional and may also be named `packageName`; it defaults to the current package name. `tarball` is optional; when present, Axiom installs that tarball instead of the package name. Relative tarball paths resolve against `PRIME_AGENT_DOWNLOAD_BASE_URL`.
 
 ### Pseudonymous usage analytics
 
-Prime Agent sends pseudonymous, aggregate usage and performance events to Prime Intellect. These events include version and operating-system category, onboarding outcome and duration, execution mode (`interactive`, `print`, `json`, `rpc`, or `acp`), run outcomes, TTFT and latency, prompt and turn counts, token usage, tool success counts, retries, and compactions.
+Axiom sends pseudonymous, aggregate usage and performance events to Prime Intellect. These events include version and operating-system category, onboarding outcome and duration, execution mode (`interactive`, `print`, `json`, `rpc`, or `acp`), run outcomes, TTFT and latency, prompt and turn counts, token usage, tool success counts, retries, and compactions.
 
-Prime Agent does not send prompts, responses, thinking, tool arguments or results, command text, filenames, paths, repository information, environment variables, credentials, raw error messages, hostnames, usernames, emails, or hardware identifiers. A random installation ID is stored as `telemetry.json` in the configured agent directory (normally `~/.prime/agent/`).
+Axiom does not send prompts, responses, thinking, tool arguments or results, command text, filenames, paths, repository information, environment variables, credentials, raw error messages, hostnames, usernames, emails, or hardware identifiers. A random installation ID is stored as `telemetry.json` in the configured agent directory (normally `~/.prime/agent/`).
 
 Telemetry can be disabled globally or for an individual project. Project settings can only further restrict telemetry: they cannot re-enable a global opt-out or suppress the global one-time disclosure.
 
@@ -87,9 +87,9 @@ Disable analytics with any of:
 ```
 
 ```bash
-PRIME_AGENT_TELEMETRY=0 prime-agent
-DO_NOT_TRACK=1 prime-agent
-prime-agent --offline
+PRIME_AGENT_TELEMETRY=0 axiom
+DO_NOT_TRACK=1 axiom
+axiom --offline
 ```
 
 `PRIME_AGENT_TELEMETRY_ENDPOINT` overrides the ingestion endpoint for development and self-hosted deployments.
@@ -248,7 +248,7 @@ Paths in `~/.prime/agent/settings.json` resolve relative to `~/.prime/agent`. Pa
 | `prompts` | string[] | `[]` | Local prompt template paths or directories |
 | `themes` | string[] | `[]` | Local theme file paths or directories |
 | `enableSkillCommands` | boolean | `true` | Register skills as `/skill:name` commands |
-| `enableBuiltinSkills` | boolean | `true` | Load built-in skills shipped with prime-agent |
+| `enableBuiltinSkills` | boolean | `true` | Load built-in skills shipped with axiom |
 | `bundledSkills.websearch` | boolean | `true` | Load the built-in `websearch` skill |
 
 Arrays support glob patterns and exclusions. Use `!pattern` to exclude. Use `+path` to force-include an exact path and `-path` to force-exclude an exact path.

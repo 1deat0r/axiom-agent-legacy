@@ -1,6 +1,6 @@
 # Termux (Android) Setup
 
-Prime Agent runs on Android via [Termux](https://termux.dev/), a terminal emulator and Linux environment for Android.
+Axiom runs on Android via [Termux](https://termux.dev/), a terminal emulator and Linux environment for Android.
 
 ## Prerequisites
 
@@ -16,12 +16,12 @@ pkg update && pkg upgrade
 # Install dependencies
 pkg install nodejs termux-api git ripgrep
 
-# Clone and install Prime Agent from source
+# Clone and install Axiom from source
 git clone https://github.com/PrimeIntellect-ai/prime-agent.git
-cd prime-agent
+cd axiom
 npm ci
 
-# Run Prime Agent
+# Run Axiom
 ./prime-agent.sh
 ```
 

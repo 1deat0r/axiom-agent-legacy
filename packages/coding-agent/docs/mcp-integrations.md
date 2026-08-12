@@ -1,9 +1,9 @@
 # MCP Integrations
 
-Connect external services (Linear, Notion, …) to Prime Agent over the
+Connect external services (Linear, Notion, …) to Axiom over the
 [Model Context Protocol](https://modelcontextprotocol.io).
 
-Consistent with Prime Agent's single-tool design, MCP integrations are **not**
+Consistent with Axiom's single-tool design, MCP integrations are **not**
 exposed as new agent tools. Each integration is a [Python-backed skill](skills.md)
 that the model imports and calls from the IPython kernel:
 

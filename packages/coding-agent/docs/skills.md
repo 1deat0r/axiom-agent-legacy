@@ -1,10 +1,10 @@
-> Prime Agent can create skills. Ask it to build one for your use case.
+> Axiom can create skills. Ask it to build one for your use case.
 
 # Skills
 
-Skills are self-contained capability packages that Prime Agent loads on demand. A skill provides specialized workflows, setup instructions, helper scripts, and reference documentation for specific tasks.
+Skills are self-contained capability packages that Axiom loads on demand. A skill provides specialized workflows, setup instructions, helper scripts, and reference documentation for specific tasks.
 
-Prime Agent implements the [Agent Skills standard](https://agentskills.io/specification), warning about violations but remaining lenient. It also supports Python-backed skills: a superset of markdown skills that install Python packages into the persistent IPython kernel.
+Axiom implements the [Agent Skills standard](https://agentskills.io/specification), warning about violations but remaining lenient. It also supports Python-backed skills: a superset of markdown skills that install Python packages into the persistent IPython kernel.
 
 ## Table of Contents
 
@@ -12,7 +12,7 @@ Prime Agent implements the [Agent Skills standard](https://agentskills.io/specif
 - [Built-in Skills](#built-in-skills)
 - [How Skills Work](#how-skills-work)
 - [Python-Backed Skills](#python-backed-skills)
-- [Creating Skills with Prime Agent](#creating-skills-with-prime-agent)
+- [Creating Skills with Axiom](#creating-skills-with-axiom)
 - [Skill Commands](#skill-commands)
 - [Skill Structure](#skill-structure)
 - [Frontmatter](#frontmatter)
@@ -24,7 +24,7 @@ Prime Agent implements the [Agent Skills standard](https://agentskills.io/specif
 
 > **Security:** Skills can instruct the model to perform any action and may include executable code the model invokes. Review skill content before use.
 
-Prime Agent loads skills from:
+Axiom loads skills from:
 
 - Global:
   - `~/.prime/agent/skills/`
@@ -35,7 +35,7 @@ Prime Agent loads skills from:
 - Packages: `skills/` directories or `pi.skills` entries in `package.json`
 - Settings: `skills` array with files or directories
 - CLI: `--skill <path>` (repeatable, additive even with `--no-skills`)
-- Built-in: `skills/` shipped with the prime-agent package (lowest precedence)
+- Built-in: `skills/` shipped with the axiom package (lowest precedence)
 
 Discovery rules:
 - In `~/.prime/agent/skills/` and `.prime/agent/skills/`, direct root `.md` files are discovered as individual skills
@@ -46,7 +46,7 @@ Disable discovery with `--no-skills` (explicit `--skill` paths still load).
 
 ## Built-in Skills
 
-Prime Agent ships with built-in skills that load by default:
+Axiom ships with built-in skills that load by default:
 
 - `prime-intellect` - Prime Intellect products and workflows via the prime CLI: verifiers environments and the Environments Hub, evaluations (local and hosted), Hosted Training and prime-rl, sandboxes, tunnels, Prime Inference, GPU compute, and storage. Reference docs for each area load on demand from the skill's `references/` directory.
 - `skill-creator` - teaches the agent to create new skills: markdown skill layout, frontmatter rules, placement and precedence, and the full Python-backed skill contract (package layout, `run()` convention, optional CLI, kernel venv behavior) with a working template in `references/python-skills.md`.
@@ -74,7 +74,7 @@ A `SERPER_API_KEY` in the environment, if set, takes precedence over the stored 
 Once loaded, the model can call it directly in the IPython kernel by import name:
 
 ```python
-print(await websearch("latest Prime Agent release"))
+print(await websearch("latest Axiom release"))
 ```
 
 Until a key is configured, web search returns a clear message telling the agent
@@ -129,7 +129,7 @@ For project-level Claude Code skills, add to `.prime/agent/settings.json`:
 
 ## How Skills Work
 
-1. At startup, Prime Agent scans skill locations and extracts names, descriptions, type, and file locations
+1. At startup, Axiom scans skill locations and extracts names, descriptions, type, and file locations
 2. The system prompt includes visible skills in XML format per the [specification](https://agentskills.io/integrate-skills)
 3. When a task matches, the agent uses `ipython` to load the full `SKILL.md` (models don't always do this; use prompting or `/skill:name` to force it)
 4. The agent follows the instructions, using relative paths to reference scripts and assets
@@ -157,7 +157,7 @@ Detection rules:
 - the import name is the skill name with hyphens converted to underscores
 - `src/<import_name>/__init__.py` must exist
 
-For `web-search`, Prime Agent exposes `web_search` in IPython. If the module defines `run()`, the module is wrapped as an async callable:
+For `web-search`, Axiom exposes `web_search` in IPython. If the module defines `run()`, the module is wrapped as an async callable:
 
 ```python
 await web_search("prime agent skills")
@@ -165,9 +165,9 @@ await web_search.run("prime agent skills")
 help(web_search)
 ```
 
-Python skills are installed editable into the kernel venv during kernel setup. By default this is `~/.prime/agent/kernel-venv`; set `PRIME_AGENT_KERNEL_VENV` to override it. If `pyproject.toml` changes, Prime Agent rebuilds the kernel venv so dependency changes are picked up.
+Python skills are installed editable into the kernel venv during kernel setup. By default this is `~/.prime/agent/kernel-venv`; set `PRIME_AGENT_KERNEL_VENV` to override it. If `pyproject.toml` changes, Axiom rebuilds the kernel venv so dependency changes are picked up.
 
-If you set `PRIME_AGENT_KERNEL_PYTHON`, Prime Agent does not install packages into that environment. The Python must already have `ipykernel`, `prime-agent-runtime`, and the default runtime packages installed. Missing Python skill imports are disabled with a warning and calling the skill raises a `RuntimeError`.
+If you set `PRIME_AGENT_KERNEL_PYTHON`, Axiom does not install packages into that environment. The Python must already have `ipykernel`, `prime-agent-runtime`, and the default runtime packages installed. Missing Python skill imports are disabled with a warning and calling the skill raises a `RuntimeError`.
 
 ### Optional CLI Command
 
@@ -198,16 +198,16 @@ await web_search("prime agent")
 !web_search "prime agent" --limit 3
 ```
 
-## Creating Skills with Prime Agent
+## Creating Skills with Axiom
 
-Prime Agent ships with a built-in `skill-creator` skill that teaches the agent both the Agent Skills format and the Python-backed package contract. You can ask for a skill in normal language:
+Axiom ships with a built-in `skill-creator` skill that teaches the agent both the Agent Skills format and the Python-backed package contract. You can ask for a skill in normal language:
 
 ```text
 Create a project Python-backed skill named release-audit in
 .prime/agent/skills/release-audit. It should expose
 await release_audit(repository, target_version), include concise SKILL.md
 instructions, declare its dependencies, and verify the callable in a fresh
-Prime Agent session.
+Axiom session.
 ```
 
 To force the creation workflow explicitly, invoke the built-in skill command:
@@ -224,7 +224,7 @@ Tell the agent three things:
 
 The agent should create `SKILL.md` in both cases. For a Python-backed skill it should also create `pyproject.toml` and `src/<import_name>/__init__.py`, expose a documented callable, and verify that the package imports in the kernel.
 
-Use `/reload` to rediscover new or edited skill metadata. Start a fresh Prime Agent session after adding a Python-backed skill so kernel setup can install and import the package.
+Use `/reload` to rediscover new or edited skill metadata. Start a fresh Axiom session after adding a Python-backed skill so kernel setup can install and import the package.
 
 ### Installed Skills and Continual Harness Skills
 
@@ -335,7 +335,7 @@ description: Helps with PDFs.
 
 ## Validation
 
-Prime Agent validates skills against the Agent Skills standard. Most issues produce warnings but still load the skill:
+Axiom validates skills against the Agent Skills standard. Most issues produce warnings but still load the skill:
 
 - Name doesn't match parent directory
 - Name exceeds 64 characters or contains invalid characters

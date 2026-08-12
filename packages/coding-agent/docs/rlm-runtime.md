@@ -1,6 +1,6 @@
 # RLM Runtime Architecture
 
-Prime Agent gives each agent session a persistent IPython kernel and a native recursive sub-agent interface. The Python `rlm` package is a model-facing shim; the TypeScript host owns child execution, persistence, usage accounting, and lifecycle.
+Axiom gives each agent session a persistent IPython kernel and a native recursive sub-agent interface. The Python `rlm` package is a model-facing shim; the TypeScript host owns child execution, persistence, usage accounting, and lifecycle.
 
 ## Architecture
 
@@ -87,7 +87,7 @@ The manager owns the child process, connection directory, ZeroMQ sockets, and a 
 
 ## Jupyter Transport
 
-Prime Agent uses three channels:
+Axiom uses three channels:
 
 ```text
 shell    execute_request, execute_reply, kernel_info_request
@@ -194,7 +194,7 @@ Registry scope follows the parent transcript. An unrelated new parent session do
 
 ## Usage and Cost Attribution
 
-The admission handle does not contain usage or completion data. Prime Agent asynchronously folds the child's assistant usage and cost into the parent assistant turn that launched it.
+The admission handle does not contain usage or completion data. Axiom asynchronously folds the child's assistant usage and cost into the parent assistant turn that launched it.
 
 The parent transcript persists a `child_usage_attributed` entry containing:
 

@@ -1,6 +1,6 @@
 # Axiom Documentation
 
-Axiom is an RLM-native coding and research harness built around a persistent IPython kernel, recursive subagents, durable sessions, and a multi-process local runtime. It began as a fork of Prime Agent; Axiom is now the product, CLI, install source, and development repository.
+Axiom is an RLM-native coding and research harness built around a persistent IPython kernel, recursive subagents, durable sessions, and a multi-process local runtime. It began as a fork of Axiom; Axiom is now the product, CLI, install source, and development repository.
 
 ## Quick Start
 
