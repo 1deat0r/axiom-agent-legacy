@@ -41,3 +41,25 @@ create|switch|list; the terminal `profile` only had create|list. Added
 - `profile list` from inside a `--profile` session still reads the nested
   home's `profiles/` dir (pre-existing). `switch` was made base-correct; if
   desired, `list` could adopt `baseHome()` too — small, optional cleanup.
+
+## Addendum — interactive terminal `/profiles` and `/projects` (2026-08-12)
+
+Key correction: "terminal menu" for a `/`-prefixed command means the
+INTERACTIVE terminal agent's slash menu (BUILTIN_SLASH_COMMANDS), not the
+shell `axiom --help` command list. `profile`/`projects` shell subcommands
+already existed, but typing `/pro` inside the interactive agent matched
+nothing because `/profiles`/`/projects` were gateway-only.
+
+Registered both as canonical builtin slash commands
+(`src/core/slash-commands.ts`) so they appear in the `/pro` autocomplete
+(the createBaseAutocompleteProvider maps every builtin command), are
+recognized (never routed to the model), and dispatch locally via
+`handleProfilesSlashCommand`/`handleProjectsSlashCommand`
+(`src/modes/interactive/interactive-mode.ts`), which reuse the pure CLI logic
+(`handleProfileCommand`/`handleProjectsCommand`) with stdout captured into
+the chat. Red-first slash-commands tests (registration + arg resolution),
+20/20. Commit 8d697a0c8. Verified biome + tsgo clean, bundle carries the
+commands, full ./test.sh only documented sandbox known-fails.
+
+Three terminal surfaces now agree: `axiom profile|projects` (shell), and
+`/profiles`/`/projects` (interactive terminal chat + messenger gateway).
