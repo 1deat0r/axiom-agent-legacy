@@ -355,4 +355,40 @@ describe("Gateway /model hotswap", () => {
 			await rm(dir, { recursive: true, force: true });
 		}
 	});
+
+	it("persists a bare /model <model> (empty provider) across load() and threads it into the next completion", async () => {
+		const dir = await home("axiom-gw-model-");
+		try {
+			const { t, sent, push } = fakeTransport();
+			const completion = fakeCompletionRunner();
+			const modelStore = new FileActiveModelStore(activeModelPath(dir, "default"));
+			const g = new Gateway({
+				transport: t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+				modelStore,
+			});
+			await g.start();
+			push({
+				channelId: "+1",
+				sender: "+1",
+				text: "/model deepseek-v4-pro",
+				isCommand: true,
+				timestamp: 1,
+			});
+			await new Promise((r) => setTimeout(r, 20));
+			expect(sent.some((s) => s.text.includes("model set to deepseek-v4-pro"))).toBe(true);
+			// persisted with an empty provider — the gateway reloads per completion
+			expect(modelStore.load()).toEqual({ provider: "", model: "deepseek-v4-pro" });
+			push({ channelId: "+1", sender: "+1", text: "hello again", isCommand: false, timestamp: 2 });
+			await new Promise((r) => setTimeout(r, 20));
+			expect(completion.calls.at(-1)!.model).toEqual({ provider: "", model: "deepseek-v4-pro" });
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
 });

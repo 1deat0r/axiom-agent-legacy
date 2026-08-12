@@ -6,7 +6,7 @@
  * keyed by profile so each profile keeps its own model selection. Strictly
  * erasable TypeScript, top-level imports only.
  */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 /** A resolved provider + model the gateway will force on the next completion. */
@@ -26,11 +26,6 @@ export interface ActiveModelStore {
 export function activeModelPath(axiomHomeDir: string, profile: string): string {
 	const safe = profile.replace(/[^A-Za-z0-9._-]/g, "_") || "default";
 	return join(axiomHomeDir, "gateway", `model-${safe}.json`);
-}
-
-/** Human-readable form of the active model ("provider model"). */
-export function formatActiveModel(active: ActiveModel): string {
-	return `${active.provider} ${active.model}`;
 }
 
 /**
@@ -71,7 +66,9 @@ export class FileActiveModelStore implements ActiveModelStore {
 	load(): ActiveModel | undefined {
 		try {
 			const raw = JSON.parse(readFileSync(this.path, "utf8")) as Partial<ActiveModel>;
-			if (typeof raw.provider === "string" && typeof raw.model === "string" && raw.provider && raw.model) {
+			// Provider may be empty (bare "/model <model>" keeps the profile's
+			// provider) — only the model must be a non-empty string.
+			if (typeof raw.provider === "string" && typeof raw.model === "string" && raw.model) {
 				return { provider: raw.provider, model: raw.model };
 			}
 			return undefined;
@@ -84,8 +81,7 @@ export class FileActiveModelStore implements ActiveModelStore {
 		writeFileSync(this.path, JSON.stringify(active), "utf8");
 	}
 	clear(): void {
-		mkdirSync(dirname(this.path), { recursive: true });
-		writeFileSync(this.path, JSON.stringify({}), "utf8");
+		rmSync(this.path, { force: true });
 	}
 }
 

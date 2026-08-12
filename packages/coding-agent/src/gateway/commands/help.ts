@@ -1,14 +1,20 @@
-import type { GatewayCommand } from "../types.js";
+import type { GatewayCommand, GatewayCommandContext } from "../types.js";
+import { describeActiveModel } from "./model.js";
 
 export const helpCommand: GatewayCommand = {
 	name: "help",
 	summary: "Show gateway commands",
-	handler() {
+	handler(_args: string[], ctx: GatewayCommandContext): string {
+		const status = ctx.modelStore ? describeActiveModel(ctx.modelStore, ctx.profile) : undefined;
 		return [
 			"axiom gateway commands:",
+			...(status ? [status, ""] : []),
 			"  /help                 this help",
 			"  /update               check for updates (fetch + report)",
 			"  /update now           update to latest main, rebuild, restart",
+			"  /model                show the active model (hotswap, ADR-0033)",
+			"  /model <provider> <model>   switch model without a restart",
+			"  /model clear          revert to the profile's default model",
 			"  /cron <add|list|rm>     schedule agent runs and deliver output here",
 			"  /profiles             list profiles",
 			"  /profiles create <n>  create a profile (SOUL.md scaffolded)",

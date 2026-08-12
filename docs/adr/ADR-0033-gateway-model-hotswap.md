@@ -1,7 +1,7 @@
 # ADR-0033 — Gateway /model hotswap (switch the agent's model from Telegram)
 
 ## Status
-Accepted (2026-08-XX)
+Accepted (2026-08-13)
 
 ## Context
 The Axiom gateway talks to the operator over Telegram (and other transports).

@@ -22,14 +22,22 @@ restart.
   Gateway deps.
 
 ## Verified how
-- Unit/behavioral: test/gateway/active-model.test.ts (store round-trip, parse
-  shapes, path, /model set/get/clear/usage), gateway.test.ts (threading the
-  model into completions), completion.test.ts (argv injection). 45 model-
-  feature tests green. tsgo --noEmit clean; biome clean.
-- Notes: the two unrelated tests that fail on a fresh `main` branch still fail
-  here (env-leak telegram-token guard — passes with the token scrubbed; and
-  the mermaid `render.ts` subgraph-title defect, fixed separately on the
-  mermaid-finish branch). Neither is a regression from this work.
+- Unit/behavioral: test/gateway/active-model.test.ts (store round-trip incl.
+  provider-empty, clear removes the file, parse shapes, path, /model
+  set/get/clear/usage), commands.test.ts (/help advertises /model and shows
+  the active override), gateway.test.ts (threading provider+model AND bare
+  model into completions across load()), completion.test.ts (argv injection
+  with/without --provider). 49 gateway tests green (active-model 12, commands
+  15, gateway 10, completion 12). tsgo --noEmit clean; biome clean;
+  `./test.sh` floor green (see feature log).
+- Fixes landed this session (see docs/feature-logs/model-hotswap.md): the
+  store now round-trips a provider-empty override (bare `/model <model>` no
+  longer vanishes on the next load()); `clear` removes the file instead of
+  writing `{}`; `/help` shows the active-model status + `/model` usage.
+- Carried (cherry-picked from feat/mermaid-render, where they also land): the
+  mermaid subgraph title-role/border fix and the tui markdown-transform
+  node:test conversion — two pre-existing main defects that broke the floor
+  on any branch containing the mermaid merge.
 
 ## Live-path caveat (operator-gated)
 - The end-to-end model CALL (real API/auth) is not exercised here — sandbox
@@ -39,5 +47,5 @@ restart.
 
 ## Remaining / next
 - Optionally validate `/model` choices against a small catalog before saving
-  (currently "try it and see" on next completion).
-- Expose the active model in `/help` or a status line.
+  (currently "try it and see" on next completion). Deliberately deferred: the
+  CLI is the model authority; a gateway-side catalog would drift.

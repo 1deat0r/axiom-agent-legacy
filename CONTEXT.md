@@ -158,3 +158,13 @@ build, and the transport offset cursors persist, so no message is lost or
 replayed. Gated: clean worktree, on `main`, ff-only merge, build exit 0;
 any failure leaves the old code serving and never restarts.
 _Avoid_: Deploy script (the runner is typed, tested, gate-checked in-repo)
+**Model hotswap**:
+The gateway-local `/model` command (ADR-0033): a persisted per-profile
+active-model override (`{provider, model}` under
+`<AXIOM_HOME>/gateway/model-<profile>.json`) that the gateway injects as
+`--provider/--model` into every subsequent completion, so the operator can
+switch the agent's model from the chat without a restart. Provider may be
+empty ("keep the profile's provider"); `/model clear` reverts to the profile
+default. The CLI stays the model authority — availability is validated on the
+next completion, not by a gateway-side catalog.
+_Avoid_: Settings edit (the store is an override, not the profile's config)

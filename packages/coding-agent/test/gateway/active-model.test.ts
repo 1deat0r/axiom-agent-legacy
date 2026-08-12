@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -51,6 +52,32 @@ describe("FileActiveModelStore", () => {
 			store.save({ provider: "deepseek", model: "deepseek-v4-pro" });
 			expect(store.load()).toEqual({ provider: "deepseek", model: "deepseek-v4-pro" });
 			store.clear();
+			expect(store.load()).toBeUndefined();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("round-trips a provider-empty override (bare /model <model>)", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-model-"));
+		try {
+			const path = join(dir, "model-default.json");
+			const store = new FileActiveModelStore(path);
+			store.save({ provider: "", model: "deepseek-v4-pro" });
+			expect(store.load()).toEqual({ provider: "", model: "deepseek-v4-pro" });
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("clear removes the override file (no {} sediment)", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-model-"));
+		try {
+			const path = join(dir, "model-default.json");
+			const store = new FileActiveModelStore(path);
+			store.save({ provider: "deepseek", model: "deepseek-v4-pro" });
+			store.clear();
+			expect(existsSync(path)).toBe(false);
 			expect(store.load()).toBeUndefined();
 		} finally {
 			await rm(dir, { recursive: true, force: true });

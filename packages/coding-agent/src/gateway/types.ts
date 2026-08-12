@@ -74,7 +74,6 @@ export interface GatewayCommandContext {
 	profile: string;
 	axiomHomeDir: string;
 	projectHome: string;
-	/** Sessions archive directory for cross-session recall (/search). */
 	/** Per-profile active-model store (/model hotswap); optional. */
 	modelStore?: ActiveModelStore;
 	/** Self-update surface (/update); absent = not configured. */
@@ -85,6 +84,7 @@ export interface GatewayCommandContext {
 	restartRequested?: boolean;
 	/** Deliver a follow-up to the channel the command arrived on. */
 	deliver?: (text: string) => Promise<void>;
+	/** Sessions archive directory for cross-session recall (/search). */
 	sessionsDir?: string;
 	/** Persistent sqlite FTS index file for cross-session recall. */
 	searchIndexPath?: string;
