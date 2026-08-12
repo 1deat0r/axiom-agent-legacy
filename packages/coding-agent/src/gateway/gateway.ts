@@ -11,7 +11,9 @@
  * cron manager (ADR — gateway cron) rides the gateway lifecycle and targets
  * `/cron` delivery at a channel.
  */
+import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { type ActiveProjectStore, FileActiveProjectStore, resolveProjectRoot } from "./active-project.js";
 import type { ChannelIndex } from "./channel-index.js";
 import { dispatchCommand } from "./commands/index.js";
 import { sessionIdForChannel } from "./completion.js";
@@ -43,6 +45,8 @@ export interface GatewayDeps {
 	searchIndexPath?: string;
 	/** Anchored project root; scopes /search unless --all is given. */
 	projectRoot?: string /** Optional gateway cron manager: lifecycle rides the gateway; /cron drives it. */;
+	/** Per-channel active-project store (injectable; defaults to a file store under the profile home). */
+	activeProjects?: ActiveProjectStore;
 	cron?: GatewayCronCommandApi & { start(): void; stop(): void };
 	/** Delivery ledger (ADR-0022); deliveries are recorded when present. */
 	ledger?: DeliveryLedger;
@@ -74,6 +78,7 @@ export class Gateway {
 	private readonly searchIndexPath?: string;
 	private readonly projectRoot?: string;
 	private readonly cron: (GatewayCronCommandApi & { start(): void; stop(): void }) | undefined;
+	private readonly activeProjects: ActiveProjectStore;
 	private readonly chains = new Map<string, ChannelChain>();
 	private started = false;
 
@@ -94,6 +99,7 @@ export class Gateway {
 		this.searchIndexPath = deps.searchIndexPath;
 		this.projectRoot = deps.projectRoot;
 		this.cron = deps.cron;
+		this.activeProjects = deps.activeProjects ?? new FileActiveProjectStore(this.projectHome);
 	}
 
 	async start(): Promise<void> {
@@ -185,6 +191,9 @@ export class Gateway {
 				profile: this.profile,
 				axiomHomeDir: this.axiomHomeDir,
 				projectHome: this.projectHome,
+				activeProject: this.activeProjects.get(msg.channelId),
+				activeProjects: this.activeProjects,
+				dropProjectSessions: (project) => this.index.removeWhere((key) => key.includes(`:${project}:`)),
 				...(this.sessionsDir ? { sessionsDir: this.sessionsDir } : {}),
 				...(this.searchIndexPath ? { searchIndexPath: this.searchIndexPath } : {}),
 				...(this.projectRoot ? { projectRoot: this.projectRoot } : {}),
@@ -197,16 +206,38 @@ export class Gateway {
 			await this.deliver({ channelId: msg.channelId, recipient: msg.sender }, reply);
 			return;
 		}
-		// Agent run: resolve (or create) the channel's session id, index it.
-		let sessionId = this.index.get(msg.channelId);
+		// Agent run: resolve the channel's active project (if any), derive the
+		// session key (channel-only when unanchored; channel:project:generation
+		// when anchored — a re-created project gets a fresh generation so it
+		// never resumes a deleted project's conversation), and run the
+		// completion anchored to the project root (per-call override).
+		const active = this.activeProjects.get(msg.channelId);
+		let anchoredRoot: string | undefined;
+		let sessionKey = msg.channelId;
+		if (active) {
+			const scoped = resolveProjectRoot(this.projectHome, active);
+			if (existsSync(scoped)) {
+				anchoredRoot = scoped;
+				sessionKey = `${msg.channelId}:${active}:${this.activeProjects.generation(active)}`;
+			} else {
+				// Stale active entry (project removed out-of-band): clear it and
+				// drop its composite session mapping so the /projects menu never
+				// lies and the channel runs unanchored (and a re-created project
+				// never resumes the dead session).
+				this.index.remove(`${msg.channelId}:${active}:${this.activeProjects.generation(active)}`);
+				this.activeProjects.clear(msg.channelId);
+			}
+		}
+		let sessionId = this.index.get(sessionKey);
 		if (sessionId === null) {
-			sessionId = sessionIdForChannel(msg.channelId);
-			this.index.set(msg.channelId, sessionId);
+			sessionId = sessionIdForChannel(sessionKey);
+			this.index.set(sessionKey, sessionId);
 		}
 		const result = await this.completion.runCompletion({
 			sessionId,
 			prompt: msg.text,
 			profile: { name: this.profile },
+			...(anchoredRoot ? { projectRoot: anchoredRoot } : {}),
 		});
 		if (result.error) {
 			await this.deliver(
