@@ -144,3 +144,7 @@ ADR collision: main already had ADR-0028-security-fence -> renumbered delegate A
 ADR-0029-delegate-tool (git mv + ref rewrite in handoff/summary/log). Verified on merged tree:
 tsgo --noEmit clean, biome clean, delegate suite 30/1 green; main rpc.test.ts still uses
 PI_CODING_AGENT_DIR (matches my live-gated test). Re-running full ./test.sh on the merged tree.
+- Merged-tree full ./test.sh: coding-agent 14 failed / 4574 passed — the 14 are ONLY the documented
+  sandbox known-fails (4603 x4, 4685 x9, daemon-serialized-refine x1); NO new failures. tui 758/0,
+  ai 69, agent 315. The earlier kernel-agent-message-skill flake did not recur.
+  Regression-free after the main merge.
