@@ -122,3 +122,16 @@ COMMIT: git commit the increment.
 - Increment (A)+(B) external review: delegate-incr-reviewer APPROVE 98/100. Non-blocking: empty
   model-param fallback has no dedicated test -> ADDED (25 neutral / 1 live-gated skipped).
 COMMIT+push increment.
+
+## Increment (C) — batch/parallel fan-out (Hermes batch/parallel + async_delegation)
+- New `tasks?: string[]` param: run one FRESH helper per task concurrently (Promise.all),
+  each reaping its own bridge; returns an aggregate `DelegateBatchResult {ok, delegations[],
+  tokens, cost}` (ok = AND across delegations; a failing task keeps sibling results / ok:false).
+- `task` became optional (single) alongside `tasks` (batch); validation requires one.
+- Shared runDelegation() extracted for single+batch (DRY, no orphan, per-delegation timeout).
+- result.ts: addAccounting, toBatchResult, renderBatchResult.
+- tests: 28 neutral / 1 live-gated skipped; tsgo clean; biome clean. New tests: batch fresh-per-task
+  (built===3), aggregate tokens/cost, partial-failure keeps sibling + ok:false, no task/tasks rejects.
+- self-review: each batch behavior has a failing-without-it test; no dead code; back-compat preserved
+  (single path unchanged, details shape is mode-dependent); empty tasks falls through to single/reject.
+COMMIT increment.

@@ -1,14 +1,16 @@
 /**
- * The axiom `delegate` tool (feature #5, first step — RPC bridge that spawns a
- * helper process and returns only a compact result block into the parent
- * session; the Hermes delegate_tool.py analog).
+ * The axiom `delegate` tool (feature #5 — RPC bridge that spawns helper
+ * processes and returns only compact result blocks into the parent session;
+ * the Hermes delegate_tool.py analog).
  *
- * Calling `delegate` spawns an isolated helper process (via `--mode rpc`),
- * runs one bounded task inside it, and returns ONLY a compact result block —
- * `{ok, summary, tokens, cost, helper?, error?}`. The helper's intermediate
- * tool calls and full context never enter the parent session: a multi-step
- * pipeline collapses into one zero-context-cost turn, and the ledger ethos is
- * honored because the block reports only RECORDED tokens/cost (never guessed).
+ * Calling `delegate` spawns isolated helper processes (via `--mode rpc`), runs
+ * a single bounded task (or a batch in parallel), and returns ONLY compact
+ * result blocks — single: `{ok, summary, tokens, cost, helper?, error?}`;
+ * batch (`tasks[]`): an aggregate `{ok, delegations[], tokens, cost}`. The
+ * helpers' intermediate tool calls and full context never enter the parent
+ * session: a multi-step pipeline collapses into one zero-context-cost turn,
+ * and the ledger ethos is honored because blocks report only RECORDED
+ * tokens/cost (never guessed).
  *
  * Dependencies are injectable for tests; the default `bridge` factory wires
  * the real helper process via `createRpcClientBridge`.
@@ -17,14 +19,22 @@
 import { type Static, Type } from "typebox";
 import type { ExtensionAPI } from "../../core/extensions/types.js";
 import { createRpcClientBridge, parseModelRef, type RpcDelegateBridge } from "./bridge.js";
-import { DEFAULT_SUMMARY_MAX_CHARS, emptyAccounting, renderDelegateResult, toDelegateResult } from "./result.js";
-import type { DelegateResult } from "./types.js";
+import {
+	DEFAULT_SUMMARY_MAX_CHARS,
+	emptyAccounting,
+	renderBatchResult,
+	renderDelegateResult,
+	toBatchResult,
+	toDelegateResult,
+} from "./result.js";
+import type { DelegateBatchResult, DelegateResult } from "./types.js";
 
 export const DEFAULT_TIMEOUT_MS = 120_000;
 export const MAX_TIMEOUT_MS = 300_000;
 
 const DelegateParamsSchema = Type.Object({
-	task: Type.String(),
+	task: Type.Optional(Type.String()),
+	tasks: Type.Optional(Type.Array(Type.String())),
 	name: Type.Optional(Type.String()),
 	model: Type.Optional(Type.String()),
 	timeoutMs: Type.Optional(Type.Number()),
@@ -63,6 +73,45 @@ function withTimeout<T>(promise: Promise<T>, ms: number, onTimeout: Error): Prom
 	});
 }
 
+/**
+ * Run one delegation to completion on a fresh helper bridge, returning a
+ * compact block. Always start + stop the bridge (no orphan on error/timeout).
+ */
+async function runDelegation(
+	bridge: RpcDelegateBridge,
+	task: string,
+	timeoutMs: number,
+	name: string | undefined,
+	model: string | undefined,
+	summaryMaxChars: number,
+): Promise<DelegateResult> {
+	let result: DelegateResult;
+	try {
+		await bridge.start();
+		const timeoutError = new Error(`delegate timed out after ${timeoutMs}ms`);
+		const run = await withTimeout(bridge.runTask(task, timeoutMs), timeoutMs, timeoutError);
+		result = toDelegateResult(
+			{
+				ok: true,
+				summary: run.lastAssistantText,
+				tokens: run.stats.tokens ?? emptyAccounting(),
+				cost: run.stats.cost,
+				helper: { name, model, sessionId: run.stats.sessionId },
+			},
+			summaryMaxChars,
+		);
+	} catch (error) {
+		result = toDelegateResult(
+			{ ok: false, error: error instanceof Error ? error.message : String(error) },
+			summaryMaxChars,
+		);
+	} finally {
+		// Always reap the helper — no orphan processes on error/timeout.
+		await bridge.stop().catch(() => undefined);
+	}
+	return result;
+}
+
 export function createDelegateExtension(deps?: Partial<DelegateDeps>): (pi: ExtensionAPI) => void {
 	const resolved: DelegateDeps = {
 		bridge: deps?.bridge ?? ((model?: string) => createRpcClientBridge(parseModelRef(model))),
@@ -78,13 +127,15 @@ export function createDelegateExtension(deps?: Partial<DelegateDeps>): (pi: Exte
 				"Run a task in an isolated helper process and return only a compact result block. " +
 				"Use for self-contained multi-step work you do not want in your own context: the helper " +
 				"carries out the task (its intermediate tool calls stay out of this session), and you " +
-				"receive a short summary plus honest token/cost accounting. " +
-				"Parameters: task (required instruction), optional name, model, timeoutMs.",
+				"receive a short summary plus honest token/cost accounting. To fan out independent work " +
+				"in parallel, pass tasks (a list) and receive one compact block per task. " +
+				"Parameters: task OR tasks (required), optional name, model, timeoutMs.",
 			parameters: DelegateParamsSchema,
 			execute: async (_toolCallId, params: DelegateParams, _signal, _onUpdate, ctx) => {
-				const task = (params.task ?? "").trim();
-				if (!task) {
-					throw new Error("delegate requires a non-empty task");
+				const singleTask = (params.task ?? "").trim();
+				const batchTasks = (params.tasks ?? []).map((t) => t.trim()).filter((t) => t.length > 0);
+				if (singleTask.length === 0 && batchTasks.length === 0) {
+					throw new Error("delegate requires a non-empty task or a non-empty tasks list");
 				}
 				const requested =
 					typeof params.timeoutMs === "number" && Number.isFinite(params.timeoutMs)
@@ -99,41 +150,37 @@ export function createDelegateExtension(deps?: Partial<DelegateDeps>): (pi: Exte
 				const viaParent = ctx?.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
 				const effectiveModel = viaParam ?? viaParent;
 
-				// One fresh helper process per call (per-call reset), configured with
-				// the resolved model when available.
-				const bridge = resolved.bridge(effectiveModel);
-				let result: DelegateResult;
-				try {
-					await bridge.start();
-					const timeoutError = new Error(`delegate timed out after ${timeoutMs}ms`);
-					const run = await withTimeout(bridge.runTask(task, timeoutMs), timeoutMs, timeoutError);
-					result = toDelegateResult(
-						{
-							ok: true,
-							summary: run.lastAssistantText,
-							tokens: run.stats.tokens ?? emptyAccounting(),
-							cost: run.stats.cost,
-							helper: {
-								name: params.name,
-								model: effectiveModel,
-								sessionId: run.stats.sessionId,
-							},
-						},
-						resolved.summaryMaxChars,
+				if (batchTasks.length > 0) {
+					// Batch/parallel fan-out: one fresh helper per task, concurrently.
+					// Each delegation reaps its own bridge; a failing task does not
+					// abort its siblings (partial failure -> ok:false but results kept).
+					const delegations = await Promise.all(
+						batchTasks.map((task) =>
+							runDelegation(
+								resolved.bridge(effectiveModel),
+								task,
+								timeoutMs,
+								params.name,
+								effectiveModel,
+								resolved.summaryMaxChars,
+							),
+						),
 					);
-				} catch (error) {
-					result = toDelegateResult(
-						{
-							ok: false,
-							error: error instanceof Error ? error.message : String(error),
-						},
-						resolved.summaryMaxChars,
-					);
-				} finally {
-					// Always reap the helper — no orphan processes on error/timeout.
-					await bridge.stop().catch(() => undefined);
+					const batch: DelegateBatchResult = toBatchResult(delegations);
+					return {
+						content: [{ type: "text", text: renderBatchResult(batch) }],
+						details: batch,
+					};
 				}
 
+				const result = await runDelegation(
+					resolved.bridge(effectiveModel),
+					singleTask,
+					timeoutMs,
+					params.name,
+					effectiveModel,
+					resolved.summaryMaxChars,
+				);
 				return {
 					content: [{ type: "text", text: renderDelegateResult(result) }],
 					details: result,

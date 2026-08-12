@@ -7,7 +7,7 @@
  * parent actually receives.
  */
 
-import type { DelegateResult, DelegateTokenAccounting } from "./types.js";
+import type { DelegateBatchResult, DelegateResult, DelegateTokenAccounting } from "./types.js";
 
 /** Default cap for the returned summary (compactness guarantee). */
 export const DEFAULT_SUMMARY_MAX_CHARS = 2000;
@@ -79,4 +79,41 @@ export function renderDelegateResult(result: DelegateResult): string {
 		return `[delegate failed] ${result.error ?? "unknown error"}`;
 	}
 	return `[delegate ok] ${result.tokens.total} tokens, $${result.cost.toFixed(4)}\n${result.summary}`;
+}
+
+/** Sum two accounting shapes (used to aggregate parallel delegations). */
+export function addAccounting(a: DelegateTokenAccounting, b: DelegateTokenAccounting): DelegateTokenAccounting {
+	return {
+		input: a.input + b.input,
+		output: a.output + b.output,
+		cacheRead: a.cacheRead + b.cacheRead,
+		cacheWrite: a.cacheWrite + b.cacheWrite,
+		total: a.total + b.total,
+	};
+}
+
+/** Aggregate per-delegation blocks into one batch result (sums accounting, ANDs ok). */
+export function toBatchResult(delegations: DelegateResult[]): DelegateBatchResult {
+	let tokens = emptyAccounting();
+	let cost = 0;
+	let ok = true;
+	for (const d of delegations) {
+		tokens = addAccounting(tokens, d.tokens);
+		cost += d.cost;
+		if (!d.ok) {
+			ok = false;
+		}
+	}
+	return { ok, delegations, tokens, cost };
+}
+
+/** Compact rendering of a batch result. */
+export function renderBatchResult(batch: DelegateBatchResult): string {
+	const lines = [
+		`[delegate batch] ${batch.delegations.length} tasks, ${batch.tokens.total} tokens, $${batch.cost.toFixed(4)}`,
+	];
+	for (const d of batch.delegations) {
+		lines.push(d.ok ? `- ${d.summary}` : `- [failed] ${d.error ?? "unknown error"}`);
+	}
+	return lines.join("\n");
 }

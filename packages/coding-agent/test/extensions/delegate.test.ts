@@ -132,6 +132,7 @@ class StubBridge implements RpcDelegateBridge {
 	runResult: RpcDelegateRunResult | null = null;
 	runError: Error | null = null;
 	hang = false;
+	failOnTask: string | null = null;
 
 	async start(): Promise<void> {
 		this.started += 1;
@@ -140,6 +141,9 @@ class StubBridge implements RpcDelegateBridge {
 		this.runCalls.push({ task, timeoutMs });
 		if (this.hang) {
 			return new Promise<RpcDelegateRunResult>(() => undefined); // never resolves
+		}
+		if (this.failOnTask !== null && task === this.failOnTask) {
+			throw new Error("boom");
 		}
 		if (this.runError) throw this.runError;
 		return this.runResult ?? { lastAssistantText: "default summary", stats: stats() };
@@ -331,6 +335,57 @@ describe("createDelegateExtension", () => {
 			model: { provider: "anthropic", id: "claude-sonnet-4-5" },
 		});
 		expect(seen).toBe("openai/gpt-4o");
+	});
+
+	it("rejects when neither task nor tasks is supplied", async () => {
+		const { pi, tools } = fakePi();
+		createDelegateExtension()(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		await expect(tool.execute!("c1", {})).rejects.toThrow("non-empty task");
+		await expect(tool.execute!("c1", { tasks: [] })).rejects.toThrow("non-empty task");
+	});
+
+	it("runs a batch across fresh helpers, one per task, and aggregates", async () => {
+		const { pi, tools } = fakePi();
+		let built = 0;
+		createDelegateExtension({
+			bridge: () => {
+				built += 1;
+				return new StubBridge();
+			},
+		})(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		const out = (await tool.execute!("c1", { tasks: ["a", "b", "c"] })) as {
+			content: Array<{ type: string; text: string }>;
+			details: {
+				ok: boolean;
+				delegations: Array<{ ok: boolean; tokens: { total: number }; cost: number }>;
+				tokens: { total: number };
+				cost: number;
+			};
+		};
+		expect(built).toBe(3); // one fresh helper per task (per-call reset holds per delegation)
+		expect(out.details.ok).toBe(true);
+		expect(out.details.delegations).toHaveLength(3);
+		expect(out.details.tokens.total).toBe(180); // 3 x 60
+		expect(out.details.cost).toBeCloseTo(0.0036); // 3 x 0.0012
+		expect(out.content[0]!.text).toContain("[delegate batch]");
+		expect(out.content[0]!.text).toContain("3 tasks");
+	});
+
+	it("batch keeps sibling results and reports ok:false on partial failure", async () => {
+		const { pi, tools } = fakePi();
+		const stub = new StubBridge();
+		stub.failOnTask = "b";
+		createDelegateExtension({ bridge: () => stub })(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		const out = (await tool.execute!("c1", { tasks: ["a", "b"] })) as {
+			details: { ok: boolean; delegations: Array<{ ok: boolean; error?: string }> };
+		};
+		expect(out.details.ok).toBe(false);
+		expect(out.details.delegations[0]!.ok).toBe(true);
+		expect(out.details.delegations[1]!.ok).toBe(false);
+		expect(out.details.delegations[1]!.error).toBe("boom");
 	});
 
 	it("the default export wires real defaults", () => {

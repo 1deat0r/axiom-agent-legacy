@@ -10,9 +10,11 @@
 
 /** Parameters accepted by the `delegate` tool. */
 export interface DelegateParams {
-	/** The natural-language task instruction for the helper to run (required). */
-	task: string;
-	/** Optional stable label for the helper (informational only). */
+	/** Single natural-language task instruction for one helper. */
+	task?: string;
+	/** Batch/parallel mode: run one fresh helper per task, concurrently. */
+	tasks?: string[];
+	/** Optional stable label for the helper (single mode, informational). */
 	name?: string;
 	/** Optional model reference for the helper (provider/model). */
 	model?: string;
@@ -27,6 +29,18 @@ export interface DelegateTokenAccounting {
 	cacheRead: number;
 	cacheWrite: number;
 	total: number;
+}
+
+/** Aggregated batch result for parallel `tasks` fan-out. */
+export interface DelegateBatchResult {
+	/** True only when every delegation finished without error/timeout. */
+	ok: boolean;
+	/** One compact result block per task, in input order. */
+	delegations: DelegateResult[];
+	/** Summed recorded token accounting across all delegations. */
+	tokens: DelegateTokenAccounting;
+	/** Summed recorded cost in USD across all delegations. */
+	cost: number;
 }
 
 /** The compact result block returned into the parent session. */
