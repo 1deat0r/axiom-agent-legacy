@@ -24,6 +24,8 @@ export interface GatewayDeps {
 	projectHome?: string;
 	/** Sessions archive directory for /search cross-session recall. */
 	sessionsDir?: string;
+	/** Persistent sqlite FTS index file for cross-session recall. */
+	searchIndexPath?: string;
 	/** Anchored project root; scopes /search unless --all is given. */
 	projectRoot?: string;
 }
@@ -40,6 +42,7 @@ export class Gateway {
 	private readonly senders: Set<string>;
 	private readonly projectHome: string;
 	private readonly sessionsDir?: string;
+	private readonly searchIndexPath?: string;
 	private readonly projectRoot?: string;
 	private readonly chains = new Map<string, ChannelChain>();
 	private started = false;
@@ -55,6 +58,7 @@ export class Gateway {
 			deps.projectHome ??
 			(deps.profile === "default" ? deps.axiomHomeDir : join(deps.axiomHomeDir, "profiles", deps.profile));
 		this.sessionsDir = deps.sessionsDir;
+		this.searchIndexPath = deps.searchIndexPath;
 		this.projectRoot = deps.projectRoot;
 	}
 
@@ -91,6 +95,7 @@ export class Gateway {
 				axiomHomeDir: this.axiomHomeDir,
 				projectHome: this.projectHome,
 				...(this.sessionsDir ? { sessionsDir: this.sessionsDir } : {}),
+				...(this.searchIndexPath ? { searchIndexPath: this.searchIndexPath } : {}),
 				...(this.projectRoot ? { projectRoot: this.projectRoot } : {}),
 			};
 			const reply = dispatchCommand(msg.text, ctx);

@@ -1,8 +1,14 @@
 /**
- * Cross-session recall: a synchronous FTS5 full-text search over the agent's
- * past session archive (append-only JSONL files under the profile's sessions
- * dir). Built on the node:sqlite stdlib (FTS5 trigram tokenizer — no new
- * dependency), it answers "what did we decide about X last month?" that the
+ * Cross-session recall: a full-text (FTS5) search over the agent's past
+ * session archive (append-only JSONL files under the profile's sessions dir),
+ * backed by a PERSISTENT SQLite index that is reconciled incrementally by file
+ * size+mtime — so repeated searches don't rescan the whole archive. Built on
+ * the node:sqlite stdlib (FTS5 trigram tokenizer; no new dependency).
+ *
+ * The index ("the SQLite session DB index"): an `entries` table of indexed
+ * messages plus a `sessions` table of reconciliation metadata (size, mtime,
+ * cwd, name, first message), with an FTS5 virtual table kept in sync by
+ * triggers. It answers "what did we decide about X last month?" that the
  * durable-fact memory tool cannot.
  *
  * Project isolation: a session belongs to a project iff its header cwd is
@@ -12,8 +18,8 @@
  * projects never silently mix in one corpus.
  */
 
-import { readdirSync, readFileSync } from "node:fs";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 /** One indexable message from a session file. */
@@ -33,53 +39,71 @@ export interface ParsedSession {
 	id: string;
 	cwd: string;
 	name?: string;
+	/** First user message text (for browse preview). */
+	firstMessage: string;
 	docs: SearchDoc[];
 }
 
 export interface SearchHit {
-	/** Full session id (uuid7). */
 	sessionId: string;
-	/** Header cwd of the session. */
 	cwd: string;
-	/** Project derived from cwd (name, or "workspace" when not under a project). */
 	projectLabel: string;
-	/** Short display id (first 7 chars). */
 	shortId: string;
 	timestamp: number;
 	role: "user" | "assistant";
-	/** Matched message text (for the snippet), kept short. */
 	snippet: string;
-	/** bm25 relevance (lower is better; negative values possible). */
 	rank: number;
 	sessionName?: string;
 }
 
 export interface SearchResult {
 	hits: SearchHit[];
-	/** Session files scanned. */
-	sessionsScanned: number;
-	/** Sessions that produced at least one match. */
+	/** Sessions present in the persistent index after reconciliation. */
+	sessionsIndexed: number;
+	/** Sessions among the returned hits. */
 	sessionsMatched: number;
 	/** True when the query is below the index's minimum token length. */
 	queryTooShort: boolean;
+	/** True when an offset consumed the whole result set. */
+	outOfRange: boolean;
+}
+
+/** A browsable session (discovery mode), newest-first. */
+export interface BrowseEntry {
+	sessionId: string;
+	shortId: string;
+	cwd: string;
+	projectLabel: string;
+	firstMessage: string;
+	modified: number;
+	sessionName?: string;
 }
 
 export interface SearchOptions {
 	sessionsDir: string;
+	/** Persistent SQLite index file (created on first use). */
+	indexPath: string;
 	query: string;
-	/** Anchored project root; when set, default scope restricts to it. */
 	projectRoot?: string;
-	/** Profile home used to derive project labels from cwd. */
 	projectHome?: string;
-	/** "project" (default) scopes to projectRoot when present. "all" crosses projects. */
 	scope?: "project" | "all";
-	/** Max hits to return. */
 	limit?: number;
-	/** Inject optional FS access (tests). */
+	/** Skip this many ranked message rows (scroll/paging). */
+	offset?: number;
 	readdir?: (dir: string) => string[];
 }
 
-/** Caps that bound a single search (archive size / per-session / per-message). */
+export interface BrowseOptions {
+	sessionsDir: string;
+	indexPath: string;
+	projectRoot?: string;
+	projectHome?: string;
+	scope?: "project" | "all";
+	limit?: number;
+	readdir?: (dir: string) => string[];
+}
+
+/** Caps that bound a single reconcile/search. */
 export const SEARCH_MAX_SESSION_FILES = 2000;
 export const SEARCH_MAX_SESSION_TEXT_CHARS = 64 * 1024;
 export const SEARCH_MAX_MESSAGE_CHARS = 4000;
@@ -98,10 +122,7 @@ export function isWithin(root: string, path: string): boolean {
 	return p === r || p.startsWith(r + sep);
 }
 
-/**
- * Derive a short project label from a session cwd: the project name when the
- * cwd sits under <projectHome>/projects/<name>, else "workspace".
- */
+/** Short project label for a cwd: name when under <projectHome>/projects/<name>, else "workspace". */
 export function projectLabelForCwd(cwd: string, projectHome?: string): string {
 	if (!cwd || !projectHome) return "workspace";
 	const projectsRoot = join(projectHome, "projects");
@@ -125,7 +146,7 @@ function textOf(message: { content?: string | Array<{ type?: string; text?: stri
 		.join(" ");
 }
 
-/** Parse one JSONL session file into header identity + indexed message docs. */
+/** Parse one JSONL session file into header identity + indexable message docs. */
 export function parseSessionFile(filePath: string, readFile = readFileSyncText): ParsedSession | null {
 	const raw = readFile(filePath);
 	if (!raw) return null;
@@ -133,6 +154,7 @@ export function parseSessionFile(filePath: string, readFile = readFileSyncText):
 	let cwd = "";
 	let name: string | undefined;
 	let sawHeader = false;
+	let firstMessage = "";
 	const docs: SearchDoc[] = [];
 	let seq = 0;
 	let sessionText = 0;
@@ -169,6 +191,7 @@ export function parseSessionFile(filePath: string, readFile = readFileSyncText):
 		const text = textOf(entry.message as { content?: string | Array<{ type?: string; text?: string }> });
 		if (!text) continue;
 		if (sessionText >= SEARCH_MAX_SESSION_TEXT_CHARS) continue;
+		if (!firstMessage && role === "user") firstMessage = text.slice(0, 200);
 		const tsRaw = typeof entry.timestamp === "string" ? new Date(entry.timestamp).getTime() : NaN;
 		docs.push({
 			seq: seq++,
@@ -180,7 +203,7 @@ export function parseSessionFile(filePath: string, readFile = readFileSyncText):
 	}
 
 	if (!sawHeader) return null;
-	return { filePath, id, cwd, name, docs };
+	return { filePath, id, cwd, name, firstMessage, docs };
 }
 
 function readFileSyncText(path: string): string {
@@ -191,20 +214,6 @@ function readFileSyncText(path: string): string {
 	}
 }
 
-function collectSessionFiles(sessionsDir: string, readdir?: (dir: string) => string[]): string[] {
-	const read = readdir ?? defaultReaddir;
-	let names: string[];
-	try {
-		names = read(sessionsDir);
-	} catch {
-		return [];
-	}
-	return names
-		.filter((n) => n.endsWith(".jsonl"))
-		.slice(0, SEARCH_MAX_SESSION_FILES)
-		.map((n) => join(sessionsDir, n));
-}
-
 function defaultReaddir(dir: string): string[] {
 	try {
 		return readdirSync(dir, { encoding: "utf8" });
@@ -213,92 +222,177 @@ function defaultReaddir(dir: string): string[] {
 	}
 }
 
-function openFtsIndex(): DatabaseSync {
-	const db = new DatabaseSync(":memory:");
+/** Current .jsonl files in the sessions dir as {sessionId, size, mtime}. */
+function collectSessionFiles(
+	sessionsDir: string,
+	readdir?: (dir: string) => string[],
+): Array<{ file: string; size: number; mtime: number }> {
+	const read = readdir ?? defaultReaddir;
+	let names: string[];
+	try {
+		names = read(sessionsDir);
+	} catch {
+		return [];
+	}
+	const out: Array<{ file: string; size: number; mtime: number }> = [];
+	for (const n of names) {
+		if (!n.endsWith(".jsonl")) continue;
+		const file = join(sessionsDir, n);
+		try {
+			const st = statSync(file);
+			out.push({ file, size: st.size, mtime: Math.floor(st.mtimeMs) });
+		} catch {
+			// unreadable/stat-failed file: skip
+		}
+		if (out.length >= SEARCH_MAX_SESSION_FILES) break;
+	}
+	return out;
+}
+
+/** Open the persistent index DB and ensure schema + FTS triggers exist. */
+export function openIndexDb(indexPath: string, mkdirp = true): DatabaseSync {
+	if (mkdirp) {
+		mkdirSync(dirname(indexPath), { recursive: true });
+	}
+	const db = new DatabaseSync(indexPath);
+	db.exec("PRAGMA journal_mode=WAL");
 	db.exec(
-		`CREATE VIRTUAL TABLE session_search USING fts5(
-			session_id, cwd, ts, role, session_name, seq, text,
-			tokenize = 'trigram'
-		);`,
+		`CREATE TABLE IF NOT EXISTS sessions (
+			session_id TEXT PRIMARY KEY,
+			file_path TEXT NOT NULL,
+			size INTEGER NOT NULL,
+			mtime_ms INTEGER NOT NULL,
+			cwd TEXT NOT NULL,
+			session_name TEXT,
+			first_message TEXT NOT NULL,
+			modified INTEGER NOT NULL
+		);
+		CREATE TABLE IF NOT EXISTS entries (
+			rowid INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_id TEXT NOT NULL,
+			role TEXT NOT NULL,
+			ts INTEGER NOT NULL,
+			seq INTEGER NOT NULL,
+			text TEXT NOT NULL
+		);
+		CREATE VIRTUAL TABLE IF NOT EXISTS session_search_fts USING fts5(
+			payload,
+			content='entries', content_rowid='rowid',
+			tokenize='trigram'
+		);
+		CREATE TRIGGER IF NOT EXISTS session_search_fts_ai AFTER INSERT ON entries BEGIN
+			INSERT INTO session_search_fts(rowid, payload) VALUES (new.rowid, new.text);
+		END;
+		CREATE TRIGGER IF NOT EXISTS session_search_fts_ad AFTER DELETE ON entries BEGIN
+			INSERT INTO session_search_fts(session_search_fts, rowid, payload) VALUES('delete', old.rowid, old.text);
+		END;
+		CREATE TRIGGER IF NOT EXISTS session_search_fts_au AFTER UPDATE OF text ON entries BEGIN
+			INSERT INTO session_search_fts(session_search_fts, rowid, payload) VALUES('delete', old.rowid, old.text);
+			INSERT INTO session_search_fts(rowid, payload) VALUES (new.rowid, new.text);
+		END;`,
 	);
 	return db;
 }
 
-/** Build an in-memory FTS5 index over the parsed sessions. */
-export function buildFtsIndex(db: DatabaseSync, sessions: ParsedSession[]): void {
-	const insert = db.prepare(
-		"INSERT INTO session_search(session_id, cwd, ts, role, session_name, seq, text) VALUES (?, ?, ?, ?, ?, ?, ?)",
-	);
-	for (const session of sessions) {
-		for (const doc of session.docs) {
-			insert.run(session.id, session.cwd, doc.timestamp, doc.role, session.name ?? null, doc.seq, doc.text);
-		}
+/** Remove every entry + session row for one session id (FTS cleaned via triggers). */
+function removeSession(db: DatabaseSync, sessionId: string): void {
+	db.prepare("DELETE FROM entries WHERE session_id = ?").run(sessionId);
+	db.prepare("DELETE FROM sessions WHERE session_id = ?").run(sessionId);
+}
+
+function insertSession(db: DatabaseSync, session: ParsedSession, filePath: string, size: number, mtime: number): void {
+	db.prepare(
+		"INSERT INTO sessions(session_id, file_path, size, mtime_ms, cwd, session_name, first_message, modified) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+	).run(session.id, filePath, size, mtime, session.cwd, session.name ?? null, session.firstMessage, mtime);
+	const ins = db.prepare("INSERT INTO entries(session_id, role, ts, seq, text) VALUES (?, ?, ?, ?, ?)");
+	for (const doc of session.docs) {
+		ins.run(session.id, doc.role, doc.timestamp, doc.seq, doc.text);
 	}
 }
 
-export function runFtsQuery(
-	db: DatabaseSync,
-	phrase: string,
-): Array<{
-	session_id: string;
-	cwd: string;
-	ts: number;
-	role: string;
-	session_name: string | null;
-	text: string;
-	score: number;
-}> {
-	const stmt = db.prepare(
-		`SELECT session_id, cwd, ts, role, session_name, text,
-			bm25(session_search) AS score
-		FROM session_search
-		WHERE session_search MATCH ?
-		ORDER BY score`,
-	);
-	return stmt.all(phrase) as Array<{
+/**
+ * Reconcile the persistent index with the sessions dir: files whose
+ * (size, mtime) are unchanged are skipped; changed/new files are re-indexed;
+ * deleted files are dropped. Returns the number of sessions now indexed.
+ */
+export function reconcileIndex(db: DatabaseSync, sessionsDir: string, readdir?: (dir: string) => string[]): number {
+	const files = collectSessionFiles(sessionsDir, readdir);
+	const currentPaths = new Set(files.map((f) => f.file));
+	const byPath = new Map<string, { file: string; size: number; mtime: number }>();
+	for (const f of files) byPath.set(f.file, f);
+
+	const existingRows = db.prepare("SELECT session_id, file_path, size, mtime_ms FROM sessions").all() as Array<{
 		session_id: string;
-		cwd: string;
-		ts: number;
-		role: string;
-		session_name: string | null;
-		text: string;
-		score: number;
+		file_path: string;
+		size: number;
+		mtime_ms: number;
 	}>;
-}
+	const existingByPath = new Map(
+		existingRows.map((r) => [r.file_path, { session_id: r.session_id, size: r.size, mtime: r.mtime_ms }]),
+	);
 
-function projectScopeFilter(options: SearchOptions): (session: ParsedSession) => boolean {
-	if (options.scope === "all") return () => true;
-	if (options.projectRoot) {
-		const root = options.projectRoot;
-		return (session) => isWithin(root, session.cwd);
+	for (const f of files) {
+		const e = existingByPath.get(f.file);
+		if (e && e.size === f.size && e.mtime === f.mtime) continue; // unchanged
+		if (e) removeSession(db, e.session_id);
+		const session = parseSessionFile(f.file);
+		if (session) insertSession(db, session, f.file, f.size, f.mtime);
 	}
-	return () => true; // unanchored: the whole profile corpus is one workspace
+	for (const [filePath, e] of existingByPath) {
+		if (!currentPaths.has(filePath)) removeSession(db, e.session_id);
+	}
+	const row = db.prepare("SELECT COUNT(*) AS n FROM sessions").get() as { n: number };
+	return row.n;
 }
 
-/** Search past sessions with an FTS5 index; returns ranked hits plus stats. */
+/** Project-scope SQL predicate over `s.cwd`; empty when scope is "all"/unanchored. */
+function projectPredicate(params: SearchOptions["scope"], projectRoot?: string): { sql: string; args: string[] } {
+	if (params !== "project" || !projectRoot) return { sql: "", args: [] };
+	const root = resolve(projectRoot);
+	return {
+		sql: ` AND (s.cwd = ? OR (instr(s.cwd, ?) = 1 AND substr(s.cwd, length(?) + 1, 1) = '/'))`,
+		args: [root, root, root],
+	};
+}
+
 export function searchSessions(options: SearchOptions): SearchResult {
 	const query = options.query.trim();
 	if (query.length < SEARCH_MIN_QUERY_LENGTH) {
-		return { hits: [], sessionsScanned: 0, sessionsMatched: 0, queryTooShort: true };
+		return { hits: [], sessionsIndexed: 0, sessionsMatched: 0, queryTooShort: true, outOfRange: false };
 	}
-	const files = collectSessionFiles(options.sessionsDir, options.readdir);
-	const sessions: ParsedSession[] = [];
-	const filter = projectScopeFilter(options);
-	for (const file of files) {
-		const session = parseSessionFile(file);
-		if (session && filter(session)) sessions.push(session);
-	}
-	const db = openFtsIndex();
+	const { sql: projSql, args: projArgs } = projectPredicate(options.scope, options.projectRoot);
+	const offset = Math.max(0, options.offset ?? 0);
+	const limit = Math.max(1, Math.min(options.limit ?? 10, 25));
+
+	const db = openIndexDb(options.indexPath);
 	try {
-		buildFtsIndex(db, sessions);
+		const sessionsIndexed = reconcileIndex(db, options.sessionsDir, options.readdir);
 		const phrase = ftsPhrase(query);
-		const rows = runFtsQuery(db, phrase);
+		const stmt = db.prepare(
+			`SELECT e.session_id AS session_id, e.role AS role, e.ts AS ts, e.text AS text,
+					s.cwd AS cwd, s.session_name AS session_name,
+					bm25(session_search_fts) AS score
+				FROM session_search_fts
+				JOIN entries e ON e.rowid = session_search_fts.rowid
+				JOIN sessions s ON s.session_id = e.session_id
+				WHERE session_search_fts MATCH ?
+				${projSql}
+				ORDER BY score, e.rowid
+				LIMIT ? OFFSET ?`,
+		);
+		const rows = stmt.all(phrase, ...projArgs, limit, offset) as Array<{
+			session_id: string;
+			role: string;
+			ts: number;
+			text: string;
+			cwd: string;
+			session_name: string | null;
+			score: number;
+		}>;
 		const projectHome = options.projectHome;
-		const limit = Math.max(1, Math.min(options.limit ?? 10, 25));
 		const seenSessions = new Set<string>();
 		const hits: SearchHit[] = [];
 		for (const row of rows) {
-			if (hits.length >= limit) break;
 			const sessionId = row.session_id;
 			const firstInSession = !seenSessions.has(sessionId);
 			if (firstInSession) seenSessions.add(sessionId);
@@ -310,11 +404,53 @@ export function searchSessions(options: SearchOptions): SearchResult {
 				timestamp: row.ts,
 				role: row.role === "assistant" ? "assistant" : "user",
 				snippet: row.text.slice(0, 280),
-				rank: row.score as number,
+				rank: row.score,
 				...(firstInSession && row.session_name ? { sessionName: row.session_name } : {}),
 			});
 		}
-		return { hits, sessionsScanned: sessions.length, sessionsMatched: seenSessions.size, queryTooShort: false };
+		return {
+			hits,
+			sessionsIndexed,
+			sessionsMatched: seenSessions.size,
+			queryTooShort: false,
+			outOfRange: offset > 0 && hits.length === 0,
+		};
+	} finally {
+		db.close();
+	}
+}
+
+/** Browse the newest sessions (discovery mode), project-scoped like search. */
+export function listRecentSessions(options: BrowseOptions): BrowseEntry[] {
+	const db = openIndexDb(options.indexPath);
+	try {
+		reconcileIndex(db, options.sessionsDir, options.readdir);
+		const { sql: projSql, args: projArgs } = projectPredicate(options.scope, options.projectRoot);
+		const limit = Math.max(1, Math.min(options.limit ?? 10, 25));
+		const rows = db
+			.prepare(
+				`SELECT session_id, cwd, session_name, first_message, modified
+				 FROM sessions s
+				 WHERE 1=1 ${projSql}
+				 ORDER BY modified DESC
+				 LIMIT ?`,
+			)
+			.all(...projArgs, limit) as Array<{
+			session_id: string;
+			cwd: string;
+			session_name: string | null;
+			first_message: string;
+			modified: number;
+		}>;
+		return rows.map((r) => ({
+			sessionId: r.session_id,
+			shortId: r.session_id.slice(0, 7),
+			cwd: r.cwd,
+			projectLabel: projectLabelForCwd(r.cwd, options.projectHome),
+			firstMessage: r.first_message.slice(0, 160),
+			modified: r.modified,
+			...(r.session_name ? { sessionName: r.session_name } : {}),
+		}));
 	} finally {
 		db.close();
 	}

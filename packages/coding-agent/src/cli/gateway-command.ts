@@ -120,6 +120,14 @@ export function resolveSessionsDir(profile: string, projectHome: string): string
 	return profile === "default" ? join(homedir(), ".prime", "agent", "sessions") : join(projectHome, "sessions");
 }
 
+/**
+ * The persistent cross-session recall index: a sqlite file under the axiom
+ * home's search dir, isolated per profile home (writable, like the memory store).
+ */
+export function resolveSearchIndexPath(axiomHomeDir: string): string {
+	return join(axiomHomeDir, "search", "session-recall.sqlite");
+}
+
 export async function defaultGatewayStart(profile: string, opts: GatewayStartOptions): Promise<Gateway> {
 	const root = axiomHome();
 	const projectHome = profile === "default" ? root : join(axiomHome(), "profiles", profile);
@@ -145,6 +153,7 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 		profile,
 		projectHome,
 		sessionsDir: resolveSessionsDir(profile, projectHome),
+		searchIndexPath: resolveSearchIndexPath(root),
 		projectRoot,
 		senders: config.senders,
 	});

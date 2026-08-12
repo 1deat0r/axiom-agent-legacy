@@ -3,12 +3,14 @@ import { helpCommand } from "./help.js";
 import { profilesCommand } from "./profiles.js";
 import { projectsCommand } from "./projects.js";
 import { searchCommand } from "./search.js";
+import { sessionsCommand } from "./sessions.js";
 import { soulCommand } from "./soul.js";
 
 /** All gateway-local commands; they never reach the model. */
 export const gatewayCommands: GatewayCommand[] = [
 	helpCommand,
 	searchCommand,
+	sessionsCommand,
 	profilesCommand,
 	projectsCommand,
 	soulCommand,

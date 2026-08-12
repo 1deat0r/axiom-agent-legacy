@@ -53,6 +53,8 @@ export interface GatewayCommandContext {
 	projectHome: string;
 	/** Sessions archive directory for cross-session recall (/search). */
 	sessionsDir?: string;
+	/** Persistent sqlite FTS index file for cross-session recall. */
+	searchIndexPath?: string;
 	/** Anchored project root; /search scopes to it unless --all is given. */
 	projectRoot?: string;
 }
