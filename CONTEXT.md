@@ -32,6 +32,12 @@ state (sessions/skills/settings via the active agent dir), and axiom state.
 two agent processes on one profile home.
 _Avoid_: Persona, account
 
+**Project**:
+A named workspace inside a profile (<AXIOM_HOME>/profiles/<profile> or the
+root home, under `projects/<name>`): a root directory that owns a run's
+working tree. Booting the gateway with `--project <name>` anchors the run
+there (cwd + AXIOM_PROJECT_ROOT) so the root guard (rung 3) confines edits.
+_Avoid_: Folder, repo, task
 **Channel**:
 A conversation's stable address on a messaging platform (gateway, ADR-0001;
 signal gateway shipped ADR-0016).
@@ -69,6 +75,12 @@ per-model thinking levels — the axiom knob maps the low/medium/high levels
 onto them.
 _Avoid_: Reasoning level, intelligence slider
 
+**Root guard**:
+The ADR-0014 rung-3 enforcement: an axiom extension, inert unless a run is
+anchored by AXIOM_PROJECT_ROOT, that blocks an `edit` whose resolved path
+leaves the project root, returning a plain-English reason surfaced to the
+model (ADR-0018). Freeform bash/ipython confinement is the OS-sandbox tier,
+recorded as a follow-up.
 **Drift**:
 An agent acting outside its project's identity, context, or boundary — wrong
 files, wrong memory, wrong ledger. Prevented by the anti-drift ladder
