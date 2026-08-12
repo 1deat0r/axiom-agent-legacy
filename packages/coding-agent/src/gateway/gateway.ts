@@ -13,7 +13,12 @@
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { type ActiveProjectStore, FileActiveProjectStore, resolveProjectRoot } from "./active-project.js";
+import {
+	type ActiveProjectStore,
+	FileActiveProjectStore,
+	isValidProjectName,
+	resolveProjectRoot,
+} from "./active-project.js";
 import type { ChannelIndex } from "./channel-index.js";
 import { dispatchCommand } from "./commands/index.js";
 import { sessionIdForChannel } from "./completion.js";
@@ -216,16 +221,17 @@ export class Gateway {
 		let sessionKey = msg.channelId;
 		if (active) {
 			const scoped = resolveProjectRoot(this.projectHome, active);
-			if (existsSync(scoped)) {
-				anchoredRoot = scoped;
-				sessionKey = `${msg.channelId}:${active}:${this.activeProjects.generation(active)}`;
-			} else {
-				// Stale active entry (project removed out-of-band): clear it and
-				// drop its composite session mapping so the /projects menu never
-				// lies and the channel runs unanchored (and a re-created project
-				// never resumes the dead session).
+			// A stored name that fails the grammar (hand-edited store file) or a
+			// project deleted out-of-band is a stale entry: clear it and drop its
+			// composite mapping so the /projects menu never lies, the channel runs
+			// unanchored, and a re-created project never resumes the dead session.
+			const usable = isValidProjectName(active) && existsSync(scoped);
+			if (!usable) {
 				this.index.remove(`${msg.channelId}:${active}:${this.activeProjects.generation(active)}`);
 				this.activeProjects.clear(msg.channelId);
+			} else {
+				anchoredRoot = scoped;
+				sessionKey = `${msg.channelId}:${active}:${this.activeProjects.generation(active)}`;
 			}
 		}
 		let sessionId = this.index.get(sessionKey);

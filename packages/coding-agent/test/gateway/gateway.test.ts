@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { MemoryActiveProjectStore } from "../../src/gateway/active-project.js";
 import { MemoryChannelIndex } from "../../src/gateway/channel-index.js";
 import { fakeCompletionRunner, sessionIdForChannel } from "../../src/gateway/completion.js";
 import { GatewayCron } from "../../src/gateway/cron.js";
@@ -512,6 +513,39 @@ describe("Gateway live project switching", () => {
 			expect(completion.calls[0]!.sessionId).toBe(sessionIdForChannel("+1:alpha:0"));
 			expect(completion.calls[1]!.sessionId).toBe(sessionIdForChannel("+1:alpha:1"));
 			expect(completion.calls[1]!.sessionId).not.toBe(completion.calls[0]!.sessionId);
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("Gateway hand-edited store guard", () => {
+	it("(h) an invalid stored project name self-heals to unanchored", async () => {
+		const dir = await home("axiom-gw-he-");
+		await import("node:fs/promises").then((fs) => fs.mkdir(join(dir, "projects", "alpha"), { recursive: true }));
+		try {
+			const { t, push } = fakeTransport();
+			const completion = fakeCompletionRunner();
+			const index = new MemoryChannelIndex();
+			const store = new MemoryActiveProjectStore();
+			store.set("+1", ".."); // hand-edited value that /projects use rejects
+			const g = new Gateway({
+				transport: t,
+				index,
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+				activeProjects: store,
+			});
+			await g.start();
+			push({ channelId: "+1", sender: "+1", text: "hi", isCommand: false, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 30));
+			expect(completion.calls[0]!.sessionId).toBe(sessionIdForChannel("+1"));
+			expect(completion.calls[0]!.projectRoot).toBeUndefined();
+			expect(store.get("+1")).toBeUndefined();
+			expect(index.get("+1:..:0")).toBeNull();
 			await g.stop();
 		} finally {
 			await rm(dir, { recursive: true, force: true });

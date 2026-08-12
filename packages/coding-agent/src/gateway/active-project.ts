@@ -18,6 +18,14 @@ import { dirname, join } from "node:path";
 /** The store file name under the profile home. */
 export const ACTIVE_PROJECTS_FILE = "active-projects.json";
 
+/** Project-name grammar: lowercase a-z0-9 and dashes (shared with /projects). */
+export const PROJECT_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
+
+/** Whether a stored project name is safe to resolve (guards hand-edited store files). */
+export function isValidProjectName(name: string): boolean {
+	return PROJECT_NAME_RE.test(name);
+}
+
 /** Per-channel active-project state: which project a chat runs anchored to. */
 export interface ActiveProjectStore {
 	get(channelId: string): string | undefined;

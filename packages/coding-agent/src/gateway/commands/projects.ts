@@ -11,9 +11,8 @@
  */
 import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join, sep } from "node:path";
+import { isValidProjectName } from "../active-project.js";
 import type { GatewayCommand } from "../types.js";
-
-const NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 /** The active profile's projects root (projectHome holds the profile home). */
 function projectsRoot(projectHome: string): string {
@@ -39,13 +38,13 @@ export const projectsCommand: GatewayCommand = {
 		const sub = args[0];
 		if (sub === "add") {
 			const name = args[1];
-			if (!name || !NAME_RE.test(name)) return "invalid project name (lowercase a-z0-9 and dashes)";
+			if (!name || !isValidProjectName(name)) return "invalid project name (lowercase a-z0-9 and dashes)";
 			mkdirSync(join(root, name), { recursive: true });
 			return `project '${name}' added to profile '${ctx.profile}'`;
 		}
 		if (sub === "rm") {
 			const name = args[1];
-			if (!name || !NAME_RE.test(name)) return "invalid project name (lowercase a-z0-9 and dashes)";
+			if (!name || !isValidProjectName(name)) return "invalid project name (lowercase a-z0-9 and dashes)";
 			// Containment guard (defense in depth; NAME_RE already excludes
 			// separators): the target must resolve INSIDE the projects root —
 			// `rm ..` must never reach the profile home.
@@ -63,7 +62,7 @@ export const projectsCommand: GatewayCommand = {
 		}
 		if (sub === "use") {
 			const name = args[1];
-			if (!name || !NAME_RE.test(name)) return "invalid project name (lowercase a-z0-9 and dashes)";
+			if (!name || !isValidProjectName(name)) return "invalid project name (lowercase a-z0-9 and dashes)";
 			if (!existsSync(join(root, name))) {
 				return `no project '${name}' — create it with /projects add ${name}`;
 			}
