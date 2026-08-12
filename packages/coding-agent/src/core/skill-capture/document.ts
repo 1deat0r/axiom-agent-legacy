@@ -75,7 +75,7 @@ ${capture.prompt.trim()}
 
 ## Steps
 
-${capture.steps
+${(capture.steps ?? [])
 	.map((step, index) => {
 		const detail = step.detail?.trim() ? `\n\n${step.detail.trim()}` : "";
 		return `${index + 1}. ${step.summary.trim()}${detail}`;

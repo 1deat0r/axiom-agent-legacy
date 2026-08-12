@@ -100,6 +100,12 @@ describe("buildSkillDocument", () => {
 		expect(/^[a-z0-9-]+$/.test(result.document.name)).toBe(true);
 	});
 
+	it("builds a valid skill even when steps are omitted", () => {
+		const { name, steps, ...rest } = capture();
+		const result = buildSkillDocument({ ...rest, name: "n", steps: undefined as never });
+		expect(result.ok).toBe(true);
+	});
+
 	it("rejects a missing prompt", () => {
 		const result = buildSkillDocument(capture({ prompt: "" }));
 		expect(result.ok).toBe(false);
