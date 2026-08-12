@@ -7,6 +7,8 @@ export const helpCommand: GatewayCommand = {
 		return [
 			"axiom gateway commands:",
 			"  /help                 this help",
+			"  /update               check for updates (fetch + report)",
+			"  /update now           update to latest main, rebuild, restart",
 			"  /cron <add|list|rm>     schedule agent runs and deliver output here",
 			"  /profiles             list profiles",
 			"  /profiles create <n>  create a profile (SOUL.md scaffolded)",

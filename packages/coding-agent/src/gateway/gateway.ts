@@ -18,6 +18,8 @@ import { dispatchCommand } from "./commands/index.js";
 import { sessionIdForChannel } from "./completion.js";
 import { isAllowedSender, loadGatewayConfig } from "./config.js";
 import type { DeliveryLedger } from "./delivery-ledger.js";
+import type { UpdateConfig, UpdateShell } from "./self-update.js";
+import { applyUpdate, CliUpdateShell, checkUpdate } from "./self-update.js";
 import type {
 	CompletionRunner,
 	GatewayCommandContext,
@@ -25,6 +27,7 @@ import type {
 	GatewayMessage,
 	GatewayRecipient,
 	GatewayTransport,
+	GatewayUpdateApi,
 } from "./types.js";
 
 const UNRECOGNIZED = "unrecognized sender — this gateway is private to allowed senders.";
@@ -44,6 +47,12 @@ export interface GatewayDeps {
 	searchIndexPath?: string;
 	/** Per-profile active-model store (/model hotswap). */
 	modelStore?: ActiveModelStore;
+	/** Self-update configuration (/update, ADR-0034); inert unless set. */
+	update?: UpdateConfig;
+	/** Shell for update steps (tests inject a scripted fake). */
+	updateShell?: UpdateShell;
+	/** Restart the gateway process after a successful update (systemd restarts it). */
+	restart?: () => void;
 	/** Anchored project root; scopes /search unless --all is given. */
 	projectRoot?: string /** Optional gateway cron manager: lifecycle rides the gateway; /cron drives it. */;
 	cron?: GatewayCronCommandApi & { start(): void; stop(): void };
@@ -77,6 +86,8 @@ export class Gateway {
 	private readonly searchIndexPath?: string;
 	private readonly projectRoot?: string;
 	private readonly modelStore: ActiveModelStore | undefined;
+	private readonly updateApi: GatewayUpdateApi | undefined;
+	private readonly restart: (() => void) | undefined;
 	private readonly cron: (GatewayCronCommandApi & { start(): void; stop(): void }) | undefined;
 	private readonly chains = new Map<string, ChannelChain>();
 	private started = false;
@@ -98,6 +109,13 @@ export class Gateway {
 		this.searchIndexPath = deps.searchIndexPath;
 		this.projectRoot = deps.projectRoot;
 		this.modelStore = deps.modelStore;
+		this.updateApi = deps.update
+			? {
+					check: () => checkUpdate(deps.updateShell ?? new CliUpdateShell(), deps.update!),
+					apply: () => applyUpdate(deps.updateShell ?? new CliUpdateShell(), deps.update!),
+				}
+			: undefined;
+		this.restart = deps.restart;
 		this.cron = deps.cron;
 	}
 
@@ -194,13 +212,17 @@ export class Gateway {
 				...(this.searchIndexPath ? { searchIndexPath: this.searchIndexPath } : {}),
 				...(this.projectRoot ? { projectRoot: this.projectRoot } : {}),
 				modelStore: this.modelStore,
+				...(this.updateApi ? { update: this.updateApi } : {}),
 				channelId: msg.channelId,
 				cron: this.cron,
 				ledger: this.ledger,
 				deliverToAll: (text) => this.deliverToAll(text),
+				deliver: (text) => this.deliver({ channelId: msg.channelId, recipient: msg.sender }, text),
 			};
 			const reply = dispatchCommand(msg.text, ctx);
 			await this.deliver({ channelId: msg.channelId, recipient: msg.sender }, reply);
+			if (ctx.afterReply) await ctx.afterReply();
+			if (ctx.restartRequested) this.restart?.();
 			return;
 		}
 		// Agent run: resolve (or create) the channel's session id, index it.
