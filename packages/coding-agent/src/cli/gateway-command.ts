@@ -6,6 +6,7 @@
  * or printed usage); the process is kept alive while the gateway runs.
  */
 import { existsSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { getCronJobsPath } from "../config.js";
 import { axiomHome } from "../extensions/profile/registry.js";
@@ -141,6 +142,23 @@ export async function handleGatewayCommand(
  * projectHome: the root itself for the implicit 'default' profile, else
  * profiles/<name> (ADR-0014).
  */
+/**
+ * The sessions archive directory for the active profile: named profiles keep
+ * their agent dir at the profile home, the implicit `default` profile uses the
+ * base agent dir (~/.prime/agent). Both hold sessions/<id>.jsonl.
+ */
+export function resolveSessionsDir(profile: string, projectHome: string): string {
+	return profile === "default" ? join(homedir(), ".prime", "agent", "sessions") : join(projectHome, "sessions");
+}
+
+/**
+ * The persistent cross-session recall index: a sqlite file under the axiom
+ * home's search dir, isolated per profile home (writable, like the memory store).
+ */
+export function resolveSearchIndexPath(axiomHomeDir: string): string {
+	return join(axiomHomeDir, "search", "session-recall.sqlite");
+}
+
 export async function defaultGatewayStart(profile: string, opts: GatewayStartOptions): Promise<Gateway> {
 	const root = axiomHome();
 	const projectHome = profile === "default" ? root : join(axiomHome(), "profiles", profile);
@@ -181,6 +199,9 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 		axiomHomeDir: root,
 		profile,
 		projectHome,
+		sessionsDir: resolveSessionsDir(profile, projectHome),
+		searchIndexPath: resolveSearchIndexPath(root),
+		projectRoot,
 		senders: config.senders,
 		cron,
 		ledger,

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cross-session recall /search — summary</title>
+<style>
+  :root { --accent:#2f6bff; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+         color:#1c1f23; background:#fff; padding:2rem 1rem; }
+  main { max-width:760px; margin:0 auto; }
+  header { border-bottom:3px solid var(--accent); padding-bottom:.6rem; margin-bottom:1.4rem; }
+  h1 { margin:0 0 .3rem; font-size:1.35rem; }
+  .meta { color:#555; font-size:.82rem; }
+  h2 { font-size:1rem; margin:1.6rem 0 .5rem; color:var(--accent); }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.86em;
+         background:#f4f5f7; padding:.05rem .3rem; border-radius:4px; }
+  .ok { color:#0a7d33; font-weight:600; }
+  ul { margin:.2rem 0 0; padding-left:1.2rem; } li { margin:.35rem 0; }
+  table { border-collapse:collapse; width:100%; font-size:.86rem; margin:.4rem 0; }
+  th,td { border:1px solid #e2e4e8; padding:.35rem .5rem; text-align:left; } th { background:#f4f5f7; }
+  footer { margin-top:2rem; font-size:.78rem; color:#888; border-top:1px solid #eee; padding-top:.6rem; }
+  @media print { body { padding:0; } }
+</style></head><body><main>
+
+<header>
+  <h1>Cross-session recall — <code>/search</code> over an FTS5 session index</h1>
+  <div class="meta">Feature Implementation Loop v2 · summary from the running log<br>
+  snapshot: 2026-08-12 · model: claude (axiom coding-agent) · branch <code>feat/session-search-recall</code></div>
+</header>
+
+<h2>Goal &amp; assumptions</h2>
+<p>A gateway-local <code>/search &lt;query&gt;</code> command that answers "what did we decide about X in
+a past session?" by full-text (FTS5) searching the agent's session archive — scoped to the anchored project
+by default, crossing projects only via an explicit guarded <code>--all</code>, every hit labeled by its
+project. Plus discovery/browse and scroll. Assumption: "session DB" = the repo's real JSONL session archive;
+FTS5 via <code>node:sqlite</code> (no new dependency); a session belongs to a project iff its header
+<code>cwd</code> is under that project's root.</p>
+
+<h2>Plan as executed</h2>
+<ul>
+  <li><b>NEW</b> <code>src/gateway/session-search.ts</code> — persistent FTS5 index with incremental
+  reconciliation.</li>
+  <li><b>NEW</b> <code>src/gateway/commands/search.ts</code> (<code>[--all] [--limit N] [--offset N]</code>)
+  + <code>commands/sessions.ts</code> (browse).</li>
+  <li><b>EDIT</b> <code>types.ts</code>/<code>gateway.ts</code>/<code>cli/gateway-command.ts</code> — thread
+  <code>sessionsDir</code>/<code>searchIndexPath</code>/<code>projectRoot</code>.</li>
+  <li><b>EDIT</b> <code>commands/index.ts</code>/<code>help.ts</code> — register/document.</li>
+  <li><b>NEW</b> tests: <code>session-search.test.ts</code> (9), <code>search-command.test.ts</code> (10, incl.
+  a real-router integration test).</li>
+</ul>
+
+<h2>Key decisions</h2>
+<ul>
+  <li>Persistent <b>SQLite session-DB index</b> (entries + sessions, FTS5 external-content + triggers,
+  reconciled by size+mtime keyed by file path) — no per-call rebuild, matching the card.</li>
+  <li>Project isolation: default <code>projectRoot</code>-scoped; <code>--all</code> is the only cross-project
+  path, labeled by project.</li>
+  <li>Trigram tokenizer; 3-char minimum; stable <code>ORDER BY score, rowid</code> for scroll paging.</li>
+  <li><code>/sessions</code> = discovery/browse (newest-first, project-labeled), same scoping rules.</li>
+</ul>
+
+<h2>Verification evidence</h2>
+<ul>
+  <li><span class="ok">session-search.test.ts (9)</span>: build/rank, persistence across opens, re-index on
+  change, project scoping, <code>--all</code> labels, offset paging, <code>queryTooShort</code>, empty/malformed
+  archives, injection safety, <code>listRecentSessions</code> browse, geometry helpers.</li>
+  <li><span class="ok">search-command.test.ts (10)</span>: arg parsing, project-scoped reply, <code>--all</code>,
+  unanchored, <code>--offset</code> scroll + out-of-range, too-short/no-match/missing-index, <code>/sessions</code>
+  browse + <code>--all</code>, unknown-args, and a Gateway-route integration (0 model calls).</li>
+  <li><span class="ok">gateway test dir: 103 pass</span> (clean env). <span class="ok">biome clean</span>,
+  <span class="ok">tsgo --noEmit clean</span>.</li>
+  <li>Full scrubbed floor: coding-agent suite green incl. my tests; overall npm exit=1 is a pre-existing env
+  artifact (ai-workspace intentional <code>nonexistent-package</code> fixture + daemon hard-link EXDEV),
+  identical before this feature.</li>
+</ul>
+
+<h2>Review history</h2>
+<table>
+  <tr><th>Round</th><th>Scores</th><th>Total</th><th>Verdict / fixes</th></tr>
+  <tr><td>Plan self-review</td><td>4 weaknesses found</td><td>—</td><td>removed dead indexDir; caps+snippet;
+  node:sqlite-under-vitest; profile semantics</td></tr>
+  <tr><td>Implementation review</td><td>C5 · F4.5 · T5 · R4 · Cl4.5</td><td><b>92/100</b></td><td>approve</td></tr>
+  <tr><td>Continuation review</td><td>persistence done; scroll+browse added; LLM layer deferred</td><td>—</td><td>structurally
+  complete; LLM summary = explicit next phase</td></tr>
+</table>
+
+<h2>Final state</h2>
+<p>All card phases are now implemented and verified at the unit level: <code>/search</code> over a
+<b>persistent FTS5 session index</b>, scroll paging (<code>--offset</code>), <code>/sessions</code>
+discovery/browse, and an agent-facing <b><code>recall</code> tool</b> (LLM-summarized recall / memory
+surfacing) that hands past-session snippets to the model to summarize and persist via the memory tool.
+Project isolation holds throughout (anchored default scopes; <code>--all</code> guarded + labeled). The only
+untested layer is a live end-to-end agent run with a real model, which this sandbox cannot exercise. See
+<code>docs/handoff-session-search.md</code>.</p>
+
+<footer>Generated 2026-08-12 from <code>docs/feature-logs/session-search-recall.md</code>.</footer>
+</main></body></html>

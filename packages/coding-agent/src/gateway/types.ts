@@ -60,7 +60,12 @@ export interface GatewayCommandContext {
 	profile: string;
 	axiomHomeDir: string;
 	projectHome: string;
-	/** The channel the inbound command arrived on (cron delivery target). */
+	/** Sessions archive directory for cross-session recall (/search). */
+	sessionsDir?: string;
+	/** Persistent sqlite FTS index file for cross-session recall. */
+	searchIndexPath?: string;
+	/** Anchored project root; /search scopes to it unless --all is given. */
+	projectRoot?: string /** The channel the inbound command arrived on (cron delivery target). */;
 	channelId?: string;
 	/** The gateway's cron manager, when wired (drives /cron). */
 	cron?: GatewayCronCommandApi;

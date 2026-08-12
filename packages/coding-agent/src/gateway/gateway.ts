@@ -37,7 +37,12 @@ export interface GatewayDeps {
 	senders?: string[];
 	/** Resolve the active profile home (defaults to the axiom home). */
 	projectHome?: string;
-	/** Optional gateway cron manager: lifecycle rides the gateway; /cron drives it. */
+	/** Sessions archive directory for /search cross-session recall. */
+	sessionsDir?: string;
+	/** Persistent sqlite FTS index file for cross-session recall. */
+	searchIndexPath?: string;
+	/** Anchored project root; scopes /search unless --all is given. */
+	projectRoot?: string /** Optional gateway cron manager: lifecycle rides the gateway; /cron drives it. */;
 	cron?: GatewayCronCommandApi & { start(): void; stop(): void };
 	/** Delivery ledger (ADR-0022); deliveries are recorded when present. */
 	ledger?: DeliveryLedger;
@@ -65,6 +70,9 @@ export class Gateway {
 	private readonly ledger: DeliveryLedger | undefined;
 	private readonly transportName: string;
 	private readonly transports: Record<string, GatewayTransport>;
+	private readonly sessionsDir?: string;
+	private readonly searchIndexPath?: string;
+	private readonly projectRoot?: string;
 	private readonly cron: (GatewayCronCommandApi & { start(): void; stop(): void }) | undefined;
 	private readonly chains = new Map<string, ChannelChain>();
 	private started = false;
@@ -82,6 +90,9 @@ export class Gateway {
 		this.ledger = deps.ledger;
 		this.transportName = deps.transportName ?? "transport";
 		this.transports = deps.transports ?? {};
+		this.sessionsDir = deps.sessionsDir;
+		this.searchIndexPath = deps.searchIndexPath;
+		this.projectRoot = deps.projectRoot;
 		this.cron = deps.cron;
 	}
 
@@ -174,6 +185,9 @@ export class Gateway {
 				profile: this.profile,
 				axiomHomeDir: this.axiomHomeDir,
 				projectHome: this.projectHome,
+				...(this.sessionsDir ? { sessionsDir: this.sessionsDir } : {}),
+				...(this.searchIndexPath ? { searchIndexPath: this.searchIndexPath } : {}),
+				...(this.projectRoot ? { projectRoot: this.projectRoot } : {}),
 				channelId: msg.channelId,
 				cron: this.cron,
 				ledger: this.ledger,
