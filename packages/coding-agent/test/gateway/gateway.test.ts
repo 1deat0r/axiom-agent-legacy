@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MemoryChannelIndex } from "../../src/gateway/channel-index.js";
 import { fakeCompletionRunner, sessionIdForChannel } from "../../src/gateway/completion.js";
+import { GatewayCron } from "../../src/gateway/cron.js";
 import { Gateway } from "../../src/gateway/gateway.js";
 import type { GatewayMessage, GatewayTransport } from "../../src/gateway/types.js";
 
@@ -167,6 +168,147 @@ describe("Gateway router", () => {
 			await new Promise((r) => setTimeout(r, 20));
 			expect(sent.some((s) => s.text.includes("could not run the agent"))).toBe(true);
 			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("Gateway cron lifecycle + command wiring", () => {
+	it("starts/stops the cron manager with the gateway and drives /cron with the channel", async () => {
+		const dir = await home("axiom-gw-cron-");
+		try {
+			const { t, sent, push } = fakeTransport();
+			const startCalls: string[] = [];
+			const added: Array<{ channelId?: string; prompt: string }> = [];
+			const cron = {
+				start() {
+					startCalls.push("start");
+				},
+				stop() {
+					startCalls.push("stop");
+				},
+				listJobs() {
+					return [];
+				},
+				removeJob() {
+					return undefined;
+				},
+				addJob(input: { channelId: string; prompt: string }) {
+					added.push({ channelId: input.channelId, prompt: input.prompt });
+					return {
+						id: "job-00000000-0000-0000-0000-000000000001",
+						status: "active" as const,
+						source: "cron" as const,
+						channelId: input.channelId,
+						activeSessionId: "s",
+						sessionId: "s",
+						sessionFile: "/tmp/s.jsonl",
+						cwd: "/tmp",
+						prompt: input.prompt,
+						schedule: { kind: "interval" as const, expression: "every 5m", intervalMs: 300_000 },
+						createdAt: new Date(0).toISOString(),
+						updatedAt: new Date(0).toISOString(),
+						runCount: 0,
+					};
+				},
+			};
+			const g = new Gateway({
+				transport: t,
+				index: new MemoryChannelIndex(),
+				completion: fakeCompletionRunner(),
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+555"],
+				cron,
+			});
+			await g.start();
+			expect(startCalls).toEqual(["start"]);
+			// A /cron add from an allowlisted channel passes the channel as the
+			// delivery target to the manager.
+			push({
+				channelId: "+555",
+				sender: "+555",
+				text: "/cron add every 5m nightwatch",
+				isCommand: true,
+				timestamp: 1,
+			});
+			await new Promise((r) => setTimeout(r, 20));
+			expect(added).toEqual([{ channelId: "+555", prompt: "nightwatch" }]);
+			expect(sent.some((s) => s.text.includes("scheduled"))).toBe(true);
+			await g.stop();
+			expect(startCalls).toEqual(["start", "stop"]);
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("reports cron-unwired when no manager is provided", async () => {
+		const dir = await home("axiom-gw-");
+		try {
+			const { t, sent, push } = fakeTransport();
+			const g = new Gateway({
+				transport: t,
+				index: new MemoryChannelIndex(),
+				completion: fakeCompletionRunner(),
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+555"],
+			});
+			await g.start();
+			push({ channelId: "+555", sender: "+555", text: "/cron list", isCommand: true, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 20));
+			expect(sent.some((s) => s.text.includes("not wired"))).toBe(true);
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("full /cron path through a real Gateway + GatewayCron", () => {
+	it("a /cron add message schedules, and the fired run delivers to the channel", async () => {
+		const dir = await home("axiom-gw-e2ecron-");
+		try {
+			const { t, sent, push } = fakeTransport();
+			const cronCompletion = fakeCompletionRunner();
+			const cron = new GatewayCron({
+				storePath: join(dir, "cron-jobs.json"),
+				completion: cronCompletion,
+				transport: t,
+				profile: "default",
+				projectHome: dir,
+			});
+			const g = new Gateway({
+				transport: t,
+				index: new MemoryChannelIndex(),
+				completion: fakeCompletionRunner(),
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+555"],
+				cron,
+			});
+			await g.start();
+			// Real command message: scheduling reply goes back to the sender.
+			push({
+				channelId: "+555",
+				sender: "+555",
+				text: "/cron add every 1h nightly report",
+				isCommand: true,
+				timestamp: 1,
+			});
+			await new Promise((r) => setTimeout(r, 20));
+			expect(sent.some((s) => s.text.includes("scheduled"))).toBe(true);
+			// The job is in the profile store with the right prompt + channel.
+			const job = cron.listJobs().find((j) => j.status === "active");
+			expect(job?.prompt).toBe("nightly report");
+			expect(job?.channelId).toBe("+555");
+			// Fire the due run: the reply is delivered to the job's channel.
+			await cron.runDue(new Date(Date.parse(job?.nextRunAt ?? "")));
+			await g.stop();
+			expect(sent.some((s) => s.to === "+555" && s.text === "axiom reply to: nightly report")).toBe(true);
+			// Cron ran on its namespaced session, never the interactive one.
+			expect(cronCompletion.calls[0]?.sessionId).toBe(`cron-${sessionIdForChannel("+555")}`);
 		} finally {
 			await rm(dir, { recursive: true, force: true });
 		}
