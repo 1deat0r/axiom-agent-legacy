@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signal gateway + project-manager assistant — summary</title>
+<style>
+:root{--accent:#0a7d5c;--ink:#1b1f23;--dim:#5a6470;--line:#e2e6ea;--bg:#fbfcfd;}
+*{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.5}
+.wrap{max-width:760px;margin:0 auto;padding:16px}
+header{border-bottom:3px solid var(--accent);padding:12px 0;margin-bottom:20px}
+h1{font-size:1.35rem;margin:0 0 4px} h1 code{color:var(--accent)}
+.meta{font-size:.8rem;color:var(--dim)}
+h2{font-size:1.05rem;margin:28px 0 8px;color:var(--accent);border-bottom:1px solid var(--line);padding-bottom:4px}
+p,li{font-size:.92rem} code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85rem;background:#eef1f4;padding:1px 4px;border-radius:3px}
+ul{margin:6px 0;padding-left:20px} li{margin:4px 0}
+.approve{color:var(--accent);font-weight:600} .deny{color:#b3261e;font-weight:600}
+table{border-collapse:collapse;width:100%;font-size:.85rem;margin:8px 0}
+th,td{border:1px solid var(--line);padding:5px 8px;text-align:left}
+th{background:#f0f3f5}
+.final{background:#eefaf5;border:1px solid var(--accent);padding:10px 12px;border-radius:6px;margin-top:8px}
+@media print{body{background:#fff} .wrap{max-width:none}}
+</style></head><body><div class="wrap">
+<header><h1>Signal gateway &middot; project-manager assistant</h1>
+<div class="meta">feature summary &middot; 2026-08-12 (UTC) &middot; Claude Fable 5 (top-level coding agent), Feature Implementation Loop v2</div></header>
+
+<h2>Goal &amp; assumptions</h2>
+<p>Axiom's first living surface on the prime-agent v0.7.2 baseline: the agent, riding a profile's SOUL.md, is reachable over <b>Signal</b> (signal-cli); the user messages it and it replies as a project manager (gateway-local commands manage profiles/SOUL.md and per-profile projects). One sender = one session.</p>
+<p><b>Success criterion:</b> <code>axiom gateway --transport signal --profile &lt;name&gt;</code> boots the profile identity, maps each sender to a session, routes to agent replies or gateway commands, sends raw-text replies over signal-cli — tests + <code>npm run check</code>+<code>tsgo</code> green; live signal-cli link operator-blocked.</p>
+<ul>
+<li>Fresh port of ADR-0001/0004/0006 (gateway, never built before) — a surface, not an extension.</li>
+<li>Signal transport shells to <code>signal-cli</code>; live link operator-blocked; tests use a fake stub.</li>
+<li>Per-message run reuses the headless print-mode seam (<code>axiom -p &hellip; --profile --session-id</code>).</li>
+<li>Commands gateway-local (<code>/help /profiles /projects /soul</code>); projects = minimal per-profile registry; root guard deferred.</li>
+<li>Signal streaming (ADR-0004) is a follow-up; this loop ships batch-send raw text.</li>
+</ul>
+
+<h2>Plan as executed</h2>
+<ol>
+<li>Gateway core (types, channel index JSON, message shape) -> unit tests + <code>tsgo</code>.</li>
+<li>Signal transport (fake signal-cli) -> unit tests.</li>
+<li>Router (channel-&gt;session, command vs agent, per-channel serialized) -> unit tests.</li>
+<li>PM commands -> unit tests.</li>
+<li>Completion adapter + CLI boot -> build + <code>axiom gateway --help</code>; headless run loads axiom extensions (SOUL.md rides).</li>
+<li>End-to-end (fake signal-cli, stub/fake completion) -> message-&gt;reply / command-&gt;effect; unknown sender denied.</li>
+<li>Full floor -> <code>npm run check</code> + extensions suite green.</li>
+<li>Docs -> ADR-0016, ports, handoff, summary.</li>
+</ol>
+
+<h2>Key decisions</h2>
+<ul>
+<li><b>Gateway = surface, not extension:</b> per-message runs shell the real CLI (<code>axiom -p</code>) behind a <code>CompletionRunner</code>, so all of main()'s setup (models, providers, axiom extensions, profile env) is reused, not duplicated.</li>
+<li><b>One sender = one session:</b> deterministic <code>gw-&lt;hash&gt;</code> session id re-passed via <code>--session-id</code>; JSON channel index (ADR-0006) persists the mapping.</li>
+<li><b>SOUL.md rides:</b> <code>--profile</code> points the run at the profile home; the ported axiom-profile extension appends SOUL.md on <code>before_agent_start</code>.</li>
+<li><b>Commands never reach the model:</b> <code>/help</code>, <code>/profiles</code>, <code>/projects</code>, <code>/soul</code>; unknown -> usage hint.</li>
+<li><b>Owner gate = sender allowlist</b> (<code>&lt;AXIOM_HOME&gt;/gateway/config.json</code>); unknown senders denied before the model.</li>
+<li><b>Per-channel serialization + batch raw-text reply</b> (ADR-0001); streaming is a follow-up.</li>
+</ul>
+
+<h2>Verification evidence</h2>
+<h3>Green</h3>
+<ul>
+<li><b>27 new gateway tests</b> (channel index get/set/persist; message normalization + isCommand; Signal transport send argv + receive delivery + skip-none; router allowlist-denial / command-vs-agent / per-channel max-in-flight=1 / completion-failure reply; PM commands; completion argv contract).</li>
+<li>Full relevant suite <b>163 tests green</b> (128 extensions + 8 acceptance + 27 gateway); <code>npm run check</code>+<code>tsgo</code>+<code>npm run build</code> green; <code>axiom gateway --help</code> prints usage.</li>
+<li>Shim tests use real executable shims (shebang + chmod), not mocks.</li>
+</ul>
+<h3>Scoped + honest</h3>
+<ul>
+<li>The plan's "real print-mode via faux provider" integration test was scoped down (would duplicate main()'s runtime bootstrap); the SOUL.md ride is pinned by the completion-argv contract + the ported axiom-profile suite; the live print-mode run needs a live provider (operator follow-up, in handoff).</li>
+<li>signal-cli live link, provider, and first real Signal message are operator/live-gated.</li>
+</ul>
+
+<h2>Review history</h2>
+<table>
+<tr><th>Round</th><th>Stage</th><th>Scores (C/F/T/R/Cl)</th><th>Verdict</th></tr>
+<tr><td>Plan r1</td><td>external</td><td>17/18/18/17/13 = 83</td><td class="deny">DENIED</td></tr>
+<tr><td>Plan r2</td><td>external</td><td>18/19/19/18/18 = 92</td><td class="approve">APPROVED</td></tr>
+<tr><td>Impl r1</td><td>external</td><td>18/19/19/18/19 = 93</td><td class="approve">APPROVED</td></tr>
+</table>
+<p><b>Plan r1 denied</b> — plan was a bracket, not a spec. Fixed: added an executable Contracts section (GatewayMessage shape, command grammar, sender allowlist), specified the SOUL.md-riding headless mechanism (resolveProfile env + axiom extensions wired so <code>before_agent_start</code> appends SOUL.md), and exact monorepo paths.</p>
+<p><b>Plan r2 approved 92</b> — all round-1 findings verified closed against the repo.</p>
+<p><b>Impl r1 approved 93</b> — reviewer mutation-proved the allowlist-denial and per-channel serialization tests; verified 27 gateway tests + tsgo/build/biome. Non-blocking item acted on: <code>/profiles switch</code> now honestly reports it is a next-boot action (a gateway runs under one <code>--profile</code>), not an overstatement.</p>
+
+<h2>Final state</h2>
+<div class="final">
+<p><code>axiom gateway [--profile &lt;name&gt;]</code> ships on <code>baseline/prime-v0.7.2</code> (ADR-0016): the agent-over-Signal surface with project-manager commands, one-sender-one-session, sender allowlist, and SOUL.md-riding identity. 163 tests green; committed and pushed. The live pass (signal-cli link + provider) is the owner follow-up.</p>
+</div>
+<p class="meta" style="margin-top:20px">Built only from the running log &middot; one accent color &middot; monospace for code &middot; self-contained (no external fonts/CDN/JS) &middot; print-friendly.</p>
+</div></body></html>
