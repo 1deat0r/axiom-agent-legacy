@@ -27,7 +27,9 @@ describe("profiles command", () => {
 			expect(dispatchCommand("/profiles", ctx(dir))).toContain("no profiles");
 			expect(dispatchCommand("/profiles create builder", ctx(dir))).toContain("created");
 			expect(dispatchCommand("/profiles", ctx(dir))).toContain("builder");
-			expect(dispatchCommand("/profiles switch builder", ctx(dir))).toContain("switched");
+			expect(dispatchCommand("/profiles switch builder", ctx(dir))).toContain(
+				"restart `axiom gateway --profile builder`",
+			);
 			expect(dispatchCommand("/profiles switch nope", ctx(dir))).toContain("unknown profile");
 		} finally {
 			await rm(dir, { recursive: true, force: true });

@@ -23,7 +23,9 @@ export const profilesCommand: GatewayCommand = {
 					? "no profiles yet — create one with /profiles create <name>"
 					: `unknown profile '${name}' — existing: ${existing.join(", ")}`;
 			}
-			return `switched to profile '${name}' (its SOUL.md rides on future completions)`;
+			// A gateway runs under one --profile; switching is a next-boot action, not a live re-boot.
+			if (name === ctx.profile) return `already running as '${name}'`;
+			return `validated profile '${name}' — restart \`axiom gateway --profile ${name}\` to run as it (this gateway stays '${ctx.profile}')`;
 		}
 		const existing = listProfiles(ctx.axiomHomeDir);
 		return existing.length === 0 ? "no profiles yet" : `profiles: ${existing.join(", ")}`;

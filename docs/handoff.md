@@ -121,3 +121,10 @@ adapter that reuses the headless print-mode seam (`axiom -p ... --profile
 - Point the completion runner at a working provider, then run `axiom gateway
   --profile <name>`; send a message to confirm the live reply and the live
   signal-cli send.
+
+- External implementation review: APPROVED 93/100 (Correctness 18, Fit 19,
+  Testability 19, Risk 18, Clarity 19). Non-blocking items acted on: the
+  `/profiles switch` reply now honestly reports that switching is a next-boot
+  action (a gateway runs under one `--profile`), rather than overstating an
+  in-process switch; the channel-index write is documented as rm+copy (single
+  writer under the profile home), not a hard atomic rename.
