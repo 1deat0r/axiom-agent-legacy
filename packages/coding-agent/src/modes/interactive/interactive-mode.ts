@@ -53,6 +53,8 @@ import {
 	launchDaemonUpdateRestartCoordinator,
 	resolveDaemonUpdateRestartSocketPath,
 } from "../../cli/daemon-update-restart.js";
+import { handleProfileCommand } from "../../cli/profile-command.js";
+import { handleProjectsCommand } from "../../cli/projects-command.js";
 import {
 	APP_NAME,
 	APP_TITLE,
@@ -4739,6 +4741,18 @@ export class InteractiveMode {
 				if (commandName === "system-prompt" && !commandArgs) {
 					this.echoLocalCommand(text);
 					await this.handleSystemPromptCommand();
+					this.editor.setText("");
+					return;
+				}
+				if (commandName === "profiles") {
+					this.echoLocalCommand(text);
+					await this.handleProfilesSlashCommand(commandArgs);
+					this.editor.setText("");
+					return;
+				}
+				if (commandName === "projects") {
+					this.echoLocalCommand(text);
+					await this.handleProjectsSlashCommand(commandArgs);
 					this.editor.setText("");
 					return;
 				}
@@ -9449,6 +9463,35 @@ export class InteractiveMode {
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(new Text(info, 1, 0));
 		this.ui.requestRender();
+	}
+
+	/**
+	 * Local /profiles and /projects slash commands: print profile/project
+	 * management results into the chat (never routed to the model), reusing the
+	 * same pure CLI command logic as `axiom profile`/`axiom projects` and the
+	 * gateway's /profiles//projects. Operates on the active axiom home.
+	 */
+	private async handleProfilesSlashCommand(args: string): Promise<void> {
+		await this.runProfileSurfaceCommand(handleProfileCommand, ["profile"], args);
+	}
+
+	private async handleProjectsSlashCommand(args: string): Promise<void> {
+		await this.runProfileSurfaceCommand(handleProjectsCommand, ["projects"], args);
+	}
+
+	private async runProfileSurfaceCommand(
+		run: (args: string[], io: { stdout?: (text: string) => void }) => Promise<boolean>,
+		head: string[],
+		args: string,
+	): Promise<void> {
+		const lines: string[] = [];
+		const argv = [...head, ...(args ? (args.match(/\S+/g) ?? []) : [])];
+		const handled = await run(argv, { stdout: (text: string) => lines.push(text) });
+		if (handled && lines.length > 0) {
+			this.chatContainer.addChild(new Spacer(1));
+			this.chatContainer.addChild(new Text(lines.join("\n"), 1, 0));
+			this.ui.requestRender();
+		}
 	}
 
 	private async handleHeartbeatCommand(text: string): Promise<void> {

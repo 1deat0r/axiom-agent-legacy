@@ -117,6 +117,18 @@ const CANONICAL_BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 		takesArgument: true,
 	},
 	{ name: "session", description: "Show session info" },
+	{
+		name: "profiles",
+		description: "List, create, or switch profiles (own axiom home + SOUL.md)",
+		argumentHint: "[list|create <name>|switch <name>]",
+		takesArgument: true,
+	},
+	{
+		name: "projects",
+		description: "List, add, or remove projects of the active profile",
+		argumentHint: "[list|add <name>|rm <name>]",
+		takesArgument: true,
+	},
 	{ name: "system-prompt", description: "Show the exact system prompt sent to the model" },
 	{ name: "logs", description: "Show where daemon and client logs are saved" },
 	{

@@ -264,3 +264,37 @@ describe("session slash commands", () => {
 		expect(parseSessionSlashCommand("/settings")).toBeUndefined();
 	});
 });
+
+describe("profiles and projects terminal slash commands", () => {
+	test("exposes /profiles and /projects as argument commands", () => {
+		expect(BUILTIN_SLASH_COMMANDS.find((command) => command.name === "profiles")).toMatchObject({
+			description: expect.stringContaining("profiles"),
+			argumentHint: expect.stringContaining("switch"),
+			takesArgument: true,
+		});
+		expect(BUILTIN_SLASH_COMMANDS.find((command) => command.name === "projects")).toMatchObject({
+			description: expect.stringContaining("projects"),
+			argumentHint: expect.stringContaining("rm"),
+			takesArgument: true,
+		});
+		expect(isBuiltinSlashCommandName("profiles")).toBe(true);
+		expect(isBuiltinSlashCommandName("projects")).toBe(true);
+		expect(builtinSlashCommandTakesArgument("profiles")).toBe(true);
+		expect(builtinSlashCommandTakesArgument("projects")).toBe(true);
+	});
+
+	test("resolves /profiles and /projects subcommand arguments", () => {
+		expect(resolveSlashCommand(parseSlashCommand("/profiles switch alpha")!)).toEqual({
+			name: "profiles",
+			args: "switch alpha",
+			originalName: "profiles",
+			isAlias: false,
+		});
+		expect(resolveSlashCommand(parseSlashCommand("/projects add docs")!)).toEqual({
+			name: "projects",
+			args: "add docs",
+			originalName: "projects",
+			isAlias: false,
+		});
+	});
+});
