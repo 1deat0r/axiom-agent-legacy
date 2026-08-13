@@ -197,10 +197,12 @@ export class CliCompletionRunner implements CompletionRunner {
 					env: childEnv,
 				});
 				let collected = "";
+				let stderr = "";
 				let settled = false;
 				child.stdout?.on("data", (d) => (collected += d.toString("utf8")));
-				child.stderr?.on("data", () => {
-					/* drain stderr; the reply / errors stream on stdout */
+				child.stderr?.on("data", (d) => {
+					/* drain stderr; surface its tail when the child exits nonzero */
+					stderr = appendTail(stderr, d.toString("utf8"), COMPLETION_STDERR_TAIL_MAX);
 				});
 				const timer = setTimeout(() => {
 					if (settled) return;
@@ -224,7 +226,7 @@ export class CliCompletionRunner implements CompletionRunner {
 					} else {
 						reject(
 							new Error(
-								`completion exited with code ${String(code ?? "unknown")}: ${[this.bin, ...args].join(" ")}`,
+								`completion exited with code ${String(code ?? "unknown")}: ${[this.bin, ...args].join(" ")}${stderrTailLine(stderr)}`,
 							),
 						);
 					}
@@ -279,6 +281,7 @@ export class CliCompletionRunner implements CompletionRunner {
 					env: childEnv,
 				});
 				let buffer = "";
+				let stderr = "";
 				let settled = false;
 				child.stdout?.on("data", (d) => {
 					buffer += d.toString("utf8");
@@ -319,8 +322,9 @@ export class CliCompletionRunner implements CompletionRunner {
 						}
 					}
 				});
-				child.stderr?.on("data", () => {
-					/* drain stderr; deltas stream on stdout */
+				child.stderr?.on("data", (d) => {
+					/* drain stderr; surface its tail when the child exits nonzero */
+					stderr = appendTail(stderr, d.toString("utf8"), COMPLETION_STDERR_TAIL_MAX);
 				});
 				const timer = setTimeout(() => {
 					if (settled) return;
@@ -344,7 +348,7 @@ export class CliCompletionRunner implements CompletionRunner {
 					} else {
 						reject(
 							new Error(
-								`completion exited with code ${String(code ?? "unknown")}: ${[this.bin, ...args].join(" ")}`,
+								`completion exited with code ${String(code ?? "unknown")}: ${[this.bin, ...args].join(" ")}${stderrTailLine(stderr)}`,
 							),
 						);
 					}
@@ -358,6 +362,22 @@ export class CliCompletionRunner implements CompletionRunner {
 		}
 	}
 }
+
+/** Keep a bounded tail of a child's stderr for error messages (last lines win). */
+export function appendTail(buffer: string, chunk: string, maxChars: number): string {
+	const next = buffer + chunk;
+	return next.length > maxChars ? next.slice(next.length - maxChars) : next;
+}
+
+/** One-line stderr tail for the "completion exited with code" error. */
+function stderrTailLine(stderr: string): string {
+	const trimmed = stderr.trim();
+	if (trimmed.length === 0) return "";
+	return `; stderr: ${trimmed.slice(-COMPLETION_STDERR_TAIL_MAX)}`;
+}
+
+/** The max stderr tail surfaced in a completion error (operator-readable, not a wall). */
+const COMPLETION_STDERR_TAIL_MAX = 500;
 
 /** A canned, injectable completion runner for router/e2e tests. */
 export function fakeCompletionRunner(): CompletionRunner & {

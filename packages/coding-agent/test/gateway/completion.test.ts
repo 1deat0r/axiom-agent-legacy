@@ -28,6 +28,18 @@ async function writeShimAt(bin: string, outText = "ok"): Promise<string> {
 	return bin;
 }
 
+/** Write a shim that exits nonzero after printing a stderr line (for error-surface tests). */
+async function writeFailingShimAt(bin: string, stderrText: string, code = 1): Promise<string> {
+	await writeFile(
+		bin,
+		"#!/usr/bin/env node\n" +
+			`process.stderr.write(${JSON.stringify(stderrText)} + "\\n");\n` +
+			`process.exit(${code});\n`,
+	);
+	await chmod(bin, 0o755);
+	return bin;
+}
+
 /** Write an executable shim in a dir (join the name for callers). */
 async function writeShim(dir: string, binName: string, outText = "ok"): Promise<string> {
 	return writeShimAt(join(dir, binName), outText);
@@ -236,6 +248,56 @@ describe("CliCompletionRunner", () => {
 });
 
 describe("CliCompletionRunner timeout", () => {
+	it("surfaces the child's stderr tail when a batch completion exits nonzero", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-cmp-"));
+		try {
+			const bin = await writeFailingShimAt(join(dir, "cli.js"), "snapshot creation failed: ENOENT");
+			const runner = new CliCompletionRunner({ bin });
+			const result = await runner.runCompletion({
+				sessionId: "gw-x",
+				prompt: "hi",
+				profile: { name: "default" },
+			});
+			expect(result.error).toContain("completion exited with code 1");
+			expect(result.error).toContain("snapshot creation failed: ENOENT");
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("surfaces the child's stderr tail when a streaming completion exits nonzero", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-cmp-"));
+		try {
+			const bin = await writeFailingShimAt(join(dir, "cli.js"), "provider rejected: 500 internal");
+			const runner = new CliCompletionRunner({ bin });
+			const result = await runner.streamCompletion(
+				{ sessionId: "gw-x", prompt: "hi", profile: { name: "default" } },
+				() => undefined,
+			);
+			expect(result.error).toContain("completion exited with code 1");
+			expect(result.error).toContain("provider rejected: 500 internal");
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("truncates a noisy stderr tail so the operator sees the last lines, not a wall", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-cmp-"));
+		try {
+			const bin = await writeFailingShimAt(join(dir, "cli.js"), `${"x".repeat(4000)}END-OF-TAIL`);
+			const runner = new CliCompletionRunner({ bin });
+			const result = await runner.runCompletion({
+				sessionId: "gw-x",
+				prompt: "hi",
+				profile: { name: "default" },
+			});
+			expect(result.error).toContain("END-OF-TAIL");
+			expect(result.error!.length).toBeLessThan(1200);
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
 	it("surfaces an error and kills the child when a completion NEVER exits", async () => {
 		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-comp-to-"));
 		try {
