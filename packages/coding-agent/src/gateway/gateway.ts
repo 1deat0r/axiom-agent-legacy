@@ -241,14 +241,19 @@ export class Gateway {
 	async deliverToAll(text: string): Promise<{ channels: number }> {
 		const config = loadGatewayConfig(this.axiomHomeDir);
 		const targets = config.deliverTo ?? [];
-		for (const target of targets) {
-			// Resolve the actual transport first: a named target we do not hold
-			// degrades to the active transport, and the ledger labels what really
-			// delivered (never a phantom transport name).
-			const named = target.transport !== undefined ? this.transports[target.transport] : undefined;
-			const transport = named ?? this.transport;
-			const name = named !== undefined ? target.transport! : this.transportName;
-			await this.deliverVia(transport, name, { channelId: target.channel, recipient: "" }, text);
+		this.transport.pausePolling?.();
+		try {
+			for (const target of targets) {
+				// Resolve the actual transport first: a named target we do not hold
+				// degrades to the active transport, and the ledger labels what really
+				// delivered (never a phantom transport name).
+				const named = target.transport !== undefined ? this.transports[target.transport] : undefined;
+				const transport = named ?? this.transport;
+				const name = named !== undefined ? target.transport! : this.transportName;
+				await this.deliverVia(transport, name, { channelId: target.channel, recipient: "" }, text);
+			}
+		} finally {
+			this.transport.resumePolling?.();
 		}
 		return { channels: targets.length };
 	}
@@ -257,7 +262,12 @@ export class Gateway {
 		const config = loadGatewayConfig(this.axiomHomeDir);
 		const allowed = this.senders.size > 0 ? this.senders.has(msg.sender) : isAllowedSender(config, msg.sender);
 		if (!allowed) {
-			await this.deliver({ channelId: msg.channelId, recipient: msg.sender }, UNRECOGNIZED);
+			this.transport.pausePolling?.();
+			try {
+				await this.deliver({ channelId: msg.channelId, recipient: msg.sender }, UNRECOGNIZED);
+			} finally {
+				this.transport.resumePolling?.();
+			}
 			return;
 		}
 		if (msg.isCommand) {
@@ -282,8 +292,13 @@ export class Gateway {
 				resetSession: () => this.resetChannelSession(msg.channelId),
 			};
 			const reply = dispatchCommand(msg.text, ctx);
-			await this.deliver({ channelId: msg.channelId, recipient: msg.sender }, reply);
-			if (ctx.afterReply) await ctx.afterReply();
+			this.transport.pausePolling?.();
+			try {
+				await this.deliver({ channelId: msg.channelId, recipient: msg.sender }, reply);
+				if (ctx.afterReply) await ctx.afterReply();
+			} finally {
+				this.transport.resumePolling?.();
+			}
 			if (ctx.restartRequested) this.restart?.();
 			return;
 		}
@@ -339,87 +354,95 @@ export class Gateway {
 			model: this.modelStore?.load(),
 			...(anchoredRoot ? { projectRoot: anchoredRoot } : {}),
 		};
-		// Streaming (ADR-0004/#6, streaming v2): when both the transport and the
-		// runner support it, place a placeholder bubble and edit it in place as
-		// text arrives. Edits go through a StreamEditor — coalesced, strictly
-		// serialized, spacing-throttled — so the Bot API is never flooded and an
-		// older edit can never clobber newer text. The bubble is journaled while
-		// in flight so a restart can replace a stranded "…" on boot. Any
-		// placeholder-send failure falls back to the batch guarantee below.
-		const streamer = this.transport;
-		if (streamer.sendMessage && streamer.editMessage && this.completion.streamCompletion) {
-			try {
-				const stopTyping = this.startTyping(recipient);
-				let messageId: number | undefined;
-				try {
-					messageId = await streamer.sendMessage(recipient, "…");
-					const editor = new StreamEditor({
-						edit: (text) => streamer.editMessage!(msg.channelId, messageId!, text),
-						minIntervalMs: STREAM_EDIT_MIN_INTERVAL_MS,
-					});
-					this.streamJournal?.add({ channelId: msg.channelId, messageId, startedAt: Date.now() });
-					// A reset note rides the bubble from the first edit so the
-					// operator sees why the channel's memory was archived.
-					let lastText = sessionWasReset ? `${SESSION_RESET_NOTICE}\n\n` : "";
-					if (lastText !== "") editor.setTarget(lastText);
-					const streamed = await this.completion.streamCompletion(input, (delta) => {
-						if (lastText === "") stopTyping(); // text is flowing; stop pinging
-						lastText += delta;
-						editor.setTarget(lastText);
-					});
-					const baseFinal =
-						streamed.error !== undefined
-							? `could not run the agent: ${streamed.error}`
-							: streamed.reply.length > 0
-								? streamed.reply
-								: "(no reply)";
-					const finalText = sessionWasReset ? `${SESSION_RESET_NOTICE}\n\n${baseFinal}` : baseFinal;
-					// The editor applies the final text itself (and skips the edit
-					// when the bubble already shows it, so Telegram never rejects a
-					// no-op "message is not modified"). A failed final edit falls
-					// back to one fresh message so the answer always lands.
-					editor.setTarget(finalText);
-					if (!(await editor.finish())) {
-						// The final in-place edit failed: one fresh send (ledgered
-						// by deliver) so the answer always lands.
-						await this.deliver(recipient, finalText);
-					} else {
-						// The streamed bubble IS the delivery: record it like any
-						// outbound delivery so /ledger stays complete (ADR-0022)
-						// and the reply carries a timestamp for latency forensics.
-						this.ledger?.record({
-							ts: Date.now(),
-							transport: this.transportName,
-							channel: msg.channelId,
-							recipient: msg.sender,
-							chars: finalText.length,
-							ok: true,
-						});
-					}
-				} finally {
-					stopTyping();
-					if (messageId !== undefined) this.streamJournal?.remove(msg.channelId, messageId);
-				}
-				return;
-			} catch {
-				/* fall through to batch — the placeholder send itself failed */
-			}
-		}
-		const stopTyping = this.startTyping(recipient);
+		// Replies go out while the receive loop must hold (ADR-0039): Telegram
+		// queues outbound calls behind an open long-poll, so an edit would hang
+		// for the whole poll window. Pause before any delivery, resume after.
+		this.transport.pausePolling?.();
 		try {
-			const result = await this.completion.runCompletion(input);
-			if (result.error) {
-				await this.deliver(recipient, `could not run the agent: ${result.error}`);
-				return;
+			// Streaming (ADR-0004/#6, streaming v2): when both the transport and the
+			// runner support it, place a placeholder bubble and edit it in place as
+			// text arrives. Edits go through a StreamEditor — coalesced, strictly
+			// serialized, spacing-throttled — so the Bot API is never flooded and an
+			// older edit can never clobber newer text. The bubble is journaled while
+			// in flight so a restart can replace a stranded "…" on boot. Any
+			// placeholder-send failure falls back to the batch guarantee below.
+			const streamer = this.transport;
+			if (streamer.sendMessage && streamer.editMessage && this.completion.streamCompletion) {
+				try {
+					const stopTyping = this.startTyping(recipient);
+					let messageId: number | undefined;
+					try {
+						messageId = await streamer.sendMessage(recipient, "…");
+						const editor = new StreamEditor({
+							edit: (text) => streamer.editMessage!(msg.channelId, messageId!, text),
+							minIntervalMs: STREAM_EDIT_MIN_INTERVAL_MS,
+						});
+						this.streamJournal?.add({ channelId: msg.channelId, messageId, startedAt: Date.now() });
+						// A reset note rides the bubble from the first edit so the
+						// operator sees why the channel's memory was archived.
+						let lastText = sessionWasReset ? `${SESSION_RESET_NOTICE}\n\n` : "";
+						if (lastText !== "") editor.setTarget(lastText);
+						const streamed = await this.completion.streamCompletion(input, (delta) => {
+							if (lastText === "") stopTyping(); // text is flowing; stop pinging
+							lastText += delta;
+							editor.setTarget(lastText);
+						});
+						const baseFinal =
+							streamed.error !== undefined
+								? `could not run the agent: ${streamed.error}`
+								: streamed.reply.length > 0
+									? streamed.reply
+									: "(no reply)";
+						const finalText = sessionWasReset ? `${SESSION_RESET_NOTICE}\n\n${baseFinal}` : baseFinal;
+						// The editor applies the final text itself (and skips the edit
+						// when the bubble already shows it, so Telegram never rejects a
+						// no-op "message is not modified"). A failed final edit falls
+						// back to one fresh message so the answer always lands.
+						editor.setTarget(finalText);
+						if (!(await editor.finish())) {
+							// The final in-place edit failed: one fresh send (ledgered
+							// by deliver) so the answer always lands.
+							await this.deliver(recipient, finalText);
+						} else {
+							// The streamed bubble IS the delivery: record it like any
+							// outbound delivery so /ledger stays complete (ADR-0022)
+							// and the reply carries a timestamp for latency forensics.
+							this.ledger?.record({
+								ts: Date.now(),
+								transport: this.transportName,
+								channel: msg.channelId,
+								recipient: msg.sender,
+								chars: finalText.length,
+								ok: true,
+							});
+						}
+					} finally {
+						stopTyping();
+						if (messageId !== undefined) this.streamJournal?.remove(msg.channelId, messageId);
+					}
+					return;
+				} catch {
+					/* fall through to batch — the placeholder send itself failed */
+				}
 			}
-			const prefix = sessionWasReset
-				? `${SESSION_RESET_NOTICE}
+			const stopTyping = this.startTyping(recipient);
+			try {
+				const result = await this.completion.runCompletion(input);
+				if (result.error) {
+					await this.deliver(recipient, `could not run the agent: ${result.error}`);
+					return;
+				}
+				const prefix = sessionWasReset
+					? `${SESSION_RESET_NOTICE}
 
 `
-				: "";
-			await this.deliver(recipient, `${prefix}${result.reply.length > 0 ? result.reply : "(no reply)"}`);
+					: "";
+				await this.deliver(recipient, `${prefix}${result.reply.length > 0 ? result.reply : "(no reply)"}`);
+			} finally {
+				stopTyping();
+			}
 		} finally {
-			stopTyping();
+			this.transport.resumePolling?.();
 		}
 	}
 

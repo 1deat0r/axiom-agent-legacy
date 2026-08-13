@@ -16,6 +16,18 @@ import {
 	telegramRequestTimeoutMs,
 } from "../../src/gateway/transports/telegram.js";
 
+/** A minimal client for transport tests that never need polling. */
+class NoopClient implements TelegramClient {
+	async sendMessage(): Promise<number> {
+		return 0;
+	}
+	async editMessageText(): Promise<void> {}
+	async sendChatAction(): Promise<void> {}
+	async getUpdates(): Promise<TelegramUpdate[]> {
+		return [];
+	}
+}
+
 /** An in-memory Telegram client the transport polls (configuration via the returned object). */
 function fakeClient(initial: TelegramUpdate[] = []) {
 	const sent: Array<{ chatId: string; text: string; messageId?: number; edited?: boolean; action?: string }> = [];
@@ -395,6 +407,84 @@ describe("telegram HTTP timeout bounds", () => {
 		const client = new HttpTelegramClient({ token: "T", timeoutMs: 40, fetchFn });
 		await expect(client.editMessageText({ chatId: "1", messageId: 7, text: "x" })).rejects.toThrow();
 		await expect(client.sendChatAction({ chatId: "1", action: "typing" })).rejects.toThrow();
+	});
+});
+
+describe("TelegramTransport poll pause (reply delivery)", () => {
+	it("aborts the in-flight poll on pause and holds the loop until resume", async () => {
+		let pollCount = 0;
+		let inFlightSignal: AbortSignal | undefined;
+		const releaseFns: Array<() => void> = [];
+		const client: TelegramClient = {
+			async sendMessage() {
+				return 1;
+			},
+			async editMessageText() {},
+			async sendChatAction() {},
+			async getUpdates(input) {
+				pollCount++;
+				inFlightSignal = input.signal;
+				// Model the real fetch: resolve only on release, reject on abort.
+				await new Promise<void>((resolve, reject) => {
+					const onAbort = () => reject(input.signal?.reason ?? new Error("aborted"));
+					input.signal?.addEventListener("abort", onAbort);
+					releaseFns.push(() => {
+						input.signal?.removeEventListener("abort", onAbort);
+						resolve();
+					});
+				});
+				return [];
+			},
+		};
+		const t = new TelegramTransport(client, { pollIntervalMs: 1, backoffMs: 1 });
+		await t.connect();
+		await vi.waitFor(() => expect(pollCount).toBe(1));
+		t.pausePolling();
+		await vi.waitFor(() => expect(inFlightSignal?.aborted).toBe(true));
+		const held = pollCount;
+		await new Promise((resolve) => setTimeout(resolve, 30));
+		expect(pollCount).toBe(held); // no new polls while paused
+		t.resumePolling();
+		await vi.waitFor(() => expect(pollCount).toBe(2));
+		for (const release of releaseFns.splice(0)) release();
+		await t.disconnect();
+	});
+
+	it("resumePolling is a no-op when not paused", () => {
+		const t = new TelegramTransport(new NoopClient(), {});
+		expect(() => t.resumePolling()).not.toThrow();
+	});
+
+	it("disconnect releases a paused loop so the transport can stop", async () => {
+		let pollCount = 0;
+		const releaseFns: Array<() => void> = [];
+		const client: TelegramClient = {
+			async sendMessage() {
+				return 1;
+			},
+			async editMessageText() {},
+			async sendChatAction() {},
+			async getUpdates(input) {
+				pollCount++;
+				await new Promise<void>((resolve, reject) => {
+					const onAbort = () => reject(input.signal?.reason ?? new Error("aborted"));
+					input.signal?.addEventListener("abort", onAbort);
+					releaseFns.push(() => {
+						input.signal?.removeEventListener("abort", onAbort);
+						resolve();
+					});
+				});
+				return [];
+			},
+		};
+		const t = new TelegramTransport(client, { pollIntervalMs: 1, backoffMs: 1 });
+		await t.connect();
+		await vi.waitFor(() => expect(pollCount).toBe(1));
+		t.pausePolling();
+		await vi.waitFor(() => expect(t.isRunning()).toBe(true));
+		await t.disconnect();
+		expect(t.isRunning()).toBe(false);
+		for (const release of releaseFns.splice(0)) release();
 	});
 });
 

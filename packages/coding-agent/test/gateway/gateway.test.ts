@@ -796,6 +796,74 @@ describe("Gateway streaming replies", () => {
 		}
 	});
 
+	it("pauses the transport's poll loop while a reply is being delivered", async () => {
+		const dir = await home("axiom-gw-stream-");
+		try {
+			const s = streamingTransport();
+			const events: string[] = [];
+			s.t.pausePolling = () => events.push("pause");
+			s.t.resumePolling = () => events.push("resume");
+			let release: (() => void) | undefined;
+			const completion: CompletionRunner = {
+				async runCompletion(input) {
+					return { reply: "x", sessionId: input.sessionId };
+				},
+				async streamCompletion(input, _onDelta) {
+					await new Promise<void>((resolve) => {
+						release = resolve;
+					});
+					return { reply: "streamed reply", sessionId: input.sessionId };
+				},
+			};
+			const g = new Gateway({
+				transport: s.t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+			});
+			await g.start();
+			s.push({ channelId: "+1", sender: "+1", text: "hello", isCommand: false, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 30));
+			expect(events).toEqual(["pause"]); // held before the completion even starts
+			release?.();
+			await new Promise((r) => setTimeout(r, 30));
+			expect(events).toEqual(["pause", "resume"]); // released after the reply landed
+			expect(s.edits.some((x) => x.text === "streamed reply")).toBe(true);
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("pauses the transport's poll loop around a command/denial reply too", async () => {
+		const dir = await home("axiom-gw-stream-");
+		try {
+			const s = streamingTransport();
+			const events: string[] = [];
+			s.t.pausePolling = () => events.push("pause");
+			s.t.resumePolling = () => events.push("resume");
+			const g = new Gateway({
+				transport: s.t,
+				index: new MemoryChannelIndex(),
+				completion: fakeCompletionRunner(),
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+			});
+			await g.start();
+			// Not allowlisted: the denial reply must also go out without a poll
+			// queuing it behind the open long-poll.
+			s.push({ channelId: "+1", sender: "+999", text: "hi", isCommand: false, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 30));
+			expect(events).toEqual(["pause", "resume"]);
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
 	it("records a streamed reply in the delivery ledger exactly once", async () => {
 		const dir = await home("axiom-gw-stream-");
 		try {
