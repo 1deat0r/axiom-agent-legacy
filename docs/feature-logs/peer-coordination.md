@@ -16,3 +16,16 @@ flock, so a pid-recycled stale record is only caught by heartbeat age.
 
 Verification: 28/28 feature tests, biome clean, tsgo clean, full ./test.sh
 regression run with only the documented sandbox known-fails.
+
+## Follow-up: human-first terminal rendering (feat/peers-cli-output)
+
+The first CLI output dumped raw JSON-ish lines (ISO timestamps, "model
+unknown", run IDs) — technically correct, hard to scan. Rebuilt to terminal
+standards: aligned columns with status glyphs (● active, ○ stale), relative
+timestamps ("2m ago"), ellipsized long values sized to the terminal width,
+ANSI color respecting TTY/NO_COLOR/FORCE_COLOR, a legend footer with the
+unread count, empty states with next actions, --json machine mode, and the
+global command-registry help enriched with the flags. Model-facing plain
+text renderers untouched. New module core/peers/render.ts. Red-first: 12
+render tests + rewritten CLI tests; full ./test.sh floor verified on the
+branch (4928 passed, 14 failed = documented sandbox known-fails only).
