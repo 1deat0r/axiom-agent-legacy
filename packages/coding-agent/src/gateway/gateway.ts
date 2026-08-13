@@ -29,6 +29,7 @@ import type { DeliveryLedger } from "./delivery-ledger.js";
 import type { RestartNoticeStore } from "./restart-notice.js";
 import type { UpdateConfig, UpdateShell } from "./self-update.js";
 import { applyUpdate, CliUpdateShell, checkUpdate } from "./self-update.js";
+import { archiveSessionFile, SESSION_RESET_NOTICE, sessionExceedsBudget, sessionFilePath } from "./session-reset.js";
 import { STREAM_EDIT_MIN_INTERVAL_MS, StreamEditor } from "./stream-editor.js";
 import type { StreamJournal } from "./stream-journal.js";
 import type {
@@ -214,6 +215,25 @@ export class Gateway {
 	}
 
 	/**
+	 * /new: archive the channel's current session file so the next agent run
+	 * starts fresh. The archive keeps its *.jsonl name, so /search still
+	 * indexes it. Returns a short human-readable report for the command reply.
+	 */
+	private resetChannelSession(channelId: string): string {
+		if (!this.sessionsDir) return "sessions directory is not configured";
+		const active = this.activeProjects.get(channelId);
+		const sessionKey = active ? `${channelId}:${active}:${this.activeProjects.generation(active)}` : channelId;
+		const path = sessionFilePath(this.sessionsDir, sessionKey);
+		if (!existsSync(path)) return "no session to reset — this channel is already fresh";
+		try {
+			archiveSessionFile(path);
+			return "started a fresh session (the old one is archived and still searchable via /search)";
+		} catch {
+			return "could not archive the current session";
+		}
+	}
+
+	/**
 	 * Fan one message out to every configured deliverTo channel — across
 	 * transports when a target names one (ADR-0023), else the active transport
 	 * (ADR-0022). Returns how many channels were targeted.
@@ -259,6 +279,7 @@ export class Gateway {
 				ledger: this.ledger,
 				deliverToAll: (text) => this.deliverToAll(text),
 				deliver: (text) => this.deliver({ channelId: msg.channelId, recipient: msg.sender }, text),
+				resetSession: () => this.resetChannelSession(msg.channelId),
 			};
 			const reply = dispatchCommand(msg.text, ctx);
 			await this.deliver({ channelId: msg.channelId, recipient: msg.sender }, reply);
@@ -294,6 +315,22 @@ export class Gateway {
 			sessionId = sessionIdForChannel(sessionKey);
 			this.index.set(sessionKey, sessionId);
 		}
+		// Session budget: a channel session that has grown past the soft cap
+		// makes every reply re-process a huge context (minute-scale latency
+		// before the first word). Archive it and let the next run start fresh;
+		// the archive stays *.jsonl so /search still finds it.
+		let sessionWasReset = false;
+		if (this.sessionsDir) {
+			const path = sessionFilePath(this.sessionsDir, sessionKey);
+			if (sessionExceedsBudget(path)) {
+				try {
+					archiveSessionFile(path);
+					sessionWasReset = true;
+				} catch {
+					/* best-effort: a failed archive must never block the reply */
+				}
+			}
+		}
 		const recipient = { channelId: msg.channelId, recipient: msg.sender };
 		const input = {
 			sessionId,
@@ -321,18 +358,22 @@ export class Gateway {
 						minIntervalMs: STREAM_EDIT_MIN_INTERVAL_MS,
 					});
 					this.streamJournal?.add({ channelId: msg.channelId, messageId, startedAt: Date.now() });
-					let lastText = "";
+					// A reset note rides the bubble from the first edit so the
+					// operator sees why the channel's memory was archived.
+					let lastText = sessionWasReset ? `${SESSION_RESET_NOTICE}\n\n` : "";
+					if (lastText !== "") editor.setTarget(lastText);
 					const streamed = await this.completion.streamCompletion(input, (delta) => {
 						if (lastText === "") stopTyping(); // text is flowing; stop pinging
 						lastText += delta;
 						editor.setTarget(lastText);
 					});
-					const finalText =
+					const baseFinal =
 						streamed.error !== undefined
 							? `could not run the agent: ${streamed.error}`
 							: streamed.reply.length > 0
 								? streamed.reply
 								: "(no reply)";
+					const finalText = sessionWasReset ? `${SESSION_RESET_NOTICE}\n\n${baseFinal}` : baseFinal;
 					// The editor applies the final text itself (and skips the edit
 					// when the bubble already shows it, so Telegram never rejects a
 					// no-op "message is not modified"). A failed final edit falls
@@ -357,7 +398,12 @@ export class Gateway {
 				await this.deliver(recipient, `could not run the agent: ${result.error}`);
 				return;
 			}
-			await this.deliver(recipient, result.reply.length > 0 ? result.reply : "(no reply)");
+			const prefix = sessionWasReset
+				? `${SESSION_RESET_NOTICE}
+
+`
+				: "";
+			await this.deliver(recipient, `${prefix}${result.reply.length > 0 ? result.reply : "(no reply)"}`);
 		} finally {
 			stopTyping();
 		}

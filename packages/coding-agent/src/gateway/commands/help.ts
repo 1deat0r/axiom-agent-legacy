@@ -29,6 +29,7 @@ export const helpCommand: GatewayCommand = {
 			"  /ledger [n]            show the last n delivery-ledger entries",
 			"  /search <q>           search past sessions [--all] [--limit N] [--offset N]",
 			"  /sessions             browse recent past sessions [--all] [--limit N]",
+			"  /new                  start a fresh session (archives the old one)",
 		].join("\n");
 	},
 };
