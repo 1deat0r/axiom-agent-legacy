@@ -21,7 +21,7 @@ import { FileStreamJournal } from "../../src/gateway/stream-journal.js";
 import type { CompletionRunner, GatewayMessage, GatewayRecipient, GatewayTransport } from "../../src/gateway/types.js";
 
 /** A scriptable in-memory transport that also supports streaming edits. */
-function streamingTransport() {
+function streamingTransport(opts?: { textLimit?: number }) {
 	const sent: Array<{ to: string; text: string }> = [];
 	const placed: Array<{ to: string; text: string }> = [];
 	const edits: Array<{ chatId: string; messageId: number; text: string }> = [];
@@ -49,6 +49,7 @@ function streamingTransport() {
 		async sendChatAction(to, action) {
 			chatActions.push({ to: to.recipient, action });
 		},
+		textLimit: opts?.textLimit,
 		onMessage(h) {
 			handler = h;
 		},
@@ -759,6 +760,82 @@ describe("Gateway streaming replies", () => {
 			expect(s.edits.length).toBeGreaterThan(0);
 			expect(s.edits.at(-1)!.text).toBe("axiom reply to: hello");
 			expect(s.sent).toHaveLength(0); // no batch fallback => no duplicate
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("rolls a long reply over into new bubbles at the transport text limit", async () => {
+		const dir = await home("axiom-gw-stream-");
+		try {
+			const s = streamingTransport({ textLimit: 20 });
+			const longReply = "x".repeat(45);
+			const completion: CompletionRunner = {
+				async runCompletion(input) {
+					return { reply: longReply, sessionId: input.sessionId };
+				},
+				async streamCompletion(input, onDelta) {
+					onDelta(longReply);
+					return { reply: longReply, sessionId: input.sessionId };
+				},
+			};
+			const g = new Gateway({
+				transport: s.t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+			});
+			await g.start();
+			s.push({ channelId: "+1", sender: "+1", text: "hello", isCommand: false, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 30));
+			// Bubble 1 holds the placeholder, then seals at the cap; the overflow
+			// opens bubble 2 (another full cap), then bubble 3 with the tail.
+			expect(s.placed.map((p) => p.text)).toEqual(["…", "x".repeat(20), "x".repeat(5)]);
+			expect(s.edits.map((e) => e.text)).toEqual(["x".repeat(20)]); // bubble 1 seal only
+			expect(s.edits.at(-1)!.messageId).toBe(1);
+			expect(s.sent).toHaveLength(0); // no batch fallback => no duplicates
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("rolls over with incremental deltas, editing the new bubble in place", async () => {
+		const dir = await home("axiom-gw-stream-");
+		try {
+			const s = streamingTransport({ textLimit: 20 });
+			const completion: CompletionRunner = {
+				async runCompletion(input) {
+					return { reply: "", sessionId: input.sessionId };
+				},
+				async streamCompletion(input, onDelta) {
+					for (const ch of "abcdefghijklmnopqrstuvwxyz0123456789") onDelta(ch);
+					return { reply: "abcdefghijklmnopqrstuvwxyz0123456789", sessionId: input.sessionId };
+				},
+			};
+			const g = new Gateway({
+				transport: s.t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+			});
+			await g.start();
+			s.push({ channelId: "+1", sender: "+1", text: "hello", isCommand: false, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 50));
+			// Two bubbles: the placeholder, then the overflow across the 20-char
+			// cap ("uvwxyz0123456789" = chars 20..35 of the 36-char reply). The
+			// overflow was delivered by the rollover send, so bubble 1's seal is
+			// the only in-place edit; no batch fallback.
+			expect(s.placed.length).toBe(2);
+			expect(s.placed[1]!.text).toBe("uvwxyz0123456789");
+			expect(s.edits.at(-1)!.messageId).toBe(1);
+			expect(s.edits.at(-1)!.text).toBe("abcdefghijklmnopqrst");
+			expect(s.sent).toHaveLength(0);
 			await g.stop();
 		} finally {
 			await rm(dir, { recursive: true, force: true });

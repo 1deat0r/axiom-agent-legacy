@@ -128,7 +128,10 @@ describe("StreamEditor rollover (long replies)", () => {
 		await vi.advanceTimersByTimeAsync(0);
 		expect(rollovers).toEqual([]);
 		expect(edits.at(-1)).toBe("0123456789");
-		// One char past the cap: bubble 1 commits at the cap, bubble 2 opens with the tail.
+		// One char past the cap: bubble 1 stays at the cap, bubble 2 opens with
+		// the tail. The rollover callback delivered the tail to the new bubble,
+		// so no redundant identical edit follows (the platform would reject it
+		// as "message is not modified").
 		editor.setTarget("0123456789a");
 		await vi.advanceTimersByTimeAsync(200);
 		expect(rollovers).toEqual(["a"]);
@@ -143,6 +146,25 @@ describe("StreamEditor rollover (long replies)", () => {
 
 	it("rolls over again when a second bubble also exceeds the cap", async () => {
 		vi.useFakeTimers();
+		const edits: string[] = [];
+		const rollovers: string[] = [];
+		const editor = new StreamEditor({
+			edit: async (t) => void edits.push(t),
+			minIntervalMs: 0,
+			maxTextLength: 5,
+			rollover: async (overflow) => void rollovers.push(overflow),
+		});
+		// 10 chars, cap 5 => bubble 1 "01234" (sealed by edit), bubble 2 "56789"
+		// (delivered by the rollover, which is why it is not edited again).
+		editor.setTarget("0123456789");
+		await vi.advanceTimersByTimeAsync(200);
+		expect(rollovers).toEqual(["56789"]);
+		expect(edits).toEqual(["01234"]);
+		expect(await editor.finish()).toBe(true);
+	});
+
+	it("feeds at most one cap of text per rollover when a target jumps several caps", async () => {
+		vi.useFakeTimers();
 		const rollovers: string[] = [];
 		const editor = new StreamEditor({
 			edit: async () => {},
@@ -150,9 +172,10 @@ describe("StreamEditor rollover (long replies)", () => {
 			maxTextLength: 5,
 			rollover: async (overflow) => void rollovers.push(overflow),
 		});
-		editor.setTarget("01234567895"); // 11 chars, cap 5 => two rollovers
+		editor.setTarget("0123456789abcdef"); // 16 chars, cap 5 => three bubbles
 		await vi.advanceTimersByTimeAsync(200);
-		expect(rollovers).toEqual(["56789", "5"]);
+		expect(rollovers).toEqual(["56789", "abcde", "f"]);
+		expect(editor.remainingText()).toBe("f");
 		expect(await editor.finish()).toBe(true);
 	});
 
@@ -175,7 +198,7 @@ describe("StreamEditor rollover (long replies)", () => {
 		expect(editor.remainingText()).toBe("abcdef");
 	});
 
-	it("finish rolls over a pending overflow before applying the final edit", async () => {
+	it("finish flushes a pending overflow before applying the final text", async () => {
 		vi.useFakeTimers();
 		const edits: string[] = [];
 		const rollovers: string[] = [];
@@ -190,42 +213,28 @@ describe("StreamEditor rollover (long replies)", () => {
 		await vi.advanceTimersByTimeAsync(0);
 		expect(await finished).toBe(true);
 		expect(rollovers).toEqual(["ab"]);
-		expect(edits.at(-1)).toBe("ab"); // final edit landed on the new bubble
+		// Bubble 1 was sealed by edit; the tail "ab" was delivered by the
+		// rollover, so the final edit is skipped (no "message is not modified").
+		expect(edits).toEqual(["0123456789"]);
 	});
 
-	it("batch fallback after a failed final edit sends only the unlanded tail", async () => {
+	it("keeps the whole text as the fallback when a seal edit fails permanently", async () => {
 		vi.useFakeTimers();
-		const edits: string[] = [];
 		const rollovers: string[] = [];
 		const editor = new StreamEditor({
 			retries: 0,
-			edit: async (t) => void edits.push(t),
-			minIntervalMs: 0,
+			minIntervalMs: 50,
 			maxTextLength: 10,
+			async edit() {
+				throw Object.assign(new Error("bad request"), { status: 400 });
+			},
 			rollover: async (overflow) => void rollovers.push(overflow),
 		});
 		editor.setTarget("0123456789abcdef");
-		await vi.advanceTimersByTimeAsync(200);
-		expect(rollovers).toEqual(["abcdef"]);
-		// Make every subsequent edit fail (bubble 2 edits + final edit).
-		let fail = true;
-		const editor2 = new StreamEditor({
-			retries: 0,
-			async edit(t) {
-				if (fail) throw Object.assign(new Error("edit failed"), { status: 400 });
-				edits.push(t);
-			},
-			minIntervalMs: 0,
-			maxTextLength: 10,
-			rollover: async (overflow) => void rollovers.push(overflow),
-		});
-		editor2.setTarget("0123456789abcdefghi");
-		await vi.advanceTimersByTimeAsync(200);
-		// Bubble 1 committed; bubble 2 opened with the overflow; the tail is unlanded.
-		expect(editor2.remainingText()).toBe("abcdefghi");
-		fail = false;
-		expect(await editor2.finish()).toBe(true);
-		expect(edits.at(-1)).toBe("abcdefghi");
+		await vi.advanceTimersByTimeAsync(500);
+		expect(rollovers).toEqual([]); // never sealed => never rolled over
+		expect(editor.remainingText()).toBe("0123456789abcdef");
+		expect(await editor.finish()).toBe(false); // fallback gets the whole text
 	});
 });
 

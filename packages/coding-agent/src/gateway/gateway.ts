@@ -47,13 +47,6 @@ const UNRECOGNIZED = "unrecognized sender — this gateway is private to allowed
 /** Chat-action refresh cadence (Telegram drops actions older than ~5s). */
 const TYPING_REFRESH_MS = 4_000;
 
-/**
- * Streaming bubble size cap (ADR-0047): a single Telegram message may hold
- * TELEGRAM_TEXT_LIMIT (4096) chars; edit the bubble to a safe margin below
- * that so a forked reply + reset notice never trips the API limit.
- */
-const STREAM_BUBBLE_MAX_LENGTH = 4_000;
-
 export interface GatewayDeps {
 	transport: GatewayTransport;
 	index: ChannelIndex;
@@ -397,33 +390,31 @@ export class Gateway {
 				try {
 					const stopTyping = this.startTyping(recipient);
 					let messageId: number | undefined;
-					const journaledBubbles: number[] = [];
+					const openedMessageIds: number[] = [];
 					try {
 						messageId = await sendMessage(recipient, "…");
-						journaledBubbles.push(messageId);
-						this.streamJournal?.add({ channelId: msg.channelId, messageId, startedAt: Date.now() });
-						// Long replies stream across several bubbles (ADR-0047):
-						// Telegram caps a message at TELEGRAM_TEXT_LIMIT chars, so
-						// when the accumulated text crosses the cap the editor
-						// commits the current bubble and calls `rollover`, which
-						// sends a fresh placeholder and re-points messageId. The
-						// edit closure reads messageId at call time, so after a
-						// rollover every subsequent edit targets the new bubble.
+						openedMessageIds.push(messageId);
 						const editor = new StreamEditor({
 							edit: (text) => editMessage(msg.channelId, messageId!, text),
 							minIntervalMs: STREAM_EDIT_MIN_INTERVAL_MS,
-							maxTextLength: STREAM_BUBBLE_MAX_LENGTH,
-							rollover: async () => {
-								const nextId = await sendMessage(recipient, "…");
-								journaledBubbles.push(nextId);
-								this.streamJournal?.add({
-									channelId: msg.channelId,
-									messageId: nextId,
-									startedAt: Date.now(),
-								});
+							// Long replies roll over: when the bubble hits the
+							// transport's text cap, Telegram rejects every further
+							// edit — so the editor seals the bubble at the cap and a
+							// fresh message continues with the overflow.
+							maxTextLength: streamer.textLimit,
+							rollover: async (overflow) => {
+								const nextId = await sendMessage(recipient, overflow);
+								openedMessageIds.push(nextId);
+								this.streamJournal?.add({ channelId: msg.channelId, messageId: nextId, startedAt: Date.now() });
 								messageId = nextId;
 							},
 						});
+						this.streamJournal?.add({ channelId: msg.channelId, messageId, startedAt: Date.now() });
+						// Long replies stream across several bubbles (ADR-0047):
+						// the editor seals a full bubble at the transport's text
+						// cap and rolls the overflow into a fresh message via the
+						// rollover hook (which re-points messageId), so every
+						// later edit targets the newest bubble.
 						// The bubble starts empty; compaction (if requested) already
 						// summarized the session before the run began.
 						let lastText = "";
@@ -448,10 +439,15 @@ export class Gateway {
 						// Fallback when the tail could not land in place: the final
 						// edit failed, or the text was fully absorbed by earlier
 						// bubbles (a short error after a long partial stream ends
-						// up beyond the last bubble window). Deliver fresh messages
-						// (chunked) so the answer always reaches the user.
+						// up beyond the last bubble window). Deliver the unlanded
+						// tail (chunked) — or the whole text when the window
+						// already absorbed it — so the answer always reaches the
+						// user.
 						if (!landed || editor.remainingText().length === 0) {
-							await this.deliver(recipient, finalText);
+							await this.deliver(
+								recipient,
+								editor.remainingText().length > 0 ? editor.remainingText() : finalText,
+							);
 						} else {
 							// The streamed bubble(s) ARE the delivery: record it like
 							// any outbound delivery so /ledger stays complete
@@ -468,9 +464,7 @@ export class Gateway {
 						}
 					} finally {
 						stopTyping();
-						for (const id of journaledBubbles) {
-							this.streamJournal?.remove(msg.channelId, id);
-						}
+						for (const id of openedMessageIds) this.streamJournal?.remove(msg.channelId, id);
 					}
 					return;
 				} catch {
