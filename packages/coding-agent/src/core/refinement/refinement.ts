@@ -601,7 +601,7 @@ function parseJsonCandidate(candidate: string): unknown {
 	}
 }
 
-function extractJsonObject(text: string): unknown {
+export function extractJsonObject(text: string): unknown {
 	const trimmed = text.trim();
 	if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
 		// A reply truncated after a nested closing brace still looks well-formed
@@ -707,7 +707,7 @@ function validateEdit(edit: RefinementEdit, computedId?: string): string | undef
 export function applyRefinementProposal(
 	state: HarnessState,
 	proposal: RefinementProposal,
-	options: { id: string; rollbackOf?: string; scope?: HarnessScope; baselineState?: HarnessState },
+	options: { id: string; rollbackOf?: string; scope?: HarnessScope; baselineState?: HarnessState; source?: string },
 ): RefinementResult {
 	const appliedEdits: AppliedRefinementEdit[] = [];
 	const proposalModifiedKeys = new Set<string>();
@@ -769,7 +769,7 @@ export function applyRefinementProposal(
 			reference: edit.reference ?? before?.reference ?? {},
 			arguments: edit.arguments ?? before?.arguments ?? {},
 			metadata: edit.metadata ?? before?.metadata ?? {},
-			source: "refine",
+			source: options.source ?? "refine",
 			created_at: createdAt,
 			updated_at: now(),
 			version,

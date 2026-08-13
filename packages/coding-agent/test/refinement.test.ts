@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	appendGlobalRefinement,
 	applyRefinementProposal,
+	extractJsonObject,
 	formatHarnessStateForPrompt,
 	getGlobalHarnessStateDir,
 	getHarnessStatePath,
@@ -1515,5 +1516,39 @@ describe("global refinement history", () => {
 		});
 
 		expect(plan.rollbackScope).toBe("global");
+	});
+});
+
+describe("consolidation provenance + shared JSON extraction", () => {
+	it("stamps applied entries with a custom source when the option is passed", () => {
+		const state = loadHarnessState(makeTempDir());
+		const result = applyRefinementProposal(
+			state,
+			proposal("Consolidate memory", [
+				{ action: "create", kind: "memory", title: "Durable fact", content: "stable content", reason: "learned" },
+			]),
+			{ id: "mc_123", source: "consolidate" },
+		);
+		expect(result.appliedEdits[0]?.applied).toBe(true);
+		expect(state.entries.memory.durable_fact?.source).toBe("consolidate");
+	});
+
+	it("keeps the default refine source when the option is omitted", () => {
+		const state = loadHarnessState(makeTempDir());
+		applyRefinementProposal(
+			state,
+			proposal("Refine memory", [
+				{ action: "create", kind: "memory", title: "Refined fact", content: "content", reason: "r" },
+			]),
+			{ id: "refine_default_source" },
+		);
+		expect(state.entries.memory.refined_fact?.source).toBe("refine");
+	});
+
+	it("exposes extractJsonObject for sibling consolidation modules", () => {
+		const fenced = extractJsonObject('```json\n{"a": 1}\n```');
+		expect(fenced).toEqual({ a: 1 });
+		const proseWrapped = extractJsonObject('Here you go: {"b": [1, 2]} thanks');
+		expect(proseWrapped).toEqual({ b: [1, 2] });
 	});
 });

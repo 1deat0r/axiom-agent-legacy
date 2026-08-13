@@ -28,6 +28,7 @@ import { processFileArguments } from "./cli/file-processor.js";
 import { handleGatewayCommand } from "./cli/gateway-command.js";
 import { buildInitialMessage } from "./cli/initial-message.js";
 import { listModels } from "./cli/list-models.js";
+import { handleMemoryConsolidationCommand } from "./cli/memory-consolidation-command.js";
 import { installOwnedSessionRecoveryTracking, isOwnedSessionWorkerProcess } from "./cli/owned-session-worker.js";
 import { handleProfileCommand } from "./cli/profile-command.js";
 import { handleProjectsCommand } from "./cli/projects-command.js";
@@ -1126,6 +1127,10 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	if (await handleSkillCaptureAutoCommand(args)) {
+		return;
+	}
+
+	if (await handleMemoryConsolidationCommand(args)) {
 		return;
 	}
 

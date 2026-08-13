@@ -1,0 +1,220 @@
+/**
+ * Memory-consolidation extension — the runtime hook that closes the loop on
+ * "gets smarter over time": recall is the read path and /refine is manual, but
+ * nothing auto-persisted durable facts learned across sessions. On `agent_end`
+ * this extension reviews the finished session, proposes durable facts, passes
+ * them through the deterministic durability gate, and either:
+ *
+ *  - stages them for operator confirmation (default; `axiom
+ *    memory-consolidation pending` to review), or
+ *  - applies them immediately with a full audit trail (auto mode,
+ *    AXIOM_MEMORY_CONSOLIDATION_AUTO=1).
+ *
+ * Deliberately inert by default (AXIOM_MEMORY_CONSOLIDATION=1 to enable), like
+ * skill-capture's unattended hook (ADR-0027). It never blocks or crashes a
+ * run: without model auth it skips silently; any failure is audited and
+ * swallowed.
+ */
+
+import { join } from "node:path";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { Model } from "@earendil-works/pi-ai";
+import type { ExtensionAPI } from "../../core/extensions/types.js";
+import {
+	type ApplyMemoryFactsResult,
+	appendAuditEvent,
+	applyMemoryFacts,
+	buildConsolidationRequest,
+	type ConsolidationAuditEvent,
+	type ConsolidationProposal,
+	type ConsolidationRequest,
+	consolidationAuditPath,
+	consolidationPendingDir,
+	evaluateMemoryFacts,
+	type GateResult,
+	type MemoryFact,
+	type MemoryOverviewEntry,
+	newProposalId,
+	type PendingProposal,
+	planMemoryConsolidation,
+	stagePendingProposal,
+} from "../../core/memory-consolidation/index.js";
+import { getGlobalHarnessStateDir, type HarnessState, loadHarnessState } from "../../core/refinement/index.js";
+import { axiomHome } from "../profile/registry.js";
+
+export interface MemoryConsolidationExtensionOptions {
+	/** Enable post-run consolidation (default AXIOM_MEMORY_CONSOLIDATION=1). */
+	enabled?: boolean;
+	/** Apply accepted facts immediately instead of staging (default AXIOM_MEMORY_CONSOLIDATION_AUTO=1). */
+	auto?: boolean;
+	/** Consolidation root (pending + audit); default <AXIOM_HOME>/consolidation. */
+	consolidationDir?: string;
+	/** Global harness state dir (default getGlobalHarnessStateDir()). */
+	harnessStateDir?: string;
+	/** Injectable pieces so tests isolate one concern without disk/model IO. */
+	buildRequest?: (
+		messages: readonly AgentMessage[],
+		options: { sessionId?: string; existingMemories: readonly MemoryOverviewEntry[] },
+	) => ConsolidationRequest;
+	plan?: (
+		request: ConsolidationRequest,
+		model: Model<any>,
+		apiKey: string,
+		options: { headers?: Record<string, string>; signal?: AbortSignal },
+	) => Promise<ConsolidationProposal>;
+	gate?: (facts: readonly MemoryFact[], options: { existing?: readonly MemoryOverviewEntry[] }) => GateResult;
+	stage?: (pendingDir: string, proposal: ConsolidationProposal, options: { sessionId?: string }) => PendingProposal;
+	apply?: (options: {
+		facts: readonly MemoryFact[];
+		harnessStateDir: string;
+		proposalId?: string;
+		sessionId?: string;
+		summary?: string;
+		rationale?: string;
+	}) => ApplyMemoryFactsResult;
+	audit?: (auditPath: string, event: ConsolidationAuditEvent) => string;
+	loadExistingMemories?: (harnessStateDir: string) => MemoryOverviewEntry[];
+}
+
+function defaultBuildRequest(
+	messages: readonly AgentMessage[],
+	options: { sessionId?: string; existingMemories: readonly MemoryOverviewEntry[] },
+): ConsolidationRequest {
+	return buildConsolidationRequest(messages, options);
+}
+
+function defaultLoadExistingMemories(harnessStateDir: string): MemoryOverviewEntry[] {
+	return memoryOverview(loadHarnessState(harnessStateDir));
+}
+
+/** Read-only summary of current global harness memories for dedup + requests. */
+export function memoryOverview(state: HarnessState): MemoryOverviewEntry[] {
+	return Object.entries(state.entries.memory).map(([id, entry]) => ({
+		id,
+		title: entry.title,
+		content: entry.content,
+	}));
+}
+
+function rejectedReasons(gate: GateResult, applied?: ApplyMemoryFactsResult): string[] {
+	const reasons = gate.rejected.map(
+		(rejection) => `${rejection.fact.title || "(untitled)"}: ${rejection.reasons.join("; ")}`,
+	);
+	if (applied) {
+		for (const skip of applied.skipped) {
+			reasons.push(`${skip.fact.title || "(untitled)"}: ${skip.reasons.join("; ")}`);
+		}
+	}
+	return reasons;
+}
+
+export function createMemoryConsolidationExtension(
+	deps: MemoryConsolidationExtensionOptions = {},
+): (pi: ExtensionAPI) => void {
+	const enabled = deps.enabled ?? process.env.AXIOM_MEMORY_CONSOLIDATION === "1";
+	const auto = deps.auto ?? process.env.AXIOM_MEMORY_CONSOLIDATION_AUTO === "1";
+	const consolidationDir = deps.consolidationDir ?? join(axiomHome(), "consolidation");
+	const pendingDir = consolidationPendingDir(consolidationDir);
+	const auditPath = consolidationAuditPath(consolidationDir);
+	const harnessStateDir = deps.harnessStateDir ?? getGlobalHarnessStateDir();
+	const buildRequest = deps.buildRequest ?? defaultBuildRequest;
+	const plan = deps.plan ?? planMemoryConsolidation;
+	const gate = deps.gate ?? evaluateMemoryFacts;
+	const stage = deps.stage ?? stagePendingProposal;
+	const apply = deps.apply ?? applyMemoryFacts;
+	const audit = deps.audit ?? appendAuditEvent;
+	const loadExistingMemories = deps.loadExistingMemories ?? defaultLoadExistingMemories;
+
+	return (pi) => {
+		pi.on("agent_end", async (event, ctx) => {
+			if (!enabled) return;
+			try {
+				const model = ctx.model;
+				if (!model) return;
+				const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
+				if (!auth.ok || !auth.apiKey) return;
+
+				const sessionId = ctx.sessionManager.getSessionId() || undefined;
+				const request = buildRequest(event.messages, {
+					...(sessionId ? { sessionId } : {}),
+					existingMemories: loadExistingMemories(harnessStateDir),
+				});
+				const proposal = await plan(request, model, auth.apiKey, { headers: auth.headers, signal: ctx.signal });
+				const gateResult = gate(proposal.facts, { existing: request.existingMemories });
+				if (gateResult.accepted.length === 0) return;
+
+				if (auto) {
+					const proposalId = newProposalId();
+					const applied = apply({
+						facts: gateResult.accepted,
+						harnessStateDir,
+						proposalId,
+						...(sessionId ? { sessionId } : {}),
+						summary: proposal.summary,
+						rationale: proposal.rationale,
+					});
+					const entryIds =
+						applied.result?.appliedEdits.filter((edit) => edit.applied).map((edit) => edit.id) ?? [];
+					audit(auditPath, {
+						id: `mc_audit_${Date.now()}`,
+						action: "auto_applied",
+						proposalId,
+						...(sessionId ? { sessionId } : {}),
+						proposed: proposal.facts.length,
+						accepted: applied.acceptedCount,
+						rejected: rejectedReasons(gateResult, applied),
+						...(entryIds.length > 0 ? { entryIds } : {}),
+						createdAt: new Date().toISOString(),
+					});
+					ctx.ui.notify(
+						applied.acceptedCount > 0
+							? `Memory consolidation applied ${applied.acceptedCount} durable fact(s) to the harness (audited)`
+							: "Memory consolidation: no new durable facts survived the gate",
+						"info",
+					);
+					return;
+				}
+
+				// Propose mode: only gate-accepted facts are staged for review.
+				const staged = stage(
+					pendingDir,
+					{ summary: proposal.summary, rationale: proposal.rationale, facts: gateResult.accepted },
+					{ ...(sessionId ? { sessionId } : {}) },
+				);
+				audit(auditPath, {
+					id: `mc_audit_${Date.now()}`,
+					action: "staged",
+					proposalId: staged.id,
+					...(sessionId ? { sessionId } : {}),
+					proposed: proposal.facts.length,
+					accepted: staged.facts.length,
+					rejected: rejectedReasons(gateResult),
+					createdAt: new Date().toISOString(),
+				});
+				ctx.ui.notify(
+					`Memory consolidation staged ${staged.facts.length} durable fact(s) — review with \`axiom memory-consolidation pending\``,
+					"info",
+				);
+			} catch (error) {
+				// The hook must never crash a run: failures are audited and swallowed.
+				try {
+					audit(auditPath, {
+						id: `mc_audit_${Date.now()}`,
+						action: "failed",
+						proposed: 0,
+						accepted: 0,
+						rejected: [],
+						error: error instanceof Error ? error.message : String(error),
+						createdAt: new Date().toISOString(),
+					});
+				} catch {
+					// Even the audit can fail (disk issues) — still never throw.
+				}
+			}
+		});
+	};
+}
+
+export default function axiomMemoryConsolidationExtension(pi: ExtensionAPI): void {
+	createMemoryConsolidationExtension()(pi);
+}

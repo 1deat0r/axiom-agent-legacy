@@ -1,24 +1,58 @@
-# Handoff — board loop-closure (2026-08-13)
+# Handoff — Agent-side automatic memory consolidation (ADR-0037, issue #19)
 
-What was done: closed four shipped issues with comments citing what shipped
-and how it was verified — #5 (Telegram batch transport, ADR-0017), #6
-(Telegram streaming v2, 065d56c27, live under axiom-telegram-gateway.service),
-#14 (profiles/projects/anti-drift spine; skin was deferred past August by
-owner decision), #12 (v0.23 review record). Filed two follow-ups, both
-ready-for-agent: #17 root guard path confinement on bash/read/write (the one
-unshipped ADR-0014 ladder step) and #18 the six deferred v0.23 findings
-(verify against main, then fix or document). Deleted feat/connectors-menu
-locally and remotely.
+**Branch:** `feat/memory-consolidation` (isolated worktree at `.worktrees/memory-consolidation`)
+**Base:** `main` @ 00da2f3f0 (includes the parallel session's board loop-closure handoff)
 
-How it was verified: every closed issue was read in full before closing and
-its acceptance criteria mapped to merged, tested, deployed code or to a filed
-follow-up; nothing was closed blind. Branch deletion was gated on
-merge-base --is-ancestor (connectors-menu is an ancestor of main, empty
-both-ways diff) and confirmed by git ls-remote showing zero remote refs.
-The working tree was checked out on feat/connectors-menu at the same commit
-as main, so switching branches moved no files; the only untracked file
-(docs/hermes-improvements.html) is not from this session and was left
-untouched.
+## What was done
 
-Live state: no code changed, nothing redeployed. This run touched the issue
-tracker, branch refs, and this handoff only.
+Post-run consolidation that extracts durable facts and proposes harness memory
+entries, gated by operator confirm by default or auto-applied with a full
+audit trail. Recall stays the read path; /refine stays manual; this closes the
+"gets smarter over time" loop automatically and complements skill-capture.
+
+- Core `packages/coding-agent/src/core/memory-consolidation/` (request →
+  propose → gate → store → apply pipeline; see ADR-0037 for the design).
+- Extension `src/extensions/memory-consolidation/` — `agent_end` hook, inert
+  unless `AXIOM_MEMORY_CONSOLIDATION=1`; propose mode stages + notifies;
+  `AXIOM_MEMORY_CONSOLIDATION_AUTO=1` auto-applies with audit; silent skip
+  without auth; failures audited and never thrown.
+- CLI `axiom memory-consolidation pending|show|approve|reject|audit` (wired
+  into `main.ts`).
+- Two minimal `refinement.ts` changes: `extractJsonObject` export + optional
+  `source` on `applyRefinementProposal` (default "refine") — entries created
+  by consolidation carry `source: "consolidate"` and are rollback-able via
+  the existing refinement history.
+- Docs: ADR-0037, CONTEXT.md term, feature-log, this handoff. Issue #19.
+
+## What was verified, and how
+
+- **Unit — 52 new tests green** (29 core, 7 extension, 13 CLI, 3 refinement
+  provenance/extract additions). Red-first on the refinement changes; a
+  mutation check confirmed the dedup tests catch real regressions.
+- **Full `./test.sh` — 4853 passed, 14 failed**, and the 14 are exactly the
+  documented sandbox known-fails (daemon-serialized-refine ×1, 4603 ×4,
+  4685 ×9 EXDEV hard-link) — no regressions vs the pristine baseline.
+- **biome clean; tsgo --noEmit clean.**
+- **Live end-to-end CLI smoke** against a scratch `AXIOM_HOME` +
+  `AXIOM_CODING_AGENT_DIR` with the real dist bundle: stage → show → approve
+  (durable fact applied with consolidate provenance + rollback history;
+  transient "this session" fact gated with a visible reason) → duplicate
+  re-approve honestly skipped → reject → audit (3 newest-first events with
+  rejection reasons).
+
+## Honest boundaries
+
+- No live cross-provider pass yet (model call unit-tested with a mocked
+  provider; needs operator API keys) — recorded follow-up.
+- A no-op consolidation (everything gated out) is deliberately silent (no
+  audit line) — documented in the ADR and feature-log.
+- Child sessions inherit the env flags and consolidate into the same global
+  store — bounded by gate + dedup, documented.
+
+## Merge/cleanup notes
+
+- Branch NOT merged to main and NOT deleted yet (user hasn't asked).
+- Worktree `.worktrees/memory-consolidation` shares `node_modules` via symlink
+  from the main working tree (same as prior worktrees).
+- Rebuilt the WORKTREE's dist bundle only; the main tree, `~/.local/bin/axiom`,
+  and the live gateway are untouched.

@@ -97,6 +97,23 @@ anchored by AXIOM_PROJECT_ROOT, that blocks an `edit` whose resolved path
 leaves the project root, returning a plain-English reason surfaced to the
 model (ADR-0018). Freeform bash/ipython confinement is the OS-sandbox tier,
 recorded as a follow-up.
+**Memory consolidation**:
+The declarative-memory half of "gets smarter over time" (ADR-0037, issue #19):
+after a run, an inert-by-default `agent_end` extension (enabled via
+`AXIOM_MEMORY_CONSOLIDATION=1`) has the model propose durable facts
+(`{title, content, path}`) from the finished session, filters them through a
+deterministic durability gate (length bounds, transient phrasing like "this
+session"/"currently"/"todo", dedup against existing global harness memory),
+then either stages them for operator confirmation (`axiom
+memory-consolidation pending|show|approve|reject|audit`) or — with
+`AXIOM_MEMORY_CONSOLIDATION_AUTO=1` — applies them to the global harness
+memory with a full audit trail (`<AXIOM_HOME>/consolidation/audit.jsonl`).
+Applied entries carry `source: "consolidate"` and are rollback-able through
+the refinement history. Pairs with skill capture: tasks → skills
+(procedural), facts → harness memory (declarative).
+_Avoid_: Recall (the read path over past sessions); refine (manual harness
+editing — consolidation is automatic and gated, not invoked)
+
 **Skill capture**:
 The procedural-memory skill pipeline (ADR-0024, step 1): turning a completed
 task that was flagged reusable into a durable `SKILL.md` that bundles the task
