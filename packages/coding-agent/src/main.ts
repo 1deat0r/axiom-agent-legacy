@@ -30,6 +30,7 @@ import { buildInitialMessage } from "./cli/initial-message.js";
 import { listModels } from "./cli/list-models.js";
 import { handleMemoryConsolidationCommand } from "./cli/memory-consolidation-command.js";
 import { installOwnedSessionRecoveryTracking, isOwnedSessionWorkerProcess } from "./cli/owned-session-worker.js";
+import { handlePeersCommand } from "./cli/peers-command.js";
 import { handleProfileCommand } from "./cli/profile-command.js";
 import { handleProjectsCommand } from "./cli/projects-command.js";
 import { handlePublicCommand } from "./cli/public-command.js";
@@ -42,6 +43,7 @@ import {
 import { handleSkillAuditCommand } from "./cli/skill-audit-command.js";
 import { handleSkillCaptureAutoCommand } from "./cli/skill-capture-auto-command.js";
 import { handleSkillCaptureCommand } from "./cli/skill-capture-command.js";
+import { handleSkillCheckCommand } from "./cli/skill-check-command.js";
 import { APP_NAME, ENV_AGENT_DIR, expandTildePath, getAgentDir, getSessionDirEnvOverride, VERSION } from "./config.js";
 import {
 	type AgentExecutionMode,
@@ -1131,6 +1133,14 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	if (await handleMemoryConsolidationCommand(args)) {
+		return;
+	}
+
+	if (await handleSkillCheckCommand(args)) {
+		return;
+	}
+
+	if (await handlePeersCommand(args)) {
 		return;
 	}
 

@@ -74,8 +74,19 @@ Keep `SKILL.md` short: the decision flow, the common commands, the contract. Pus
 
 After writing the skill:
 
-1. Re-read the frontmatter and check every rule in the table above, especially that `name` matches the directory name and the description is non-empty.
-2. In an interactive session, `/reload` picks up new skills without a restart; other sessions pick them up on start. Loading problems (bad name, missing description, name collisions) surface as warnings — ask the user to check, or check diagnostics yourself if you can.
-3. A loaded skill is also invocable as `/skill:<name>`, which the user can try directly.
+1. Run `axiom skill-check <dir>` (the path to the new skill directory) and
+   require exit 0. This loads the skill with the REAL loader — the same path a
+   session uses — and reports anything the loader would silently drop: a
+   missing or empty description, an unparsable frontmatter block, or a name
+   collision. A skill without a description is not just warned about; it never
+   appears in the next session's prompt. `--strict` also fails on warnings
+   (e.g. a name that does not match its directory), and `--json` gives a
+   scriptable report. No directory argument checks the default skill dirs
+   (`~/.axiom/agent/skills` and `<project>/.axiom/agent/skills`).
+2. Re-read the frontmatter and check every rule in the table above, especially
+   that `name` matches the directory name and the description is non-empty.
+3. In an interactive session, `/reload` picks up new skills without a restart;
+   other sessions pick them up on start. A loaded skill is also invocable as
+   `/skill:<name>`, which the user can try directly.
 
 For Python-backed skills, also run the checks in [references/python-skills.md](references/python-skills.md).

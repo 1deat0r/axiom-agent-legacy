@@ -23,6 +23,34 @@ export const TELEGRAM_TEXT_LIMIT = 4096;
 /** The Bot API getUpdates long-poll 'timeout' parameter cap, in seconds. */
 export const TELEGRAM_LONG_POLL_MAX_SECONDS = 50;
 
+/**
+ * Client-side HTTP timeout for outbound mutations (sendMessage / edit /
+ * sendChatAction). A hung connection to api.telegram.org otherwise stalls the
+ * gateway's reply path for minutes (observed 2026-08-13: a ~25s hang turned a
+ * 3s completion into a 31s reply). The timeout turns the hang into a fast,
+ * visible failure — the streaming path falls back to a fresh send, and a
+ * still-stuck network surfaces as an ok:false ledger entry instead of silence.
+ */
+export const TELEGRAM_HTTP_TIMEOUT_MS = 15_000;
+/** Grace added to the long-poll window so the poll is never cut mid-flight. */
+export const TELEGRAM_LONG_POLL_GRACE_MS = 5_000;
+
+/**
+ * The client-side timeout for one Telegram HTTP call: mutations get the
+ * operator's timeout; polls get at least the long-poll window plus grace so a
+ * 50s long-poll is never aborted early.
+ */
+export function telegramRequestTimeoutMs(kind: "mutate" | "poll", timeoutMs: number, pollSeconds: number): number {
+	if (kind === "mutate") return timeoutMs;
+	return Math.max(timeoutMs, pollSeconds * 1000 + TELEGRAM_LONG_POLL_GRACE_MS);
+}
+
+/** A hard timeout signal, merged with an optional caller signal. */
+function timedSignal(timeoutMs: number, signal?: AbortSignal): AbortSignal {
+	if (signal === undefined) return AbortSignal.timeout(timeoutMs);
+	return AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
+}
+
 /** One update from getUpdates (the fields the transport consumes). */
 export interface TelegramUpdate {
 	update_id: number;
@@ -56,6 +84,8 @@ export interface HttpTelegramClientOptions {
 	baseUrl?: string;
 	/** Injectable fetch for the local-server test; defaults to global fetch. */
 	fetchFn?: typeof fetch;
+	/** Client-side HTTP timeout for mutations; defaults to TELEGRAM_HTTP_TIMEOUT_MS. */
+	timeoutMs?: number;
 }
 
 /**
@@ -144,6 +174,9 @@ export class TelegramTransport implements GatewayTransport {
 	private controller: AbortController | undefined;
 	private running = false;
 	private lastTransientLogged: string | undefined;
+	/** True while the gateway delivers a reply: the poll loop must hold. */
+	private paused = false;
+	private pollResumeWaiters: Array<() => void> = [];
 
 	constructor(client: TelegramClient, options: TelegramTransportOptions = {}) {
 		this.client = client;
@@ -166,6 +199,8 @@ export class TelegramTransport implements GatewayTransport {
 	disconnect(): Promise<void> {
 		this.stopped = true;
 		this.running = false;
+		// Wake a paused loop so it observes `stopped` and exits cleanly.
+		this.resumePolling();
 		this.controller?.abort();
 		this.controller = undefined;
 		return Promise.resolve();
@@ -178,6 +213,33 @@ export class TelegramTransport implements GatewayTransport {
 
 	onMessage(handler: (msg: GatewayMessage) => void): void {
 		this.handler = handler;
+	}
+
+	/**
+	 * Hold the poll loop while a reply is delivered (ADR-0039): Telegram
+	 * queues outbound calls behind an open getUpdates long-poll, so a
+	 * streamed edit can hang until the poll window expires (observed
+	 * 2026-08-13: every single-message reply took ~30s — exactly the poll
+	 * window — with edits timing out at 15s). Pausing aborts the in-flight
+	 * poll and keeps the loop idle until resume.
+	 */
+	pausePolling(): void {
+		if (this.paused) return;
+		this.paused = true;
+		this.controller?.abort();
+	}
+
+	resumePolling(): void {
+		if (!this.paused) return;
+		this.paused = false;
+		const waiters = this.pollResumeWaiters.splice(0);
+		for (const resolve of waiters) resolve();
+	}
+
+	private waitForPollResume(): Promise<void> {
+		return new Promise((resolve) => {
+			this.pollResumeWaiters.push(resolve);
+		});
 	}
 
 	/** Single-message send that returns the message id (for streaming edits). */
@@ -212,12 +274,17 @@ export class TelegramTransport implements GatewayTransport {
 
 	private async loop(): Promise<void> {
 		while (!this.stopped) {
+			if (this.paused) {
+				await this.waitForPollResume();
+				continue;
+			}
 			this.controller = new AbortController();
 			try {
 				await this.pollOnce(this.controller.signal);
 				if (this.stopped) break;
 			} catch (error) {
 				if (this.stopped) break;
+				if (this.paused) continue; // the pause aborted the in-flight poll — silent
 				if (isFatalTelegramError(error)) {
 					const message = error instanceof Error ? error.message : String(error);
 					this.logger(`telegram polling stopped (fatal): ${message}`);
@@ -291,11 +358,13 @@ export class HttpTelegramClient implements TelegramClient {
 	private readonly token: string;
 	private readonly baseUrl: string;
 	private readonly fetchFn: typeof fetch;
+	private readonly timeoutMs: number;
 
 	constructor(options: HttpTelegramClientOptions) {
 		this.token = options.token;
 		this.baseUrl = (options.baseUrl ?? "https://api.telegram.org").replace(/\/+$/, "");
 		this.fetchFn = options.fetchFn ?? globalThis.fetch.bind(globalThis);
+		this.timeoutMs = options.timeoutMs ?? TELEGRAM_HTTP_TIMEOUT_MS;
 	}
 
 	private url(method: string): string {
@@ -303,25 +372,37 @@ export class HttpTelegramClient implements TelegramClient {
 	}
 
 	async sendMessage(input: { chatId: string; text: string }): Promise<number> {
-		const data = await this.post("sendMessage", { chat_id: input.chatId, text: input.text });
+		const data = await this.post(
+			"sendMessage",
+			{ chat_id: input.chatId, text: input.text },
+			undefined,
+			this.timeoutMs,
+		);
 		const result = data.result as { message_id?: number } | undefined;
 		return typeof result?.message_id === "number" ? result.message_id : 0;
 	}
 
 	async editMessageText(input: { chatId: string; messageId: number; text: string }): Promise<void> {
-		await this.post("editMessageText", {
-			chat_id: input.chatId,
-			message_id: input.messageId,
-			text: input.text,
-		});
+		await this.post(
+			"editMessageText",
+			{ chat_id: input.chatId, message_id: input.messageId, text: input.text },
+			undefined,
+			this.timeoutMs,
+		);
 	}
 
 	async sendChatAction(input: { chatId: string; action: string }): Promise<void> {
-		await this.post("sendChatAction", { chat_id: input.chatId, action: input.action });
+		await this.post("sendChatAction", { chat_id: input.chatId, action: input.action }, undefined, this.timeoutMs);
 	}
 
 	async getUpdates(input: { offset?: number; timeout?: number; signal?: AbortSignal }): Promise<TelegramUpdate[]> {
-		const data = await this.post("getUpdates", { offset: input.offset, timeout: input.timeout }, input.signal);
+		const pollSeconds = Math.min(TELEGRAM_LONG_POLL_MAX_SECONDS, Math.max(1, input.timeout ?? 1));
+		const data = await this.post(
+			"getUpdates",
+			{ offset: input.offset, timeout: input.timeout },
+			timedSignal(telegramRequestTimeoutMs("poll", this.timeoutMs, pollSeconds), input.signal),
+			undefined,
+		);
 		const result = data.result;
 		return Array.isArray(result) ? (result as TelegramUpdate[]) : [];
 	}
@@ -330,12 +411,13 @@ export class HttpTelegramClient implements TelegramClient {
 		method: string,
 		body: Record<string, unknown>,
 		signal?: AbortSignal,
+		requestTimeoutMs?: number,
 	): Promise<{ ok: boolean; result?: unknown; description?: string; error_code?: number }> {
 		const res = await this.fetchFn(this.url(method), {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify(body),
-			signal,
+			signal: requestTimeoutMs !== undefined ? timedSignal(requestTimeoutMs, signal) : signal,
 		});
 		if (!res.ok) {
 			throw Object.assign(new Error(`telegram ${method} HTTP ${res.status}`), { status: res.status });
