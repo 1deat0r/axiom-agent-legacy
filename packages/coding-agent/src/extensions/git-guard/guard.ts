@@ -1,5 +1,5 @@
 /**
- * Git guard (ADR-0048) - pure matcher.
+ * Git guard (ADR-0049) - pure matcher.
  *
  * Detects destructive git invocations in shell text (the bash tool's command
  * or an ipython cell) and returns a block decision naming the pattern. This is

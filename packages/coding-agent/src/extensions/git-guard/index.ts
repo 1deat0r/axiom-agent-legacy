@@ -1,5 +1,5 @@
 /**
- * Git guard extension (ADR-0048) - tool seam wiring.
+ * Git guard extension (ADR-0049) - tool seam wiring.
  *
  * Ships the git-guard matcher on the `tool_call` seam for the freeform shell
  * tools (`bash`, `ipython`), gated exactly like the security fence: INERT

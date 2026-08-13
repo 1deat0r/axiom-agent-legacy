@@ -191,7 +191,7 @@ the ADR-0019 OS-sandbox tier, never string-fenced.
 _Avoid_: Firewall (a wall, not a fence — the fence is one rung of the ladder)
 
 **Git guard**:
-The ADR-0048 rung-3 addition, on the same `tool_call` seam and inert unless
+The ADR-0049 rung-3 addition, on the same `tool_call` seam and inert unless
 anchored: `checkGitCommand` scans the freeform shell tools (`bash` command,
 `ipython` code) against a port of the git-guardrails skill blocklist (push in
 all forms, reset --hard, clean -f variants, branch -D, checkout/restore ".")

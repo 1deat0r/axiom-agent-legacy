@@ -1,4 +1,4 @@
-# ADR-0048: Git guard (destructive-git block on shell tool calls)
+# ADR-0049: Git guard (destructive-git block on shell tool calls)
 
 **Status:** accepted
 **Date:** 2026-08-14

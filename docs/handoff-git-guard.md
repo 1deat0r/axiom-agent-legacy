@@ -1,4 +1,4 @@
-# Handoff: git guard (ADR-0048)
+# Handoff: git guard (ADR-0049)
 
 ## What was done
 
