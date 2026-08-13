@@ -1,0 +1,153 @@
+/**
+ * The peers facade: register a run, heartbeat, set intent, send messages
+ * (directed or group), and read the inbox. All state is plain files under a
+ * scope dir; every dependency is injectable so tests never touch real pids.
+ */
+
+import { randomUUID } from "node:crypto";
+import { appendBoardEntry, readBoardSince, readCursor, writeCursor } from "./board.js";
+import { DEFAULT_STALE_MS, isPeerAlive, listPresence, unregisterPresence, writePresence } from "./presence.js";
+import type { BoardEntry, PeerIdentity, PeerSummary, PeersListResult, PresenceRecord } from "./types.js";
+
+export const MAX_MESSAGE_LENGTH = 4000;
+const TARGET_PATTERN = /^[A-Za-z0-9-]{1,64}$/;
+
+export interface PeersDeps {
+	now?: () => number;
+	staleMs?: number;
+	pid?: number;
+	pidAlive?: (pid: number) => boolean;
+	uuid?: () => string;
+}
+
+export interface RegisterOptions {
+	model?: string;
+	intent?: string;
+}
+
+export function defaultPidAlive(pid: number): boolean {
+	if (pid <= 0) return false;
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch (error) {
+		return (error as NodeJS.ErrnoException).code !== "ESRCH";
+	}
+}
+
+/** Publish this run's presence and return its run ID. */
+export function registerRun(
+	scope: string,
+	identity: PeerIdentity,
+	options: RegisterOptions = {},
+	deps: PeersDeps = {},
+): string {
+	const now = deps.now ?? Date.now;
+	const runId = deps.uuid ? deps.uuid() : randomUUID();
+	const record: PresenceRecord = {
+		instanceId: identity.instanceId,
+		runId,
+		pid: deps.pid ?? process.pid,
+		model: options.model ?? "",
+		intent: options.intent ?? "",
+		startedAt: new Date(now()).toISOString(),
+		heartbeatAt: new Date(now()).toISOString(),
+	};
+	writePresence(scope, record);
+	return runId;
+}
+
+/** Update this run's intent so peers can see what it is doing. */
+export function setIntent(scope: string, runId: string, intent: string, deps: PeersDeps = {}): boolean {
+	const now = deps.now ?? Date.now;
+	const record = listPresence(scope).find((r) => r.runId === runId);
+	if (!record) return false;
+	writePresence(scope, { ...record, intent: intent.slice(0, 500), heartbeatAt: new Date(now()).toISOString() });
+	return true;
+}
+
+/** Bump this run's heartbeat; false when the presence record is gone. */
+export function heartbeatRun(scope: string, runId: string, deps: PeersDeps = {}): boolean {
+	const now = deps.now ?? Date.now;
+	const record = listPresence(scope).find((r) => r.runId === runId);
+	if (!record) return false;
+	writePresence(scope, { ...record, heartbeatAt: new Date(now()).toISOString() });
+	return true;
+}
+
+/** Append a directed (to=<instanceId>) or group (to="*") message. */
+export function sendPeerMessage(
+	scope: string,
+	identity: PeerIdentity,
+	runId: string,
+	to: string,
+	text: string,
+	deps: PeersDeps = {},
+): void {
+	const trimmed = text.trim();
+	if (trimmed === "") throw new Error("peer message text is empty");
+	if (trimmed.length > MAX_MESSAGE_LENGTH) {
+		throw new Error(`peer message exceeds ${MAX_MESSAGE_LENGTH} characters`);
+	}
+	if (to !== "*" && !TARGET_PATTERN.test(to)) {
+		throw new Error(`invalid peer target: ${to}`);
+	}
+	const now = deps.now ?? Date.now;
+	const entry: BoardEntry = {
+		ts: new Date(now()).toISOString(),
+		from: identity.instanceId,
+		fromRun: runId,
+		to,
+		kind: to === "*" ? "group" : "msg",
+		text: trimmed,
+	};
+	appendBoardEntry(scope, entry);
+}
+
+function inboxMessages(scope: string, identity: PeerIdentity, markRead: boolean): { messages: BoardEntry[] } {
+	const cursor = readCursor(scope, identity.instanceId);
+	const { entries, nextCursor } = readBoardSince(scope, cursor);
+	const mine = entries.filter((e) => e.to === "*" || e.to === identity.instanceId);
+	if (markRead) writeCursor(scope, identity.instanceId, nextCursor);
+	return { messages: mine };
+}
+
+/** Read unread messages (group + directed at me) and mark them read. */
+export function inbox(scope: string, identity: PeerIdentity): { messages: BoardEntry[] } {
+	return inboxMessages(scope, identity, true);
+}
+
+/** Read unread messages without marking them read (CLI peek). */
+export function peekInbox(scope: string, identity: PeerIdentity): { messages: BoardEntry[] } {
+	return inboxMessages(scope, identity, false);
+}
+
+/** List peers: own runs, then others split into active and stale. */
+export function listPeers(scope: string, identity: PeerIdentity, deps: PeersDeps = {}): PeersListResult {
+	const now = deps.now ?? Date.now;
+	const staleMs = deps.staleMs ?? DEFAULT_STALE_MS;
+	const pidAlive = deps.pidAlive ?? defaultPidAlive;
+	const records = listPresence(scope);
+	const summarize = (r: PresenceRecord): PeerSummary => ({
+		instanceId: r.instanceId,
+		shortId: r.instanceId.slice(0, 8),
+		runId: r.runId,
+		pid: r.pid,
+		model: r.model,
+		intent: r.intent,
+		startedAt: r.startedAt,
+		lastSeen: r.heartbeatAt,
+		status: isPeerAlive(r, now(), staleMs, pidAlive) ? "active" : "stale",
+	});
+	const summaries = records.map(summarize);
+	return {
+		self: summaries.filter((s) => s.instanceId === identity.instanceId),
+		active: summaries.filter((s) => s.instanceId !== identity.instanceId && s.status === "active"),
+		stale: summaries.filter((s) => s.instanceId !== identity.instanceId && s.status === "stale"),
+	};
+}
+
+/** Remove this run's presence (session shutdown). */
+export function unregisterRun(scope: string, runId: string): void {
+	unregisterPresence(scope, runId);
+}

@@ -29,6 +29,7 @@ import { handleGatewayCommand } from "./cli/gateway-command.js";
 import { buildInitialMessage } from "./cli/initial-message.js";
 import { listModels } from "./cli/list-models.js";
 import { installOwnedSessionRecoveryTracking, isOwnedSessionWorkerProcess } from "./cli/owned-session-worker.js";
+import { handlePeersCommand } from "./cli/peers-command.js";
 import { handleProfileCommand } from "./cli/profile-command.js";
 import { handleProjectsCommand } from "./cli/projects-command.js";
 import { handlePublicCommand } from "./cli/public-command.js";
@@ -1131,7 +1132,678 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	if (await handleSkillCheckCommand(args)) {
-		return;
+		if (await handlePeersCommand(args)) {
+			return;
+		}
+
+		const explicitAgentsView = publicCommand.explicitAgentsView;
+
+		const parsed = parseArgs(args);
+		if (parsed.diagnostics.length > 0) {
+			for (const d of parsed.diagnostics) {
+				const color = d.type === "error" ? chalk.red : chalk.yellow;
+				console.error(color(`${d.type === "error" ? "Error" : "Warning"}: ${d.message}`));
+			}
+			if (parsed.diagnostics.some((d) => d.type === "error")) {
+				process.exit(1);
+			}
+		}
+		time("parseArgs");
+		const appMode = resolveAppMode(parsed, process.stdin.isTTY);
+
+		if (shouldRejectNonInteractiveAttach(publicCommand.attachAgent, appMode)) {
+			console.error(chalk.red("Error: attach requires an interactive terminal"));
+			process.exit(1);
+		}
+		if (shouldRejectBareResume(parsed.resume)) {
+			console.error(
+				chalk.red("Error: --resume requires a session id or path; browse sessions with left-arrow from a chat"),
+			);
+			process.exit(1);
+		}
+		setLogContext({ mode: appMode });
+		const shouldTakeOverStdout = appMode !== "interactive";
+		if (shouldTakeOverStdout) {
+			takeOverStdout();
+		}
+
+		if (parsed.version) {
+			console.log(`${AXIOM_LOGO}\naxiom ${VERSION}`);
+			process.exit(0);
+		}
+		if (parsed.help) {
+			console.log(formatTopLevelHelp());
+			process.exit(0);
+		}
+
+		if (parsed.export) {
+			let result: string;
+			try {
+				const outputPath = parsed.messages.length > 0 ? parsed.messages[0] : undefined;
+				result = await exportFromFile(parsed.export, outputPath);
+			} catch (error: unknown) {
+				const message = error instanceof Error ? error.message : "Failed to export session";
+				console.error(chalk.red(`Error: ${message}`));
+				process.exit(1);
+			}
+			console.log(`Exported to: ${result}`);
+			process.exit(0);
+		}
+
+		if ((parsed.mode === "rpc" || parsed.mode === "daemon") && parsed.fileArgs.length > 0) {
+			console.error(chalk.red("Error: @file arguments are not supported in RPC or daemon mode"));
+			process.exit(1);
+		}
+
+		validateForkFlags(parsed);
+
+		const cwd = parsed.cwd ? resolve(expandTildePath(parsed.cwd)) : process.cwd();
+		if (parsed.cwd) {
+			try {
+				process.chdir(cwd);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				console.error(chalk.red(`Error: Cannot use cwd ${cwd}: ${message}`));
+				process.exit(1);
+			}
+		}
+
+		// Run migrations (pass cwd for project-local migrations)
+		const { migratedAuthProviders: migratedProviders, deprecationWarnings } = runMigrations(cwd);
+		time("runMigrations");
+
+		const agentDir = getAgentDir();
+		const startupSettingsManager = SettingsManager.create(cwd, agentDir);
+		reportDiagnostics(collectSettingsDiagnostics(startupSettingsManager, "startup session lookup"));
+		const startupBenchmark = isTruthyEnvFlag(process.env.PI_STARTUP_BENCHMARK);
+		if (startupBenchmark && appMode !== "interactive") {
+			console.error(chalk.red("Error: PI_STARTUP_BENCHMARK only supports interactive mode"));
+			process.exit(1);
+		}
+		// Programmatic factories are process-local functions and cannot be serialized to a daemon worker.
+		const hasProcessLocalExtensionFactories = extensionFactories.length > 0;
+		const useDaemonClient = shouldUseDaemonClientRuntime({
+			appMode,
+			startupBenchmark,
+			noSession: parsed.noSession,
+			listModels: parsed.listModels,
+			ownedSessionWorker: isOwnedSessionWorkerProcess(),
+			hasProcessLocalExtensionFactories,
+		});
+		const useDaemonInteractive = useDaemonClient && appMode === "interactive";
+
+		// Decide the final runtime cwd before creating cwd-bound runtime services.
+		// --resume may select a session from another project, so project-local
+		// settings, resources, provider registrations, and models must be resolved only after
+		// the target session cwd is known. The startup-cwd settings manager is used only for
+		// sessionDir lookup during session selection.
+		const sessionDir =
+			(parsed.sessionDir ? expandTildePath(parsed.sessionDir) : undefined) ??
+			getSessionDirEnvOverride() ??
+			startupSettingsManager.getSessionDir();
+		const daemonSocketPath = parsed.daemonSocket ?? defaultDaemonSocketPath();
+		// Kick off daemon spawn/readiness immediately so it overlaps session-manager
+		// and runtime-services preparation; attach only connects to an existing daemon.
+		let daemonReady = shouldEnsureInteractiveDaemonForStartup(useDaemonClient, publicCommand.attachAgent)
+			? ensureInteractiveDaemonRunning(daemonSocketPath)
+			: undefined;
+		// Errors are rethrown at the await sites below; this only avoids an unhandled
+		// rejection if startup exits before reaching them.
+		daemonReady?.catch(() => {});
+		const resumeSelector = getResumeSelector(parsed);
+		const shouldLookupDaemonActiveSession = shouldEnsureDaemonBeforeActiveSessionLookup({
+			useDaemonInteractive,
+			resumeSelector,
+			explicitAttach: publicCommand.attachAgent !== undefined,
+		});
+		if (shouldLookupDaemonActiveSession && daemonReady) {
+			daemonReady = (await awaitDaemonReady(daemonReady)).ready;
+		}
+		let activeDaemonSessionSummary: SessionSummary | undefined;
+		if (shouldLookupDaemonActiveSession && resumeSelector) {
+			try {
+				activeDaemonSessionSummary = await findActiveDaemonSessionSummaryForInteractiveStartup(
+					daemonSocketPath,
+					resumeSelector,
+					{ fallbackOnError: !publicCommand.attachAgent },
+				);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				console.error(chalk.red(`Error: Could not look up active agent '${resumeSelector}': ${message}`));
+				process.exit(1);
+			}
+		}
+		if (publicCommand.attachAgent && !activeDaemonSessionSummary) {
+			console.error(chalk.red(`Error: No active agent found matching '${publicCommand.attachAgent}'`));
+			process.exit(1);
+		}
+		let sessionManager: SessionManager;
+		if (activeDaemonSessionSummary) {
+			sessionManager = createSessionManagerForActiveDaemonSummary(activeDaemonSessionSummary, cwd);
+		} else if (
+			useDaemonInteractive &&
+			shouldUseEphemeralSessionManagerForDaemonInteractive({
+				resume: parsed.resume,
+				continue: parsed.continue,
+				fork: parsed.fork,
+			})
+		) {
+			sessionManager = SessionManager.inMemory(cwd);
+		} else {
+			try {
+				sessionManager = await createSessionManager(parsed, cwd, sessionDir);
+			} catch (error) {
+				if (!(error instanceof SessionSelectorError)) {
+					throw error;
+				}
+				const suggestion =
+					error instanceof SessionSelectorNotFoundError && error.suggestion
+						? ` Did you mean '${error.suggestion}'?`
+						: "";
+				console.error(chalk.red(`Error: ${error.message}.${suggestion}`));
+				console.error(chalk.dim(`Open ${APP_NAME} and press left-arrow to browse sessions.`));
+				process.exit(1);
+			}
+		}
+		const missingSessionCwdIssue = getMissingSessionCwdIssue(sessionManager, cwd);
+		if (missingSessionCwdIssue) {
+			if (appMode === "interactive") {
+				const selectedCwd = await promptForMissingSessionCwd(missingSessionCwdIssue, startupSettingsManager);
+				if (!selectedCwd) {
+					process.exit(0);
+				}
+				sessionManager = SessionManager.open(missingSessionCwdIssue.sessionFile!, sessionDir, selectedCwd);
+			} else {
+				console.error(chalk.red(new MissingSessionCwdError(missingSessionCwdIssue).message));
+				process.exit(1);
+			}
+		}
+		time("createSessionManager");
+
+		const telemetrySettingsManager =
+			sessionManager.getCwd() === cwd
+				? startupSettingsManager
+				: SettingsManager.create(sessionManager.getCwd(), agentDir);
+		const telemetryDisabled = isTelemetryEnabled(telemetrySettingsManager) ? undefined : true;
+		const defaultSessionConfig = runtimeConfigFromArgs(
+			parsed,
+			sessionManager.getCwd(),
+			agentDir,
+			sessionDir,
+			appMode,
+			telemetryDisabled,
+		);
+		// Verifier/headless clients pass initialGoal in each create request. The long-lived
+		// daemon fallback must not seed that goal into unrelated future sessions.
+		const daemonDefaultSessionConfig = daemonServerDefaultSessionConfig(defaultSessionConfig);
+		const runtimeDefaultSessionConfig = appMode === "daemon" ? daemonDefaultSessionConfig : defaultSessionConfig;
+		const createRuntime: CreateAgentSessionRuntimeFactory = async ({
+			cwd,
+			agentDir,
+			sessionManager,
+			sessionStartEvent,
+			sessionConfig,
+			sessionOptions: runtimeSessionOptions,
+		}) => {
+			const config = mergeAgentSessionRuntimeConfig(runtimeDefaultSessionConfig, sessionConfig);
+			const prepared = await prepareRuntimeServices({
+				config,
+				cwd,
+				agentDir,
+				sessionManager,
+				extensionFactories,
+				sessionOptionsOverride: runtimeSessionOptions,
+			});
+			const { services, sessionOptions, diagnostics } = prepared;
+			const resolvedSessionOptions = resolveRuntimeSessionOptions(sessionOptions, runtimeSessionOptions);
+
+			const created = await createAgentSessionFromServices({
+				services,
+				sessionManager,
+				sessionStartEvent,
+				...resolvedSessionOptions,
+				// Main agents boot their kernel in the background at session creation;
+				// subagent sessions (rlmDepth > 0) keep the lazy first-call start.
+				prewarmIpythonKernel: true,
+				// Read serializedRefine from the merged runtime config (passed
+				// from the JSON/print client through AgentSessionRuntimeConfig)
+				// so it survives the daemon worker's appMode="daemon" context.
+				serializedRefine: config.serializedRefine ?? false,
+				executionMode: config.executionMode,
+				telemetryDisabled: config.telemetryDisabled,
+				// Only seed initial goal for top-level sessions (rlmDepth 0).
+				initialGoal: (runtimeSessionOptions?.rlmDepth ?? 0) === 0 ? config.initialGoal : undefined,
+			});
+			const cliThinkingOverride = config.thinking !== undefined || prepared.cliThinkingFromModel;
+			if (created.session.model && cliThinkingOverride) {
+				created.session.setThinkingLevel(created.session.thinkingLevel);
+			}
+
+			return {
+				...created,
+				services,
+				diagnostics,
+			};
+		};
+		time("createRuntime");
+		// Daemon mode never uses the bootstrap runtime, so skip the heavy
+		// createAgentSessionRuntime below and start listening immediately; sessions
+		// are created on demand through the daemon protocol via createRuntime.
+		// --list-models still takes the full path to print and exit.
+		if (appMode === "daemon" && parsed.listModels === undefined) {
+			printTimings();
+			if (isDaemonWorkerProcess()) {
+				await runDaemonMode({
+					socketPath: parsed.daemonSocket,
+					defaultSessionConfig: daemonDefaultSessionConfig,
+					createRuntime,
+					worker: {
+						authenticationToken: requireDaemonWorkerAuthenticationToken(),
+						restoreActiveSessionId: process.env[DAEMON_WORKER_ACTIVE_SESSION_ID_ENV],
+					},
+				});
+			} else {
+				await runDaemonSupervisorMode({
+					socketPath: parsed.daemonSocket,
+					defaultSessionConfig: daemonDefaultSessionConfig,
+				});
+			}
+			return;
+		}
+		if (useDaemonInteractive) {
+			const prepared = await prepareRuntimeServices({
+				config: defaultSessionConfig,
+				cwd: sessionManager.getCwd(),
+				agentDir,
+				sessionManager,
+				extensionFactories,
+			});
+			const { services, scopedModels } = prepared;
+			const { settingsManager } = services;
+
+			const startupModel = await resolvePreparedStartupModel({ prepared, sessionManager });
+
+			const stdinContent = await readPipedStdin();
+			time("readPipedStdin");
+
+			const { initialMessage, initialImages } = await prepareInitialMessage(
+				parsed,
+				settingsManager.getImageAutoResize(),
+				stdinContent,
+			);
+			time("prepareInitialMessage");
+			initTheme(settingsManager.getTheme(), true);
+			time("initTheme");
+
+			if (deprecationWarnings.length > 0) {
+				await showDeprecationWarnings(deprecationWarnings);
+			}
+
+			reportDiagnostics(prepared.diagnostics);
+			if (prepared.diagnostics.some((diagnostic) => diagnostic.type === "error")) {
+				process.exit(1);
+			}
+			time("prepareInteractiveServices");
+
+			if (scopedModels.length > 0 && (parsed.verbose || !settingsManager.getQuietStartup())) {
+				const modelList = scopedModels
+					.map((sm) => {
+						const thinkingStr = sm.thinkingLevel ? `:${sm.thinkingLevel}` : "";
+						return `${sm.model.id}${thinkingStr}`;
+					})
+					.join(", ");
+				console.log(chalk.dim(`Model scope: ${modelList} ${chalk.gray("(Ctrl+P to cycle)")}`));
+			}
+
+			const promptStashStore = new ClientPromptStashStore();
+			const daemonUiServices = createInteractiveModeUiServicesFromServices({
+				services,
+				sessionManager,
+			});
+			const launchAgentsView = async (initialSession?: SessionSummary, initialScopeKey?: AgentsViewScopeKey) => {
+				await runAgentsViewMode({
+					socketPath: daemonSocketPath,
+					config: defaultSessionConfig,
+					uiServices: daemonUiServices,
+					recoverDaemon: () => ensureInteractiveDaemonRunning(daemonSocketPath),
+					createUiServicesForSession: async (summary) => {
+						const attachedSessionManager = createSessionManagerForActiveDaemonSummary(
+							summary,
+							sessionManager.getCwd(),
+						);
+						const attachedPrepared = await prepareRuntimeServices({
+							config: mergeAgentSessionRuntimeConfig(defaultSessionConfig, {
+								cwd: attachedSessionManager.getCwd(),
+							}),
+							cwd: attachedSessionManager.getCwd(),
+							agentDir,
+							sessionManager: attachedSessionManager,
+							extensionFactories,
+						});
+						return createInteractiveModeUiServicesFromServices({
+							services: attachedPrepared.services,
+							sessionManager: attachedSessionManager,
+						});
+					},
+					migratedProviders,
+					modelFallbackMessage: startupModel.modelFallbackMessage,
+					promptStashStore,
+					startupModelId: startupModel.model?.id,
+					initialSession,
+					initialScopeKey,
+					verbose: parsed.verbose,
+				});
+			};
+			if (
+				shouldOpenAgentsViewForDaemonInteractive({
+					useDaemonInteractive: useDaemonInteractive && !parsed.noSession,
+					explicitAgentsView,
+					needsOnboarding: shouldRunOnboarding({
+						settingsManager,
+						modelRegistry: services.modelRegistry,
+						model: startupModel.model,
+					}),
+					resume: parsed.resume,
+					continue: parsed.continue,
+					fork: parsed.fork,
+				})
+			) {
+				daemonReady = (await awaitDaemonReady(daemonReady)).ready;
+				await preloadCodeHighlighter();
+				printTimings();
+				await launchAgentsView();
+				return;
+			}
+
+			daemonReady = (await awaitDaemonReady(daemonReady)).ready;
+			// A fresh default chat opens a real but message-less session; the lifecycle
+			// axis treats it as a draft (hidden, discarded on detach if never used), so
+			// no DeferredAgentConnection is needed to avoid creating it up front.
+			const isFreshDefaultSession =
+				!activeDaemonSessionSummary && !getInteractiveDaemonSessionPath(parsed, sessionManager);
+			const { connection, summary } = await createDaemonClientConnection({
+				socketPath: daemonSocketPath,
+				config: defaultSessionConfig,
+				activeSessionId: activeDaemonSessionSummary
+					? getDaemonSummaryActiveSessionId(activeDaemonSessionSummary)
+					: undefined,
+				sessionPath: getInteractiveDaemonSessionPath(parsed, sessionManager),
+				clientOwned: parsed.noSession,
+				noSession: parsed.noSession,
+				supportsExtensionUi: true,
+			});
+			const agentConnection: AgentConnection = connection;
+			const attachModelFallbackMessage = isFreshDefaultSession
+				? startupModel.modelFallbackMessage
+				: resolveAttachModelFallbackMessage(summary, startupModel.modelFallbackMessage);
+
+			const interactiveMode = new InteractiveMode({
+				agentConnection,
+				daemonSocketPath,
+				uiServices: daemonUiServices,
+				promptStashStore,
+				promptStashSessionId: summary.sessionId,
+				bindLocalSessionExtensions: false,
+				migratedProviders,
+				modelFallbackMessage: attachModelFallbackMessage,
+				initialMessage,
+				initialImages,
+				initialMessages: parsed.messages,
+				verbose: parsed.verbose,
+				// Resumed/attached daemon sessions are part of the same fleet; left
+				// arrow takes them to the agents view like any other session. The agents
+				// view was not rendered here, so we intentionally leave
+				// agentsViewOwnsStartupNotices unset and let the in-session fallback run.
+				returnToAgentsView: !parsed.noSession,
+				sessionDepth: summary.rlmDepth,
+				// Direct launch has only the attached summary; the live+passive+saved
+				// unified catalog index is not built until the agents view opens. Retained
+				// child snapshots augment this running-child fallback inside chat.
+				sessionHasChildren: summary.hasRunningRlmChildren === true,
+			});
+
+			await preloadCodeHighlighter();
+			printTimings();
+			const interactiveResult = await interactiveMode.run();
+			if (parsed.noSession) {
+				return;
+			}
+			const returnedSummary = {
+				...summary,
+				...interactiveResult.source,
+				id: interactiveResult.source.activeSessionId ?? summary.id,
+			};
+			const initialScopeKey =
+				interactiveResult.type === "scoped_agents_view"
+					? {
+							sessionId: interactiveResult.source.sessionId,
+							activeSessionId: interactiveResult.source.activeSessionId,
+						}
+					: undefined;
+			await launchAgentsView(returnedSummary, initialScopeKey);
+			return;
+		}
+		if (useDaemonClient) {
+			const settingsManager = SettingsManager.create(sessionManager.getCwd(), agentDir);
+			let stdinContent: string | undefined;
+			if (appMode !== "rpc" && appMode !== "acp") {
+				stdinContent = await readPipedStdin();
+			}
+			time("readPipedStdin");
+			const { initialMessage, initialImages } = await prepareInitialMessage(
+				parsed,
+				settingsManager.getImageAutoResize(),
+				stdinContent,
+			);
+			time("prepareInitialMessage");
+			initTheme(settingsManager.getTheme(), false);
+			time("initTheme");
+
+			daemonReady = (await awaitDaemonReady(daemonReady)).ready;
+			let connection: DaemonAgentConnection;
+			let summary: SessionSummary;
+			try {
+				({ connection, summary } = await createDaemonClientConnection({
+					socketPath: daemonSocketPath,
+					config: defaultSessionConfig,
+					sessionPath: parsed.noSession ? undefined : sessionManager.getSessionFile(),
+					continueRecent: parsed.continue,
+					clientOwned: true,
+					noSession: parsed.noSession,
+					supportsExtensionUi: appMode === "rpc",
+				}));
+			} catch (error) {
+				if (error instanceof SessionAlreadyActiveError) {
+					console.error(chalk.red(`Error: ${error.message}`));
+					process.exit(1);
+				}
+				throw error;
+			}
+			const diagnostics = summary.diagnostics ?? [];
+			reportDiagnostics(diagnostics);
+			if (diagnostics.some((diagnostic) => diagnostic.type === "error")) {
+				await connection.dispose();
+				process.exit(1);
+			}
+			if (!summary.model) {
+				console.error(chalk.red(summary.modelFallbackMessage ?? formatNoModelsAvailableMessage()));
+				await connection.dispose();
+				process.exit(1);
+			}
+
+			printTimings();
+			if (appMode === "rpc") {
+				return await runRpcModeWithConnection(connection);
+			}
+			if (appMode === "acp") {
+				return await runAcpModeWithConnection(connection);
+			}
+			const exitCode = await runPrintModeWithConnection(connection, {
+				mode: toPrintOutputMode(appMode),
+				messages: parsed.messages,
+				initialMessage,
+				initialImages,
+			});
+			stopThemeWatcher();
+			restoreStdout();
+			if (exitCode !== 0) {
+				process.exitCode = exitCode;
+			}
+			return;
+		}
+
+		let runtime: AgentSessionRuntime;
+		try {
+			runtime = await createAgentSessionRuntime(createRuntime, {
+				cwd: sessionManager.getCwd(),
+				agentDir,
+				sessionManager,
+				sessionConfig: defaultSessionConfig,
+			});
+		} catch (error) {
+			if (error instanceof SessionAlreadyActiveError) {
+				console.error(chalk.red(`Error: ${error.message}`));
+				process.exit(1);
+			}
+			throw error;
+		}
+		const { services, session, modelFallbackMessage } = runtime;
+		installOwnedSessionRecoveryTracking(runtime);
+		const { settingsManager, modelRegistry } = services;
+
+		if (parsed.listModels !== undefined) {
+			const searchPattern = typeof parsed.listModels === "string" ? parsed.listModels : undefined;
+			await listModels(modelRegistry, searchPattern);
+			process.exit(0);
+		}
+
+		// Read piped stdin content (if any) - skip for RPC/daemon modes which use other transports
+		let stdinContent: string | undefined;
+		if (appMode !== "rpc" && appMode !== "acp" && appMode !== "daemon") {
+			stdinContent = await readPipedStdin();
+		}
+		time("readPipedStdin");
+
+		const { initialMessage, initialImages } = await prepareInitialMessage(
+			parsed,
+			settingsManager.getImageAutoResize(),
+			stdinContent,
+		);
+		time("prepareInitialMessage");
+		initTheme(settingsManager.getTheme(), appMode === "interactive");
+		time("initTheme");
+
+		// Show deprecation warnings in interactive mode
+		if (appMode === "interactive" && deprecationWarnings.length > 0) {
+			await showDeprecationWarnings(deprecationWarnings);
+		}
+
+		const scopedModels = [...session.scopedModels];
+		time("resolveModelScope");
+		reportDiagnostics(runtime.diagnostics);
+		if (runtime.diagnostics.some((diagnostic) => diagnostic.type === "error")) {
+			process.exit(1);
+		}
+		time("createAgentSession");
+
+		if (appMode !== "interactive" && appMode !== "daemon" && !session.model) {
+			console.error(chalk.red(formatNoModelsAvailableMessage()));
+			process.exit(1);
+		}
+
+		if (appMode === "rpc") {
+			printTimings();
+			await runRpcMode(runtime);
+		} else if (appMode === "acp") {
+			printTimings();
+			await runAcpMode(runtime);
+		} else if (appMode === "interactive") {
+			if (explicitAgentsView) {
+				console.error(chalk.yellow("Warning: the agents view needs the daemon; opening a normal chat instead"));
+			}
+			if (scopedModels.length > 0 && (parsed.verbose || !settingsManager.getQuietStartup())) {
+				const modelList = scopedModels
+					.map((sm) => {
+						const thinkingStr = sm.thinkingLevel ? `:${sm.thinkingLevel}` : "";
+						return `${sm.model.id}${thinkingStr}`;
+					})
+					.join(", ");
+				console.log(chalk.dim(`Model scope: ${modelList} ${chalk.gray("(Ctrl+P to cycle)")}`));
+			}
+
+			const interactiveMode = new InteractiveMode({
+				agentConnection: new InProcessAgentConnection(runtime),
+				localSessionHost: createInteractiveModeLocalSessionHost(runtime),
+				promptStashStore: new ClientPromptStashStore(),
+				promptStashSessionId: session.sessionId,
+				bindLocalSessionExtensions: true,
+				migratedProviders,
+				modelFallbackMessage,
+				initialMessage,
+				initialImages,
+				initialMessages: parsed.messages,
+				verbose: parsed.verbose,
+			});
+			if (startupBenchmark) {
+				await interactiveMode.init();
+				time("interactiveMode.init");
+				printTimings();
+				interactiveMode.stop();
+				stopThemeWatcher();
+				if (process.stdout.writableLength > 0) {
+					await new Promise<void>((resolve) => process.stdout.once("drain", resolve));
+				}
+				if (process.stderr.writableLength > 0) {
+					await new Promise<void>((resolve) => process.stderr.once("drain", resolve));
+				}
+				return;
+			}
+
+			await preloadCodeHighlighter();
+			printTimings();
+			await interactiveMode.run();
+		} else {
+			printTimings();
+			const exitCode = await runPrintMode(runtime, {
+				mode: toPrintOutputMode(appMode),
+				messages: parsed.messages,
+				initialMessage,
+				initialImages,
+			});
+			stopThemeWatcher();
+			restoreStdout();
+			// Print mode is a one-shot: once the reply is flushed we must exit
+			// explicitly, or lingering ref'd handles (keep-alive provider sockets,
+			// the detached daemon/worker child) keep the event loop alive and the
+			// process never terminates. That hang breaks execFile-based callers like
+			// the gateway's CliCompletionRunner, which waits for child exit before
+			// delivering a reply ("could not run the agent: Command failed").
+			if (process.stdout.writableLength > 0) {
+				await new Promise<void>((resolve) => process.stdout.once("drain", resolve));
+			}
+			if (process.stderr.writableLength > 0) {
+				await new Promise<void>((resolve) => process.stderr.once("drain", resolve));
+			}
+			process.exit(exitCode);
+		}
+	}
+
+	// Direct-script entry: `npx tsx src/main.ts <args>` should drive main() so
+	// surfaces like the gateway stay up. cli.ts -> cli-main.ts imports main as a
+	// module, so this guard only fires when main.ts is itself the entry script.
+	// (Health: running `npx tsx src/main.ts gateway --transport telegram` boots
+	// the gateway; running any non-gateway command behaves like the CLI.)
+	let isMainModule = false;
+	try {
+		isMainModule = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+	} catch {
+		isMainModule = false;
+	}
+	if (isMainModule) {
+		void main(process.argv.slice(2)).catch((error) => {
+			console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
+			process.exit(1);
+		});
 	}
 
 	const explicitAgentsView = publicCommand.explicitAgentsView;
