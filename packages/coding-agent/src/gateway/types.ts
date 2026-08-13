@@ -68,6 +68,8 @@ export interface CompletionRunner {
 		model?: { provider: string; model: string };
 		/** Per-run anchor override; wins over the runner's boot-time root. */
 		projectRoot?: string;
+		/** Compact the session before the run (gateway session-budget path). */
+		compactBefore?: boolean;
 	}): Promise<{
 		reply: string;
 		sessionId: string;
@@ -81,6 +83,7 @@ export interface CompletionRunner {
 			profile: GatewayProfile;
 			model?: { provider: string; model: string };
 			projectRoot?: string;
+			compactBefore?: boolean;
 		},
 		onDelta: (delta: string) => void,
 	): Promise<{ reply: string; sessionId: string; error?: string }>;

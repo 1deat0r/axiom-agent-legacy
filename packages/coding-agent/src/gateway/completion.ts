@@ -93,6 +93,12 @@ export interface CliCompletionOptions {
 	 * messages on that channel.
 	 */
 	timeoutMs?: number;
+	/**
+	 * Compact the session before the completion child runs (gateway
+	 * session-budget path): the child summarizes the existing context so the
+	 * reply resumes on a small session instead of prefilling a huge one.
+	 */
+	compactBefore?: boolean;
 }
 
 /** Real completion runner: shells the axiom CLI in print mode under --profile. */
@@ -102,6 +108,7 @@ export class CliCompletionRunner implements CompletionRunner {
 	private readonly printFlag: string;
 	private readonly timeoutMs: number;
 	private readonly projectRoot?: string;
+	private readonly compactBefore: boolean;
 	private readonly confinement?: { bwrap?: string; axiomHome?: string; agentHome?: string; shadowDirs?: string[] };
 	constructor(options: CliCompletionOptions = {}) {
 		const child = resolveCompletionChild(options.bin);
@@ -110,6 +117,7 @@ export class CliCompletionRunner implements CompletionRunner {
 		this.printFlag = options.printFlag ?? "-p";
 		this.timeoutMs = options.timeoutMs ?? 300_000;
 		this.projectRoot = options.projectRoot;
+		this.compactBefore = options.compactBefore ?? false;
 		this.confinement = options.confinement;
 	}
 	/**
@@ -160,6 +168,7 @@ export class CliCompletionRunner implements CompletionRunner {
 		profile: GatewayProfile;
 		model?: { provider: string; model: string };
 		projectRoot?: string;
+		compactBefore?: boolean;
 	}): Promise<{ reply: string; sessionId: string; error?: string }> {
 		// Per-call override wins over the boot-time anchor; BOTH thread through
 		// every anchoring point below (bwrap mount, cwd, AXIOM_PROJECT_ROOT,
@@ -178,6 +187,7 @@ export class CliCompletionRunner implements CompletionRunner {
 			"--session-id",
 			input.sessionId,
 		];
+		if (input.compactBefore ?? this.compactBefore) args.push("--compact-before");
 		// Active-model hotswap (/model): force the operator's chosen provider+model
 		// on this completion. Provider is optional (empty keeps the profile's).
 		if (input.model) {
@@ -253,6 +263,7 @@ export class CliCompletionRunner implements CompletionRunner {
 			profile: GatewayProfile;
 			model?: { provider: string; model: string };
 			projectRoot?: string;
+			compactBefore?: boolean;
 		},
 		onDelta: (delta: string) => void,
 	): Promise<{ reply: string; sessionId: string; error?: string }> {
@@ -267,6 +278,7 @@ export class CliCompletionRunner implements CompletionRunner {
 			"--session-id",
 			input.sessionId,
 		];
+		if (input.compactBefore ?? this.compactBefore) args.push("--compact-before");
 		if (input.model) {
 			if (input.model.provider) args.push("--provider", input.model.provider);
 			args.push("--model", input.model.model);
@@ -386,6 +398,7 @@ export function fakeCompletionRunner(): CompletionRunner & {
 		prompt: string;
 		model: { provider: string; model: string } | undefined;
 		projectRoot?: string;
+		compactBefore?: boolean;
 	}>;
 } {
 	const runner: CompletionRunner & {
@@ -394,6 +407,7 @@ export function fakeCompletionRunner(): CompletionRunner & {
 			prompt: string;
 			model: { provider: string; model: string } | undefined;
 			projectRoot?: string;
+			compactBefore?: boolean;
 		}>;
 	} = {
 		calls: [],
@@ -403,6 +417,7 @@ export function fakeCompletionRunner(): CompletionRunner & {
 				prompt: input.prompt,
 				model: input.model,
 				projectRoot: input.projectRoot,
+				compactBefore: input.compactBefore,
 			});
 
 			return { reply: `axiom reply to: ${input.prompt}`, sessionId: input.sessionId };
@@ -413,6 +428,7 @@ export function fakeCompletionRunner(): CompletionRunner & {
 				prompt: input.prompt,
 				model: input.model,
 				projectRoot: input.projectRoot,
+				compactBefore: input.compactBefore,
 			});
 			const reply = `axiom reply to: ${input.prompt}`;
 			// Emit the whole reply as two deltas so the streamed bubble ends on the

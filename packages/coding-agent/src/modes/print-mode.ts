@@ -27,6 +27,12 @@ export interface PrintModeOptions {
 	initialMessage?: string;
 	/** Images to attach to the initial message */
 	initialImages?: ImageContent[];
+	/**
+	 * Compact the loaded session before prompting (gateway session-budget
+	 * path): summarizes the existing context so the run resumes small instead
+	 * of prefilling a huge session, preserving memory as a summary.
+	 */
+	compactBefore?: boolean;
 }
 
 function describeAutonomousLimit(status: AgentAutonomousStatus, reason: AutonomousLimitReason): string {
@@ -64,7 +70,7 @@ async function runPrintModeWithConnectionInternal(
 	options: PrintModeOptions,
 	bindHeadlessExtensions?: () => Promise<void>,
 ): Promise<number> {
-	const { mode, messages = [], initialMessage, initialImages } = options;
+	const { mode, messages = [], initialMessage, initialImages, compactBefore = false } = options;
 	let exitCode = 0;
 	let disposed = false;
 	let unsubscribe: (() => void) | undefined;
@@ -110,6 +116,21 @@ async function runPrintModeWithConnectionInternal(
 			}
 		});
 		await bindHeadlessExtensions?.();
+
+		if (compactBefore) {
+			// Gateway session-budget path: compact the loaded session before the
+			// run so the reply resumes on a summarized (small) session instead of
+			// prefilling a huge one. Best-effort — a compaction failure must never
+			// block the run; the reply still lands (possibly with the large
+			// context), and the next run retries compaction. Reported on stderr
+			// so stdout stays a clean text/JSON stream for the gateway parser.
+			try {
+				const result = await connection.compact();
+				console.error(`[compact-before: ok (${result.tokensBefore} tokens before)]`);
+			} catch (error) {
+				console.error(`[compact-before: error ${error instanceof Error ? error.message : String(error)}]`);
+			}
+		}
 
 		if (initialMessage) {
 			await connection.promptAndWait(initialMessage, { images: initialImages });

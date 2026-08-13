@@ -112,6 +112,123 @@ describe("StreamEditor", () => {
 	});
 });
 
+describe("StreamEditor rollover (long replies)", () => {
+	it("rolls the bubble over into a new message when text exceeds the cap", async () => {
+		vi.useFakeTimers();
+		const edits: string[] = [];
+		const rollovers: string[] = [];
+		const editor = new StreamEditor({
+			edit: async (t) => void edits.push(t),
+			minIntervalMs: 100,
+			maxTextLength: 10,
+			rollover: async (overflow) => void rollovers.push(overflow),
+		});
+		// First bubble grows toward the cap.
+		editor.setTarget("0123456789"); // exactly at cap: no rollover
+		await vi.advanceTimersByTimeAsync(0);
+		expect(rollovers).toEqual([]);
+		expect(edits.at(-1)).toBe("0123456789");
+		// One char past the cap: bubble 1 commits at the cap, bubble 2 opens with the tail.
+		editor.setTarget("0123456789a");
+		await vi.advanceTimersByTimeAsync(200);
+		expect(rollovers).toEqual(["a"]);
+		expect(edits.at(-1)).toBe("0123456789");
+		// More text edits bubble 2 (the new bubble), never bubble 1.
+		editor.setTarget("0123456789abc");
+		await vi.advanceTimersByTimeAsync(200);
+		expect(edits.at(-1)).toBe("abc");
+		expect(await editor.finish()).toBe(true);
+		expect(edits.at(-1)).toBe("abc");
+	});
+
+	it("rolls over again when a second bubble also exceeds the cap", async () => {
+		vi.useFakeTimers();
+		const rollovers: string[] = [];
+		const editor = new StreamEditor({
+			edit: async () => {},
+			minIntervalMs: 0,
+			maxTextLength: 5,
+			rollover: async (overflow) => void rollovers.push(overflow),
+		});
+		editor.setTarget("01234567895"); // 11 chars, cap 5 => two rollovers
+		await vi.advanceTimersByTimeAsync(200);
+		expect(rollovers).toEqual(["56789", "5"]);
+		expect(await editor.finish()).toBe(true);
+	});
+
+	it("exposes the unlanded tail for the batch fallback", async () => {
+		vi.useFakeTimers();
+		const editor = new StreamEditor({
+			edit: async () => {},
+			minIntervalMs: 0,
+			maxTextLength: 10,
+			rollover: async () => {},
+		});
+		editor.setTarget("0123456789abc");
+		await vi.advanceTimersByTimeAsync(200);
+		// Bubble 1 landed "0123456789"; the tail "abc" is the current bubble.
+		expect(editor.remainingText()).toBe("abc");
+		editor.setTarget("0123456789abcdef");
+		await vi.advanceTimersByTimeAsync(200);
+		expect(editor.remainingText()).toBe("abcdef");
+		expect(await editor.finish()).toBe(true);
+		expect(editor.remainingText()).toBe("abcdef");
+	});
+
+	it("finish rolls over a pending overflow before applying the final edit", async () => {
+		vi.useFakeTimers();
+		const edits: string[] = [];
+		const rollovers: string[] = [];
+		const editor = new StreamEditor({
+			edit: async (t) => void edits.push(t),
+			minIntervalMs: 10_000,
+			maxTextLength: 10,
+			rollover: async (overflow) => void rollovers.push(overflow),
+		});
+		editor.setTarget("0123456789ab"); // over cap, but never pumped (spacing window)
+		const finished = editor.finish();
+		await vi.advanceTimersByTimeAsync(0);
+		expect(await finished).toBe(true);
+		expect(rollovers).toEqual(["ab"]);
+		expect(edits.at(-1)).toBe("ab"); // final edit landed on the new bubble
+	});
+
+	it("batch fallback after a failed final edit sends only the unlanded tail", async () => {
+		vi.useFakeTimers();
+		const edits: string[] = [];
+		const rollovers: string[] = [];
+		const editor = new StreamEditor({
+			retries: 0,
+			edit: async (t) => void edits.push(t),
+			minIntervalMs: 0,
+			maxTextLength: 10,
+			rollover: async (overflow) => void rollovers.push(overflow),
+		});
+		editor.setTarget("0123456789abcdef");
+		await vi.advanceTimersByTimeAsync(200);
+		expect(rollovers).toEqual(["abcdef"]);
+		// Make every subsequent edit fail (bubble 2 edits + final edit).
+		let fail = true;
+		const editor2 = new StreamEditor({
+			retries: 0,
+			async edit(t) {
+				if (fail) throw Object.assign(new Error("edit failed"), { status: 400 });
+				edits.push(t);
+			},
+			minIntervalMs: 0,
+			maxTextLength: 10,
+			rollover: async (overflow) => void rollovers.push(overflow),
+		});
+		editor2.setTarget("0123456789abcdefghi");
+		await vi.advanceTimersByTimeAsync(200);
+		// Bubble 1 committed; bubble 2 opened with the overflow; the tail is unlanded.
+		expect(editor2.remainingText()).toBe("abcdefghi");
+		fail = false;
+		expect(await editor2.finish()).toBe(true);
+		expect(edits.at(-1)).toBe("abcdefghi");
+	});
+});
+
 describe("isRetryableEditError", () => {
 	it("retries flood-control and server errors only", () => {
 		expect(isRetryableEditError({ status: 429 })).toBe(true);

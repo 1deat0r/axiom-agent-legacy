@@ -1651,6 +1651,7 @@ export async function main(args: string[], options?: MainOptions) {
 			messages: parsed.messages,
 			initialMessage,
 			initialImages,
+			compactBefore: parsed.compactBefore,
 		});
 		stopThemeWatcher();
 		restoreStdout();

@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import { activeModelPath, FileActiveModelStore } from "../../src/gateway/active-model.js";
 import { MemoryActiveProjectStore } from "../../src/gateway/active-project.js";
@@ -172,7 +173,7 @@ describe("Gateway router", () => {
 			let inFlight = 0;
 			let maxInFlight = 0;
 			const completion = {
-				calls: [] as Array<{ sessionId: string; prompt: string }>,
+				calls: fromPartial<Array<{ sessionId: string; prompt: string }>>([]),
 				async runCompletion(input: { sessionId: string; prompt: string; profile: { name: string } }) {
 					this.calls.push({ sessionId: input.sessionId, prompt: input.prompt });
 					inFlight++;
@@ -207,7 +208,7 @@ describe("Gateway router", () => {
 		try {
 			const { t, sent, push } = fakeTransport();
 			const completion = {
-				calls: [] as unknown[],
+				calls: fromPartial<unknown[]>([]),
 				async runCompletion() {
 					return { reply: "", sessionId: "s", error: "signal-cli missing" };
 				},
@@ -1104,7 +1105,7 @@ describe("Gateway streaming replies", () => {
 		}
 	});
 
-	it("archives an oversized session before a run and notes the reset in the bubble", async () => {
+	it("requests compaction instead of archiving an oversized session", async () => {
 		const dir = await home("axiom-gw-stream-");
 		try {
 			const s = streamingTransport();
@@ -1125,14 +1126,10 @@ describe("Gateway streaming replies", () => {
 			await g.start();
 			s.push({ channelId: "+1", sender: "+1", text: "hello", isCommand: false, timestamp: 1 });
 			await new Promise((r) => setTimeout(r, 30));
-			expect(existsSync(sessionPath)).toBe(false); // archived away
-			const archived = readdirSync(sessionsDir).find((f) =>
-				f.startsWith(`${sessionIdForChannel("+1")}.jsonl.archived-`),
-			);
-			expect(archived).toBeDefined();
-			const shown = s.edits.map((e) => e.text).join("\n");
-			expect(shown).toContain(SESSION_RESET_NOTICE);
-			expect(s.edits.at(-1)!.text).toBe(`${SESSION_RESET_NOTICE}\n\naxiom reply to: hello`);
+			// The session is NOT archived (its memory is preserved): the run is
+			// flagged compactBefore so the child summarizes it instead.
+			expect(existsSync(sessionPath)).toBe(true);
+			expect(completion.calls.at(-1)).toMatchObject({ compactBefore: true });
 			await g.stop();
 		} finally {
 			await rm(dir, { recursive: true, force: true });

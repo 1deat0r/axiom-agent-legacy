@@ -32,6 +32,12 @@ export interface Args {
 	sessionId?: string;
 	/** Axiom profile name (ADR-0014): boot in the profile's own home. */
 	profile?: string;
+	/**
+	 * Compact the session before running (gateway's session-budget path):
+	 * summarize the existing context so the run resumes on a small session
+	 * instead of prefilling a huge one, preserving memory as a summary.
+	 */
+	compactBefore?: boolean;
 	models?: string[];
 	tools?: string[];
 	noTools?: boolean;
@@ -168,6 +174,8 @@ export function parseArgs(args: string[]): Args {
 			} else {
 				result.diagnostics.push({ type: "error", message: "--session-id requires a value" });
 			}
+		} else if (arg === "--compact-before") {
+			result.compactBefore = true;
 		} else if (arg === "--profile") {
 			if (i + 1 < args.length) {
 				result.profile = args[++i];

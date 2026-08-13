@@ -29,6 +29,19 @@ export interface StreamEditorOptions {
 	retries?: number;
 	/** Observability sink for swallowed edit failures; defaults to console.error. */
 	logger?: (line: string) => void;
+	/**
+	 * Max characters one bubble may show. When a target would exceed it, the
+	 * current bubble commits at the cap and `rollover` is called with the
+	 * overflow text so the caller can open a fresh message (long replies
+	 * stream across several bubbles instead of one oversized edit).
+	 */
+	maxTextLength?: number;
+	/**
+	 * Called (in order) when the current bubble hits maxTextLength. `overflow`
+	 * is the text that continues on the NEW bubble; the caller sends a fresh
+	 * placeholder and the editor resumes targeting it on the next setTarget.
+	 */
+	rollover?: (overflow: string) => Promise<void>;
 }
 
 /**
@@ -44,10 +57,18 @@ export function isRetryableEditError(error: unknown): boolean {
 }
 
 export class StreamEditor {
-	/** The full text the bubble should currently show. */
+	/** The full text the bubble(s) should currently show. */
 	private target = "";
-	/** The full text of the last edit that actually landed. */
+	/** The text shown in the CURRENT bubble (the last edit that landed). */
 	private applied = "";
+	/**
+	 * Char offset into `target` where the current bubble begins. Bubbles are
+	 * sequential windows of the full reply: bubble N shows
+	 * target[bubbleStart..bubbleStart+maxTextLength); when a target would
+	 * exceed the cap, the current bubble commits at the cap, `bubbleStart`
+	 * advances, and `rollover(overflow)` opens a fresh bubble.
+	 */
+	private bubbleStart = 0;
 	private timer: ReturnType<typeof setTimeout> | null = null;
 	private editing = false;
 	/** When the last edit COMPLETED (spacing is measured from completion). */
@@ -59,12 +80,16 @@ export class StreamEditor {
 	private readonly minIntervalMs: number;
 	private readonly retries: number;
 	private readonly logger: (line: string) => void;
+	private readonly maxTextLength: number | undefined;
+	private readonly rollover: ((overflow: string) => Promise<void>) | undefined;
 
 	constructor(options: StreamEditorOptions) {
 		this.edit = options.edit;
 		this.minIntervalMs = options.minIntervalMs ?? STREAM_EDIT_MIN_INTERVAL_MS;
 		this.retries = options.retries ?? STREAM_EDIT_RETRIES;
 		this.logger = options.logger ?? ((line) => console.error(line));
+		this.maxTextLength = options.maxTextLength;
+		this.rollover = options.rollover;
 	}
 
 	/** Replace the desired bubble text (full text, not a delta). */
@@ -73,6 +98,15 @@ export class StreamEditor {
 		if (text === this.target) return;
 		this.target = text;
 		this.schedule();
+	}
+
+	/**
+	 * The text that still needs to land on the CURRENT bubble. After a
+	 * rollover this is the unlanded tail; the batch fallback sends exactly
+	 * this (the committed bubbles are already on screen).
+	 */
+	remainingText(): string {
+		return this.target.slice(this.bubbleStart);
 	}
 
 	/**
@@ -95,24 +129,67 @@ export class StreamEditor {
 		}, delay);
 	}
 
+	/** The text the CURRENT bubble should show (the tail of the full target). */
+	private currentBubbleText(): string {
+		return this.target.slice(this.bubbleStart);
+	}
+
+	/**
+	 * While the current bubble's text exceeds the cap, commit the bubble at the
+	 * cap (best-effort edit), advance the window, and open the next bubble via
+	 * `rollover(overflow)`. Returns true when at least one rollover ran.
+	 * Commit-edit failures are logged, never fatal: the bubble is stale, but the
+	 * stream must keep moving so the final tail still lands.
+	 */
+	private async rollOverPending(): Promise<boolean> {
+		if (this.maxTextLength === undefined || this.rollover === undefined) return false;
+		let rolled = false;
+		while (this.currentBubbleText().length > this.maxTextLength) {
+			rolled = true;
+			const commit = this.target.slice(this.bubbleStart, this.bubbleStart + this.maxTextLength);
+			try {
+				await this.editWithRetry(commit);
+				this.applied = commit;
+			} catch (error) {
+				this.logger(`stream bubble commit failed: ${error instanceof Error ? error.message : String(error)}`);
+			}
+			this.bubbleStart += this.maxTextLength;
+			// The overflow handed to the caller is the NEXT cap-sized chunk (the
+			// text the new bubble should eventually show), not the whole tail.
+			const overflow = this.target.slice(this.bubbleStart, this.bubbleStart + this.maxTextLength);
+			await this.rollover(overflow);
+			// The new bubble has not been edited yet; nothing counts as applied.
+			this.applied = "";
+		}
+		return rolled;
+	}
+
 	private async pump(): Promise<void> {
 		if (this.editing) return;
-		if (this.target === this.applied) {
+		if (this.currentBubbleText() === this.applied) {
 			this.signalSettled();
 			return;
 		}
 		this.editing = true;
-		const text = this.target;
+		let rolled = false;
 		try {
-			await this.editWithRetry(text);
-			this.applied = text;
+			rolled = await this.rollOverPending();
+			// After a rollover the new bubble is owned by the next setTarget:
+			// the placeholder is left untouched until more text arrives.
+			if (!rolled) {
+				const text = this.currentBubbleText();
+				await this.editWithRetry(text);
+				this.applied = text;
+			}
 		} catch (error) {
 			this.logger(`stream edit failed: ${error instanceof Error ? error.message : String(error)}`);
 		} finally {
 			this.editing = false;
 			this.lastEditDoneAt = Date.now();
 		}
-		if (this.target !== this.applied) {
+		// A rollover hands the new bubble to the next setTarget (or to finish's
+		// final edit); only a plain text edit re-schedules the pump.
+		if (!rolled && this.currentBubbleText() !== this.applied) {
 			if (this.done) {
 				// Final drain: no spacing throttle — finish() must not stall.
 				void this.pump();
@@ -136,10 +213,14 @@ export class StreamEditor {
 	}
 
 	private async applyFinal(): Promise<boolean> {
-		if (this.target === this.applied) return true;
+		// A pending overflow must roll before the final edit lands (finish is
+		// the last chance to split an oversized tail into a fresh bubble).
+		await this.rollOverPending();
+		const text = this.currentBubbleText();
+		if (text === this.applied) return true;
 		try {
-			await this.editWithRetry(this.target);
-			this.applied = this.target;
+			await this.editWithRetry(text);
+			this.applied = text;
 			return true;
 		} catch (error) {
 			this.logger(`final stream edit failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -148,12 +229,12 @@ export class StreamEditor {
 	}
 
 	private settled(): Promise<void> {
-		if (!this.editing && this.target === this.applied) return Promise.resolve();
+		if (!this.editing && this.currentBubbleText() === this.applied) return Promise.resolve();
 		return new Promise<void>((resolve) => this.waiters.push(resolve));
 	}
 
 	private signalSettled(): void {
-		if (this.editing || this.target !== this.applied) return;
+		if (this.editing || this.currentBubbleText() !== this.applied) return;
 		const waiters = this.waiters;
 		this.waiters = [];
 		for (const resolve of waiters) resolve();

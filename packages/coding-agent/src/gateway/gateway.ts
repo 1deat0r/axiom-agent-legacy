@@ -29,7 +29,7 @@ import type { DeliveryLedger } from "./delivery-ledger.js";
 import type { RestartNoticeStore } from "./restart-notice.js";
 import type { UpdateConfig, UpdateShell } from "./self-update.js";
 import { applyUpdate, CliUpdateShell, checkUpdate } from "./self-update.js";
-import { archiveSessionFile, SESSION_RESET_NOTICE, sessionExceedsBudget, sessionFilePath } from "./session-reset.js";
+import { archiveSessionFile, sessionExceedsBudget, sessionFilePath } from "./session-reset.js";
 import { STREAM_EDIT_MIN_INTERVAL_MS, StreamEditor } from "./stream-editor.js";
 import type { StreamJournal } from "./stream-journal.js";
 import type {
@@ -46,6 +46,13 @@ const UNRECOGNIZED = "unrecognized sender — this gateway is private to allowed
 
 /** Chat-action refresh cadence (Telegram drops actions older than ~5s). */
 const TYPING_REFRESH_MS = 4_000;
+
+/**
+ * Streaming bubble size cap (ADR-0047): a single Telegram message may hold
+ * TELEGRAM_TEXT_LIMIT (4096) chars; edit the bubble to a safe margin below
+ * that so a forked reply + reset notice never trips the API limit.
+ */
+const STREAM_BUBBLE_MAX_LENGTH = 4_000;
 
 export interface GatewayDeps {
 	transport: GatewayTransport;
@@ -351,18 +358,15 @@ export class Gateway {
 		}
 		// Session budget: a channel session that has grown past the soft cap
 		// makes every reply re-process a huge context (minute-scale latency
-		// before the first word). Archive it and let the next run start fresh;
-		// the archive's .jsonl.archived-<ts> name is still indexed by /search.
-		let sessionWasReset = false;
+		// before the first word). Instead of archiving (which wipes the
+		// conversation's memory), request a pre-run compaction: the completion
+		// child summarizes the existing context, so the reply resumes on a
+		// small session while /search still indexes the full history.
+		let compactBefore = false;
 		if (this.sessionsDir) {
 			const path = sessionFilePath(this.sessionsDir, sessionKey);
 			if (sessionExceedsBudget(path)) {
-				try {
-					archiveSessionFile(path);
-					sessionWasReset = true;
-				} catch {
-					/* best-effort: a failed archive must never block the reply */
-				}
+				compactBefore = true;
 			}
 		}
 		const recipient = { channelId: msg.channelId, recipient: msg.sender };
@@ -372,6 +376,7 @@ export class Gateway {
 			profile: { name: this.profile },
 			model: this.modelStore?.load(),
 			...(anchoredRoot ? { projectRoot: anchoredRoot } : {}),
+			...(compactBefore ? { compactBefore: true } : {}),
 		};
 		// Replies go out while the receive loop must hold (ADR-0039): Telegram
 		// queues outbound calls behind an open long-poll, so an edit would hang
@@ -387,20 +392,41 @@ export class Gateway {
 			// placeholder-send failure falls back to the batch guarantee below.
 			const streamer = this.transport;
 			if (streamer.sendMessage && streamer.editMessage && this.completion.streamCompletion) {
+				const sendMessage = streamer.sendMessage.bind(streamer);
+				const editMessage = streamer.editMessage.bind(streamer);
 				try {
 					const stopTyping = this.startTyping(recipient);
 					let messageId: number | undefined;
+					const journaledBubbles: number[] = [];
 					try {
-						messageId = await streamer.sendMessage(recipient, "…");
-						const editor = new StreamEditor({
-							edit: (text) => streamer.editMessage!(msg.channelId, messageId!, text),
-							minIntervalMs: STREAM_EDIT_MIN_INTERVAL_MS,
-						});
+						messageId = await sendMessage(recipient, "…");
+						journaledBubbles.push(messageId);
 						this.streamJournal?.add({ channelId: msg.channelId, messageId, startedAt: Date.now() });
-						// A reset note rides the bubble from the first edit so the
-						// operator sees why the channel's memory was archived.
-						let lastText = sessionWasReset ? `${SESSION_RESET_NOTICE}\n\n` : "";
-						if (lastText !== "") editor.setTarget(lastText);
+						// Long replies stream across several bubbles (ADR-0047):
+						// Telegram caps a message at TELEGRAM_TEXT_LIMIT chars, so
+						// when the accumulated text crosses the cap the editor
+						// commits the current bubble and calls `rollover`, which
+						// sends a fresh placeholder and re-points messageId. The
+						// edit closure reads messageId at call time, so after a
+						// rollover every subsequent edit targets the new bubble.
+						const editor = new StreamEditor({
+							edit: (text) => editMessage(msg.channelId, messageId!, text),
+							minIntervalMs: STREAM_EDIT_MIN_INTERVAL_MS,
+							maxTextLength: STREAM_BUBBLE_MAX_LENGTH,
+							rollover: async () => {
+								const nextId = await sendMessage(recipient, "…");
+								journaledBubbles.push(nextId);
+								this.streamJournal?.add({
+									channelId: msg.channelId,
+									messageId: nextId,
+									startedAt: Date.now(),
+								});
+								messageId = nextId;
+							},
+						});
+						// The bubble starts empty; compaction (if requested) already
+						// summarized the session before the run began.
+						let lastText = "";
 						const streamed = await this.completion.streamCompletion(input, (delta) => {
 							if (lastText === "") stopTyping(); // text is flowing; stop pinging
 							lastText += delta;
@@ -412,20 +438,25 @@ export class Gateway {
 								: streamed.reply.length > 0
 									? streamed.reply
 									: "(no reply)";
-						const finalText = sessionWasReset ? `${SESSION_RESET_NOTICE}\n\n${baseFinal}` : baseFinal;
+						const finalText = baseFinal;
 						// The editor applies the final text itself (and skips the edit
 						// when the bubble already shows it, so Telegram never rejects a
-						// no-op "message is not modified"). A failed final edit falls
-						// back to one fresh message so the answer always lands.
+						// no-op "message is not modified"). finish() rolls any pending
+						// overflow into a fresh bubble first, then lands the tail.
 						editor.setTarget(finalText);
-						if (!(await editor.finish())) {
-							// The final in-place edit failed: one fresh send (ledgered
-							// by deliver) so the answer always lands.
+						const landed = await editor.finish();
+						// Fallback when the tail could not land in place: the final
+						// edit failed, or the text was fully absorbed by earlier
+						// bubbles (a short error after a long partial stream ends
+						// up beyond the last bubble window). Deliver fresh messages
+						// (chunked) so the answer always reaches the user.
+						if (!landed || editor.remainingText().length === 0) {
 							await this.deliver(recipient, finalText);
 						} else {
-							// The streamed bubble IS the delivery: record it like any
-							// outbound delivery so /ledger stays complete (ADR-0022)
-							// and the reply carries a timestamp for latency forensics.
+							// The streamed bubble(s) ARE the delivery: record it like
+							// any outbound delivery so /ledger stays complete
+							// (ADR-0022) and the reply carries a timestamp for latency
+							// forensics.
 							this.ledger?.record({
 								ts: Date.now(),
 								transport: this.transportName,
@@ -437,7 +468,9 @@ export class Gateway {
 						}
 					} finally {
 						stopTyping();
-						if (messageId !== undefined) this.streamJournal?.remove(msg.channelId, messageId);
+						for (const id of journaledBubbles) {
+							this.streamJournal?.remove(msg.channelId, id);
+						}
 					}
 					return;
 				} catch {
@@ -451,12 +484,7 @@ export class Gateway {
 					await this.deliver(recipient, `could not run the agent: ${result.error}`);
 					return;
 				}
-				const prefix = sessionWasReset
-					? `${SESSION_RESET_NOTICE}
-
-	`
-					: "";
-				await this.deliver(recipient, `${prefix}${result.reply.length > 0 ? result.reply : "(no reply)"}`);
+				await this.deliver(recipient, `${result.reply.length > 0 ? result.reply : "(no reply)"}`);
 			} finally {
 				stopTyping();
 			}
