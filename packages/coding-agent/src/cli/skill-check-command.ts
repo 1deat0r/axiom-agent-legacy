@@ -82,9 +82,7 @@ export function handleSkillCheckCommand(
 	}
 
 	const dirs =
-		explicitDirs.length > 0
-			? explicitDirs
-			: defaultSkillCheckDirs(process.cwd()).filter((dir) => isDirectory(dir));
+		explicitDirs.length > 0 ? explicitDirs : defaultSkillCheckDirs(process.cwd()).filter((dir) => isDirectory(dir));
 
 	const results = dirs.map((dir) => ({ dir, result: runSkillCheck(dir) }));
 	const report: SkillCheckCliReport = {
