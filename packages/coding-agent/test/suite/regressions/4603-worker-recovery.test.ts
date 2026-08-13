@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { createConnection, type Socket } from "node:net";
 import { join, resolve } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it } from "vitest";
 import { APP_NAME, ENV_AGENT_DIR } from "../../../src/config.js";
 import { getProcessStartId } from "../../../src/core/session-lease.js";
@@ -281,7 +282,7 @@ function registerFixtureRecord(value: unknown, role: "supervisor" | "worker", pa
 	if (!value || typeof value !== "object") {
 		throw new Error(`Invalid fixture process record: ${path}`);
 	}
-	const record = value as { pid?: unknown; processStartId?: unknown };
+	const record = fromPartial<{ pid?: unknown; processStartId?: unknown }>(value);
 	if (
 		typeof record.pid !== "number" ||
 		!Number.isSafeInteger(record.pid) ||
@@ -351,7 +352,7 @@ function signalFixtureProcess(identity: FixtureProcessIdentity, signal: NodeJS.S
 		process.kill(identity.pid, signal);
 		return true;
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
+		if (fromAny<NodeJS.ErrnoException, unknown>(error).code === "ESRCH") return false;
 		throw error;
 	}
 }
@@ -432,16 +433,16 @@ function readFixtureDirectory(path: string): string[] {
 	try {
 		return readdirSync(path);
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+		if (fromAny<NodeJS.ErrnoException, unknown>(error).code === "ENOENT") return [];
 		throw error;
 	}
 }
 
 function readFixtureJson<T>(path: string): T | undefined {
 	try {
-		return JSON.parse(readFileSync(path, "utf8")) as T;
+		return fromPartial<T>(JSON.parse(readFileSync(path, "utf8")));
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+		if (fromAny<NodeJS.ErrnoException, unknown>(error).code === "ENOENT") return undefined;
 		throw error;
 	}
 }
@@ -458,7 +459,7 @@ function fixturePidIsAlive(pid: number): boolean {
 		process.kill(pid, 0);
 		return true;
 	} catch (error) {
-		const code = (error as NodeJS.ErrnoException).code;
+		const code = fromAny<NodeJS.ErrnoException, unknown>(error).code;
 		if (code === "ESRCH") return false;
 		if (code === "EPERM") return true;
 		throw error;
@@ -543,7 +544,7 @@ function waitForType<T extends FixtureMessage["type"]>(
 	return waitForMessage(handle, (message) => message.type === type || message.type === "failed", timeoutMs)
 		.then((message) => {
 			if (message.type === "failed") throw new Error(message.error);
-			return message as Extract<FixtureMessage, { type: T }>;
+			return fromAny<Extract<FixtureMessage, { type: T }>, unknown>(message);
 		})
 		.catch((error: unknown) => {
 			throw new Error(`Timed out waiting for fixture message ${type}: ${String(error)}`);
@@ -602,9 +603,9 @@ function listOwnerRecords(registryDir: string): OwnerRecord[] {
 		.filter((name) => name.endsWith(".owner"))
 		.map((name) => {
 			const path = join(registryDir, name, "owner.json");
-			const record = JSON.parse(readFileSync(path, "utf8")) as unknown;
+			const record = fromAny<unknown, unknown>(JSON.parse(readFileSync(path, "utf8")));
 			registerFixtureRecord(record, "supervisor", path);
-			return record as OwnerRecord;
+			return fromAny<OwnerRecord, unknown>(record);
 		});
 	return records;
 }
@@ -612,16 +613,18 @@ function listOwnerRecords(registryDir: string): OwnerRecord[] {
 function readWorkerDescriptor(descriptorDir: string): DaemonWorkerDescriptor {
 	const descriptors = readdirSync(descriptorDir).filter((name) => name.endsWith(".json"));
 	expect(descriptors).toHaveLength(1);
-	const descriptor = JSON.parse(readFileSync(join(descriptorDir, descriptors[0]!), "utf8")) as DaemonWorkerDescriptor;
+	const descriptor = fromPartial<DaemonWorkerDescriptor>(
+		JSON.parse(readFileSync(join(descriptorDir, descriptors[0]!), "utf8")),
+	);
 	registerFixtureRecord(descriptor, "worker", join(descriptorDir, descriptors[0]!));
 	return descriptor;
 }
 
 function requireSummary(value: unknown): SessionSummary {
-	if (!value || typeof value !== "object" || typeof (value as Partial<SessionSummary>).id !== "string") {
+	if (!value || typeof value !== "object" || typeof fromPartial<Partial<SessionSummary>>(value).id !== "string") {
 		throw new Error("Daemon returned an invalid session summary");
 	}
-	return value as SessionSummary;
+	return fromPartial<SessionSummary>(value);
 }
 
 function exactProcessIsAlive(pid: number, processStartId: string | undefined): boolean {
@@ -742,7 +745,7 @@ function createFrameReader(socket: Socket): {
 }
 
 function decodeResponse(frame: PrivateFrame<DaemonWorkerFrameHeader>): DaemonResponse {
-	return JSON.parse(frame.payload.toString("utf8")) as DaemonResponse;
+	return fromPartial<DaemonResponse>(JSON.parse(frame.payload.toString("utf8")));
 }
 
 function delay(ms: number): Promise<void> {
@@ -792,7 +795,7 @@ describe("ENG-4603 worker recovery convergence", () => {
 		expect(readdirSync(paths.descriptorDir).filter((name) => name.endsWith(".json"))).toHaveLength(1);
 		const listed = await successorClient.request({ type: "list" });
 		if (!listed.success) throw new Error(listed.error);
-		const sessions = (listed.data as { sessions: unknown[] }).sessions;
+		const sessions = fromAny<{ sessions: unknown[] }, unknown>(listed.data).sessions;
 		expect(sessions).toHaveLength(1);
 		expect(requireSummary(sessions[0]).workerPid).toBe(replacement.pid);
 
@@ -877,7 +880,7 @@ describe("ENG-4603 worker recovery convergence", () => {
 			await delay(750);
 			expect(readFileSync(psCountPath, "utf8").length).toBe(countAfterAuthentication);
 			const ownerPath = join(workerPaths.registryDir, `${oldOwner.record.generation}.owner`, "owner.json");
-			const ownerRecord = JSON.parse(readFileSync(ownerPath, "utf8")) as { updatedAt: string };
+			const ownerRecord = fromPartial<{ updatedAt: string }>(JSON.parse(readFileSync(ownerPath, "utf8")));
 			ownerRecord.updatedAt = new Date(Date.now() + 1000).toISOString();
 			const updatedOwnerPath = `${ownerPath}.updated`;
 			writeFileSync(updatedOwnerPath, `${JSON.stringify(ownerRecord, null, 2)}\n`);
@@ -896,7 +899,9 @@ describe("ENG-4603 worker recovery convergence", () => {
 		socket.write(commandFrame.subarray(0, commandFrame.length - 1));
 		const ownerDirectory = join(workerPaths.registryDir, `${oldOwner.record.generation}.owner`);
 		const ownerPath = join(ownerDirectory, "owner.json");
-		const transitionedOwner = JSON.parse(readFileSync(ownerPath, "utf8")) as OwnerRecord & { updatedAt: string };
+		const transitionedOwner = fromPartial<OwnerRecord & { updatedAt: string }>(
+			JSON.parse(readFileSync(ownerPath, "utf8")),
+		);
 		transitionedOwner.token = "successor-token";
 		transitionedOwner.pid = worker.child.pid!;
 		transitionedOwner.processStartId = getProcessStartId(worker.child.pid!);
@@ -949,13 +954,15 @@ describe("ENG-4603 worker recovery convergence", () => {
 		process.env[supervisorRegistryDirEnv] = paths.registryDir;
 		try {
 			const first = await acquireDaemonShutdownAdmission();
-			const record = JSON.parse(readFileSync(join(paths.registryDir, "shutdown-admission.json"), "utf8")) as {
+			const record = fromPartial<{
 				pid: number;
 				processStartId?: string;
-			};
+			}>(JSON.parse(readFileSync(join(paths.registryDir, "shutdown-admission.json"), "utf8")));
 			expect(record.pid).toBe(process.pid);
 			expect(record.processStartId).toBe(getProcessStartId(process.pid));
-			const refreshTimer = Reflect.get(first, "refreshTimer") as ReturnType<typeof setInterval> | undefined;
+			const refreshTimer = fromPartial<ReturnType<typeof setInterval> | undefined>(
+				Reflect.get(first, "refreshTimer"),
+			);
 			if (!refreshTimer) throw new Error("Shutdown admission did not start its lease refresh");
 			clearInterval(refreshTimer);
 			let acquired = false;
@@ -1028,7 +1035,7 @@ describe("ENG-4603 worker recovery convergence", () => {
 
 		const shutdown = await runCli(paths, ["shutdown", "--force", "--json"], 60_000, lsofEnvironment);
 		expect(shutdown.code).toBe(0);
-		const shutdownResult = JSON.parse(shutdown.stdout) as { stopped: unknown[]; failed: unknown[] };
+		const shutdownResult = fromPartial<{ stopped: unknown[]; failed: unknown[] }>(JSON.parse(shutdown.stdout));
 		const survivingIdentities = [
 			{ pid: predecessor.child.pid!, processStartId: predecessorStartId },
 			{ pid: successor.child.pid!, processStartId: successorStartId },

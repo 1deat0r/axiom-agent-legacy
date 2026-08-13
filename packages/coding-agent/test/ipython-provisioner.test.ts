@@ -2,6 +2,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cleanupSessionResources } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExtensionContext } from "../src/core/extensions/types.js";
 import type { KernelBootstrapProgressHandler } from "../src/core/kernel/bootstrap.js";
@@ -61,13 +62,13 @@ function createBusyKernelContext(
 			throw new Error("stale UI context");
 		}
 	});
-	const ctx = {
+	const ctx = fromAny<ExtensionContext, unknown>({
 		hasUI: true,
 		ui: {
 			select,
 			setWorkingMessage,
 		},
-	} as unknown as ExtensionContext;
+	});
 	return { ctx, setWorkingMessage };
 }
 
@@ -195,12 +196,15 @@ describe("IpythonKernelProvisioner", () => {
 	it("does not dispose a running kernel when an ensure caller is aborted", async () => {
 		const provisioner = new IpythonKernelProvisioner(tempDir, {});
 		const dispose = vi.fn(async () => {});
-		const manager = { dispose, isRunning: true } as unknown as KernelManager;
+		const manager = fromAny<KernelManager, unknown>({ dispose, isRunning: true });
 		Object.assign(
-			provisioner as unknown as {
-				managerPromise: Promise<KernelManager>;
-				startedManager: KernelManager;
-			},
+			fromAny<
+				{
+					managerPromise: Promise<KernelManager>;
+					startedManager: KernelManager;
+				},
+				unknown
+			>(provisioner),
 			{
 				managerPromise: Promise.resolve(manager),
 				startedManager: manager,
@@ -217,9 +221,12 @@ describe("IpythonKernelProvisioner", () => {
 	it("removes startup progress listeners when an ensure caller is aborted", async () => {
 		const provisioner = new IpythonKernelProvisioner(tempDir, {});
 		Object.assign(
-			provisioner as unknown as {
-				managerPromise: Promise<KernelManager>;
-			},
+			fromAny<
+				{
+					managerPromise: Promise<KernelManager>;
+				},
+				unknown
+			>(provisioner),
 			{
 				managerPromise: new Promise<KernelManager>(() => {}),
 			},
@@ -231,18 +238,21 @@ describe("IpythonKernelProvisioner", () => {
 		controller.abort();
 		await ensurePromise;
 
-		const internals = provisioner as unknown as {
-			startupListeners: Set<KernelBootstrapProgressHandler>;
-		};
+		const internals = fromAny<
+			{
+				startupListeners: Set<KernelBootstrapProgressHandler>;
+			},
+			unknown
+		>(provisioner);
 		expect(internals.startupListeners.has(onProgress)).toBe(false);
 	});
 
 	it("applies shell settings to bash cells after leading blank lines", async () => {
 		const execute = vi.fn<KernelManager["execute"]>().mockResolvedValueOnce(okExecuteResult());
-		const manager = { execute } as unknown as KernelManager;
+		const manager = fromAny<KernelManager, unknown>({ execute });
 		const ensure = vi.fn(async () => manager);
 		const kill = vi.fn(async () => {});
-		const provisioner = { ensure, kill } as unknown as IpythonKernelProvisioner;
+		const provisioner = fromAny<IpythonKernelProvisioner, unknown>({ ensure, kill });
 		const tool = createIpythonToolDefinition(tempDir, {
 			provisioner,
 			commandPrefix: "export TEST_PREFIX=1",
@@ -254,7 +264,7 @@ describe("IpythonKernelProvisioner", () => {
 			{ code: "\n \r\n\t%%bash\r\necho body" },
 			undefined,
 			undefined,
-			{} as ExtensionContext,
+			fromPartial<ExtensionContext>({}),
 		);
 
 		expect(execute).toHaveBeenCalledWith(
@@ -268,10 +278,10 @@ describe("IpythonKernelProvisioner", () => {
 			.fn<KernelManager["execute"]>()
 			.mockRejectedValueOnce(new KernelBusyAfterInterruptError())
 			.mockResolvedValueOnce(okExecuteResult());
-		const manager = { execute } as unknown as KernelManager;
+		const manager = fromAny<KernelManager, unknown>({ execute });
 		const ensure = vi.fn(async () => manager);
 		const kill = vi.fn(async () => {});
-		const provisioner = { ensure, kill } as unknown as IpythonKernelProvisioner;
+		const provisioner = fromAny<IpythonKernelProvisioner, unknown>({ ensure, kill });
 		const select = vi.fn(async () => "Wait and preserve state");
 		const { ctx, setWorkingMessage } = createBusyKernelContext(select, { throwWorkingMessage: true });
 		const tool = createIpythonToolDefinition(tempDir, { provisioner });
@@ -294,17 +304,17 @@ describe("IpythonKernelProvisioner", () => {
 	});
 
 	it("lets the user kill and restart a busy interrupted kernel", async () => {
-		const busyManager = {
+		const busyManager = fromAny<KernelManager, unknown>({
 			execute: vi.fn<KernelManager["execute"]>().mockRejectedValueOnce(new KernelBusyAfterInterruptError()),
-		} as unknown as KernelManager;
-		const freshManager = {
+		});
+		const freshManager = fromAny<KernelManager, unknown>({
 			execute: vi.fn<KernelManager["execute"]>().mockResolvedValueOnce(okExecuteResult()),
-		} as unknown as KernelManager;
+		});
 		const ensure = vi.fn(async () => {
 			return ensure.mock.calls.length === 1 ? busyManager : freshManager;
 		});
 		const kill = vi.fn(async () => {});
-		const provisioner = { ensure, kill } as unknown as IpythonKernelProvisioner;
+		const provisioner = fromAny<IpythonKernelProvisioner, unknown>({ ensure, kill });
 		const select = vi.fn(async () => "Kill kernel and restart");
 		const { ctx, setWorkingMessage } = createBusyKernelContext(select, { throwWorkingMessage: true });
 		const tool = createIpythonToolDefinition(tempDir, { provisioner });

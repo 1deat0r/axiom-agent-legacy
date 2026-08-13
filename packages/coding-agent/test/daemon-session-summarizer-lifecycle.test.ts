@@ -1,3 +1,4 @@
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { ActiveSessionState } from "../src/modes/daemon/active-session-state.js";
 import { DaemonSessionSummarizer } from "../src/modes/daemon/daemon-session-summarizer.js";
@@ -10,7 +11,7 @@ function makeState(
 	opts: { working?: boolean; messages?: number; kind?: "top-level" | "subagent"; persisted?: unknown } = {},
 ): ActiveSessionState {
 	const appended: unknown[] = [];
-	const state = {
+	const state = fromAny<ActiveSessionState, unknown>({
 		activeSessionId: "a1",
 		summaryState: undefined,
 		runtime: {
@@ -29,8 +30,8 @@ function makeState(
 				},
 			},
 		},
-	} as unknown as ActiveSessionState;
-	(state as unknown as { appendedStatuses: unknown[] }).appendedStatuses = appended;
+	});
+	fromAny<{ appendedStatuses: unknown[] }, unknown>(state).appendedStatuses = appended;
 	return state;
 }
 
@@ -140,7 +141,7 @@ describe("DaemonSessionSummarizer lifecycle", () => {
 		const state = makeState({ working: false });
 		// The model "responds" only after the session has moved on to a new turn.
 		const generate = vi.fn().mockImplementation(async () => {
-			(state.runtime.session.messages as unknown[]).push({ role: "user", content: "another task" });
+			fromPartial<unknown[]>(state.runtime.session.messages).push({ role: "user", content: "another task" });
 			return { summary: "Stale summary for the old turn", taskState: "completed" };
 		});
 		const summarizer = new DaemonSessionSummarizer(() => [], undefined, generate);
@@ -163,7 +164,7 @@ describe("DaemonSessionSummarizer lifecycle", () => {
 
 		expect(generate).toHaveBeenCalledOnce();
 		expect(state.summaryState).toMatchObject({ summary: "Auditing the migration scripts", taskState: "completed" });
-		expect((state as unknown as { appendedStatuses: unknown[] }).appendedStatuses).toHaveLength(1);
+		expect(fromAny<{ appendedStatuses: unknown[] }, unknown>(state).appendedStatuses).toHaveLength(1);
 	});
 
 	test("seeds a subagent's persisted recap into memory", () => {

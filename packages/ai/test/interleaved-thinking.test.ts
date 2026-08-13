@@ -1,3 +1,4 @@
+import { fromPartial } from "@total-typescript/shoehorn";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { getEnvApiKey } from "../src/env-api-keys.js";
@@ -34,7 +35,7 @@ function asCalculatorArguments(args: ToolCall["arguments"]): CalculatorArguments
 		throw new Error("Tool arguments must be an object");
 	}
 
-	const value = args as Record<string, unknown>;
+	const value = fromPartial<Record<string, unknown>>(args);
 	const operation = value.operation;
 	if (
 		typeof value.a !== "number" ||

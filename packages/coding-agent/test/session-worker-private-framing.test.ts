@@ -1,4 +1,5 @@
 import { PassThrough } from "node:stream";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import {
 	encodePrivateFrame,
@@ -16,7 +17,7 @@ const isTestHeader: PrivateFrameHeaderValidator<TestHeader> = (value: unknown): 
 	if (!value || typeof value !== "object") {
 		return false;
 	}
-	const candidate = value as { type?: unknown; requestId?: unknown };
+	const candidate = fromPartial<{ type?: unknown; requestId?: unknown }>(value);
 	return (
 		typeof candidate.type === "string" &&
 		(candidate.requestId === undefined || typeof candidate.requestId === "string")

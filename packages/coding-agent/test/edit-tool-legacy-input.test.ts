@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ExtensionContext } from "../src/core/extensions/types.js";
 import { createEditToolDefinition } from "../src/core/tools/edit.js";
@@ -88,7 +89,13 @@ describe("edit tool prepareArguments", () => {
 			newText: "after",
 		});
 
-		const result = await definition.execute("tool-1", prepared, undefined, undefined, {} as ExtensionContext);
+		const result = await definition.execute(
+			"tool-1",
+			prepared,
+			undefined,
+			undefined,
+			fromPartial<ExtensionContext>({}),
+		);
 		expect(result.content).toEqual([{ type: "text", text: "Successfully replaced 1 block(s) in legacy.txt." }]);
 		expect(await readFile(filePath, "utf8")).toBe("after\n");
 	});

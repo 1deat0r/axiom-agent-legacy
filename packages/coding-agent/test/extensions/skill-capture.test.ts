@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ExtensionAPI } from "../../src/core/extensions/types.js";
 import { buildTaskTraceFromMessages, createSkillCaptureExtension } from "../../src/extensions/skill-capture/index.js";
@@ -24,9 +25,9 @@ function makeTempDir(): string {
 function fakePi(): { pi: ExtensionAPI; fire(event: string, payload: unknown, ctx: unknown): Promise<void> } {
 	const handlers = new Map<string, Array<(...a: unknown[]) => unknown>>();
 	return {
-		pi: {
+		pi: fromAny<ExtensionAPI, unknown>({
 			on: (evt: string, h: (...a: unknown[]) => unknown) => handlers.set(evt, [...(handlers.get(evt) ?? []), h]),
-		} as unknown as ExtensionAPI,
+		}),
 		fire: async (event, payload, ctx) => {
 			for (const handler of handlers.get(event) ?? []) {
 				await handler(payload, ctx);
@@ -44,12 +45,13 @@ const assistant = (toolNames: string[], stopReason = "stop") => ({
 });
 
 const reusableSession = (): AgentMessage[] =>
-	[
+	fromAny<AgentMessage[], unknown>([
 		user("Set up a reusable CI pipeline for every new service"),
 		assistant(["a", "b", "c", "d", "e", "f"]),
-	] as unknown as AgentMessage[];
+	]);
 
-const thinSession = (): AgentMessage[] => [user("just a one-time scratch"), assistant([])] as unknown as AgentMessage[];
+const thinSession = (): AgentMessage[] =>
+	fromAny<AgentMessage[], unknown>([user("just a one-time scratch"), assistant([])]);
 
 function countSkills(dir: string): number {
 	if (!existsSync(dir)) return 0;
@@ -66,7 +68,7 @@ describe("buildTaskTraceFromMessages", () => {
 		expect(trace.completed).toBe(true);
 	});
 	it("marks a task incomplete when the last assistant turn errored", () => {
-		const messages = [user("do x"), assistant(["tool"], "error")] as unknown as AgentMessage[];
+		const messages = fromAny<AgentMessage[], unknown>([user("do x"), assistant(["tool"], "error")]);
 		expect(buildTaskTraceFromMessages(messages).completed).toBe(false);
 	});
 });

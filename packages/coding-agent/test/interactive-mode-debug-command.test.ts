@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { Container } from "@earendil-works/pi-tui";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ENV_AGENT_DIR, getDebugLogPath } from "../src/config.js";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.js";
@@ -25,7 +26,7 @@ type InteractiveModePrototype = {
 	handleDebugCommand(this: DebugCommandContext): Promise<void>;
 };
 
-const interactiveModePrototype = InteractiveMode.prototype as unknown as InteractiveModePrototype;
+const interactiveModePrototype = fromAny<InteractiveModePrototype, unknown>(InteractiveMode.prototype);
 
 describe("InteractiveMode /debug", () => {
 	let previousAgentDir: string | undefined;

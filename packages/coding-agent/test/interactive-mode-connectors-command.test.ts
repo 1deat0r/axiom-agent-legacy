@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import { defaultGatewayServiceDeps } from "../src/cli/gateway-service.js";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.js";
@@ -10,7 +11,7 @@ type InteractiveModePrototype = {
 	): Promise<void>;
 };
 
-const prototype = InteractiveMode.prototype as unknown as InteractiveModePrototype;
+const prototype = fromAny<InteractiveModePrototype, unknown>(InteractiveMode.prototype);
 
 function makeDeps() {
 	const deps = defaultGatewayServiceDeps();

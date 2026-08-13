@@ -11,6 +11,7 @@ import {
 	getModel,
 	type ImageContent,
 } from "@earendil-works/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AgentSession } from "../src/core/agent-session.js";
 import { AuthStorage } from "../src/core/auth-storage.js";
@@ -257,15 +258,16 @@ describe("AgentSession queue mutation", () => {
 	it("rejects replacing an injected custom-message turn but allows deleting it", async () => {
 		createSession();
 		const { running } = await blockSession();
-		const injected = (
-			session as unknown as {
+		const injected = fromAny<
+			{
 				_promptInjectedMessage(
 					text: string,
 					message: unknown,
 					options?: { streamingBehavior?: "steer" },
 				): Promise<void>;
-			}
-		)._promptInjectedMessage(
+			},
+			unknown
+		>(session)._promptInjectedMessage(
 			"injected",
 			{ role: "custom", customType: "test", content: "injected", display: true, timestamp: Date.now() },
 			{ streamingBehavior: "steer" },

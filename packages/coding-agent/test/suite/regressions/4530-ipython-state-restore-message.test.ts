@@ -1,5 +1,6 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { Type } from "typebox";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { RestoreResult } from "../../../src/core/kernel/state-snapshot.js";
@@ -79,7 +80,7 @@ describe("ENG-4530 IPython state restore message", () => {
 
 		const firstPrompt = harness.session.prompt("start");
 		await toolStarted;
-		(harness.session as unknown as StateRestoreHost)._onIpythonStateRestored({
+		fromAny<StateRestoreHost, unknown>(harness.session)._onIpythonStateRestored({
 			restored: ["alpha", "beta"],
 			failed: [],
 			path: "/tmp/kernel-state.dill",
@@ -136,9 +137,9 @@ describe("ENG-4530 IPython state restore message", () => {
 			},
 			{ deliverAs: "nextTurn" },
 		);
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = true;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = true;
 		await harness.session.prompt("queued prompt", { streamingBehavior: "followUp" });
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = false;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = false;
 		vi.spyOn(harness.session.agent, "prompt").mockImplementationOnce(async (messages) => {
 			const batch = Array.isArray(messages) ? messages : [messages];
 			harness.session.agent.state.messages.push(batch[0]);

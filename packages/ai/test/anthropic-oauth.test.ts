@@ -1,3 +1,4 @@
+import { fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loginAnthropic, refreshAnthropicToken } from "../src/utils/oauth/anthropic.js";
 
@@ -27,7 +28,7 @@ function getJsonBody(init?: RequestInit): Record<string, string> {
 	if (typeof init?.body !== "string") {
 		throw new Error(`Expected string request body, got ${typeof init?.body}`);
 	}
-	return JSON.parse(init.body) as Record<string, string>;
+	return fromPartial<Record<string, string>>(JSON.parse(init.body));
 }
 
 describe.sequential("Anthropic OAuth", () => {

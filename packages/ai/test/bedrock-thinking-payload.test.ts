@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import { getModel } from "../src/models.js";
 import { type BedrockOptions, streamBedrock } from "../src/providers/amazon-bedrock.js";
@@ -28,7 +29,7 @@ async function capturePayload(
 		reasoning: options?.reasoning ?? "high",
 		signal: AbortSignal.abort(),
 		onPayload: (payload) => {
-			capturedPayload = payload as BedrockThinkingPayload;
+			capturedPayload = fromAny<BedrockThinkingPayload, unknown>(payload);
 			return payload;
 		},
 	});

@@ -1,3 +1,4 @@
+import { fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getModel } from "../src/models.js";
 import { streamOpenAIResponses } from "../src/providers/openai-responses.js";
@@ -25,7 +26,7 @@ async function captureOpenAIResponseHeaders(
 	options: Parameters<typeof streamOpenAIResponses>[2],
 	model: Model<"openai-responses"> = getModel("openai", "gpt-5.4"),
 ): Promise<{ sessionId: string | null; clientRequestId: string | null }> {
-	const captured = { sessionId: null as string | null, clientRequestId: null as string | null };
+	const captured = { sessionId: fromPartial<string | null>(null), clientRequestId: fromPartial<string | null>(null) };
 	vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
 		captured.sessionId = getHeader(init?.headers, "session_id");
 		captured.clientRequestId = getHeader(init?.headers, "x-client-request-id");

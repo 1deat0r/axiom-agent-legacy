@@ -11,8 +11,8 @@ interface CapturedAzureClientOptions {
 	baseURL: string;
 }
 
-const azureMock = vi.hoisted(() => ({
-	constructorCalls: [] as CapturedAzureClientOptions[],
+const azureMock = vi.hoisted((): { constructorCalls: CapturedAzureClientOptions[] } => ({
+	constructorCalls: [],
 }));
 
 vi.mock("openai", () => {

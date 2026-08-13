@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, registerFauxProvider } from "@earendil-works/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AgentSession } from "../src/core/agent-session.js";
 import {
@@ -142,9 +143,9 @@ describe("daemon extension binding", () => {
 		for (const update of updates) {
 			expect(update.event).toHaveProperty("message");
 			expect(update.event).toHaveProperty("assistantMessageEvent");
-			expect((update.event as { assistantMessageEvent: object }).assistantMessageEvent).not.toHaveProperty(
-				"partial",
-			);
+			expect(
+				fromAny<{ assistantMessageEvent: object }, unknown>(update.event).assistantMessageEvent,
+			).not.toHaveProperty("partial");
 		}
 	});
 

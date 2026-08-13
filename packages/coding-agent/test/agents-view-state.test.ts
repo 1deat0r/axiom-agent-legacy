@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, test, vi } from "vitest";
 import type { AgentSessionRuntimeConfig } from "../src/core/agent-session-config.js";
 import type { ModelRegistry } from "../src/core/model-registry.js";
@@ -1556,8 +1557,8 @@ function makeSessionInfo(overrides: Partial<SessionInfo> & { path: string; id: s
 
 function makeUiServices(cwd: string): InteractiveModeUiServices {
 	return {
-		settingsManager: {} as SettingsManager,
-		modelRegistry: {} as ModelRegistry,
+		settingsManager: fromPartial<SettingsManager>({}),
+		modelRegistry: fromPartial<ModelRegistry>({}),
 		getInitialCwd: () => cwd,
 		getInitialSessionName: () => undefined,
 		getThemes: (): Theme[] => [],

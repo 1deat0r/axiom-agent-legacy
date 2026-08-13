@@ -1,3 +1,4 @@
+import { fromPartial } from "@total-typescript/shoehorn";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { complete } from "../src/stream.js";
 import type { Model } from "../src/types.js";
@@ -5,8 +6,8 @@ import type { Model } from "../src/types.js";
 // Router/virtual ids (e.g. OpenRouter `auto`) keep `model` pinned to the
 // requested id and surface the routed concrete id on `responseModel`.
 
-const mockState = vi.hoisted(() => ({
-	chunks: [] as unknown[],
+const mockState = vi.hoisted((): { chunks: unknown[] } => ({
+	chunks: [],
 }));
 
 vi.mock("openai", () => {
@@ -20,12 +21,14 @@ vi.mock("openai", () => {
 							for (const chunk of chunks) yield chunk;
 						},
 					};
-					const promise = Promise.resolve(stream) as Promise<typeof stream> & {
-						withResponse: () => Promise<{
-							data: typeof stream;
-							response: { status: number; headers: Headers };
-						}>;
-					};
+					const promise = fromPartial<
+						Promise<typeof stream> & {
+							withResponse: () => Promise<{
+								data: typeof stream;
+								response: { status: number; headers: Headers };
+							}>;
+						}
+					>(Promise.resolve(stream));
 					promise.withResponse = async () => ({
 						data: stream,
 						response: { status: 200, headers: new Headers() },

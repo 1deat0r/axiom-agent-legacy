@@ -1,10 +1,11 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import type { AgentSession } from "../src/core/agent-session.js";
 import { createAgentConnectionResourceSnapshot } from "../src/modes/agent-connection/snapshot.js";
 
 describe("agent connection snapshots", () => {
 	it("adds remote-friendly artifact references to resource snapshots", () => {
-		const session = {
+		const session = fromAny<AgentSession, unknown>({
 			sessionId: "session-1",
 			sessionManager: {
 				getCwd: () => "/workspace/project",
@@ -36,7 +37,7 @@ describe("agent connection snapshots", () => {
 					errors: [],
 				}),
 			},
-		} as unknown as AgentSession;
+		});
 
 		const snapshot = createAgentConnectionResourceSnapshot(session);
 

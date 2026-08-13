@@ -1,4 +1,5 @@
 import { type Component, type Focusable, type TUI, visibleWidth } from "@earendil-works/pi-tui";
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import { CenteredOverlayComponent, showFullPaneOverlay } from "../src/modes/interactive/components/centered-overlay.js";
 
@@ -55,13 +56,13 @@ describe("CenteredOverlayComponent", () => {
 
 	it("uses the full terminal width when requested", () => {
 		let overlay: Component | undefined;
-		const ui = {
+		const ui = fromAny<TUI, unknown>({
 			terminal: { rows: 1 },
 			showOverlay: (component: Component) => {
 				overlay = component;
 				return {};
 			},
-		} as unknown as TUI;
+		});
 
 		showFullPaneOverlay(ui, new TestComponent(), { fullWidth: true });
 

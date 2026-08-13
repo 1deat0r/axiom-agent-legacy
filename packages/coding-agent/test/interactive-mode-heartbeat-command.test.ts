@@ -1,4 +1,5 @@
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.js";
 
@@ -6,7 +7,7 @@ type InteractiveModePrototype = {
 	getHeartbeatArgumentCompletions(prefix: string): AutocompleteItem[] | null;
 };
 
-const interactiveModePrototype = InteractiveMode.prototype as unknown as InteractiveModePrototype;
+const interactiveModePrototype = fromAny<InteractiveModePrototype, unknown>(InteractiveMode.prototype);
 
 describe("InteractiveMode /heartbeat", () => {
 	describe("argument autocomplete", () => {

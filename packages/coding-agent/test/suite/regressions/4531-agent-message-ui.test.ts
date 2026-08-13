@@ -1,6 +1,7 @@
 import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
 import { fauxAssistantMessage, fauxToolCall, type Message, type ToolResultMessage } from "@earendil-works/pi-ai";
 import { Container, type TUI } from "@earendil-works/pi-tui";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { Type } from "typebox";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -196,7 +197,7 @@ describe("ENG-4531 agent message UI", () => {
 		};
 		const events: string[] = [];
 		const unsubscribe = harness.session.subscribe((event) => events.push(event.type));
-		const host = harness.session as unknown as LateSentAgentMessageHost;
+		const host = fromAny<LateSentAgentMessageHost, unknown>(harness.session);
 
 		host._recordLateIpythonSentAgentMessage(toolResult.toolCallId, lateMessage);
 		await host._agentEventQueue;
@@ -311,9 +312,9 @@ describe("ENG-4531 agent message UI", () => {
 		["received", undefined, { sessionName: "Legacy" }, "from Legacy"],
 		["sent", undefined, {}, "to unknown"],
 	] as const)("formats %s %s agent-message participants", (direction, role, endpoint, expected) => {
-		expect(formatAgentMessageParticipant(direction, role as AgentFamilyRelationship | undefined, endpoint)).toBe(
-			expected,
-		);
+		expect(
+			formatAgentMessageParticipant(direction, fromPartial<AgentFamilyRelationship | undefined>(role), endpoint),
+		).toBe(expected);
 	});
 
 	it("classifies a spawn task as an agent message component", () => {
@@ -332,7 +333,7 @@ describe("ENG-4531 agent message UI", () => {
 		};
 
 		const components = buildConversationComponents([spawnMessage], {
-			ui: { requestRender: () => {} } as unknown as TUI,
+			ui: fromAny<TUI, unknown>({ requestRender: () => {} }),
 			cwd: "/tmp",
 			toolOptions: {},
 			getToolDefinition: () => undefined,
@@ -340,7 +341,9 @@ describe("ENG-4531 agent message UI", () => {
 
 		expect(components).toHaveLength(1);
 		expect(components[0]).toBeInstanceOf(AgentMessageComponent);
-		expect(render(components[0] as AgentMessageComponent)).toContain("Agent message received · from parent Planner");
+		expect(render(fromPartial<AgentMessageComponent>(components[0]))).toContain(
+			"Agent message received · from parent Planner",
+		);
 	});
 
 	it("uses compact rebuilt spacing for agent messages next to messages and tool cells", () => {
@@ -350,7 +353,7 @@ describe("ENG-4531 agent message UI", () => {
 			stopReason: "toolUse",
 		});
 		const options = {
-			ui: { requestRender: () => {} } as unknown as TUI,
+			ui: fromAny<TUI, unknown>({ requestRender: () => {} }),
 			cwd: "/tmp",
 			toolOptions: {},
 			getToolDefinition: () => undefined,
@@ -369,7 +372,7 @@ describe("ENG-4531 agent message UI", () => {
 		expect(messageThenTool.at(-1)?.render(120)[0]).not.toBe("");
 
 		const userThenMessage = buildConversationComponents(
-			[{ role: "user", content: "intervening prompt", timestamp: 123 }, second] as AgentMessage[],
+			fromPartial<AgentMessage[]>([{ role: "user", content: "intervening prompt", timestamp: 123 }, second]),
 			options,
 		);
 		expect(userThenMessage[1]?.render(120)[0]).toBe("");
@@ -406,7 +409,7 @@ describe("ENG-4531 agent message UI", () => {
 		const toolComponents = buildConversationComponents(
 			[fauxAssistantMessage(fauxToolCall("ipython", { code: "print('ready')" }), { stopReason: "toolUse" })],
 			{
-				ui: { requestRender: () => {} } as unknown as TUI,
+				ui: fromAny<TUI, unknown>({ requestRender: () => {} }),
 				cwd: "/tmp",
 				toolOptions: {},
 				getToolDefinition: () => undefined,

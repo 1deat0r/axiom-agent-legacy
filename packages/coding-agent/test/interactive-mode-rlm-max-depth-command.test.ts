@@ -1,4 +1,5 @@
 import { Container } from "@earendil-works/pi-tui";
+import { fromAny } from "@total-typescript/shoehorn";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.js";
 import { initTheme } from "../src/modes/interactive/theme/theme.js";
@@ -29,7 +30,7 @@ type Prototype = {
 	setupEditorSubmitHandler(this: SubmitContext): void;
 };
 
-const prototype = InteractiveMode.prototype as unknown as Prototype;
+const prototype = fromAny<Prototype, unknown>(InteractiveMode.prototype);
 
 function renderAll(container: Container, width = 120): string {
 	return container.children
@@ -65,7 +66,7 @@ describe("InteractiveMode /rlm-max-depth", () => {
 		const commandPending = new Promise<void>((resolve) => {
 			resolveCommand = resolve;
 		});
-		const submitContext = {
+		const submitContext = fromAny<SubmitContext, unknown>({
 			defaultEditor: {},
 			editor: {
 				getText: () => editorText,
@@ -80,7 +81,7 @@ describe("InteractiveMode /rlm-max-depth", () => {
 			pendingPromptStashReleases: [],
 			promptStashState: {},
 			clearShortcutGuide: vi.fn(),
-		} as unknown as SubmitContext;
+		});
 		prototype.setupEditorSubmitHandler.call(submitContext);
 
 		const submission = submitContext.defaultEditor.onSubmit?.("/rlm-max-depth 3");

@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ENV_AGENT_DIR } from "../../../src/config.js";
 
@@ -96,7 +97,7 @@ process.exit(0);
 			});
 			exitCode = 0;
 		} catch (err: unknown) {
-			const e = err as { status: number; stdout: string; stderr: string };
+			const e = fromAny<{ status: number; stdout: string; stderr: string }, unknown>(err);
 			_stdout = e.stdout ?? "";
 			stderr = e.stderr ?? "";
 			exitCode = e.status ?? 1;

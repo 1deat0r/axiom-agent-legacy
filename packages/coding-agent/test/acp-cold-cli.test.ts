@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it } from "vitest";
 import { ENV_AGENT_DIR } from "../src/config.js";
 
@@ -115,7 +116,7 @@ async function driveAcpTurn(baseUrl: string): Promise<AcpResult> {
 				if (!line.trim().startsWith("{")) continue;
 				let frame: Record<string, unknown>;
 				try {
-					frame = JSON.parse(line) as Record<string, unknown>;
+					frame = fromPartial<Record<string, unknown>>(JSON.parse(line));
 				} catch {
 					continue;
 				}
@@ -132,7 +133,7 @@ async function driveAcpTurn(baseUrl: string): Promise<AcpResult> {
 						params: { cwd: projectDir, mcpServers: [] },
 					});
 				} else if (frame.id === 2) {
-					const sessionId = (frame.result as { sessionId?: string } | undefined)?.sessionId;
+					const sessionId = fromAny<{ sessionId?: string } | undefined, unknown>(frame.result)?.sessionId;
 					send({
 						jsonrpc: "2.0",
 						id: 3,
@@ -202,8 +203,8 @@ describe("ACP mode over a cold real CLI process", () => {
 		// The provider rejected, so the turn must not claim a clean completion.
 		// Before this was fixed the answer was {stopReason: "end_turn"} with
 		// updates === 0, which a client reads as a successful empty turn.
-		const result = (prompt as { result?: { stopReason?: string } }).result;
-		const error = (prompt as { error?: unknown }).error;
+		const result = fromAny<{ result?: { stopReason?: string } }, unknown>(prompt).result;
+		const error = fromAny<{ error?: unknown }, unknown>(prompt).error;
 		expect(
 			error !== undefined || result?.stopReason !== "end_turn",
 			`a failed turn must not report end_turn (updates=${updates}, frame=${JSON.stringify(prompt)})`,

@@ -1,4 +1,5 @@
 import { setKeybindings, type TUI } from "@earendil-works/pi-tui";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.js";
 import { KeybindingsManager } from "../src/core/keybindings.js";
@@ -12,7 +13,7 @@ import { createHarness, type Harness } from "./suite/harness.js";
 const DOWN = "\x1b[B";
 
 function createFakeTui(): TUI {
-	return { requestRender: () => {} } as unknown as TUI;
+	return fromAny<TUI, unknown>({ requestRender: () => {} });
 }
 
 function moveDown(component: { handleInput(data: string): void }, count: number): void {

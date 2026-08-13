@@ -1,5 +1,6 @@
 import type { AgentEvent, AgentTool } from "@earendil-works/pi-agent-core";
 import { type AssistantMessage, fauxAssistantMessage, fauxThinking, fauxToolCall } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
 import { createHarness, type Harness } from "./harness.js";
@@ -286,7 +287,7 @@ describe("AgentSession retry and event characterization", () => {
 	it("keeps retry state active when overflow compaction will retry", async () => {
 		const harness = await createHarness({ settings: { retry: { enabled: true, maxRetries: 3, baseDelayMs: 1 } } });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SessionRetryCompactionInternals;
+		const internals = fromAny<SessionRetryCompactionInternals, unknown>(harness.session);
 		const originalCheckCompaction = internals._checkCompaction.bind(harness.session);
 		const overflowMessage = fauxAssistantMessage("", {
 			stopReason: "error",
@@ -299,7 +300,9 @@ describe("AgentSession retry and event characterization", () => {
 		internals._checkCompaction = async () => true;
 
 		try {
-			await internals._processAgentEvent({ type: "agent_end", messages: [overflowMessage] } as AgentEvent);
+			await internals._processAgentEvent(
+				fromPartial<AgentEvent>({ type: "agent_end", messages: [overflowMessage] }),
+			);
 
 			expect(internals._retryAttempt).toBe(1);
 			expect(harness.session.isRetrying).toBe(true);
@@ -313,7 +316,7 @@ describe("AgentSession retry and event characterization", () => {
 	it("cancels overflow-compaction retry continuation when abortRetry is called", async () => {
 		const harness = await createHarness({ settings: { retry: { enabled: true, maxRetries: 3, baseDelayMs: 1 } } });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SessionRetryCompactionInternals;
+		const internals = fromAny<SessionRetryCompactionInternals, unknown>(harness.session);
 		const compactionAbortController = new AbortController();
 		internals._retryAttempt = 1;
 		internals._retryPromise = new Promise<void>((resolve) => {

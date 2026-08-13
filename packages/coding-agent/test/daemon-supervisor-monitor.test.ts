@@ -5,6 +5,7 @@ import type { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getProcessStartId } from "../src/core/session-lease.js";
 import type { DaemonSocketClient } from "../src/modes/daemon/active-session-state.js";
@@ -31,20 +32,28 @@ import type { PrivateFrame } from "../src/modes/session-worker/private-framing.j
 import * as childProcessModule from "../src/utils/child-process.js";
 import { createDeferred } from "./suite/scheduling.js";
 
-const workerLaunchTestState = vi.hoisted(() => ({
-	capture: false,
-	forceMissingProcessStartId: false,
-	fixtureMode: "worker" as "worker" | "close-gate" | "rollback-gate" | "successful-gate",
-	gateMarkerPath: "",
-	tsxCliPath: "",
-	cliEntrypoint: "",
-	spawned: [] as Array<{ child: ChildProcess; args: readonly string[] }>,
-}));
+const workerLaunchTestState = vi.hoisted(
+	(): {
+		capture: boolean;
+		forceMissingProcessStartId: boolean;
+		fixtureMode: "worker" | "close-gate" | "rollback-gate" | "successful-gate";
+		gateMarkerPath: string;
+		tsxCliPath: string;
+		cliEntrypoint: string;
+		spawned: Array<{ child: ChildProcess; args: readonly string[] }>;
+	} => ({
+		capture: false,
+		forceMissingProcessStartId: false,
+		fixtureMode: "worker",
+		gateMarkerPath: "",
+		tsxCliPath: "",
+		cliEntrypoint: "",
+		spawned: [],
+	}),
+);
 
 vi.mock("node:child_process", async (importOriginal) => {
-	const actual = (await importOriginal()) as Record<string, unknown> & {
-		spawn(command: string, args: readonly string[], options: SpawnOptions): ChildProcess;
-	};
+	const actual = await importOriginal<typeof import("node:child_process")>();
 	return {
 		...actual,
 		spawn(command: string, args: readonly string[], options: SpawnOptions): ChildProcess {
@@ -58,12 +67,12 @@ vi.mock("node:child_process", async (importOriginal) => {
 });
 
 vi.mock("../src/cli/subprocess-launch.js", async (importOriginal) => {
-	const actual = (await importOriginal()) as Record<string, unknown>;
+	const actual = await importOriginal<typeof import("../src/cli/subprocess-launch.js")>();
 	return {
 		...actual,
 		createCliSubprocessLaunchSpec(args: readonly string[]) {
 			if (!workerLaunchTestState.capture) {
-				return (actual.createCliSubprocessLaunchSpec as (args: readonly string[]) => unknown)(args);
+				return actual.createCliSubprocessLaunchSpec(args);
 			}
 			if (workerLaunchTestState.fixtureMode === "rollback-gate") {
 				const markerPath = JSON.stringify(workerLaunchTestState.gateMarkerPath);
@@ -103,9 +112,7 @@ vi.mock("../src/cli/subprocess-launch.js", async (importOriginal) => {
 });
 
 vi.mock("../src/core/session-lease.js", async (importOriginal) => {
-	const actual = (await importOriginal()) as Record<string, unknown> & {
-		getProcessStartId(pid: number): string | undefined;
-	};
+	const actual = await importOriginal<typeof import("../src/core/session-lease.js")>();
 	return {
 		...actual,
 		getProcessStartId(pid: number): string | undefined {
@@ -190,7 +197,7 @@ function createExistingLaunchWorker(root: string, descriptorDir: string) {
 			version: 1 as const,
 			workerId,
 			pid: 999_999,
-			processStartId: undefined as string | undefined,
+			processStartId: fromPartial<string | undefined>(undefined),
 			socketPath: join(root, `${workerId}.sock`),
 			recoveryJournalPath: join(descriptorDir, `${workerId}.recovery.jsonl`),
 			orphanProcessJournalPath: join(descriptorDir, `${workerId}.orphans.jsonl`),
@@ -200,7 +207,7 @@ function createExistingLaunchWorker(root: string, descriptorDir: string) {
 			createdAt: now,
 			updatedAt: now,
 			lifecycle: "recovering" as const,
-			stopRequestedAt: undefined as string | undefined,
+			stopRequestedAt: fromPartial<string | undefined>(undefined),
 			createCommand: { type: "create" as const, config: { cwd: root, agentDir: root } },
 			consecutiveFailures: 0,
 		},
@@ -263,14 +270,16 @@ function createHarness(canConnect: () => Promise<boolean>): SupervisorMonitorHar
 	const registryDir = mkdtempSync(join(tmpdir(), "prime-supervisor-registry-test-"));
 	supervisorRegistryDirs.add(registryDir);
 	process.env[supervisorRegistryDirEnv] = registryDir;
-	return Object.assign(Object.create(AgentDaemon.prototype), {
-		options: { worker: {} },
-		clients: new Set<{ authenticated: boolean }>(),
-		supervisorClaims: new Map<object, object>(),
-		shuttingDown: false,
-		canConnectToSupervisor: vi.fn(canConnect),
-		launchReplacementSupervisor: vi.fn(async () => undefined),
-	}) as SupervisorMonitorHarness;
+	return fromPartial<SupervisorMonitorHarness>(
+		Object.assign(Object.create(AgentDaemon.prototype), {
+			options: { worker: {} },
+			clients: new Set<{ authenticated: boolean }>(),
+			supervisorClaims: new Map<object, object>(),
+			shuttingDown: false,
+			canConnectToSupervisor: vi.fn(canConnect),
+			launchReplacementSupervisor: vi.fn(async () => undefined),
+		}),
+	);
 }
 
 describe("daemon worker supervisor monitoring", () => {
@@ -312,21 +321,26 @@ describe("daemon worker supervisor monitoring", () => {
 				},
 				worker: { authenticationToken: "token" },
 			});
-			const socket = Object.assign(new EventEmitter(), {
-				destroyed: false,
-				write: vi.fn(() => true),
-				end: vi.fn(function (this: EventEmitter) {
-					this.emit("close");
+			const socket = fromAny<Socket, unknown>(
+				Object.assign(new EventEmitter(), {
+					destroyed: false,
+					write: vi.fn(() => true),
+					end: vi.fn(function (this: EventEmitter) {
+						this.emit("close");
+					}),
 				}),
-			}) as unknown as Socket;
-			const internals = daemon as unknown as {
-				clients: Set<DaemonSocketClient>;
-				supervisorClaims: Map<DaemonSocketClient, object>;
-				handleConnection(socket: Socket): void;
-				checkSupervisorFences(): Promise<void>;
-				assertSupervisorClaimCurrent: ReturnType<typeof vi.fn>;
-				scheduleSupervisorAvailabilityCheck: ReturnType<typeof vi.fn>;
-			};
+			);
+			const internals = fromAny<
+				{
+					clients: Set<DaemonSocketClient>;
+					supervisorClaims: Map<DaemonSocketClient, object>;
+					handleConnection(socket: Socket): void;
+					checkSupervisorFences(): Promise<void>;
+					assertSupervisorClaimCurrent: ReturnType<typeof vi.fn>;
+					scheduleSupervisorAvailabilityCheck: ReturnType<typeof vi.fn>;
+				},
+				unknown
+			>(daemon);
 			internals.handleConnection(socket);
 			const client = [...internals.clients][0]!;
 			client.authenticated = true;
@@ -354,10 +368,10 @@ describe("daemon worker supervisor monitoring", () => {
 	it("does not revoke a newer same-client claim when an older periodic fence fails", async () => {
 		const assertionReached = createDeferred<void>();
 		const assertionGate = createDeferred<void>();
-		const client = {
+		const client = fromAny<DaemonSocketClient, unknown>({
 			authenticated: true,
 			socket: { destroyed: false, end: vi.fn() },
-		} as unknown as DaemonSocketClient;
+		});
 		const oldClaim = { claim: {}, ownerFingerprint: "old" };
 		const newerClaim = { claim: {}, ownerFingerprint: "new" };
 		const transaction = {
@@ -366,22 +380,27 @@ describe("daemon worker supervisor monitoring", () => {
 			abort: new AbortController(),
 			phase: "prepared",
 		};
-		const daemon = Object.assign(Object.create(AgentDaemon.prototype), {
-			options: { worker: { authenticationToken: "token" } },
-			supervisorClaims: new Map([[client, oldClaim]]),
-			updateRestart: transaction,
-			shuttingDown: false,
-			scheduleSupervisorFenceCheck: vi.fn(),
-			assertSupervisorClaimCurrent: vi.fn(async () => {
-				assertionReached.resolve();
-				await assertionGate.promise;
-				throw new Error("stale fence");
+		const daemon = fromAny<
+			{
+				supervisorClaims: Map<DaemonSocketClient, object>;
+				updateRestart: object;
+				checkSupervisorFences(): Promise<void>;
+			},
+			unknown
+		>(
+			Object.assign(Object.create(AgentDaemon.prototype), {
+				options: { worker: { authenticationToken: "token" } },
+				supervisorClaims: new Map([[client, oldClaim]]),
+				updateRestart: transaction,
+				shuttingDown: false,
+				scheduleSupervisorFenceCheck: vi.fn(),
+				assertSupervisorClaimCurrent: vi.fn(async () => {
+					assertionReached.resolve();
+					await assertionGate.promise;
+					throw new Error("stale fence");
+				}),
 			}),
-		}) as unknown as {
-			supervisorClaims: Map<DaemonSocketClient, object>;
-			updateRestart: object;
-			checkSupervisorFences(): Promise<void>;
-		};
+		);
 
 		const check = daemon.checkSupervisorFences();
 		await assertionReached.promise;
@@ -397,7 +416,7 @@ describe("daemon worker supervisor monitoring", () => {
 	it("does not revoke a newer same-client claim when an older command fence fails", async () => {
 		const assertionReached = createDeferred<void>();
 		const assertionGate = createDeferred<void>();
-		const client = {
+		const client = fromAny<DaemonSocketClient, unknown>({
 			id: "supervisor",
 			authenticated: true,
 			socket: { destroyed: false, write: vi.fn(() => true), end: vi.fn() },
@@ -405,7 +424,7 @@ describe("daemon worker supervisor monitoring", () => {
 			detachInput: vi.fn(),
 			supportsExtensionUi: false,
 			capabilities: new Set(),
-		} as unknown as DaemonSocketClient;
+		});
 		const oldClaim = { claim: {}, ownerFingerprint: "old" };
 		const newerClaim = { claim: {}, ownerFingerprint: "new" };
 		const transaction = {
@@ -414,21 +433,26 @@ describe("daemon worker supervisor monitoring", () => {
 			abort: new AbortController(),
 			phase: "prepared",
 		};
-		const daemon = Object.assign(Object.create(AgentDaemon.prototype), {
-			options: { worker: { authenticationToken: "token" } },
-			supervisorClaims: new Map([[client, oldClaim]]),
-			updateRestart: transaction,
-			handleWorkerCommand: vi.fn(async () => undefined),
-			assertSupervisorClaimCurrent: vi.fn(async () => {
-				assertionReached.resolve();
-				await assertionGate.promise;
-				throw new Error("stale fence");
+		const daemon = fromAny<
+			{
+				supervisorClaims: Map<DaemonSocketClient, object>;
+				updateRestart: object;
+				handleLine(client: DaemonSocketClient, line: string): Promise<void>;
+			},
+			unknown
+		>(
+			Object.assign(Object.create(AgentDaemon.prototype), {
+				options: { worker: { authenticationToken: "token" } },
+				supervisorClaims: new Map([[client, oldClaim]]),
+				updateRestart: transaction,
+				handleWorkerCommand: vi.fn(async () => undefined),
+				assertSupervisorClaimCurrent: vi.fn(async () => {
+					assertionReached.resolve();
+					await assertionGate.promise;
+					throw new Error("stale fence");
+				}),
 			}),
-		}) as unknown as {
-			supervisorClaims: Map<DaemonSocketClient, object>;
-			updateRestart: object;
-			handleLine(client: DaemonSocketClient, line: string): Promise<void>;
-		};
+		);
 
 		const command = daemon.handleLine(
 			client,
@@ -455,26 +479,31 @@ describe("daemon worker supervisor monitoring", () => {
 		});
 		let assertionCount = 0;
 		const handleWorkerCommand = vi.fn(async () => undefined);
-		const daemon = Object.assign(Object.create(AgentDaemon.prototype), {
-			options: { worker: { authenticationToken: "token" } },
-			supervisorClaims: new Map(),
-			shuttingDown: false,
-			clearSupervisorAvailabilityCheck: vi.fn(),
-			scheduleSupervisorFenceCheck: vi.fn(),
-			handleWorkerCommand,
-			assertSupervisorClaimCurrent: vi.fn(async () => {
-				assertionCount++;
-				if (assertionCount === 2) {
-					markOldAssertionReached();
-					await oldAssertionGate;
-				}
-				return `fingerprint-${assertionCount}`;
+		const daemon = fromAny<
+			{
+				handleLine(client: DaemonSocketClient, line: string): Promise<void>;
+			},
+			unknown
+		>(
+			Object.assign(Object.create(AgentDaemon.prototype), {
+				options: { worker: { authenticationToken: "token" } },
+				supervisorClaims: new Map(),
+				shuttingDown: false,
+				clearSupervisorAvailabilityCheck: vi.fn(),
+				scheduleSupervisorFenceCheck: vi.fn(),
+				handleWorkerCommand,
+				assertSupervisorClaimCurrent: vi.fn(async () => {
+					assertionCount++;
+					if (assertionCount === 2) {
+						markOldAssertionReached();
+						await oldAssertionGate;
+					}
+					return `fingerprint-${assertionCount}`;
+				}),
 			}),
-		}) as unknown as {
-			handleLine(client: DaemonSocketClient, line: string): Promise<void>;
-		};
+		);
 		const makeClient = () =>
-			({
+			fromAny<DaemonSocketClient, unknown>({
 				id: "supervisor",
 				authenticated: false,
 				socket: { destroyed: false, write: vi.fn(() => true), end: vi.fn() },
@@ -482,7 +511,7 @@ describe("daemon worker supervisor monitoring", () => {
 				detachInput: vi.fn(),
 				supportsExtensionUi: false,
 				capabilities: new Set(),
-			}) as unknown as DaemonSocketClient;
+			});
 		const auth = (generation: string) =>
 			JSON.stringify({
 				type: "worker_auth",
@@ -536,29 +565,31 @@ describe("daemon worker supervisor monitoring", () => {
 		process.env[supervisorRegistryDirEnv] = registryDir;
 		let assertionCount = 0;
 		const workers = new Map<string, unknown>();
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			...createSupervisorSnapshotState(),
-			defaultSessionConfig: { cwd: root, agentDir: root },
-			descriptorDir,
-			socketPath: join(root, "supervisor.sock"),
-			workers,
-			assertRecoveryAllowed: vi.fn(async () => {
-				assertionCount++;
-				if ("assertionCall" in scenario && assertionCount === scenario.assertionCall) {
-					throw scenario.error;
-				}
-			}),
-			...("persistFailure" in scenario
-				? {
-						persistWorker: vi.fn(() => {
-							throw scenario.error;
-						}),
-					}
-				: {}),
-			log: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			launchWorker(command: { type: "create"; config: { cwd: string; agentDir: string } }): Promise<unknown>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				...createSupervisorSnapshotState(),
+				defaultSessionConfig: { cwd: root, agentDir: root },
+				descriptorDir,
+				socketPath: join(root, "supervisor.sock"),
+				workers,
+				assertRecoveryAllowed: vi.fn(async () => {
+					assertionCount++;
+					if ("assertionCall" in scenario && assertionCount === scenario.assertionCall) {
+						throw scenario.error;
+					}
+				}),
+				...("persistFailure" in scenario
+					? {
+							persistWorker: vi.fn(() => {
+								throw scenario.error;
+							}),
+						}
+					: {}),
+				log: vi.fn(),
+			}),
+		);
 
 		await expect(supervisor.launchWorker({ type: "create", config: { cwd: root, agentDir: root } })).rejects.toBe(
 			scenario.error,
@@ -591,29 +622,31 @@ describe("daemon worker supervisor monitoring", () => {
 		let assertionCount = 0;
 		const workers = new Map<string, unknown>();
 		const connectWorker = vi.fn();
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			...createSupervisorSnapshotState(),
-			defaultSessionConfig: { cwd: root, agentDir: root },
-			descriptorDir,
-			socketPath: join(root, "supervisor.sock"),
-			workers,
-			shuttingDown: false,
-			assertRecoveryAllowed: vi.fn(async () => {
-				assertionCount++;
-				if (assertionCount === 3) {
-					const child = workerLaunchTestState.spawned.at(-1)?.child;
-					if (!child) {
-						throw new Error("Worker child was not captured");
-					}
-					await waitForCapturedChildClose(child);
-				}
-			}),
-			connectWorker,
-			syncAgentPeers: vi.fn(async () => undefined),
-			log: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			launchWorker(command: { type: "create"; config: { cwd: string; agentDir: string } }): Promise<unknown>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				...createSupervisorSnapshotState(),
+				defaultSessionConfig: { cwd: root, agentDir: root },
+				descriptorDir,
+				socketPath: join(root, "supervisor.sock"),
+				workers,
+				shuttingDown: false,
+				assertRecoveryAllowed: vi.fn(async () => {
+					assertionCount++;
+					if (assertionCount === 3) {
+						const child = workerLaunchTestState.spawned.at(-1)?.child;
+						if (!child) {
+							throw new Error("Worker child was not captured");
+						}
+						await waitForCapturedChildClose(child);
+					}
+				}),
+				connectWorker,
+				syncAgentPeers: vi.fn(async () => undefined),
+				log: vi.fn(),
+			}),
+		);
 
 		const timeoutError = new Error("startup gate rejection timed out");
 		const result = await Promise.race([
@@ -661,25 +694,27 @@ describe("daemon worker supervisor monitoring", () => {
 				})),
 			};
 		});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			...createSupervisorSnapshotState(),
-			defaultSessionConfig: { cwd: root, agentDir: root },
-			descriptorDir,
-			socketPath: join(root, "supervisor.sock"),
-			workers,
-			shuttingDown: false,
-			assertRecoveryAllowed: vi.fn(async () => undefined),
-			connectWorker,
-			subscribeWorker: vi.fn(async () => undefined),
-			refreshWorkerSummaries: vi.fn(async () => undefined),
-			syncAgentPeers: vi.fn(async () => undefined),
-			log: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			launchWorker(command: {
 				type: "create";
 				config: { cwd: string; agentDir: string };
 			}): Promise<{ descriptor: { lifecycle: string } }>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				...createSupervisorSnapshotState(),
+				defaultSessionConfig: { cwd: root, agentDir: root },
+				descriptorDir,
+				socketPath: join(root, "supervisor.sock"),
+				workers,
+				shuttingDown: false,
+				assertRecoveryAllowed: vi.fn(async () => undefined),
+				connectWorker,
+				subscribeWorker: vi.fn(async () => undefined),
+				refreshWorkerSummaries: vi.fn(async () => undefined),
+				syncAgentPeers: vi.fn(async () => undefined),
+				log: vi.fn(),
+			}),
+		);
 
 		const worker = await supervisor.launchWorker({ type: "create", config: { cwd: root, agentDir: root } });
 
@@ -719,27 +754,29 @@ describe("daemon worker supervisor monitoring", () => {
 			await waitForFile(markerPath);
 			throw cancellation;
 		});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			...createSupervisorSnapshotState(),
-			defaultSessionConfig: { cwd: root, agentDir: root },
-			descriptorDir,
-			socketPath: join(root, "supervisor.sock"),
-			workers,
-			shuttingDown: false,
-			assertRecoveryAllowed: vi.fn(async () => undefined),
-			connectWorker,
-			persistWorker: vi.fn(function (this: object, worker: object) {
-				persistenceCalls++;
-				if (persistenceCalls === 2) {
-					throw rollbackPersistenceError;
-				}
-				Reflect.apply(persistWorker, this, [worker]);
-			}),
-			syncAgentPeers: vi.fn(async () => undefined),
-			log: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			launchWorker(command: { type: "create"; config: { cwd: string; agentDir: string } }): Promise<unknown>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				...createSupervisorSnapshotState(),
+				defaultSessionConfig: { cwd: root, agentDir: root },
+				descriptorDir,
+				socketPath: join(root, "supervisor.sock"),
+				workers,
+				shuttingDown: false,
+				assertRecoveryAllowed: vi.fn(async () => undefined),
+				connectWorker,
+				persistWorker: vi.fn(function (this: object, worker: object) {
+					persistenceCalls++;
+					if (persistenceCalls === 2) {
+						throw rollbackPersistenceError;
+					}
+					Reflect.apply(persistWorker, this, [worker]);
+				}),
+				syncAgentPeers: vi.fn(async () => undefined),
+				log: vi.fn(),
+			}),
+		);
 
 		await expect(supervisor.launchWorker({ type: "create", config: { cwd: root, agentDir: root } })).rejects.toBe(
 			cancellation,
@@ -779,31 +816,33 @@ describe("daemon worker supervisor monitoring", () => {
 			await waitForFile(markerPath);
 			throw cancellation;
 		});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			...createSupervisorSnapshotState(),
-			defaultSessionConfig: { cwd: root, agentDir: root },
-			descriptorDir,
-			socketPath: join(root, "supervisor.sock"),
-			workers,
-			shuttingDown: false,
-			assertRecoveryAllowed: vi.fn(async () => undefined),
-			connectWorker,
-			persistWorker: vi.fn(function (this: object, worker: object) {
-				persistenceCalls++;
-				if (persistenceCalls === 3) {
-					throw restorationError;
-				}
-				Reflect.apply(persistWorker, this, [worker]);
-			}),
-			deferWorkerRecovery,
-			syncAgentPeers: vi.fn(async () => undefined),
-			log: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			launchWorker(
 				command: { type: "create"; config: { cwd: string; agentDir: string } },
 				existing: object,
 			): Promise<unknown>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				...createSupervisorSnapshotState(),
+				defaultSessionConfig: { cwd: root, agentDir: root },
+				descriptorDir,
+				socketPath: join(root, "supervisor.sock"),
+				workers,
+				shuttingDown: false,
+				assertRecoveryAllowed: vi.fn(async () => undefined),
+				connectWorker,
+				persistWorker: vi.fn(function (this: object, worker: object) {
+					persistenceCalls++;
+					if (persistenceCalls === 3) {
+						throw restorationError;
+					}
+					Reflect.apply(persistWorker, this, [worker]);
+				}),
+				deferWorkerRecovery,
+				syncAgentPeers: vi.fn(async () => undefined),
+				log: vi.fn(),
+			}),
+		);
 
 		await expect(
 			supervisor.launchWorker({ type: "create", config: { cwd: root, agentDir: root } }, existing),
@@ -871,27 +910,29 @@ describe("daemon worker supervisor monitoring", () => {
 			await waitForFile(markerPath);
 			throw cancellation;
 		});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			...createSupervisorSnapshotState(),
-			defaultSessionConfig: { cwd: root, agentDir: root },
-			descriptorDir,
-			socketPath: join(root, "supervisor.sock"),
-			workers,
-			shuttingDown: false,
-			assertRecoveryAllowed: vi.fn(async () => undefined),
-			connectWorker,
-			stopWorker: controlledStopWorker,
-			deferWorkerRecovery,
-			syncAgentPeers: vi.fn(async () => undefined),
-			log: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			shuttingDown: boolean;
 			launchWorker(
 				command: { type: "create"; config: { cwd: string; agentDir: string } },
 				existing: object,
 			): Promise<unknown>;
 			stopWorker(worker: object, removeDescriptor: boolean, force: boolean): Promise<void>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				...createSupervisorSnapshotState(),
+				defaultSessionConfig: { cwd: root, agentDir: root },
+				descriptorDir,
+				socketPath: join(root, "supervisor.sock"),
+				workers,
+				shuttingDown: false,
+				assertRecoveryAllowed: vi.fn(async () => undefined),
+				connectWorker,
+				stopWorker: controlledStopWorker,
+				deferWorkerRecovery,
+				syncAgentPeers: vi.fn(async () => undefined),
+				log: vi.fn(),
+			}),
+		);
 
 		const launchResult = supervisor
 			.launchWorker({ type: "create", config: { cwd: root, agentDir: root } }, existing)
@@ -926,26 +967,30 @@ describe("daemon worker supervisor monitoring", () => {
 		});
 		const ownershipRelease = vi.fn(async () => undefined);
 		const log = vi.fn();
-		const exit = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
-			throw new Error(`exit ${code}`);
-		}) as typeof process.exit);
+		const exit = vi.spyOn(process, "exit").mockImplementation(
+			fromPartial<typeof process.exit>((code?: string | number | null) => {
+				throw new Error(`exit ${code}`);
+			}),
+		);
 		type ShutdownHarness = {
 			socketLease?: { release(): Promise<void> };
 			ownership?: { release(): Promise<void> };
 			shutdown(exitCode: number, stopWorkers: boolean, relaunch?: boolean, forceWorkers?: boolean): Promise<never>;
 		};
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			shuttingDown: false,
-			signalCleanupHandlers: [],
-			workers: new Map(),
-			clients: new Set(),
-			catalog: { stop: vi.fn(async () => undefined) },
-			cleanupSocket,
-			snapshotCacheRoot: "\0",
-			socketLease: { release: leaseRelease },
-			ownership: { release: ownershipRelease },
-			log,
-		}) as ShutdownHarness;
+		const supervisor = fromPartial<ShutdownHarness>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				shuttingDown: false,
+				signalCleanupHandlers: [],
+				workers: new Map(),
+				clients: new Set(),
+				catalog: { stop: vi.fn(async () => undefined) },
+				cleanupSocket,
+				snapshotCacheRoot: "\0",
+				socketLease: { release: leaseRelease },
+				ownership: { release: ownershipRelease },
+				log,
+			}),
+		);
 
 		try {
 			await expect(supervisor.shutdown(42, false)).rejects.toThrow("exit 42");
@@ -986,28 +1031,32 @@ describe("daemon worker supervisor monitoring", () => {
 			stopFinalization: new Promise<void>(() => {}),
 		};
 		const workers = new Map([[worker.descriptor.workerId, worker]]);
-		const exit = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
-			throw new Error(`exit ${code}`);
-		}) as typeof process.exit);
+		const exit = vi.spyOn(process, "exit").mockImplementation(
+			fromPartial<typeof process.exit>((code?: string | number | null) => {
+				throw new Error(`exit ${code}`);
+			}),
+		);
 		const killSpy = vi.spyOn(childProcessModule, "signalProcessGroupOrProcess").mockImplementation(() => {});
 		const existsSpy = vi.spyOn(childProcessModule, "processIdExists").mockReturnValue(true);
 		const aliveSpy = vi.spyOn(childProcessModule, "isProcessAlive").mockReturnValue(true);
 		const catalogStop = vi.fn(async () => undefined);
 		const log = vi.fn();
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			shuttingDown: false,
-			signalCleanupHandlers: [],
-			workers,
-			clients: new Set(),
-			persistWorkerStopTombstone: vi.fn(),
-			hasPersistedWorkerDescriptors: vi.fn(() => true),
-			catalog: { stop: catalogStop },
-			cleanupSocket: vi.fn(),
-			snapshotCacheRoot: join(root, "cache"),
-			log,
-		}) as {
+		const supervisor = fromPartial<{
 			shutdown(exitCode: number, stopWorkers: boolean, relaunch?: boolean, forceWorkers?: boolean): Promise<never>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				shuttingDown: false,
+				signalCleanupHandlers: [],
+				workers,
+				clients: new Set(),
+				persistWorkerStopTombstone: vi.fn(),
+				hasPersistedWorkerDescriptors: vi.fn(() => true),
+				catalog: { stop: catalogStop },
+				cleanupSocket: vi.fn(),
+				snapshotCacheRoot: join(root, "cache"),
+				log,
+			}),
+		);
 
 		try {
 			const shutdown = supervisor.shutdown(0, true, false, true).then(
@@ -1117,15 +1166,17 @@ describe("daemon worker supervisor monitoring", () => {
 		});
 		const persistWorker = vi.fn();
 		const recoverWorker = vi.fn(async () => undefined);
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			...createSupervisorSnapshotState(),
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			shuttingDown: false,
-			assertRecoveryAllowed,
-			persistWorker,
-			syncAgentPeers: vi.fn(async () => undefined),
-			recoverWorker,
-		}) as DeferredRecoveryHarness;
+		const supervisor = fromPartial<DeferredRecoveryHarness>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				...createSupervisorSnapshotState(),
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				shuttingDown: false,
+				assertRecoveryAllowed,
+				persistWorker,
+				syncAgentPeers: vi.fn(async () => undefined),
+				recoverWorker,
+			}),
+		);
 
 		await supervisor.handleWorkerClose(worker, client, new Error("worker disconnected"));
 		const deferredRecovery = worker.deferredRecovery;
@@ -1176,15 +1227,17 @@ describe("daemon worker supervisor monitoring", () => {
 		});
 		const persistWorker = vi.fn();
 		const recoverWorker = vi.fn(async () => undefined);
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			...createSupervisorSnapshotState(),
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			shuttingDown: false,
-			assertRecoveryAllowed,
-			persistWorker,
-			syncAgentPeers: vi.fn(async () => undefined),
-			recoverWorker,
-		}) as DeferredRecoveryHarness;
+		const supervisor = fromPartial<DeferredRecoveryHarness>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				...createSupervisorSnapshotState(),
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				shuttingDown: false,
+				assertRecoveryAllowed,
+				persistWorker,
+				syncAgentPeers: vi.fn(async () => undefined),
+				recoverWorker,
+			}),
+		);
 
 		await supervisor.handleWorkerClose(worker, client, new Error("worker disconnected"));
 		const deferredRecovery = worker.deferredRecovery;
@@ -1247,15 +1300,17 @@ describe("daemon worker supervisor monitoring", () => {
 		});
 		const persistWorker = vi.fn();
 		const recoverWorker = vi.fn(async () => undefined);
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			...createSupervisorSnapshotState(),
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			shuttingDown: false,
-			assertRecoveryAllowed,
-			persistWorker,
-			syncAgentPeers: vi.fn(async () => undefined),
-			recoverWorker,
-		}) as DeferredRecoveryHarness;
+		const supervisor = fromPartial<DeferredRecoveryHarness>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				...createSupervisorSnapshotState(),
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				shuttingDown: false,
+				assertRecoveryAllowed,
+				persistWorker,
+				syncAgentPeers: vi.fn(async () => undefined),
+				recoverWorker,
+			}),
+		);
 
 		await supervisor.handleWorkerClose(worker, client, new Error("worker disconnected"));
 		const deferredRecovery = worker.deferredRecovery;
@@ -1300,15 +1355,17 @@ describe("daemon worker supervisor monitoring", () => {
 			const persistWorker = vi.fn();
 			const syncAgentPeers = vi.fn(async () => undefined);
 			const recoverWorker = vi.fn(async () => undefined);
-			const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-				...createSupervisorSnapshotState(),
-				workers: new Map([[worker.descriptor.workerId, worker]]),
-				shuttingDown: false,
-				assertRecoveryAllowed: vi.fn(() => assertion),
-				persistWorker,
-				syncAgentPeers,
-				recoverWorker,
-			}) as DeferredRecoveryHarness;
+			const supervisor = fromPartial<DeferredRecoveryHarness>(
+				Object.assign(Object.create(DaemonSupervisor.prototype), {
+					...createSupervisorSnapshotState(),
+					workers: new Map([[worker.descriptor.workerId, worker]]),
+					shuttingDown: false,
+					assertRecoveryAllowed: vi.fn(() => assertion),
+					persistWorker,
+					syncAgentPeers,
+					recoverWorker,
+				}),
+			);
 
 			const handling = supervisor.handleWorkerClose(worker, client, new Error("worker disconnected"));
 			invalidate(supervisor, worker);
@@ -1369,14 +1426,16 @@ describe("daemon worker supervisor monitoring", () => {
 		const recoverWorker = vi.fn(async () => {
 			worker.descriptor.lifecycle = "ready";
 		});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			persistWorker,
-			recoverWorker,
-			assertWorkerAccessibleToClient: vi.fn(),
-		}) as RetryHarness;
+		const supervisor = fromPartial<RetryHarness>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				persistWorker,
+				recoverWorker,
+				assertWorkerAccessibleToClient: vi.fn(),
+			}),
+		);
 
-		await supervisor.handleCommand({} as DaemonSocketClient, {
+		await supervisor.handleCommand(fromPartial<DaemonSocketClient>({}), {
 			type: "retry_worker",
 			activeSessionId: worker.descriptor.rootSessionId,
 		});
@@ -1424,22 +1483,24 @@ describe("daemon worker supervisor monitoring", () => {
 		const releaseStop = createDeferred<void>();
 		const persistWorker = vi.fn();
 		const recoverWorker = vi.fn();
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			workerStopCounts: new Map(),
-			stopWorkerUntracked: vi.fn(async () => {
-				stopStarted.resolve();
-				await releaseStop.promise;
+		const supervisor = fromPartial<RetryHarness>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				workerStopCounts: new Map(),
+				stopWorkerUntracked: vi.fn(async () => {
+					stopStarted.resolve();
+					await releaseStop.promise;
+				}),
+				persistWorker,
+				recoverWorker,
+				assertWorkerAccessibleToClient: vi.fn(),
 			}),
-			persistWorker,
-			recoverWorker,
-			assertWorkerAccessibleToClient: vi.fn(),
-		}) as RetryHarness;
+		);
 
 		const stopping = supervisor.stopWorker(worker, true);
 		await stopStarted.promise;
 		await expect(
-			supervisor.handleCommand({} as DaemonSocketClient, {
+			supervisor.handleCommand(fromPartial<DaemonSocketClient>({}), {
 				type: "retry_worker",
 				activeSessionId: worker.descriptor.rootSessionId,
 			}),
@@ -1475,10 +1536,12 @@ describe("daemon worker supervisor monitoring", () => {
 			descriptor: { workerId: "worker-1", pid: process.pid, rootActiveSessionId: "active-1" },
 			intentionalStop: false,
 		};
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			shuttingDown: false,
-		}) as RecoveryHarness;
+		const supervisor = fromPartial<RecoveryHarness>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				shuttingDown: false,
+			}),
+		);
 
 		const recovery = supervisor.recoverWorker(worker);
 		worker.intentionalStop = true;
@@ -1523,14 +1586,16 @@ describe("daemon worker supervisor monitoring", () => {
 			intentionalStop: false,
 			stopRevision: 0,
 		};
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			shuttingDown: false,
-			connectWorker: vi.fn(),
-			recoverUncertainWorkerOperations: vi.fn(async () => {}),
-			launchWorker: vi.fn(async () => worker),
-			assertRecoveryAllowed: vi.fn(async () => {}),
-		}) as RecoveryHarness;
+		const supervisor = fromPartial<RecoveryHarness>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				shuttingDown: false,
+				connectWorker: vi.fn(),
+				recoverUncertainWorkerOperations: vi.fn(async () => {}),
+				launchWorker: vi.fn(async () => worker),
+				assertRecoveryAllowed: vi.fn(async () => {}),
+			}),
+		);
 
 		const recovery = supervisor.recoverWorker(worker);
 		await vi.advanceTimersByTimeAsync(250);
@@ -1583,19 +1648,21 @@ describe("daemon worker supervisor monitoring", () => {
 			intentionalStop: false,
 			stopRevision: 0,
 		};
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			shuttingDown: false,
-			connectWorker: vi.fn(async () => {
-				throw new Error("worker socket unavailable");
+		const supervisor = fromPartial<RecoveryHarness>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				shuttingDown: false,
+				connectWorker: vi.fn(async () => {
+					throw new Error("worker socket unavailable");
+				}),
+				recoverUncertainWorkerOperations: vi.fn(async () => {}),
+				launchWorker: vi.fn(async () => worker),
+				persistWorker: vi.fn(),
+				syncAgentPeers: vi.fn(async () => {}),
+				log: vi.fn(),
+				assertRecoveryAllowed: vi.fn(async () => {}),
 			}),
-			recoverUncertainWorkerOperations: vi.fn(async () => {}),
-			launchWorker: vi.fn(async () => worker),
-			persistWorker: vi.fn(),
-			syncAgentPeers: vi.fn(async () => {}),
-			log: vi.fn(),
-			assertRecoveryAllowed: vi.fn(async () => {}),
-		}) as RecoveryHarness;
+		);
 
 		const recovery = supervisor.recoverWorker(worker);
 		await vi.runAllTimersAsync();
@@ -1648,22 +1715,24 @@ describe("daemon worker supervisor monitoring", () => {
 			intentionalStop: false,
 			stopRevision: 0,
 		};
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			shuttingDown: false,
-			connectWorker: vi.fn(async () => ({})),
-			subscribeWorker: vi.fn(async () => {}),
-			refreshWorkerSummaries: vi.fn(async () => {}),
-			recoverUncertainWorkerOperations: vi.fn(async () => {}),
-			launchWorker: vi.fn(async () => worker),
-			persistWorker: vi.fn(),
-			syncAgentPeers: vi.fn(async () => {
-				throw new Error("peer unavailable");
+		const supervisor = fromPartial<RecoveryHarness>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				shuttingDown: false,
+				connectWorker: vi.fn(async () => ({})),
+				subscribeWorker: vi.fn(async () => {}),
+				refreshWorkerSummaries: vi.fn(async () => {}),
+				recoverUncertainWorkerOperations: vi.fn(async () => {}),
+				launchWorker: vi.fn(async () => worker),
+				persistWorker: vi.fn(),
+				syncAgentPeers: vi.fn(async () => {
+					throw new Error("peer unavailable");
+				}),
+				broadcastHeartbeatsChanged: vi.fn(),
+				log: vi.fn(),
+				assertRecoveryAllowed: vi.fn(async () => {}),
 			}),
-			broadcastHeartbeatsChanged: vi.fn(),
-			log: vi.fn(),
-			assertRecoveryAllowed: vi.fn(async () => {}),
-		}) as RecoveryHarness;
+		);
 
 		const recovery = supervisor.recoverWorker(worker);
 		await vi.advanceTimersByTimeAsync(250);
@@ -1687,9 +1756,9 @@ describe("daemon worker supervisor monitoring", () => {
 			client: {},
 			intentionalStop: false,
 		};
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {}) as {
+		const supervisor = fromPartial<{
 			effectiveWorkerState(target: object): string;
-		};
+		}>(Object.assign(Object.create(DaemonSupervisor.prototype), {}));
 
 		expect(supervisor.effectiveWorkerState(worker)).toBe("stopping");
 	});
@@ -1700,9 +1769,9 @@ describe("daemon worker supervisor monitoring", () => {
 			client: undefined,
 			intentionalStop: false,
 		};
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {}) as {
+		const supervisor = fromPartial<{
 			effectiveWorkerState(target: object): string;
-		};
+		}>(Object.assign(Object.create(DaemonSupervisor.prototype), {}));
 
 		expect(supervisor.effectiveWorkerState(worker)).toBe("recovering");
 	});
@@ -1713,9 +1782,9 @@ describe("daemon worker supervisor monitoring", () => {
 			client: {},
 			intentionalStop: false,
 		};
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {}) as {
+		const supervisor = fromPartial<{
 			effectiveWorkerState(target: object): string;
-		};
+		}>(Object.assign(Object.create(DaemonSupervisor.prototype), {}));
 
 		expect(supervisor.effectiveWorkerState(worker)).toBe("ready");
 	});
@@ -1734,27 +1803,18 @@ describe("daemon worker supervisor monitoring", () => {
 			summaries: new Map([
 				[
 					`${workerId}-active`,
-					{
+					fromAny<SessionSummary, unknown>({
 						id: `${workerId}-active`,
 						activeSessionId: `${workerId}-active`,
 						sessionId: `${workerId}-session`,
 						cwd: "/tmp",
-					} as unknown as SessionSummary,
+					}),
 				],
 			]),
 		});
 		const liveWorker = makeWorker("worker-live");
 		const stoppingWorker = makeWorker("worker-stopping", new Date().toISOString());
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([
-				[liveWorker.descriptor.workerId, liveWorker],
-				[stoppingWorker.descriptor.workerId, stoppingWorker],
-			]),
-			clients: new Set(),
-			refreshWorkerSummaries: vi.fn(async () => {}),
-			syncAgentPeers: vi.fn(async () => {}),
-			log: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			handleList(
 				client: object,
 				command: { id: string; type: "list" },
@@ -1762,7 +1822,18 @@ describe("daemon worker supervisor monitoring", () => {
 				success: boolean;
 				data?: { sessions: Array<{ activeSessionId?: string; id: string; workerState?: string }> };
 			}>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([
+					[liveWorker.descriptor.workerId, liveWorker],
+					[stoppingWorker.descriptor.workerId, stoppingWorker],
+				]),
+				clients: new Set(),
+				refreshWorkerSummaries: vi.fn(async () => {}),
+				syncAgentPeers: vi.fn(async () => {}),
+				log: vi.fn(),
+			}),
+		);
 
 		const response = await supervisor.handleList({}, { id: "list-1", type: "list" });
 
@@ -1785,13 +1856,15 @@ describe("daemon worker supervisor monitoring", () => {
 			},
 		};
 		const stopWorker = vi.fn(async () => {});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			assertRecoveryAllowed: vi.fn(async () => undefined),
-			stopWorker,
-			log: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			adoptOrRecoverWorker(target: object): Promise<void>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				assertRecoveryAllowed: vi.fn(async () => undefined),
+				stopWorker,
+				log: vi.fn(),
+			}),
+		);
 		const killSpy = vi.spyOn(childProcessModule, "signalProcessGroupOrProcess").mockImplementation(() => {});
 		try {
 			await supervisor.adoptOrRecoverWorker(worker);
@@ -1805,29 +1878,31 @@ describe("daemon worker supervisor monitoring", () => {
 
 	it("captures the live process identity before an adoption stop when the descriptor has none", async () => {
 		const worker = {
-			descriptor: {
+			descriptor: fromAny<{ processStartId?: string }, unknown>({
 				workerId: "worker-adopted-legacy",
 				pid: process.pid,
 				stopRequestedAt: new Date().toISOString(),
 				archiveOnStop: false,
-			} as { processStartId?: string },
+			}),
 		};
 		const stopOrder: string[] = [];
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			assertRecoveryAllowed: vi.fn(async () => undefined),
-			connectWorker: vi.fn(async () => {
-				stopOrder.push("connect");
-			}),
-			persistWorker: vi.fn(() => {
-				stopOrder.push("persist");
-			}),
-			stopWorker: vi.fn(async () => {
-				stopOrder.push("stop");
-			}),
-			log: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			adoptOrRecoverWorker(target: object): Promise<void>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				assertRecoveryAllowed: vi.fn(async () => undefined),
+				connectWorker: vi.fn(async () => {
+					stopOrder.push("connect");
+				}),
+				persistWorker: vi.fn(() => {
+					stopOrder.push("persist");
+				}),
+				stopWorker: vi.fn(async () => {
+					stopOrder.push("stop");
+				}),
+				log: vi.fn(),
+			}),
+		);
 
 		await supervisor.adoptOrRecoverWorker(worker);
 
@@ -1839,26 +1914,28 @@ describe("daemon worker supervisor monitoring", () => {
 
 	it("keeps an unverifiable identity untrusted when the adoption connect fails", async () => {
 		const worker = {
-			descriptor: {
+			descriptor: fromAny<{ processStartId?: string }, unknown>({
 				workerId: "worker-adopted-unverified",
 				pid: process.pid,
 				stopRequestedAt: new Date().toISOString(),
 				archiveOnStop: false,
-			} as { processStartId?: string },
+			}),
 		};
 		const persistWorker = vi.fn();
 		const stopWorker = vi.fn(async () => {});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			assertRecoveryAllowed: vi.fn(async () => undefined),
-			connectWorker: vi.fn(async () => {
-				throw new Error("connect refused");
-			}),
-			persistWorker,
-			stopWorker,
-			log: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			adoptOrRecoverWorker(target: object): Promise<void>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				assertRecoveryAllowed: vi.fn(async () => undefined),
+				connectWorker: vi.fn(async () => {
+					throw new Error("connect refused");
+				}),
+				persistWorker,
+				stopWorker,
+				log: vi.fn(),
+			}),
+		);
 
 		await supervisor.adoptOrRecoverWorker(worker);
 
@@ -1880,20 +1957,22 @@ describe("daemon worker supervisor monitoring", () => {
 			},
 			intentionalStop: true,
 			stopRevision: 0,
-			stopFinalization: undefined as Promise<void> | undefined,
+			stopFinalization: fromPartial<Promise<void> | undefined>(undefined),
 		};
 		let alive = true;
 		const stopWorker = vi.fn(async () => {});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			shuttingDown: false,
-			stopWorker,
-			persistWorker: vi.fn(),
-			log: vi.fn(),
-			reportCleanupFailure: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			scheduleWorkerStopFinalization(target: object): void;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				shuttingDown: false,
+				stopWorker,
+				persistWorker: vi.fn(),
+				log: vi.fn(),
+				reportCleanupFailure: vi.fn(),
+			}),
+		);
 		const childProcessModule = await import("../src/utils/child-process.js");
 		const aliveSpy = vi.spyOn(childProcessModule, "isProcessAlive").mockImplementation(() => alive);
 		try {
@@ -1932,20 +2011,22 @@ describe("daemon worker supervisor monitoring", () => {
 			},
 			intentionalStop: true,
 			stopRevision: 0,
-			stopFinalization: undefined as Promise<void> | undefined,
+			stopFinalization: fromPartial<Promise<void> | undefined>(undefined),
 		};
 		let alive = true;
 		const stopWorker = vi.fn(async () => {});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			shuttingDown: false,
-			stopWorker,
-			persistWorker: vi.fn(),
-			log: vi.fn(),
-			reportCleanupFailure: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			scheduleWorkerStopFinalization(target: object): void;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				shuttingDown: false,
+				stopWorker,
+				persistWorker: vi.fn(),
+				log: vi.fn(),
+				reportCleanupFailure: vi.fn(),
+			}),
+		);
 		const childProcessModule = await import("../src/utils/child-process.js");
 		const aliveSpy = vi.spyOn(childProcessModule, "isProcessAlive").mockImplementation(() => alive);
 		const killSpy = vi.spyOn(childProcessModule, "signalProcessGroupOrProcess").mockImplementation((_pid, signal) => {
@@ -1975,23 +2056,25 @@ describe("daemon worker supervisor monitoring", () => {
 				workerId: "worker-relaunched",
 				pid: 111_111,
 				rootActiveSessionId: "active-1",
-				stopRequestedAt: new Date().toISOString() as string | undefined,
+				stopRequestedAt: fromPartial<string | undefined>(new Date().toISOString()),
 			},
 			intentionalStop: true,
 			stopRevision: 3,
-			stopFinalization: undefined as Promise<void> | undefined,
+			stopFinalization: fromPartial<Promise<void> | undefined>(undefined),
 		};
 		const stopWorker = vi.fn(async () => {});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			shuttingDown: false,
-			stopWorker,
-			persistWorker: vi.fn(),
-			log: vi.fn(),
-			reportCleanupFailure: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			scheduleWorkerStopFinalization(target: object): void;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				shuttingDown: false,
+				stopWorker,
+				persistWorker: vi.fn(),
+				log: vi.fn(),
+				reportCleanupFailure: vi.fn(),
+			}),
+		);
 		const existsSpy = vi.spyOn(childProcessModule, "processIdExists").mockReturnValue(true);
 		const aliveSpy = vi.spyOn(childProcessModule, "isProcessAlive").mockReturnValue(true);
 		const killSpy = vi.spyOn(childProcessModule, "signalProcessGroupOrProcess").mockImplementation(() => {});
@@ -2033,19 +2116,21 @@ describe("daemon worker supervisor monitoring", () => {
 			},
 			intentionalStop: true,
 			stopRevision: 0,
-			stopFinalization: undefined as Promise<void> | undefined,
+			stopFinalization: fromPartial<Promise<void> | undefined>(undefined),
 		};
 		const stopWorker = vi.fn(async () => {});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			shuttingDown: false,
-			stopWorker,
-			persistWorker: vi.fn(),
-			log: vi.fn(),
-			reportCleanupFailure: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			scheduleWorkerStopFinalization(target: object): void;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				shuttingDown: false,
+				stopWorker,
+				persistWorker: vi.fn(),
+				log: vi.fn(),
+				reportCleanupFailure: vi.fn(),
+			}),
+		);
 		const childProcessModule = await import("../src/utils/child-process.js");
 		const sessionLeaseModule = await import("../src/core/session-lease.js");
 		// The pid is alive, but it now belongs to an unrelated process.
@@ -2078,7 +2163,7 @@ describe("daemon worker supervisor monitoring", () => {
 				workerId: "worker-relaunched-during-stop",
 				pid: 111_115,
 				rootActiveSessionId: "active-1",
-				stopRequestedAt: new Date().toISOString() as string | undefined,
+				stopRequestedAt: fromPartial<string | undefined>(new Date().toISOString()),
 				archiveOnStop: true,
 			},
 			client: undefined,
@@ -2091,31 +2176,36 @@ describe("daemon worker supervisor monitoring", () => {
 			stopRevision: 0,
 		};
 		const workers = new Map([[worker.descriptor.workerId, worker]]);
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers,
-			shuttingDown: false,
-			persistWorker: vi.fn(),
-			persistWorkerStopTombstone: vi.fn(),
-			reclaimStoppedWorkerCronLock: vi.fn(),
-			// Archival yields, and a retry relaunches the worker meanwhile.
-			finalizeArchivedWorkerStop: vi.fn(async () => {
-				worker.descriptor.pid = 222_222;
-				worker.descriptor.stopRequestedAt = undefined;
+		const supervisor = fromAny<
+			{
+				stopWorker(
+					target: object,
+					removeDescriptor: boolean,
+					force?: boolean,
+					archiveSession?: boolean,
+				): Promise<void>;
+				deleteWorkerDescriptor: ReturnType<typeof vi.fn>;
+			},
+			unknown
+		>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers,
+				shuttingDown: false,
+				persistWorker: vi.fn(),
+				persistWorkerStopTombstone: vi.fn(),
+				reclaimStoppedWorkerCronLock: vi.fn(),
+				// Archival yields, and a retry relaunches the worker meanwhile.
+				finalizeArchivedWorkerStop: vi.fn(async () => {
+					worker.descriptor.pid = 222_222;
+					worker.descriptor.stopRequestedAt = undefined;
+				}),
+				deleteWorkerDescriptor: vi.fn(),
+				syncAgentPeers: vi.fn(async () => {}),
+				broadcastHeartbeatsChanged: vi.fn(),
+				log: vi.fn(),
+				reportCleanupFailure: vi.fn(),
 			}),
-			deleteWorkerDescriptor: vi.fn(),
-			syncAgentPeers: vi.fn(async () => {}),
-			broadcastHeartbeatsChanged: vi.fn(),
-			log: vi.fn(),
-			reportCleanupFailure: vi.fn(),
-		}) as unknown as {
-			stopWorker(
-				target: object,
-				removeDescriptor: boolean,
-				force?: boolean,
-				archiveSession?: boolean,
-			): Promise<void>;
-			deleteWorkerDescriptor: ReturnType<typeof vi.fn>;
-		};
+		);
 		const childProcessModule = await import("../src/utils/child-process.js");
 		const existsSpy = vi.spyOn(childProcessModule, "processIdExists").mockReturnValue(false);
 		const aliveSpy = vi.spyOn(childProcessModule, "isProcessAlive").mockReturnValue(false);
@@ -2137,7 +2227,7 @@ describe("daemon worker supervisor monitoring", () => {
 				workerId: "worker-rescinded-during-stop",
 				pid: 111_120,
 				rootActiveSessionId: "active-1",
-				stopRequestedAt: new Date().toISOString() as string | undefined,
+				stopRequestedAt: fromPartial<string | undefined>(new Date().toISOString()),
 				archiveOnStop: true,
 			},
 			client: undefined,
@@ -2150,31 +2240,36 @@ describe("daemon worker supervisor monitoring", () => {
 			stopRevision: 0,
 		};
 		const workers = new Map([[worker.descriptor.workerId, worker]]);
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers,
-			shuttingDown: false,
-			persistWorker: vi.fn(),
-			persistWorkerStopTombstone: vi.fn(),
-			reclaimStoppedWorkerCronLock: vi.fn(),
-			// A retry rescinds the tombstone while archival yields, before
-			// recoverWorker has assigned the successor pid.
-			finalizeArchivedWorkerStop: vi.fn(async () => {
-				worker.descriptor.stopRequestedAt = undefined;
+		const supervisor = fromAny<
+			{
+				stopWorker(
+					target: object,
+					removeDescriptor: boolean,
+					force?: boolean,
+					archiveSession?: boolean,
+				): Promise<void>;
+				deleteWorkerDescriptor: ReturnType<typeof vi.fn>;
+			},
+			unknown
+		>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers,
+				shuttingDown: false,
+				persistWorker: vi.fn(),
+				persistWorkerStopTombstone: vi.fn(),
+				reclaimStoppedWorkerCronLock: vi.fn(),
+				// A retry rescinds the tombstone while archival yields, before
+				// recoverWorker has assigned the successor pid.
+				finalizeArchivedWorkerStop: vi.fn(async () => {
+					worker.descriptor.stopRequestedAt = undefined;
+				}),
+				deleteWorkerDescriptor: vi.fn(),
+				syncAgentPeers: vi.fn(async () => {}),
+				broadcastHeartbeatsChanged: vi.fn(),
+				log: vi.fn(),
+				reportCleanupFailure: vi.fn(),
 			}),
-			deleteWorkerDescriptor: vi.fn(),
-			syncAgentPeers: vi.fn(async () => {}),
-			broadcastHeartbeatsChanged: vi.fn(),
-			log: vi.fn(),
-			reportCleanupFailure: vi.fn(),
-		}) as unknown as {
-			stopWorker(
-				target: object,
-				removeDescriptor: boolean,
-				force?: boolean,
-				archiveSession?: boolean,
-			): Promise<void>;
-			deleteWorkerDescriptor: ReturnType<typeof vi.fn>;
-		};
+		);
 		const childProcessModule = await import("../src/utils/child-process.js");
 		const existsSpy = vi.spyOn(childProcessModule, "processIdExists").mockReturnValue(false);
 		const aliveSpy = vi.spyOn(childProcessModule, "isProcessAlive").mockReturnValue(false);
@@ -2208,18 +2303,23 @@ describe("daemon worker supervisor monitoring", () => {
 			intentionalStop: true,
 			stopRevision: 0,
 		};
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			shuttingDown: false,
-			persistWorker: vi.fn(),
-			persistWorkerStopTombstone: vi.fn(),
-			scheduleWorkerStopFinalization: vi.fn(),
-			syncAgentPeers: vi.fn(async () => {}),
-			broadcastHeartbeatsChanged: vi.fn(),
-		}) as unknown as {
-			stopWorker(target: object, removeDescriptor: boolean, force?: boolean): Promise<void>;
-			scheduleWorkerStopFinalization: ReturnType<typeof vi.fn>;
-		};
+		const supervisor = fromAny<
+			{
+				stopWorker(target: object, removeDescriptor: boolean, force?: boolean): Promise<void>;
+				scheduleWorkerStopFinalization: ReturnType<typeof vi.fn>;
+			},
+			unknown
+		>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				shuttingDown: false,
+				persistWorker: vi.fn(),
+				persistWorkerStopTombstone: vi.fn(),
+				scheduleWorkerStopFinalization: vi.fn(),
+				syncAgentPeers: vi.fn(async () => {}),
+				broadcastHeartbeatsChanged: vi.fn(),
+			}),
+		);
 		const existsSpy = vi.spyOn(childProcessModule, "processIdExists").mockReturnValue(true);
 		const aliveSpy = vi.spyOn(childProcessModule, "isProcessAlive").mockReturnValue(true);
 		const killSpy = vi.spyOn(childProcessModule, "signalProcessGroupOrProcess").mockImplementation(() => {});
@@ -2232,7 +2332,9 @@ describe("daemon worker supervisor monitoring", () => {
 
 			const error = await stopping;
 			expect(error).toBeInstanceOf(Error);
-			expect((error as Error).message).toBe("Session worker worker-force-missing-identity did not stop");
+			expect(fromAny<Error, unknown>(error).message).toBe(
+				"Session worker worker-force-missing-identity did not stop",
+			);
 			expect(killSpy).not.toHaveBeenCalled();
 			expect(supervisor.scheduleWorkerStopFinalization).toHaveBeenCalledWith(worker);
 		} finally {
@@ -2254,22 +2356,24 @@ describe("daemon worker supervisor monitoring", () => {
 			},
 			intentionalStop: true,
 			stopRevision: 0,
-			stopFinalization: undefined as Promise<void> | undefined,
+			stopFinalization: fromPartial<Promise<void> | undefined>(undefined),
 		};
 		const workers = new Map([[worker.descriptor.workerId, worker]]);
 		const stopWorker = vi.fn(async () => {
 			workers.delete(worker.descriptor.workerId);
 		});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers,
-			shuttingDown: false,
-			stopWorker,
-			persistWorker: vi.fn(),
-			log: vi.fn(),
-			reportCleanupFailure: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			scheduleWorkerStopFinalization(target: object): void;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers,
+				shuttingDown: false,
+				stopWorker,
+				persistWorker: vi.fn(),
+				log: vi.fn(),
+				reportCleanupFailure: vi.fn(),
+			}),
+		);
 		const childProcessModule = await import("../src/utils/child-process.js");
 		const sessionLeaseModule = await import("../src/core/session-lease.js");
 		const existsSpy = vi.spyOn(childProcessModule, "processIdExists").mockReturnValue(true);
@@ -2306,22 +2410,24 @@ describe("daemon worker supervisor monitoring", () => {
 			},
 			intentionalStop: true,
 			stopRevision: 0,
-			stopFinalization: undefined as Promise<void> | undefined,
+			stopFinalization: fromPartial<Promise<void> | undefined>(undefined),
 		};
 		const workers = new Map([[worker.descriptor.workerId, worker]]);
 		const stopWorker = vi.fn(async () => {
 			workers.delete(worker.descriptor.workerId);
 		});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers,
-			shuttingDown: false,
-			stopWorker,
-			persistWorker: vi.fn(),
-			log: vi.fn(),
-			reportCleanupFailure: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			scheduleWorkerStopFinalization(target: object): void;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers,
+				shuttingDown: false,
+				stopWorker,
+				persistWorker: vi.fn(),
+				log: vi.fn(),
+				reportCleanupFailure: vi.fn(),
+			}),
+		);
 		const childProcessModule = await import("../src/utils/child-process.js");
 		const sessionLeaseModule = await import("../src/core/session-lease.js");
 		const existsSpy = vi.spyOn(childProcessModule, "processIdExists").mockReturnValue(true);
@@ -2367,19 +2473,21 @@ describe("daemon worker supervisor monitoring", () => {
 			},
 			intentionalStop: true,
 			stopRevision: 0,
-			stopFinalization: undefined as Promise<void> | undefined,
+			stopFinalization: fromPartial<Promise<void> | undefined>(undefined),
 		};
 		const stopWorker = vi.fn(async () => {});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			shuttingDown: false,
-			stopWorker,
-			persistWorker: vi.fn(),
-			log: vi.fn(),
-			reportCleanupFailure: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			scheduleWorkerStopFinalization(target: object): void;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				shuttingDown: false,
+				stopWorker,
+				persistWorker: vi.fn(),
+				log: vi.fn(),
+				reportCleanupFailure: vi.fn(),
+			}),
+		);
 		const childProcessModule = await import("../src/utils/child-process.js");
 		const sessionLeaseModule = await import("../src/core/session-lease.js");
 		const existsSpy = vi.spyOn(childProcessModule, "processIdExists").mockReturnValue(true);
@@ -2415,19 +2523,21 @@ describe("daemon worker supervisor monitoring", () => {
 			},
 			intentionalStop: true,
 			stopRevision: 0,
-			stopFinalization: undefined as Promise<void> | undefined,
+			stopFinalization: fromPartial<Promise<void> | undefined>(undefined),
 		};
 		const stopWorker = vi.fn(async () => {});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			shuttingDown: false,
-			stopWorker,
-			persistWorker: vi.fn(),
-			log: vi.fn(),
-			reportCleanupFailure: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			scheduleWorkerStopFinalization(target: object): void;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				shuttingDown: false,
+				stopWorker,
+				persistWorker: vi.fn(),
+				log: vi.fn(),
+				reportCleanupFailure: vi.fn(),
+			}),
+		);
 		const childProcessModule = await import("../src/utils/child-process.js");
 		const sessionLeaseModule = await import("../src/core/session-lease.js");
 		const existsSpy = vi.spyOn(childProcessModule, "processIdExists").mockReturnValue(true);
@@ -2461,7 +2571,7 @@ describe("daemon worker supervisor monitoring", () => {
 			},
 			intentionalStop: true,
 			stopRevision: 0,
-			stopFinalization: undefined as Promise<void> | undefined,
+			stopFinalization: fromPartial<Promise<void> | undefined>(undefined),
 		};
 		const workers = new Map([[worker.descriptor.workerId, worker]]);
 		const stopWorker = vi
@@ -2471,16 +2581,18 @@ describe("daemon worker supervisor monitoring", () => {
 			.mockImplementationOnce(async () => {
 				throw new Error("archive temporarily unavailable");
 			});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers,
-			shuttingDown: false,
-			stopWorker,
-			persistWorker: vi.fn(),
-			log: vi.fn(),
-			reportCleanupFailure: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			scheduleWorkerStopFinalization(target: object): void;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers,
+				shuttingDown: false,
+				stopWorker,
+				persistWorker: vi.fn(),
+				log: vi.fn(),
+				reportCleanupFailure: vi.fn(),
+			}),
+		);
 		const childProcessModule = await import("../src/utils/child-process.js");
 		const aliveSpy = vi.spyOn(childProcessModule, "isProcessAlive").mockReturnValue(false);
 		try {
@@ -2506,24 +2618,26 @@ describe("daemon worker supervisor monitoring", () => {
 				workerId: "worker-rescinded-stop",
 				pid: process.pid,
 				rootActiveSessionId: "active-1",
-				stopRequestedAt: new Date().toISOString() as string | undefined,
+				stopRequestedAt: fromPartial<string | undefined>(new Date().toISOString()),
 			},
 			intentionalStop: true,
 			stopRevision: 0,
-			stopFinalization: undefined as Promise<void> | undefined,
+			stopFinalization: fromPartial<Promise<void> | undefined>(undefined),
 		};
 		let alive = true;
 		const stopWorker = vi.fn(async () => {});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			shuttingDown: false,
-			stopWorker,
-			persistWorker: vi.fn(),
-			log: vi.fn(),
-			reportCleanupFailure: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			scheduleWorkerStopFinalization(target: object): void;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				shuttingDown: false,
+				stopWorker,
+				persistWorker: vi.fn(),
+				log: vi.fn(),
+				reportCleanupFailure: vi.fn(),
+			}),
+		);
 		const childProcessModule = await import("../src/utils/child-process.js");
 		const aliveSpy = vi.spyOn(childProcessModule, "isProcessAlive").mockImplementation(() => alive);
 		try {
@@ -2560,14 +2674,16 @@ describe("daemon worker supervisor monitoring", () => {
 		const stopWorker = vi.fn(async () => {
 			workers.delete(worker.descriptor.workerId);
 		});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers,
-			stopWorker,
-			log: vi.fn(),
-			reportCleanupFailure: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			reclaimStaleWorkerRegistration(target: object): Promise<boolean>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers,
+				stopWorker,
+				log: vi.fn(),
+				reportCleanupFailure: vi.fn(),
+			}),
+		);
 		const childProcessModule = await import("../src/utils/child-process.js");
 		const aliveSpy = vi.spyOn(childProcessModule, "isProcessAlive").mockReturnValue(false);
 		try {
@@ -2596,14 +2712,16 @@ describe("daemon worker supervisor monitoring", () => {
 		const stopWorker = vi.fn(async () => {
 			workers.delete(worker.descriptor.workerId);
 		});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers,
-			stopWorker,
-			log: vi.fn(),
-			reportCleanupFailure: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			reclaimStaleWorkerRegistration(target: object): Promise<boolean>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers,
+				stopWorker,
+				log: vi.fn(),
+				reportCleanupFailure: vi.fn(),
+			}),
+		);
 		const childProcessModule = await import("../src/utils/child-process.js");
 		const sessionLeaseModule = await import("../src/core/session-lease.js");
 		// The pid is alive, but it belongs to an unrelated process now.
@@ -2630,7 +2748,7 @@ describe("daemon worker supervisor monitoring", () => {
 			recovery: undefined,
 			intentionalStop: true,
 			stopRevision: 0,
-			stopFinalization: undefined as Promise<void> | undefined,
+			stopFinalization: fromPartial<Promise<void> | undefined>(undefined),
 		};
 		const workers = new Map([[worker.descriptor.workerId, worker]]);
 		let releaseFinalization!: () => void;
@@ -2641,14 +2759,16 @@ describe("daemon worker supervisor monitoring", () => {
 			};
 		});
 		const stopWorker = vi.fn(async () => {});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers,
-			stopWorker,
-			log: vi.fn(),
-			reportCleanupFailure: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			reclaimStaleWorkerRegistration(target: object): Promise<boolean>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers,
+				stopWorker,
+				log: vi.fn(),
+				reportCleanupFailure: vi.fn(),
+			}),
+		);
 
 		const childProcessModule = await import("../src/utils/child-process.js");
 		const aliveSpy = vi.spyOn(childProcessModule, "isProcessAlive").mockReturnValue(false);
@@ -2677,19 +2797,21 @@ describe("daemon worker supervisor monitoring", () => {
 			recovery: undefined,
 			intentionalStop: true,
 			stopRevision: 0,
-			stopFinalization: undefined as Promise<void> | undefined,
+			stopFinalization: fromPartial<Promise<void> | undefined>(undefined),
 		};
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			shuttingDown: false,
-			// Cleanup hangs past the bounded reclaim wait.
-			stopWorker: vi.fn(() => new Promise<void>(() => {})),
-			persistWorker: vi.fn(),
-			log: vi.fn(),
-			reportCleanupFailure: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			reclaimStaleWorkerRegistration(target: object): Promise<boolean>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				shuttingDown: false,
+				// Cleanup hangs past the bounded reclaim wait.
+				stopWorker: vi.fn(() => new Promise<void>(() => {})),
+				persistWorker: vi.fn(),
+				log: vi.fn(),
+				reportCleanupFailure: vi.fn(),
+			}),
+		);
 		const childProcessModule = await import("../src/utils/child-process.js");
 		const aliveSpy = vi.spyOn(childProcessModule, "isProcessAlive").mockReturnValue(false);
 		try {
@@ -2719,22 +2841,24 @@ describe("daemon worker supervisor monitoring", () => {
 			recovery: undefined,
 			intentionalStop: true,
 			stopRevision: 0,
-			stopFinalization: undefined as Promise<void> | undefined,
+			stopFinalization: fromPartial<Promise<void> | undefined>(undefined),
 		};
 		const workers = new Map([[worker.descriptor.workerId, worker]]);
 		const stopWorker = vi.fn(async () => {
 			workers.delete(worker.descriptor.workerId);
 		});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers,
-			shuttingDown: false,
-			stopWorker,
-			persistWorker: vi.fn(),
-			log: vi.fn(),
-			reportCleanupFailure: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			reclaimStaleWorkerRegistration(target: object): Promise<boolean>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers,
+				shuttingDown: false,
+				stopWorker,
+				persistWorker: vi.fn(),
+				log: vi.fn(),
+				reportCleanupFailure: vi.fn(),
+			}),
+		);
 		const childProcessModule = await import("../src/utils/child-process.js");
 		const aliveSpy = vi.spyOn(childProcessModule, "isProcessAlive").mockReturnValue(false);
 		try {
@@ -2765,14 +2889,16 @@ describe("daemon worker supervisor monitoring", () => {
 			stopRevision: 0,
 		};
 		const stopWorker = vi.fn(async () => {});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			stopWorker,
-			log: vi.fn(),
-			reportCleanupFailure: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			reclaimStaleWorkerRegistration(target: object): Promise<boolean>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				stopWorker,
+				log: vi.fn(),
+				reportCleanupFailure: vi.fn(),
+			}),
+		);
 		const childProcessModule = await import("../src/utils/child-process.js");
 		const aliveSpy = vi.spyOn(childProcessModule, "isProcessAlive").mockReturnValue(true);
 		try {
@@ -2792,14 +2918,16 @@ describe("daemon worker supervisor monitoring", () => {
 			stopRevision: 0,
 		};
 		const stopWorker = vi.fn(async () => {});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			stopWorker,
-			log: vi.fn(),
-			reportCleanupFailure: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			reclaimStaleWorkerRegistration(target: object): Promise<boolean>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				stopWorker,
+				log: vi.fn(),
+				reportCleanupFailure: vi.fn(),
+			}),
+		);
 
 		await expect(supervisor.reclaimStaleWorkerRegistration(worker)).resolves.toBe(false);
 		expect(stopWorker).not.toHaveBeenCalled();
@@ -2817,15 +2945,17 @@ describe("daemon worker supervisor monitoring", () => {
 					rootActiveSessionId: "active-1",
 				})}\n`,
 			);
-			const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-				descriptorDir,
-				socketPath: "/tmp/supervisor.sock",
-				workers: new Map(),
-				log: vi.fn(),
-			}) as {
+			const supervisor = fromPartial<{
 				workers: Map<string, unknown>;
 				loadWorkerDescriptors(): void;
-			};
+			}>(
+				Object.assign(Object.create(DaemonSupervisor.prototype), {
+					descriptorDir,
+					socketPath: "/tmp/supervisor.sock",
+					workers: new Map(),
+					log: vi.fn(),
+				}),
+			);
 
 			supervisor.loadWorkerDescriptors();
 
@@ -2871,10 +3001,10 @@ describe("daemon worker supervisor monitoring", () => {
 			sessionActions: { queuedCount: 0, steering: [], followUps: [] },
 			streamingMessage,
 		};
-		const result = {
+		const result = fromAny<DaemonAttachResult, unknown>({
 			activeSessionId,
 			snapshot: { summary, messages: [finalizedMessage] },
-		} as unknown as DaemonAttachResult;
+		});
 		const worker = {
 			descriptor: { workerId: "worker-1", lifecycle: "ready", pid: 1234 },
 			client: {},
@@ -2890,12 +3020,7 @@ describe("daemon worker supervisor monitoring", () => {
 			attachedActiveSessionIds: new Set<string>(),
 		};
 		const seed = vi.fn();
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			clients: new Set([client]),
-			streamReconstructor: { seed },
-			syncWorkerExtensionUi: vi.fn(async () => {}),
-		}) as {
+		const supervisor = fromPartial<{
 			attachClient(
 				client: {
 					id: string;
@@ -2905,7 +3030,14 @@ describe("daemon worker supervisor monitoring", () => {
 				},
 				command: { type: "attach"; activeSessionId: string },
 			): Promise<unknown>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				clients: new Set([client]),
+				streamReconstructor: { seed },
+				syncWorkerExtensionUi: vi.fn(async () => {}),
+			}),
+		);
 
 		await supervisor.attachClient(client, { type: "attach", activeSessionId });
 
@@ -2943,15 +3075,17 @@ describe("daemon worker supervisor monitoring", () => {
 			supportsExtensionUi: false,
 			attachedActiveSessionIds: new Set<string>(),
 		};
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			clients: new Set([client]),
-		}) as {
+		const supervisor = fromPartial<{
 			attachClient(
 				attachClient: typeof client,
 				command: { type: "attach"; activeSessionId: string; telemetryDisabled?: true },
 			): Promise<unknown>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				clients: new Set([client]),
+			}),
+		);
 
 		await expect(
 			supervisor.attachClient(client, { type: "attach", activeSessionId, telemetryDisabled: true }),
@@ -2977,16 +3111,18 @@ describe("daemon worker supervisor monitoring", () => {
 			supportsExtensionUi: false,
 			attachedActiveSessionIds: new Set<string>(),
 		};
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			clients: new Set([client]),
-			protocolClientIds: new Map(),
-		}) as {
+		const supervisor = fromPartial<{
 			attachClient(
 				attachClient: typeof client,
 				command: { type: "attach"; activeSessionId: string; telemetryDisabled?: true },
 			): Promise<unknown>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				clients: new Set([client]),
+				protocolClientIds: new Map(),
+			}),
+		);
 
 		await expect(
 			supervisor.attachClient(client, { type: "attach", activeSessionId, telemetryDisabled: true }),
@@ -3000,7 +3136,7 @@ describe("daemon worker supervisor monitoring", () => {
 			writes.push(String(data));
 			return false;
 		});
-		const client = {
+		const client = fromAny<DaemonSocketClient, unknown>({
 			id: "client-1",
 			socket: { destroyed: false, write },
 			attachedActiveSessionIds: new Set([activeSessionId]),
@@ -3008,7 +3144,7 @@ describe("daemon worker supervisor monitoring", () => {
 			backpressured: false,
 			supportsExtensionUi: false,
 			capabilities: new Set(),
-		} as unknown as DaemonSocketClient;
+		});
 		const worker = {
 			snapshotCache: new Map(),
 			transcriptCaches: new Map(),
@@ -3017,14 +3153,16 @@ describe("daemon worker supervisor monitoring", () => {
 			snapshotTransferFrames: new Map(),
 		};
 		const catchUpClient = vi.fn(async () => undefined);
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			clients: new Set([client]),
-			streamReconstructor: { observe: vi.fn() },
-			catchUpClient,
-			invalidateWorkerSnapshot: vi.fn(),
-		}) as {
+		const supervisor = fromPartial<{
 			handleWorkerFrame(residentWorker: typeof worker, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				clients: new Set([client]),
+				streamReconstructor: { observe: vi.fn() },
+				catchUpClient,
+				invalidateWorkerSnapshot: vi.fn(),
+			}),
+		);
 		const frame = (error: string, extensionPath: string): PrivateFrame<DaemonWorkerFrameHeader> => ({
 			header: { kind: "outbound", outboundType: "extension_error", activeSessionId },
 			payload: Buffer.from(
@@ -3052,11 +3190,13 @@ describe("daemon worker supervisor monitoring", () => {
 		};
 		const requestWorker = vi.fn(async () => ({ success: true }));
 		const worker: SubscriptionWorker = { client: { requestWorker } };
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			clients: new Set(),
-		}) as {
+		const supervisor = fromPartial<{
 			subscribeWorker(worker: SubscriptionWorker, activeSessionId: string): Promise<void>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				clients: new Set(),
+			}),
+		);
 
 		await supervisor.subscribeWorker(worker, "active-1");
 
@@ -3110,12 +3250,14 @@ describe("daemon worker supervisor monitoring", () => {
 			supportsExtensionUi: false,
 			attachedActiveSessionIds: new Set<string>(),
 		};
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([[worker.descriptor.workerId, worker]]),
-			clients: new Set([client]),
-		}) as {
+		const supervisor = fromPartial<{
 			attachClient(client: AttachClient, command: { type: "attach"; activeSessionId: string }): Promise<unknown>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([[worker.descriptor.workerId, worker]]),
+				clients: new Set([client]),
+			}),
+		);
 
 		await expect(supervisor.attachClient(client, { type: "attach", activeSessionId })).rejects.toThrow(
 			"snapshot failed",
@@ -3173,13 +3315,15 @@ describe("daemon worker supervisor monitoring", () => {
 		};
 		const markInterrupted = vi.fn(async () => undefined);
 		const kill = vi.spyOn(process, "kill").mockReturnValue(true);
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			catalog: { markInterrupted },
-			log: vi.fn(),
-			assertRecoveryAllowed: vi.fn(async () => {}),
-		}) as {
+		const supervisor = fromPartial<{
 			recoverUncertainWorkerOperations(worker: RecoveryWorker, killWorkerProcess: boolean): Promise<void>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				catalog: { markInterrupted },
+				log: vi.fn(),
+				assertRecoveryAllowed: vi.fn(async () => {}),
+			}),
+		);
 
 		try {
 			await supervisor.recoverUncertainWorkerOperations(worker, false);
@@ -3210,9 +3354,11 @@ describe("daemon worker supervisor monitoring", () => {
 			descriptor: { workerId: "worker", lifecycle: "ready", rootActiveSessionId: "root" },
 			client,
 		};
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([["worker", worker]]),
-		}) as { prepareUpdateRestartFenced(): Promise<unknown> };
+		const supervisor = fromPartial<{ prepareUpdateRestartFenced(): Promise<unknown> }>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([["worker", worker]]),
+			}),
+		);
 		await expect(supervisor.prepareUpdateRestartFenced()).rejects.toThrow(error);
 		expect(client.requestWorker).toHaveBeenCalledWith({ type: "worker_cancel_update" }, 5000);
 	});
@@ -3237,11 +3383,15 @@ describe("daemon worker supervisor monitoring", () => {
 			descriptor: { workerId: "worker", lifecycle: "ready", rootActiveSessionId: "root" },
 			client,
 		};
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([["worker", worker]]),
-			validateAndPersistUpdateManifest: vi.fn(),
-			stopWorker: vi.fn(async () => undefined),
-		}) as { prepareUpdateRestartFenced(): Promise<{ discardedActiveSessionIds?: string[] }> };
+		const supervisor = fromPartial<{
+			prepareUpdateRestartFenced(): Promise<{ discardedActiveSessionIds?: string[] }>;
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([["worker", worker]]),
+				validateAndPersistUpdateManifest: vi.fn(),
+				stopWorker: vi.fn(async () => undefined),
+			}),
+		);
 		await expect(supervisor.prepareUpdateRestartFenced()).resolves.toMatchObject({
 			discardedActiveSessionIds: ["root"],
 		});
@@ -3254,7 +3404,7 @@ describe("daemon worker supervisor monitoring", () => {
 		commandJournal.begin("client-1", "command-1", "kill");
 		commandJournal.recordResult("client-1", "command-1", response);
 		const writes: string[] = [];
-		const client = {
+		const client = fromAny<DaemonSocketClient, unknown>({
 			id: "socket-client",
 			socket: {
 				destroyed: false,
@@ -3263,23 +3413,28 @@ describe("daemon worker supervisor monitoring", () => {
 					return true;
 				}),
 			},
-		} as unknown as DaemonSocketClient;
+		});
 		const mutationDrain = { begin: vi.fn(), end: vi.fn() };
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			ready: Promise.resolve(),
-			workers: new Map(),
-			protocolClientIds: new WeakMap(),
-			commandJournal,
-			mutationDrain,
-			updateRestartPhase: "fencing",
-			assertCurrentOwnership: vi.fn(async () => undefined),
-			cancelOwnedWorkerCleanup: vi.fn(),
-			handleCommand: vi.fn(async () => {
-				throw new Error("completed command was dispatched again");
+		const supervisor = fromAny<
+			{
+				handleLine(client: DaemonSocketClient, line: string): Promise<void>;
+			},
+			unknown
+		>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				ready: Promise.resolve(),
+				workers: new Map(),
+				protocolClientIds: new WeakMap(),
+				commandJournal,
+				mutationDrain,
+				updateRestartPhase: "fencing",
+				assertCurrentOwnership: vi.fn(async () => undefined),
+				cancelOwnedWorkerCleanup: vi.fn(),
+				handleCommand: vi.fn(async () => {
+					throw new Error("completed command was dispatched again");
+				}),
 			}),
-		}) as unknown as {
-			handleLine(client: DaemonSocketClient, line: string): Promise<void>;
-		};
+		);
 
 		try {
 			await supervisor.handleLine(
@@ -3300,7 +3455,7 @@ describe("daemon worker supervisor monitoring", () => {
 		const root = mkdtempSync(join(tmpdir(), "prime-supervisor-command-reject-"));
 		const commandJournal = new CommandRecoveryJournal(join(root, "commands.jsonl"));
 		const writes: string[] = [];
-		const client = {
+		const client = fromAny<DaemonSocketClient, unknown>({
 			id: "socket-client",
 			socket: {
 				destroyed: false,
@@ -3309,20 +3464,25 @@ describe("daemon worker supervisor monitoring", () => {
 					return true;
 				}),
 			},
-		} as unknown as DaemonSocketClient;
+		});
 		const mutationDrain = { begin: vi.fn(), end: vi.fn() };
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			ready: Promise.resolve(),
-			workers: new Map(),
-			protocolClientIds: new WeakMap(),
-			commandJournal,
-			mutationDrain,
-			updateRestartPhase: "fencing",
-			assertCurrentOwnership: vi.fn(async () => undefined),
-			cancelOwnedWorkerCleanup: vi.fn(),
-		}) as unknown as {
-			handleLine(client: DaemonSocketClient, line: string): Promise<void>;
-		};
+		const supervisor = fromAny<
+			{
+				handleLine(client: DaemonSocketClient, line: string): Promise<void>;
+			},
+			unknown
+		>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				ready: Promise.resolve(),
+				workers: new Map(),
+				protocolClientIds: new WeakMap(),
+				commandJournal,
+				mutationDrain,
+				updateRestartPhase: "fencing",
+				assertCurrentOwnership: vi.fn(async () => undefined),
+				cancelOwnedWorkerCleanup: vi.fn(),
+			}),
+		);
 
 		try {
 			await supervisor.handleLine(
@@ -3355,14 +3515,16 @@ describe("daemon worker supervisor monitoring", () => {
 			createdAt: "now",
 			sessions: [],
 		}));
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			mutationDrain,
-			workers: new Map(),
-			prepareUpdateRestartFenced: prepareFenced,
-		}) as {
+		const supervisor = fromPartial<{
 			updateRestartPhase?: "draining" | "fencing" | "prepared";
 			prepareUpdateRestart(): Promise<unknown>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				mutationDrain,
+				workers: new Map(),
+				prepareUpdateRestartFenced: prepareFenced,
+			}),
+		);
 
 		const prepare = supervisor.prepareUpdateRestart();
 		await firstDrain.promise;
@@ -3410,11 +3572,13 @@ describe("daemon worker supervisor monitoring", () => {
 			descriptor: { workerId: "resident-1", lifecycle: "recovering" },
 			client: undefined,
 		};
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			workers: new Map([["resident-1", worker]]),
-		}) as {
+		const supervisor = fromPartial<{
 			prepareUpdateRestartFenced(): Promise<unknown>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				workers: new Map([["resident-1", worker]]),
+			}),
+		);
 
 		await expect(supervisor.prepareUpdateRestartFenced()).rejects.toThrow(/resident-1.*recovering.*disconnected/);
 		expect(requestWorker).not.toHaveBeenCalled();

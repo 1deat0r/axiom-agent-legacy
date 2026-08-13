@@ -1,3 +1,4 @@
+import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import type { AgentCronJob, AgentHeartbeatManagementAction } from "../src/core/cron-jobs.js";
 import type {
@@ -73,7 +74,7 @@ describe("interactive heartbeat management", () => {
 		const current = heartbeat();
 		const stopped = { ...current, status: "cancelled" as const, nextRunAt: undefined };
 		const patches: Array<{ heartbeat: AgentCronJob | null }> = [];
-		const harness = Object.create(InteractiveMode.prototype) as HeartbeatManagementHarness;
+		const harness = fromPartial<HeartbeatManagementHarness>(Object.create(InteractiveMode.prototype));
 		harness.heartbeats = [{ job: current }];
 		harness.heartbeatCatalog = harness.heartbeats;
 		harness.connectionState = { activeSessionId: current.activeSessionId };
@@ -94,7 +95,7 @@ describe("interactive heartbeat management", () => {
 	it("keeps a successful action successful when the catalog refresh fails", async () => {
 		const current = heartbeat();
 		const paused = { ...current, status: "paused" as const, nextRunAt: undefined };
-		const harness = Object.create(InteractiveMode.prototype) as HeartbeatManagementHarness;
+		const harness = fromPartial<HeartbeatManagementHarness>(Object.create(InteractiveMode.prototype));
 		harness.heartbeats = [{ job: current, sessionName: "Primary session" }];
 		harness.heartbeatCatalog = harness.heartbeats;
 		harness.connectionState = { activeSessionId: current.activeSessionId };
@@ -121,7 +122,7 @@ describe("interactive heartbeat management", () => {
 		const unrelated = {
 			job: heartbeat({ id: "heartbeat-3", activeSessionId: "active-3", sessionId: "session-3" }),
 		};
-		const harness = Object.create(InteractiveMode.prototype) as HeartbeatScopeHarness;
+		const harness = fromPartial<HeartbeatScopeHarness>(Object.create(InteractiveMode.prototype));
 		harness.heartbeatCatalog = [];
 		harness.heartbeats = [];
 		harness.connectionState = { activeSessionId: "active-1", sessionId: "session-1" };
@@ -157,7 +158,7 @@ describe("interactive heartbeat management", () => {
 			status: "running",
 			sessionDir: "/tmp/child-1",
 		};
-		const harness = Object.create(InteractiveMode.prototype) as ChildIdentityUpdateHarness;
+		const harness = fromPartial<ChildIdentityUpdateHarness>(Object.create(InteractiveMode.prototype));
 		harness.subagentSnapshots = new Map([[existing.id, existing]]);
 		harness.refreshSubagentSummary = vi.fn();
 
@@ -171,7 +172,7 @@ describe("interactive heartbeat management", () => {
 		vi.useFakeTimers();
 		try {
 			vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
-			const harness = Object.create(InteractiveMode.prototype) as HeartbeatRefreshHarness;
+			const harness = fromPartial<HeartbeatRefreshHarness>(Object.create(InteractiveMode.prototype));
 			harness.heartbeats = [{ job: { ...heartbeat(), nextRunAt: "2026-01-01T00:00:01.000Z" } }];
 			harness.heartbeatManager = {};
 			harness.heartbeatManagerRefreshTimer = undefined;

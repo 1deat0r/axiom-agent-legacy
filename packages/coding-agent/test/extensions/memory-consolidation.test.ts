@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type * as PiAi from "@earendil-works/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ExtensionAPI } from "../../src/core/extensions/types.js";
 import {
@@ -46,9 +47,9 @@ function makeTempDir(): string {
 function fakePi(): { pi: ExtensionAPI; fire(event: string, payload: unknown, ctx: unknown): Promise<void> } {
 	const handlers = new Map<string, Array<(...a: unknown[]) => unknown>>();
 	return {
-		pi: {
+		pi: fromAny<ExtensionAPI, unknown>({
 			on: (evt: string, h: (...a: unknown[]) => unknown) => handlers.set(evt, [...(handlers.get(evt) ?? []), h]),
-		} as unknown as ExtensionAPI,
+		}),
 		fire: async (event, payload, ctx) => {
 			for (const handler of handlers.get(event) ?? []) {
 				await handler(payload, ctx);
@@ -73,7 +74,9 @@ function fakeCtx(overrides: Record<string, unknown> = {}) {
 }
 
 const session = (): AgentMessage[] =>
-	[{ role: "user", content: [{ type: "text", text: "session text" }], timestamp: 0 }] as unknown as AgentMessage[];
+	fromAny<AgentMessage[], unknown>([
+		{ role: "user", content: [{ type: "text", text: "session text" }], timestamp: 0 },
+	]);
 
 const facts = (): MemoryFact[] => [
 	{

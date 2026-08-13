@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import type { DaemonClient, DaemonHello } from "../src/modes/daemon/daemon-client.js";
 import { listDaemonHeartbeats } from "../src/modes/daemon/heartbeat-catalog.js";
@@ -19,7 +20,7 @@ describe("daemon heartbeat catalog", () => {
 	it("waits for the daemon hello before checking heartbeat capabilities", async () => {
 		let greeted = false;
 		const heartbeat = { job: { id: "heartbeat" } };
-		const client = {
+		const client = fromAny<DaemonClient, unknown>({
 			hello: undefined,
 			waitForHello: vi.fn(async () => {
 				greeted = true;
@@ -33,7 +34,7 @@ describe("daemon heartbeat catalog", () => {
 				success: true,
 				data: { heartbeats: [heartbeat] },
 			})),
-		} as unknown as DaemonClient;
+		});
 
 		await expect(listDaemonHeartbeats(client)).resolves.toEqual([heartbeat]);
 		expect(client.waitForHello).toHaveBeenCalledOnce();

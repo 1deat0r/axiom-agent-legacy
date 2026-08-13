@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentSession } from "../../../src/core/agent-session.js";
 import type { CreateAgentSessionRuntimeFactory } from "../../../src/core/agent-session-runtime.js";
@@ -49,9 +50,9 @@ function createDueHeartbeat(
 function runtimeResult(harness: Harness, cwd: string, agentDir: string) {
 	return {
 		session: harness.session,
-		services: { cwd, agentDir } as never,
+		services: fromAny<never, unknown>({ cwd, agentDir }),
 		diagnostics: [],
-		extensionsResult: {} as never,
+		extensionsResult: fromAny<never, unknown>({}),
 	};
 }
 
@@ -83,7 +84,7 @@ describe("ENG-4519 heartbeat rebirth", () => {
 			throw new Error("archived sessions must not be reopened");
 		});
 		const daemon = createDaemon(harness, createRuntime);
-		const internals = daemon as unknown as AgentDaemonCronInternals;
+		const internals = fromAny<AgentDaemonCronInternals, unknown>(daemon);
 		const sessionFile = harness.session.sessionFile!;
 		const heartbeat = createDueHeartbeat(internals.cronStore, {
 			activeSessionId: "old-active",
@@ -118,7 +119,7 @@ describe("ENG-4519 heartbeat rebirth", () => {
 			throw new Error("missing sessions must not be recreated");
 		});
 		const daemon = createDaemon(harness, createRuntime);
-		const internals = daemon as unknown as AgentDaemonCronInternals;
+		const internals = fromAny<AgentDaemonCronInternals, unknown>(daemon);
 		const sessionFile = join(harness.tempDir, "sessions", "deleted-session.jsonl");
 		const heartbeat = createDueHeartbeat(internals.cronStore, {
 			activeSessionId: "old-active",
@@ -150,7 +151,7 @@ describe("ENG-4519 heartbeat rebirth", () => {
 			return runtimeResult(harness, cwd, agentDir);
 		});
 		const daemon = createDaemon(harness, createRuntime);
-		const internals = daemon as unknown as AgentDaemonCronInternals;
+		const internals = fromAny<AgentDaemonCronInternals, unknown>(daemon);
 		const heartbeat = createDueHeartbeat(internals.cronStore, {
 			activeSessionId: "old-active",
 			sessionId: harness.session.sessionId,
@@ -177,7 +178,7 @@ describe("ENG-4519 heartbeat rebirth", () => {
 			runtimeResult(harness, cwd, agentDir),
 		);
 		const daemon = createDaemon(harness, createRuntime);
-		const internals = daemon as unknown as AgentDaemonCronInternals;
+		const internals = fromAny<AgentDaemonCronInternals, unknown>(daemon);
 		const state = await internals.createRuntime({
 			type: "create",
 			sessionPath: harness.session.sessionFile!,
@@ -218,7 +219,7 @@ describe("ENG-4519 heartbeat rebirth", () => {
 			runtimeResult(harness, cwd, agentDir),
 		);
 		const daemon = createDaemon(harness, createRuntime);
-		const internals = daemon as unknown as AgentDaemonCronInternals;
+		const internals = fromAny<AgentDaemonCronInternals, unknown>(daemon);
 		const state = await internals.createRuntime({
 			type: "create",
 			sessionPath: harness.session.sessionFile!,
@@ -259,10 +260,10 @@ describe("ENG-4519 heartbeat rebirth", () => {
 		const daemon = createDaemon(original, async () => {
 			throw new Error("runtime creation is not expected");
 		});
-		const internals = daemon as unknown as AgentDaemonCronInternals;
+		const internals = fromAny<AgentDaemonCronInternals, unknown>(daemon);
 		const activeSessionId = "active-session";
 		const runtime = { session: original.session };
-		const state = { activeSessionId, runtime } as unknown as ActiveSessionState;
+		const state = fromAny<ActiveSessionState, unknown>({ activeSessionId, runtime });
 		internals.sessions.set(activeSessionId, state);
 		let releaseLock: () => void = () => {};
 		const lock = new Promise<void>((resolve) => {
@@ -295,7 +296,7 @@ describe("ENG-4519 heartbeat rebirth", () => {
 			runtimeResult(harness, cwd, agentDir),
 		);
 		const daemon = createDaemon(harness, createRuntime);
-		const internals = daemon as unknown as AgentDaemonCronInternals;
+		const internals = fromAny<AgentDaemonCronInternals, unknown>(daemon);
 		const heartbeat = createDueHeartbeat(internals.cronStore, {
 			activeSessionId: "old-active",
 			sessionId: harness.session.sessionId,

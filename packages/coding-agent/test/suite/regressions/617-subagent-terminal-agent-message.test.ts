@@ -1,4 +1,5 @@
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it } from "vitest";
 import {
 	AGENT_MESSAGE_CUSTOM_TYPE,
@@ -14,8 +15,8 @@ function terminalMessage(messages: readonly unknown[]): AgentSessionMessage | un
 			message !== null &&
 			"role" in message &&
 			"customType" in message &&
-			(message as { role?: unknown }).role === "custom" &&
-			(message as { customType?: unknown }).customType === AGENT_MESSAGE_CUSTOM_TYPE,
+			fromPartial<{ role?: unknown }>(message).role === "custom" &&
+			fromPartial<{ customType?: unknown }>(message).customType === AGENT_MESSAGE_CUSTOM_TYPE,
 	);
 }
 
@@ -103,10 +104,10 @@ describe("#617 subagent terminal agent messages", () => {
 			},
 		});
 		parent = await createHarness({
-			subagentRuntimeHost: {
+			subagentRuntimeHost: fromAny<never, unknown>({
 				createRlmSubagentRuntime: async () => ({ session: child!.session }),
 				deleteRlmSubagentRuntime: async () => {},
-			} as never,
+			}),
 		});
 		child.setResponses([fauxAssistantMessage("done, no reply to parent")]);
 		parent.setResponses([fauxAssistantMessage("parent ack")]);
@@ -117,7 +118,7 @@ describe("#617 subagent terminal agent messages", () => {
 		// The notice arrives some way: either the agent message or the injected
 		// fallback, but never silently dropped.
 		const sawNotice = parent.session.messages.some((message) => {
-			const content = (message as { content?: unknown }).content;
+			const content = fromAny<{ content?: unknown }, unknown>(message).content;
 			return typeof content === "string" && content.includes("completed without sending a reply");
 		});
 		expect(sawNotice || terminalMessage(parent.session.messages) !== undefined).toBe(true);

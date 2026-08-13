@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { handlePeersCommand } from "../src/cli/peers-command.js";
 import { inbox, registerRun, resolvePeerScopeDir } from "../src/core/peers/index.js";
@@ -118,11 +119,11 @@ describe("handlePeersCommand", () => {
 			const scopeDir = resolvePeerScopeDir(project, home);
 			registerRun(scopeDir, SELF, { model: "m1" }, { uuid: () => "run-x", pid: 1234 });
 			expect(await handlePeersCommand(["peers", "--json"])).toBe(true);
-			const parsed = JSON.parse(log.mock.calls[0]?.[0] as string) as {
+			const parsed = fromPartial<{
 				self: unknown[];
 				active: unknown[];
 				stale: unknown[];
-			};
+			}>(JSON.parse(fromPartial<string>(log.mock.calls[0]?.[0])));
 			expect(Array.isArray(parsed.self)).toBe(true);
 			expect(Array.isArray(parsed.active)).toBe(true);
 			expect(Array.isArray(parsed.stale)).toBe(true);

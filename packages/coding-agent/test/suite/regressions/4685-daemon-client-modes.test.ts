@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createCliSubprocessEnv, createCliSubprocessLaunchSpec } from "../../../src/cli/subprocess-launch.js";
 import { ENV_AGENT_DIR } from "../../../src/config.js";
@@ -103,7 +104,7 @@ async function runCli(
 		}, 20_000);
 		child.once("exit", (code, signal) => {
 			clearTimeout(timeout);
-			resolveExit({ code, signal: signal as NodeJS.Signals | null });
+			resolveExit({ code, signal: fromPartial<NodeJS.Signals | null>(signal) });
 		});
 	});
 	children.delete(child);
@@ -133,7 +134,7 @@ async function runRpc(
 		const timeout = setTimeout(() => reject(new Error(`RPC fixture timed out\n${stderr}`)), 10_000);
 		child.once("exit", (code, signal) => {
 			clearTimeout(timeout);
-			resolveExit({ code, signal: signal as NodeJS.Signals | null });
+			resolveExit({ code, signal: fromPartial<NodeJS.Signals | null>(signal) });
 		});
 	});
 	children.delete(child);
@@ -143,14 +144,14 @@ async function runRpc(
 			.trim()
 			.split("\n")
 			.filter(Boolean)
-			.map((line) => JSON.parse(line) as object),
+			.map((line) => fromPartial<object>(JSON.parse(line))),
 		stderr,
 	};
 }
 
 describe("ENG-4685 daemon-backed client modes", () => {
 	it("commits owned-worker promotion before best-effort peer synchronization", async () => {
-		const client = { id: "client-1" } as DaemonSocketClient;
+		const client = fromPartial<DaemonSocketClient>({ id: "client-1" });
 		const worker = {
 			descriptor: { ownerClientId: "protocol-client" },
 			launchEnv: { TEST: "value" },
@@ -160,14 +161,16 @@ describe("ENG-4685 daemon-backed client modes", () => {
 			throw new Error("peer unavailable");
 		});
 		const log = vi.fn();
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			protocolClientId: () => "protocol-client",
-			persistWorker,
-			syncAgentPeers,
-			log,
-		}) as {
+		const supervisor = fromPartial<{
 			promoteOwnedWorker(client: DaemonSocketClient, resident: typeof worker): Promise<void>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				protocolClientId: () => "protocol-client",
+				persistWorker,
+				syncAgentPeers,
+				log,
+			}),
+		);
 
 		await supervisor.promoteOwnedWorker(client, worker);
 		await supervisor.promoteOwnedWorker(client, worker);
@@ -180,7 +183,7 @@ describe("ENG-4685 daemon-backed client modes", () => {
 	});
 
 	it("rolls back owned-worker promotion when persistence fails", async () => {
-		const client = { id: "client-1" } as DaemonSocketClient;
+		const client = fromPartial<DaemonSocketClient>({ id: "client-1" });
 		const descriptor = { ownerClientId: "protocol-client" };
 		const timer = setTimeout(() => {}, 60_000);
 		const worker = {
@@ -188,14 +191,16 @@ describe("ENG-4685 daemon-backed client modes", () => {
 			launchEnv: { TEST: "value" },
 			ownerCleanupTimer: timer,
 		};
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			protocolClientId: () => "protocol-client",
-			persistWorker: () => {
-				throw new Error("disk full");
-			},
-		}) as {
+		const supervisor = fromPartial<{
 			promoteOwnedWorker(client: DaemonSocketClient, resident: typeof worker): Promise<void>;
-		};
+		}>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				protocolClientId: () => "protocol-client",
+				persistWorker: () => {
+					throw new Error("disk full");
+				},
+			}),
+		);
 
 		await expect(supervisor.promoteOwnedWorker(client, worker)).rejects.toThrow("disk full");
 
@@ -215,11 +220,12 @@ describe("ENG-4685 daemon-backed client modes", () => {
 			},
 		});
 		harnesses.push(harness);
-		const state = (
-			harness.session as unknown as {
+		const state = fromAny<
+			{
 				_autonomousState: AutonomousRuntimeState;
-			}
-		)._autonomousState;
+			},
+			unknown
+		>(harness.session)._autonomousState;
 		state.gateAttempts[gate] = 1;
 		state.lastGateFailure = {
 			command: gate,
@@ -478,7 +484,7 @@ describe("ENG-4685 daemon-backed client modes", () => {
 		});
 		client.onObservedSessionEvent((event) => observed.push(event.type));
 
-		(client as unknown as { handleLine(line: string): void }).handleLine(
+		fromAny<{ handleLine(line: string): void }, unknown>(client).handleLine(
 			JSON.stringify({ type: "observed_session_closed", activeSessionId: "child" }),
 		);
 

@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Usage } from "@earendil-works/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import type { ExtensionAPI } from "../../src/core/extensions/types.js";
 import { createLedgerExtension } from "../../src/extensions/ledger/index.js";
@@ -214,7 +215,7 @@ describe("spend cap in the extension", () => {
 				events.set(event, handler);
 			},
 		};
-		return { pi: pi as unknown as ExtensionAPI, commands, events };
+		return { pi: fromAny<ExtensionAPI, unknown>(pi), commands, events };
 	}
 
 	function fakeCtx() {
@@ -261,12 +262,18 @@ describe("spend cap in the extension", () => {
 		const u1 = usage({ input: 300_000, cost: { input: 0.3, output: 0, cacheRead: 0, cacheWrite: 0, total: 0.3 } });
 		const u2 = usage({ input: 300_000, cost: { input: 0.3, output: 0, cacheRead: 0, cacheWrite: 0, total: 0.3 } });
 		createLedgerExtension(depsWith(0.5))(pi);
-		await events.get("agent_start")!(null, ctx as never);
-		await events.get("turn_end")!(turnEnd(assistantMessage({ provider: "p", model: "m", usage: u1 })), ctx as never);
-		await events.get("turn_start")!(turnStart(1), ctx as never);
+		await events.get("agent_start")!(null, fromAny<never, unknown>(ctx));
+		await events.get("turn_end")!(
+			turnEnd(assistantMessage({ provider: "p", model: "m", usage: u1 })),
+			fromAny<never, unknown>(ctx),
+		);
+		await events.get("turn_start")!(turnStart(1), fromAny<never, unknown>(ctx));
 		expect(aborted).toEqual([]);
-		await events.get("turn_end")!(turnEnd(assistantMessage({ provider: "p", model: "m", usage: u2 })), ctx as never);
-		await events.get("turn_start")!(turnStart(2), ctx as never);
+		await events.get("turn_end")!(
+			turnEnd(assistantMessage({ provider: "p", model: "m", usage: u2 })),
+			fromAny<never, unknown>(ctx),
+		);
+		await events.get("turn_start")!(turnStart(2), fromAny<never, unknown>(ctx));
 		expect(aborted).toEqual(["abort"]);
 		expect(notified.some((n) => n.includes("cost cap") && n.includes("run stopped"))).toBe(true);
 		expect(
@@ -280,14 +287,17 @@ describe("spend cap in the extension", () => {
 		const u = usage({ input: 600_000, cost: { input: 0.6, output: 0, cacheRead: 0, cacheWrite: 0, total: 0.6 } });
 		createLedgerExtension(depsWith(0.5))(pi);
 		// First run exceeds the cap.
-		await events.get("agent_start")!(null, ctx as never);
-		await events.get("turn_end")!(turnEnd(assistantMessage({ provider: "p", model: "m", usage: u })), ctx as never);
-		await events.get("turn_start")!(turnStart(1), ctx as never);
+		await events.get("agent_start")!(null, fromAny<never, unknown>(ctx));
+		await events.get("turn_end")!(
+			turnEnd(assistantMessage({ provider: "p", model: "m", usage: u })),
+			fromAny<never, unknown>(ctx),
+		);
+		await events.get("turn_start")!(turnStart(1), fromAny<never, unknown>(ctx));
 		expect(aborted).toEqual(["abort"]);
 		// A new run starts fresh.
 		aborted.length = 0;
-		await events.get("agent_start")!(null, ctx as never);
-		await events.get("turn_start")!(turnStart(0), ctx as never);
+		await events.get("agent_start")!(null, fromAny<never, unknown>(ctx));
+		await events.get("turn_start")!(turnStart(0), fromAny<never, unknown>(ctx));
 		expect(aborted).toEqual([]);
 	});
 
@@ -295,8 +305,8 @@ describe("spend cap in the extension", () => {
 		const { pi, events } = fakePi();
 		const { ctx, aborted, notified } = fakeCtx();
 		createLedgerExtension(depsWith(0))(pi);
-		await events.get("agent_start")!(null, ctx as never);
-		await events.get("turn_start")!(turnStart(0), ctx as never);
+		await events.get("agent_start")!(null, fromAny<never, unknown>(ctx));
+		await events.get("turn_start")!(turnStart(0), fromAny<never, unknown>(ctx));
 		expect(aborted).toEqual(["abort"]);
 		expect(notified.some((n) => n.includes("disabled"))).toBe(true);
 		expect(notified.some((n) => n.includes("/cap none to re-enable"))).toBe(true);
@@ -312,9 +322,12 @@ describe("spend cap in the extension", () => {
 		});
 		const overrides = new Map([["p/m", { input: 1.0, output: 2.0, cacheRead: 0.5, cacheWrite: 1.0 }]]);
 		createLedgerExtension(depsWith(5, overrides))(pi);
-		await events.get("agent_start")!(null, ctx as never);
-		await events.get("turn_end")!(turnEnd(assistantMessage({ provider: "p", model: "m", usage: u })), ctx as never);
-		await events.get("turn_start")!(turnStart(1), ctx as never);
+		await events.get("agent_start")!(null, fromAny<never, unknown>(ctx));
+		await events.get("turn_end")!(
+			turnEnd(assistantMessage({ provider: "p", model: "m", usage: u })),
+			fromAny<never, unknown>(ctx),
+		);
+		await events.get("turn_start")!(turnStart(1), fromAny<never, unknown>(ctx));
 		expect(aborted).toEqual([]); // $1.00 repriced < $5 cap
 	});
 
@@ -322,19 +335,19 @@ describe("spend cap in the extension", () => {
 		const { pi, events } = fakePi();
 		const { ctx, aborted } = fakeCtx();
 		createLedgerExtension(depsWith(0.5))(pi);
-		await events.get("agent_start")!(null, ctx as never);
+		await events.get("agent_start")!(null, fromAny<never, unknown>(ctx));
 		// A user-role message and a usage-less assistant message carry no spend.
 		await events.get("turn_end")!(
 			{ type: "turn_end", turnIndex: 0, message: { role: "user", content: "hi", timestamp: 1 }, toolResults: [] },
-			ctx as never,
+			fromAny<never, unknown>(ctx),
 		);
 		// Aborted turns can end with an assistant message that carries no usage.
-		const usageLess = {
+		const usageLess = fromAny<ReturnType<typeof assistantMessage>, unknown>({
 			...assistantMessage({ provider: "p", model: "m", usage: usage({}) }),
 			usage: undefined,
-		} as unknown as ReturnType<typeof assistantMessage>;
-		await events.get("turn_end")!(turnEnd(usageLess), ctx as never);
-		await events.get("turn_start")!(turnStart(1), ctx as never);
+		});
+		await events.get("turn_end")!(turnEnd(usageLess), fromAny<never, unknown>(ctx));
+		await events.get("turn_start")!(turnStart(1), fromAny<never, unknown>(ctx));
 		expect(aborted).toEqual([]);
 	});
 
@@ -350,7 +363,7 @@ describe("spend cap in the extension", () => {
 			await writeFile(join(dir, "ledger.json"), JSON.stringify({ maxRunCostUsd: 0.5 }));
 			const { pi, commands } = fakePi();
 			const { ctx, notified } = fakeCtx();
-			const entry = {
+			const entry = fromAny<import("../../src/core/session-manager.ts").SessionEntry, unknown>({
 				type: "message" as const,
 				id: "m1",
 				parentId: null,
@@ -368,7 +381,7 @@ describe("spend cap in the extension", () => {
 					stopReason: "stop",
 					timestamp: 1,
 				},
-			} as unknown as import("../../src/core/session-manager.ts").SessionEntry;
+			});
 			const deps = {
 				overridesPath: join(dir, "ledger.json"),
 				loadConfig: async () => loadLedgerConfig(join(dir, "ledger.json")),
@@ -376,7 +389,7 @@ describe("spend cap in the extension", () => {
 				loadEntries: () => [entry],
 			};
 			createLedgerExtension(deps)(pi);
-			await commands.get("cap")!.handler("", ctx as never);
+			await commands.get("cap")!.handler("", fromAny<never, unknown>(ctx));
 			expect(notified.join(" ")).toContain("cap $0.50");
 			// Session reads the ctx's entries (none here); lifetime scans the bundles.
 			expect(notified.join(" ")).toContain("session $0.0000");
@@ -384,7 +397,7 @@ describe("spend cap in the extension", () => {
 			// Without a cap the show line says so.
 			await writeFile(join(dir, "ledger.json"), JSON.stringify({}));
 			notified.length = 0;
-			await commands.get("cap")!.handler("", ctx as never);
+			await commands.get("cap")!.handler("", fromAny<never, unknown>(ctx));
 			expect(notified.join(" ")).toContain("no cap");
 		} finally {
 			await rm(dir, { recursive: true, force: true });
@@ -404,10 +417,10 @@ describe("spend cap in the extension", () => {
 				loadEntries: () => [],
 			};
 			createLedgerExtension(deps)(pi);
-			await commands.get("cap")!.handler("1.25", ctx as never);
+			await commands.get("cap")!.handler("1.25", fromAny<never, unknown>(ctx));
 			expect((await loadLedgerConfig(path)).maxRunCostUsd).toBe(1.25);
 			expect(notified.at(-1)).toContain("cap set to $1.25");
-			await commands.get("cap")!.handler("none", ctx as never);
+			await commands.get("cap")!.handler("none", fromAny<never, unknown>(ctx));
 			expect((await loadLedgerConfig(path)).maxRunCostUsd).toBeUndefined();
 			expect(notified.at(-1)).toContain("cap cleared");
 		} finally {
@@ -428,7 +441,7 @@ describe("spend cap in the extension", () => {
 				loadEntries: () => [],
 			};
 			createLedgerExtension(deps)(pi);
-			await commands.get("cap")!.handler("0", ctx as never);
+			await commands.get("cap")!.handler("0", fromAny<never, unknown>(ctx));
 			expect((await loadLedgerConfig(path)).maxRunCostUsd).toBe(0);
 			expect(notified.at(-1)).toContain("LLM calls disabled");
 			expect(notified.at(-1)).toContain("/cap none to re-enable");
@@ -450,7 +463,7 @@ describe("spend cap in the extension", () => {
 				loadEntries: () => [],
 			};
 			createLedgerExtension(deps)(pi);
-			await commands.get("cap")!.handler("-1", ctx as never);
+			await commands.get("cap")!.handler("-1", fromAny<never, unknown>(ctx));
 			expect(notified.at(-1)).toMatch(/invalid|cap/i);
 			expect((await loadLedgerConfig(path)).maxRunCostUsd).toBeUndefined();
 		} finally {
@@ -463,9 +476,12 @@ describe("spend cap in the extension", () => {
 		const { ctx, aborted } = fakeCtx();
 		const u = usage({ input: 9_000_000, cost: { input: 9.0, output: 0, cacheRead: 0, cacheWrite: 0, total: 9.0 } });
 		createLedgerExtension(depsWith(undefined))(pi);
-		await events.get("agent_start")!(null, ctx as never);
-		await events.get("turn_end")!(turnEnd(assistantMessage({ provider: "p", model: "m", usage: u })), ctx as never);
-		await events.get("turn_start")!(turnStart(1), ctx as never);
+		await events.get("agent_start")!(null, fromAny<never, unknown>(ctx));
+		await events.get("turn_end")!(
+			turnEnd(assistantMessage({ provider: "p", model: "m", usage: u })),
+			fromAny<never, unknown>(ctx),
+		);
+		await events.get("turn_start")!(turnStart(1), fromAny<never, unknown>(ctx));
 		expect(aborted).toEqual([]);
 	});
 });

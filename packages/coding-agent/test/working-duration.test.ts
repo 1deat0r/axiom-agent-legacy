@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, test } from "vitest";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.js";
 
@@ -5,7 +6,7 @@ type WorkingDurationFormatter = {
 	formatWorkingElapsed(elapsedMs: number): string;
 };
 
-const formatWorkingElapsed = (InteractiveMode.prototype as unknown as WorkingDurationFormatter).formatWorkingElapsed;
+const formatWorkingElapsed = fromAny<WorkingDurationFormatter, unknown>(InteractiveMode.prototype).formatWorkingElapsed;
 
 describe("working duration", () => {
 	test.each([

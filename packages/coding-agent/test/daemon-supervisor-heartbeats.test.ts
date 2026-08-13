@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DaemonSocketClient } from "../src/modes/daemon/active-session-state.js";
 import { type DaemonCommand, type DaemonResponse, failure, success } from "../src/modes/daemon/daemon-protocol.js";
@@ -24,10 +25,12 @@ afterEach(() => {
 function createSupervisorHarness(): SupervisorHarness {
 	const directory = mkdtempSync(join(tmpdir(), "prime-supervisor-heartbeats-"));
 	tempDirs.push(directory);
-	return new DaemonSupervisor(join(directory, "daemon.sock"), {
-		defaultSessionConfig: { agentDir: directory, cwd: directory },
-		descriptorDir: join(directory, "workers"),
-	}) as unknown as SupervisorHarness;
+	return fromAny<SupervisorHarness, unknown>(
+		new DaemonSupervisor(join(directory, "daemon.sock"), {
+			defaultSessionConfig: { agentDir: directory, cwd: directory },
+			descriptorDir: join(directory, "workers"),
+		}),
+	);
 }
 
 function worker(lifecycle: "ready" | "recovering", connected = true) {
@@ -50,7 +53,7 @@ describe("daemon supervisor heartbeat aggregation", () => {
 			}),
 		);
 
-		const initial = await supervisor.handleCommand({} as DaemonSocketClient, {
+		const initial = await supervisor.handleCommand(fromPartial<DaemonSocketClient>({}), {
 			id: "list-1",
 			type: "heartbeats_list",
 		});
@@ -61,7 +64,7 @@ describe("daemon supervisor heartbeat aggregation", () => {
 
 		second.descriptor.lifecycle = "recovering";
 		delete second.client;
-		const recovered = await supervisor.handleCommand({} as DaemonSocketClient, {
+		const recovered = await supervisor.handleCommand(fromPartial<DaemonSocketClient>({}), {
 			id: "list-2",
 			type: "heartbeats_list",
 		});
@@ -85,7 +88,7 @@ describe("daemon supervisor heartbeat aggregation", () => {
 				: failure(command.id, command.type, "worker unavailable"),
 		);
 
-		const response = await supervisor.handleCommand({} as DaemonSocketClient, {
+		const response = await supervisor.handleCommand(fromPartial<DaemonSocketClient>({}), {
 			id: "list-2",
 			type: "heartbeats_list",
 		});
@@ -110,7 +113,7 @@ describe("daemon supervisor heartbeat aggregation", () => {
 			header: { kind: "outbound", outboundType: "heartbeats_changed" },
 			payload: Buffer.alloc(0),
 		});
-		const response = await supervisor.handleCommand({} as DaemonSocketClient, {
+		const response = await supervisor.handleCommand(fromPartial<DaemonSocketClient>({}), {
 			id: "list-stale",
 			type: "heartbeats_list",
 		});
@@ -127,7 +130,7 @@ describe("daemon supervisor heartbeat aggregation", () => {
 			success(command.id, command.type, { heartbeats: [] }),
 		);
 
-		const response = await supervisor.handleCommand({} as DaemonSocketClient, {
+		const response = await supervisor.handleCommand(fromPartial<DaemonSocketClient>({}), {
 			id: "list-3",
 			type: "heartbeats_list",
 		});
@@ -152,7 +155,7 @@ describe("daemon supervisor heartbeat aggregation", () => {
 			}),
 		);
 
-		const response = await supervisor.handleCommand({} as DaemonSocketClient, {
+		const response = await supervisor.handleCommand(fromPartial<DaemonSocketClient>({}), {
 			id: "manage-1",
 			type: "heartbeat_manage",
 			activeSessionId: "unloaded-session",

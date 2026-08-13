@@ -1,9 +1,10 @@
+import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import type { AgentAutonomousStatus } from "../src/core/autonomous.js";
 import { acpStopReason } from "../src/modes/acp/acp-stop-reason.js";
 
 function status(overrides: Partial<AgentAutonomousStatus> = {}): AgentAutonomousStatus {
-	return {
+	return fromPartial<AgentAutonomousStatus>({
 		enabled: true,
 		continuationsUsed: 0,
 		turnsUsed: 0,
@@ -17,7 +18,7 @@ function status(overrides: Partial<AgentAutonomousStatus> = {}): AgentAutonomous
 		gates: { commands: [], maxRetries: 1, timeoutMs: 60_000 },
 		gateAttempts: {},
 		...overrides,
-	} as AgentAutonomousStatus;
+	});
 }
 
 describe("ACP stop reasons", () => {

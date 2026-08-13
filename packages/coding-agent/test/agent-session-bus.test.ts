@@ -1,3 +1,4 @@
+import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import {
 	AGENT_MESSAGE_SOURCE,
@@ -163,7 +164,7 @@ describe("agent session bus", () => {
 	it("resolves role sends and scopes all broadcasts to the family roster", async () => {
 		const sendAgentMessage = vi.fn(async (input: { target: string; message: string }) => ({
 			id: input.target,
-			source: AGENT_MESSAGE_SOURCE as typeof AGENT_MESSAGE_SOURCE,
+			source: fromPartial<typeof AGENT_MESSAGE_SOURCE>(AGENT_MESSAGE_SOURCE),
 			target: { activeSessionId: input.target, sessionId: input.target },
 			message: input.message,
 			deliveryStatus: "delivered" as const,
@@ -235,7 +236,7 @@ describe("agent session bus", () => {
 			if (input.target === "sibling") throw new Error("rate limited");
 			return {
 				id: input.target,
-				source: AGENT_MESSAGE_SOURCE as typeof AGENT_MESSAGE_SOURCE,
+				source: fromPartial<typeof AGENT_MESSAGE_SOURCE>(AGENT_MESSAGE_SOURCE),
 				target: { activeSessionId: input.target, sessionId: input.target },
 				message: input.message,
 				deliveryStatus: "delivered" as const,

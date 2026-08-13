@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	buildWorkspaceRelaunchEnv,
@@ -114,13 +115,16 @@ type SwitchWorkspaceThis = {
 	ui: { terminal: { drainInput(ms: number): Promise<unknown> } };
 };
 
-const prototype = InteractiveMode.prototype as unknown as {
-	switchWorkspace(
-		this: SwitchWorkspaceThis,
-		opts: { profile?: string; project?: string },
-		deps?: WorkspaceRelaunchDeps,
-	): Promise<void>;
-};
+const prototype = fromAny<
+	{
+		switchWorkspace(
+			this: SwitchWorkspaceThis,
+			opts: { profile?: string; project?: string },
+			deps?: WorkspaceRelaunchDeps,
+		): Promise<void>;
+	},
+	unknown
+>(InteractiveMode.prototype);
 
 describe("InteractiveMode.switchWorkspace wiring", () => {
 	const originalArgv = process.argv;

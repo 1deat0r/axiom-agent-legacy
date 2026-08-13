@@ -1,3 +1,4 @@
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import { getEnvApiKey } from "../src/env-api-keys.js";
 import { getModels, getProviders } from "../src/models.js";
@@ -22,8 +23,8 @@ function getE2EApiKey(provider: KnownProvider): string | undefined {
 }
 
 function getAnthropicMessagesModels(provider: KnownProvider): Model<"anthropic-messages">[] {
-	const models = getModels(provider) as Model<Api>[];
-	return models.filter((model) => model.api === "anthropic-messages") as Model<"anthropic-messages">[];
+	const models = fromPartial<Model<Api>[]>(getModels(provider));
+	return fromAny<Model<"anthropic-messages">[], unknown>(models.filter((model) => model.api === "anthropic-messages"));
 }
 
 const anthropicMessagesCases: AnthropicLongCacheRetentionE2ECase[] = getProviders().flatMap((provider) =>

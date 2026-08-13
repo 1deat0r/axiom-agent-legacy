@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import {
 	chunkSlackText,
@@ -304,8 +305,8 @@ describe("SlackTransport", () => {
 	it("skips messages without a user or text", async () => {
 		const f = fakeClient([{ id: "C" }]);
 		f.queue.set("C", [
-			{ ts: "1.0", channel: "C" } as SlackMessage, // no user/text
-			{ ts: "2.0", channel: "C", user: "x" } as SlackMessage, // no text
+			fromPartial<SlackMessage>({ ts: "1.0", channel: "C" }), // no user/text
+			fromPartial<SlackMessage>({ ts: "2.0", channel: "C", user: "x" }), // no text
 			msg("3.0", "C", "real"),
 		]);
 		const t = new SlackTransport(f.client, { pollIntervalMs: 1 });
@@ -361,7 +362,7 @@ describe("HttpSlackClient (local server boundary)", () => {
 				});
 			});
 			server.on("error", reject);
-			server.listen(0, "127.0.0.1", () => resolve((server!.address() as { port: number }).port));
+			server.listen(0, "127.0.0.1", () => resolve(fromAny<{ port: number }, unknown>(server!.address()).port));
 		});
 		try {
 			const client = new HttpSlackClient({ token: "T", baseUrl: `http://127.0.0.1:${port}` });
@@ -391,7 +392,7 @@ describe("HttpSlackClient (local server boundary)", () => {
 				res.end(JSON.stringify({ ok: false, error: "invalid_auth" }));
 			});
 			server.on("error", reject);
-			server.listen(0, "127.0.0.1", () => resolve((server!.address() as { port: number }).port));
+			server.listen(0, "127.0.0.1", () => resolve(fromAny<{ port: number }, unknown>(server!.address()).port));
 		});
 		try {
 			const client = new HttpSlackClient({ token: "BAD", baseUrl: `http://127.0.0.1:${port}` });

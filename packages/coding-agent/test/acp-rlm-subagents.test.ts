@@ -11,6 +11,7 @@ import {
 	type TextContent,
 	type Usage,
 } from "@earendil-works/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AgentSession } from "../src/core/agent-session.js";
 import type { AgentSessionRuntime } from "../src/core/agent-session-runtime.js";
@@ -73,12 +74,12 @@ function streamAnswer(text: string): ReturnType<typeof createAssistantMessageEve
  */
 
 function runtimeHostFor(session: AgentSession): AgentSessionRuntime {
-	return {
+	return fromAny<AgentSessionRuntime, unknown>({
 		session,
 		setRebindSession() {},
 		setBeforeSessionInvalidate() {},
 		async dispose() {},
-	} as unknown as AgentSessionRuntime;
+	});
 }
 
 describe("ACP mode surfaces RLM subagents", () => {

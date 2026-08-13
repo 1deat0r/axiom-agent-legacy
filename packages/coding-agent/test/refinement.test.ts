@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type * as PiAi from "@earendil-works/pi-ai";
 import type { AssistantMessage, Model } from "@earendil-works/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	appendGlobalRefinement,
@@ -896,7 +897,7 @@ describe("harness refinement", () => {
 			state,
 			proposal("Unsupported edits", [
 				{
-					action: "rename" as RefinementAction,
+					action: fromAny<RefinementAction, unknown>("rename"),
 					kind: "memory",
 					id: "bad_action",
 					title: "Bad action",
@@ -904,7 +905,7 @@ describe("harness refinement", () => {
 				},
 				{
 					action: "create",
-					kind: "tool" as RefinementKind,
+					kind: fromAny<RefinementKind, unknown>("tool"),
 					id: "bad_kind",
 					title: "Bad kind",
 					content: "Bad kind",
@@ -1157,7 +1158,7 @@ describe("harness refinement", () => {
 		expect(state.entries.memory.kept_memory.content).toBe("Updated memory content");
 		expect(state.entries.skill.deleted_skill).toBeUndefined();
 
-		const rollback = await refineHarness([], state, [target], {} as never, "api-key", {
+		const rollback = await refineHarness([], state, [target], fromAny<never, unknown>({}), "api-key", {
 			rollbackId: "refine_target",
 		});
 
@@ -1192,7 +1193,7 @@ describe("harness refinement", () => {
 		const state = loadHarnessState(makeTempDir());
 
 		await expect(
-			refineHarness([], state, [], {} as never, "api-key", { rollbackId: "missing_refinement" }),
+			refineHarness([], state, [], fromAny<never, unknown>({}), "api-key", { rollbackId: "missing_refinement" }),
 		).rejects.toThrow("Refinement missing_refinement not found");
 	});
 });
@@ -1405,7 +1406,7 @@ describe("global refinement history", () => {
 			{ id: "refine_rollback_target" },
 		);
 
-		const plan = await planRefinement([], state, [target], {} as never, "api-key", {
+		const plan = await planRefinement([], state, [target], fromAny<never, unknown>({}), "api-key", {
 			rollbackId: "refine_rollback_target",
 		});
 
@@ -1442,7 +1443,7 @@ describe("global refinement history", () => {
 		expect(sessionBState.entries.memory.session_a_memory).toBeDefined();
 
 		const globalHistory = mergeRefinementHistory(loadGlobalRefinementHistory(dir), getRefinementHistory([]));
-		const rollback = await refineHarness([], sessionBState, globalHistory, {} as never, "api-key", {
+		const rollback = await refineHarness([], sessionBState, globalHistory, fromAny<never, unknown>({}), "api-key", {
 			rollbackId: "refine_session_a",
 		});
 
@@ -1469,7 +1470,7 @@ describe("global refinement history", () => {
 		);
 		expect(target.scope).toBe("global");
 
-		const plan = await planRefinement([], state, [target], {} as never, "api-key", {
+		const plan = await planRefinement([], state, [target], fromAny<never, unknown>({}), "api-key", {
 			rollbackId: "refine_global_target",
 		});
 
@@ -1511,7 +1512,7 @@ describe("global refinement history", () => {
 		};
 		const legacyHistory = mergeRefinementHistory([{ ...legacyTarget, scope: "global" }], [legacyTarget]);
 
-		const plan = await planRefinement([], state, legacyHistory, {} as never, "api-key", {
+		const plan = await planRefinement([], state, legacyHistory, fromAny<never, unknown>({}), "api-key", {
 			rollbackId: "refine_legacy_global",
 		});
 

@@ -1,5 +1,6 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { Container, visibleWidth } from "@earendil-works/pi-tui";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { InteractiveMode } from "../../../src/modes/interactive/interactive-mode.js";
 import { initTheme } from "../../../src/modes/interactive/theme/theme.js";
@@ -37,36 +38,40 @@ type HandleEventHost = {
 	handleEvent(this: MessageStartMode, event: { type: "message_start"; message: AgentMessage }): Promise<void>;
 };
 
-const renderRecap = (InteractiveMode.prototype as unknown as RenderRecapHost).renderRecap;
-const handleEvent = (InteractiveMode.prototype as unknown as HandleEventHost).handleEvent;
+const renderRecap = fromAny<RenderRecapHost, unknown>(InteractiveMode.prototype).renderRecap;
+const handleEvent = fromAny<HandleEventHost, unknown>(InteractiveMode.prototype).handleEvent;
 
 function createRenderMode(sessionRecap?: string): RecapRenderMode {
-	return Object.assign(Object.create(InteractiveMode.prototype), {
-		recapContainer: new Container(),
-		sessionRecap,
-		agentRunFileChanges: new Map(),
-		isAgentStreaming: () => false,
-		ui: { requestRender: vi.fn() },
-	}) as RecapRenderMode;
+	return fromPartial<RecapRenderMode>(
+		Object.assign(Object.create(InteractiveMode.prototype), {
+			recapContainer: new Container(),
+			sessionRecap,
+			agentRunFileChanges: new Map(),
+			isAgentStreaming: () => false,
+			ui: { requestRender: vi.fn() },
+		}),
+	);
 }
 
 function createMessageStartMode(): MessageStartMode {
-	return Object.assign(Object.create(InteractiveMode.prototype), {
-		isInitialized: true,
-		footer: { invalidate: vi.fn() },
-		updateConnectionStateFromEvent: vi.fn(),
-		contextUsageTokenBaseline: 12,
-		setSessionHasMessages: vi.fn(),
-		clearShortcutGuide: vi.fn(),
-		activityTracker: { handleEvent: vi.fn() },
-		updateWorkingLoaderMessage: vi.fn(),
-		addMessageToChat: vi.fn(),
-		ui: { requestRender: vi.fn() },
-		sessionRecap: "previous recap",
-		agentRunFileChanges: new Map(),
-		renderRecap: vi.fn(),
-		updatePendingMessagesDisplay: vi.fn(),
-	}) as MessageStartMode;
+	return fromPartial<MessageStartMode>(
+		Object.assign(Object.create(InteractiveMode.prototype), {
+			isInitialized: true,
+			footer: { invalidate: vi.fn() },
+			updateConnectionStateFromEvent: vi.fn(),
+			contextUsageTokenBaseline: 12,
+			setSessionHasMessages: vi.fn(),
+			clearShortcutGuide: vi.fn(),
+			activityTracker: { handleEvent: vi.fn() },
+			updateWorkingLoaderMessage: vi.fn(),
+			addMessageToChat: vi.fn(),
+			ui: { requestRender: vi.fn() },
+			sessionRecap: "previous recap",
+			agentRunFileChanges: new Map(),
+			renderRecap: vi.fn(),
+			updatePendingMessagesDisplay: vi.fn(),
+		}),
+	);
 }
 
 function render(mode: RecapRenderMode, width = 80): string[] {

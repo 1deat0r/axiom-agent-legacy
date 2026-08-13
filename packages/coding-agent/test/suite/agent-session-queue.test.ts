@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -115,7 +116,7 @@ describe("AgentSession queue characterization", () => {
 			settings: { autoRefine: { enabled: true, turnInterval: 1, cooldownMs: 0 } },
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as AutoRefineInternals;
+		const internals = fromAny<AutoRefineInternals, unknown>(harness.session);
 		harness.setResponses([fauxAssistantMessage("failed", { stopReason: "error", errorMessage: "provider failed" })]);
 
 		await harness.session.prompt("fail once");
@@ -128,7 +129,7 @@ describe("AgentSession queue characterization", () => {
 			name: "review runs after the configured turn interval",
 			settings: { autoRefine: { enabled: true, turnInterval: 2, cooldownMs: 0 } },
 			turns: 2,
-			reason: "turn_interval" as AutoRefineReason,
+			reason: fromPartial<AutoRefineReason>("turn_interval"),
 			review: {
 				shouldRefine: true,
 				rationale: "durable lesson found",
@@ -137,19 +138,19 @@ describe("AgentSession queue characterization", () => {
 			expectedReviewContext: { reason: "turn_interval", turnsSinceLastReview: 2 },
 			refineFragments: ["capture the durable lesson", "local harness entries", "Do not promote anything global"],
 			turnsAfter: 0,
-			compactPendingAfter: undefined as boolean | undefined,
-			scheduleCalledWith: undefined as AutoRefineReason | undefined,
+			compactPendingAfter: fromPartial<boolean | undefined>(undefined),
+			scheduleCalledWith: fromPartial<AutoRefineReason | undefined>(undefined),
 			queuedMessages: false,
 		},
 		{
 			name: "compact hook does not require the turn interval",
 			settings: { autoRefine: { enabled: true, turnInterval: 25, cooldownMs: 0 } },
 			turns: 0,
-			reason: "compact" as AutoRefineReason,
+			reason: fromPartial<AutoRefineReason>("compact"),
 			review: { shouldRefine: false, rationale: "nothing durable" },
 			expectedReviewContext: { reason: "compact", turnsSinceLastReview: 0 },
-			refineFragments: undefined as string[] | undefined,
-			turnsAfter: undefined as number | undefined,
+			refineFragments: fromPartial<string[] | undefined>(undefined),
+			turnsAfter: fromPartial<number | undefined>(undefined),
 			compactPendingAfter: undefined,
 			scheduleCalledWith: undefined,
 			queuedMessages: false,
@@ -158,12 +159,12 @@ describe("AgentSession queue characterization", () => {
 			name: "falls back to turn-interval review when compact auto-refine is disabled",
 			settings: { autoRefine: { enabled: true, compact: false, turnInterval: 2, cooldownMs: 0 } },
 			turns: 2,
-			reason: "compact" as AutoRefineReason,
+			reason: fromPartial<AutoRefineReason>("compact"),
 			review: { shouldRefine: false, rationale: "nothing durable" },
 			expectedReviewContext: { reason: "turn_interval", turnsSinceLastReview: 2 },
 			refineFragments: undefined,
 			turnsAfter: undefined,
-			compactPendingAfter: false as boolean | undefined,
+			compactPendingAfter: fromPartial<boolean | undefined>(false),
 			scheduleCalledWith: undefined,
 			queuedMessages: false,
 		},
@@ -171,20 +172,20 @@ describe("AgentSession queue characterization", () => {
 			name: "declined compact review preserves an already-due turn interval",
 			settings: { autoRefine: { enabled: true, turnInterval: 2, cooldownMs: 0 } },
 			turns: 2,
-			reason: "compact" as AutoRefineReason,
+			reason: fromPartial<AutoRefineReason>("compact"),
 			review: { shouldRefine: false, rationale: "nothing compact-specific" },
-			expectedReviewContext: undefined as { reason: string; turnsSinceLastReview: number } | undefined,
+			expectedReviewContext: fromPartial<{ reason: string; turnsSinceLastReview: number } | undefined>(undefined),
 			refineFragments: undefined,
 			turnsAfter: 2,
 			compactPendingAfter: undefined,
-			scheduleCalledWith: "turn_interval" as AutoRefineReason | undefined,
+			scheduleCalledWith: fromPartial<AutoRefineReason | undefined>("turn_interval"),
 			queuedMessages: false,
 		},
 		{
 			name: "queued follow-up messages do not make an idle agent active",
 			settings: { autoRefine: { enabled: true, turnInterval: 1, cooldownMs: 0 } },
 			turns: 1,
-			reason: "turn_interval" as AutoRefineReason,
+			reason: fromPartial<AutoRefineReason>("turn_interval"),
 			review: {
 				shouldRefine: true,
 				rationale: "durable lesson found",
@@ -215,7 +216,7 @@ describe("AgentSession queue characterization", () => {
 			const harness = await createAutoRefineHarness({ settings, autoRefineReviewer: reviewer });
 			harnesses.push(harness);
 			const refine = vi.spyOn(harness.session, "refine").mockResolvedValue(emptyRefinementResult());
-			const internals = harness.session as unknown as AutoRefineInternals;
+			const internals = fromAny<AutoRefineInternals, unknown>(harness.session);
 			internals._assistantTurnsSinceAutoRefine = turns;
 			const scheduleAutoRefine = vi.spyOn(internals, "_scheduleAutoRefine").mockImplementation(() => {});
 			if (queuedMessages) vi.spyOn(harness.session.agent, "hasQueuedMessages").mockReturnValue(true);
@@ -275,7 +276,7 @@ describe("AgentSession queue characterization", () => {
 			settings: { autoRefine: { enabled: true, turnInterval: 25, cooldownMs: 0 } },
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as AutoRefineInternals;
+		const internals = fromAny<AutoRefineInternals, unknown>(harness.session);
 		const scheduleAutoRefine = vi.spyOn(internals, "_scheduleAutoRefine").mockImplementation(() => {});
 
 		act(internals, (called) =>
@@ -300,7 +301,7 @@ describe("AgentSession queue characterization", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as AutoRefineInternals;
+		const internals = fromAny<AutoRefineInternals, unknown>(harness.session);
 		internals._assistantTurnsSinceAutoRefine = 2;
 
 		try {
@@ -328,7 +329,7 @@ describe("AgentSession queue characterization", () => {
 			settings: { autoRefine: { enabled: true, turnInterval: 25, cooldownMs: 0 } },
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as AutoRefineInternals;
+		const internals = fromAny<AutoRefineInternals, unknown>(harness.session);
 		const continueAgent = vi
 			.spyOn(harness.session.agent, "continue")
 			.mockRejectedValueOnce(new Error("Agent is already processing. Wait for completion before continuing."))
@@ -356,7 +357,7 @@ describe("AgentSession queue characterization", () => {
 			settings: { autoRefine: { enabled: true, turnInterval: 25, cooldownMs: 0 } },
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as AutoRefineInternals;
+		const internals = fromAny<AutoRefineInternals, unknown>(harness.session);
 		const continueAgent = vi.spyOn(harness.session.agent, "continue").mockResolvedValue();
 
 		try {
@@ -381,7 +382,7 @@ describe("AgentSession queue characterization", () => {
 		vi.useFakeTimers();
 		const harness = await createAutoRefineHarness();
 		harnesses.push(harness);
-		const internals = harness.session as unknown as AutoRefineInternals;
+		const internals = fromAny<AutoRefineInternals, unknown>(harness.session);
 		const continueAgent = vi.spyOn(harness.session.agent, "continue").mockResolvedValue();
 
 		try {
@@ -405,7 +406,7 @@ describe("AgentSession queue characterization", () => {
 			settings: { autoRefine: { enabled: true, turnInterval: 25, cooldownMs: 0 } },
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as AutoRefineInternals;
+		const internals = fromAny<AutoRefineInternals, unknown>(harness.session);
 		try {
 			internals._schedulePostCompactionContinue();
 
@@ -425,7 +426,7 @@ describe("AgentSession queue characterization", () => {
 			settings: { autoRefine: { enabled: true, turnInterval: 2, cooldownMs: 60_000 } },
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as AutoRefineInternals;
+		const internals = fromAny<AutoRefineInternals, unknown>(harness.session);
 		internals._pendingAutoRefineReview = {
 			reason: "turn_interval",
 			review: { shouldRefine: true, rationale: "durable lesson" },
@@ -467,7 +468,7 @@ describe("AgentSession queue characterization", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as AutoRefineInternals;
+		const internals = fromAny<AutoRefineInternals, unknown>(harness.session);
 		internals._assistantTurnsSinceAutoRefine = 2;
 		vi.spyOn(harness.session, "refine").mockRejectedValueOnce(new Error("refine failed"));
 
@@ -496,7 +497,7 @@ describe("AgentSession queue characterization", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as AutoRefineInternals;
+		const internals = fromAny<AutoRefineInternals, unknown>(harness.session);
 		internals._assistantTurnsSinceAutoRefine = 1;
 		const refine = vi.spyOn(harness.session, "refine").mockResolvedValue(emptyRefinementResult());
 
@@ -526,7 +527,7 @@ describe("AgentSession queue characterization", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as AutoRefineInternals;
+		const internals = fromAny<AutoRefineInternals, unknown>(harness.session);
 		internals._assistantTurnsSinceAutoRefine = 1;
 
 		await internals._maybeAutoRefine("turn_interval");
@@ -544,7 +545,7 @@ describe("AgentSession queue characterization", () => {
 			settings: { autoRefine: { enabled: true, turnInterval: 1, cooldownMs: 60_000 } },
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as AutoRefineInternals;
+		const internals = fromAny<AutoRefineInternals, unknown>(harness.session);
 		internals._pendingAutoRefineReview = {
 			reason: "turn_interval",
 			review: { shouldRefine: true, rationale: "durable lesson" },
@@ -608,7 +609,7 @@ describe("AgentSession queue characterization", () => {
 				);
 			},
 		]);
-		const internals = harness.session as unknown as { _reconnectToAgent(): void };
+		const internals = fromAny<{ _reconnectToAgent(): void }, unknown>(harness.session);
 		const reconnect = vi.spyOn(internals, "_reconnectToAgent");
 		const entriesBeforeDispose = harness.sessionManager.getEntries().length;
 
@@ -748,11 +749,12 @@ describe("AgentSession queue characterization", () => {
 		withStreaming(harness, false);
 		await vi.waitFor(() => expect(pause).toBeDefined());
 		await harness.session.waitForSessionInputIdle();
-		const store = (
-			harness.session as unknown as {
+		const store = fromAny<
+			{
 				_actionStore: { queuedActions(): readonly { payload: { prepared?: unknown } }[] };
-			}
-		)._actionStore;
+			},
+			unknown
+		>(harness.session)._actionStore;
 		await vi.waitFor(() => expect(store.queuedActions()[0]?.payload.prepared).toBeDefined());
 
 		const navigation = harness.session.navigateTree(target!.id, { summarize: false });
@@ -787,7 +789,7 @@ describe("AgentSession queue characterization", () => {
 		skipReviewer.mockClear();
 		const harness = await makeHarness();
 		harnesses.push(harness);
-		const internals = harness.session as unknown as AutoRefineInternals;
+		const internals = fromAny<AutoRefineInternals, unknown>(harness.session);
 		internals._assistantTurnsSinceAutoRefine = 1;
 		const refine = vi.spyOn(harness.session, "refine").mockResolvedValue(emptyRefinementResult());
 		const scheduleAutoRefine = vi.spyOn(internals, "_scheduleAutoRefine").mockImplementation(() => {});
@@ -806,9 +808,11 @@ describe("AgentSession queue characterization", () => {
 			settings: { autoRefine: { enabled: true, turnInterval: 1, cooldownMs: 0 } },
 		});
 		harnesses.push(harness);
-		const state = harness.session.agent.state as { model: typeof harness.session.agent.state.model | undefined };
+		const state = fromPartial<{ model: typeof harness.session.agent.state.model | undefined }>(
+			harness.session.agent.state,
+		);
 		state.model = undefined;
-		const internals = harness.session as unknown as AutoRefineInternals;
+		const internals = fromAny<AutoRefineInternals, unknown>(harness.session);
 
 		await internals._maybeAutoRefine("compact");
 
@@ -816,8 +820,12 @@ describe("AgentSession queue characterization", () => {
 	});
 
 	it.each([
-		{ reason: "turn_interval" as AutoRefineReason, turns: 1, pendingFlag: "_turnIntervalAutoRefinePending" as const },
-		{ reason: "compact" as AutoRefineReason, turns: 0, pendingFlag: "_compactAutoRefinePending" as const },
+		{
+			reason: fromPartial<AutoRefineReason>("turn_interval"),
+			turns: 1,
+			pendingFlag: "_turnIntervalAutoRefinePending" as const,
+		},
+		{ reason: fromPartial<AutoRefineReason>("compact"), turns: 0, pendingFlag: "_compactAutoRefinePending" as const },
 	])(
 		"auto-refine review obeys the cooldown and preserves a $reason checkpoint",
 		async ({ reason, turns, pendingFlag }) => {
@@ -827,7 +835,7 @@ describe("AgentSession queue characterization", () => {
 				autoRefineReviewer: reviewer,
 			});
 			harnesses.push(harness);
-			const internals = harness.session as unknown as AutoRefineInternals;
+			const internals = fromAny<AutoRefineInternals, unknown>(harness.session);
 			internals._assistantTurnsSinceAutoRefine = turns;
 			internals._lastAutoRefineReviewAt = Date.now();
 
@@ -846,8 +854,8 @@ describe("AgentSession queue characterization", () => {
 			editId: "local:shared",
 			refineOptions: { instructions: "update the local shared memory" },
 			updatedContent: "Updated local content",
-			expectLocalContent: "Updated local content" as string | undefined,
-			expectGlobalContent: "Global content" as string | undefined,
+			expectLocalContent: fromPartial<string | undefined>("Updated local content"),
+			expectGlobalContent: fromPartial<string | undefined>("Global content"),
 		},
 		{
 			name: "global display prefixes before applying local refine edits",
@@ -856,8 +864,8 @@ describe("AgentSession queue characterization", () => {
 			editId: "global:shared",
 			refineOptions: { instructions: "update local memory" },
 			updatedContent: "Updated local content",
-			expectLocalContent: "Updated local content" as string | undefined,
-			expectGlobalContent: undefined as string | undefined,
+			expectLocalContent: fromPartial<string | undefined>("Updated local content"),
+			expectGlobalContent: fromPartial<string | undefined>(undefined),
 		},
 		{
 			name: "global display prefixes before applying global refine edits",
@@ -866,8 +874,8 @@ describe("AgentSession queue characterization", () => {
 			editId: "global:shared",
 			refineOptions: { instructions: "update the global shared memory", global: true },
 			updatedContent: "Updated global content",
-			expectLocalContent: undefined as string | undefined,
-			expectGlobalContent: "Updated global content" as string | undefined,
+			expectLocalContent: fromPartial<string | undefined>(undefined),
+			expectGlobalContent: fromPartial<string | undefined>("Updated global content"),
 		},
 	])(
 		"strips $name",
@@ -1339,7 +1347,7 @@ describe("AgentSession queue characterization", () => {
 		pause.release();
 		await hook.reached;
 
-		(harness.session as unknown as SteeringStopInternals)._clearQueuedGoalContexts();
+		fromAny<SteeringStopInternals, unknown>(harness.session)._clearQueuedGoalContexts();
 		hook.release();
 		await harness.session.waitForIdle();
 
@@ -1384,7 +1392,7 @@ describe("AgentSession queue characterization", () => {
 		const hook = gatedHook({ prompt: "active steering" });
 		const harness = await createHarness({ extensionFactories: [hook.factory] });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SteeringStopInternals;
+		const internals = fromAny<SteeringStopInternals, unknown>(harness.session);
 		harness.setResponses([fauxAssistantMessage("delivered")]);
 		const pause = harness.session.acquireQueuedWorkPause();
 		await harness.session.steer("active steering", undefined, { resumeIfIdle: true });
@@ -1435,7 +1443,7 @@ describe("AgentSession queue characterization", () => {
 	it("hides queued trigger-turn actions from user-visible queue projections", async () => {
 		const harness = await createHarness();
 		harnesses.push(harness);
-		const internals = harness.session as unknown as { _scheduleSessionInputPump(): void };
+		const internals = fromAny<{ _scheduleSessionInputPump(): void }, unknown>(harness.session);
 		const schedule = vi.spyOn(internals, "_scheduleSessionInputPump").mockImplementation(() => {});
 		await harness.session.followUp("visible queued prompt");
 		const hidden = harness.session.sendCustomMessage(
@@ -1490,9 +1498,12 @@ describe("AgentSession queue characterization", () => {
 		expect(command).toBeDefined();
 		const selected = createDeferred<void>();
 		const releaseSelection = createDeferred<void>();
-		const internals = harness.session as unknown as {
-			_executeSelectedSessionCommand(action: unknown, epoch?: number): Promise<void>;
-		};
+		const internals = fromAny<
+			{
+				_executeSelectedSessionCommand(action: unknown, epoch?: number): Promise<void>;
+			},
+			unknown
+		>(harness.session);
 		internals._executeSelectedSessionCommand = async () => {
 			selected.resolve();
 			await releaseSelection.promise;
@@ -1535,9 +1546,12 @@ describe("AgentSession queue characterization", () => {
 			(error: unknown) => ({ error }),
 		);
 		withStreaming(harness, false);
-		const internals = harness.session as unknown as {
-			_acquireSessionActionCommitFence(): Promise<{ release(): void }>;
-		};
+		const internals = fromAny<
+			{
+				_acquireSessionActionCommitFence(): Promise<{ release(): void }>;
+			},
+			unknown
+		>(harness.session);
 		const fence = await internals._acquireSessionActionCommitFence();
 
 		pause.release();
@@ -1717,7 +1731,7 @@ describe("AgentSession queue characterization", () => {
 			],
 		});
 		harnesses.push(harness);
-		sessionInternals = harness.session as unknown as { _refineInFlight?: Promise<void> };
+		sessionInternals = fromAny<{ _refineInFlight?: Promise<void> }, unknown>(harness.session);
 		harness.setResponses([fauxAssistantMessage("kept response")]);
 
 		const clearedAgentMessage = agentPromptText("agentmsg_cleared", "cleared");
@@ -1812,7 +1826,7 @@ describe("AgentSession queue characterization", () => {
 		harness.setResponses([fauxAssistantMessage("seed")]);
 		await harness.session.prompt("seed");
 		vi.spyOn(
-			harness.session as unknown as { _checkCompaction(): Promise<boolean> },
+			fromAny<{ _checkCompaction(): Promise<boolean> }, unknown>(harness.session),
 			"_checkCompaction",
 		).mockImplementationOnce(async () => {
 			await harness.session.sendCustomMessage(
@@ -2182,10 +2196,13 @@ describe("AgentSession queue characterization", () => {
 		const prompt = vi.spyOn(harness.session.agent, "prompt");
 		const admitted = createDeferred<void>();
 		let pause: { release(): void } | undefined;
-		const internals = harness.session as unknown as {
-			_canStartSessionActionImmediately(): boolean;
-			_scheduleSessionInputPump(): void;
-		};
+		const internals = fromAny<
+			{
+				_canStartSessionActionImmediately(): boolean;
+				_scheduleSessionInputPump(): void;
+			},
+			unknown
+		>(harness.session);
 		const immediateEligibilitySpy = vi.spyOn(internals, "_canStartSessionActionImmediately").mockReturnValue(false);
 		const scheduleSpy = vi.spyOn(internals, "_scheduleSessionInputPump").mockImplementation(() => {
 			pause = harness.session.acquireQueuedWorkPause();
@@ -2687,7 +2704,7 @@ describe("AgentSession queue characterization", () => {
 		harnesses.push(harness);
 		const initialEvent = createDeferred();
 		const chainedOperation = createDeferred();
-		const internals = harness.session as unknown as { _agentEventQueue: Promise<void> };
+		const internals = fromAny<{ _agentEventQueue: Promise<void> }, unknown>(harness.session);
 		let eventQueue: Promise<void>;
 		eventQueue = initialEvent.promise.then(() => {
 			internals._agentEventQueue = eventQueue.then(() => chainedOperation.promise);
@@ -2930,7 +2947,7 @@ describe("AgentSession scheduler scenarios", () => {
 		const waiting = await createWaitingHarness();
 		const { harness, waitForToolStart, promptPromise, releaseToolExecution } = waiting;
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SteeringStopInternals;
+		const internals = fromAny<SteeringStopInternals, unknown>(harness.session);
 		const removedTexts = ["first", "second", "same heartbeat", "clear me"];
 		let continuationSawRemoved = false;
 		harness.setResponses([
@@ -3200,7 +3217,8 @@ describe("AgentSession scheduler scenarios", () => {
 				(message) =>
 					message.role === "custom" &&
 					message.customType === "session_slash_command" &&
-					(message.details as { command?: { text?: string } } | undefined)?.command?.text === command!.text,
+					fromAny<{ command?: { text?: string } } | undefined, unknown>(message.details)?.command?.text ===
+						command!.text,
 			),
 		).toHaveLength(1);
 		expect(

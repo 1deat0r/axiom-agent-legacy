@@ -1,6 +1,7 @@
 import { once } from "node:events";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it } from "vitest";
 import { convertMessages, streamOpenAICompletions } from "../src/providers/openai-completions.js";
 import type {
@@ -148,7 +149,7 @@ describe("openai-completions thinking-as-text replay", () => {
 			for await (const chunk of req) {
 				body += chunk.toString();
 			}
-			requestBodies.push(JSON.parse(body) as ChatCompletionsRequestBody);
+			requestBodies.push(fromPartial<ChatCompletionsRequestBody>(JSON.parse(body)));
 
 			res.writeHead(200, {
 				"content-type": "text/event-stream",
@@ -182,7 +183,7 @@ describe("openai-completions thinking-as-text replay", () => {
 		await once(server, "listening");
 
 		try {
-			const { port } = server.address() as AddressInfo;
+			const { port } = fromAny<AddressInfo, unknown>(server.address());
 			const events = await collectEvents(
 				streamOpenAICompletions(
 					buildModel(`http://127.0.0.1:${port}`),

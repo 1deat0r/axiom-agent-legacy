@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { APP_NAME, ENV_AGENT_DIR, PACKAGE_NAME, SELF_UPDATE_INTERACTIVE_CHILD_ENV, VERSION } from "../src/config.js";
 import { main } from "../src/main.js";
@@ -82,7 +83,7 @@ describe("package commands", () => {
 		await main(["package", "install", "./packages/local-package"]);
 
 		const settingsPath = join(agentDir, "settings.json");
-		const settings = JSON.parse(readFileSync(settingsPath, "utf-8")) as { packages?: string[] };
+		const settings = fromPartial<{ packages?: string[] }>(JSON.parse(readFileSync(settingsPath, "utf-8")));
 		expect(settings.packages?.length).toBe(1);
 		const stored = settings.packages?.[0] ?? "";
 		const resolvedFromSettings = realpathSync(join(agentDir, stored));
@@ -93,12 +94,12 @@ describe("package commands", () => {
 		await main(["package", "install", `${packageDir}/`]);
 
 		const settingsPath = join(agentDir, "settings.json");
-		const installedSettings = JSON.parse(readFileSync(settingsPath, "utf-8")) as { packages?: string[] };
+		const installedSettings = fromPartial<{ packages?: string[] }>(JSON.parse(readFileSync(settingsPath, "utf-8")));
 		expect(installedSettings.packages?.length).toBe(1);
 
 		await main(["package", "remove", `${packageDir}/`]);
 
-		const removedSettings = JSON.parse(readFileSync(settingsPath, "utf-8")) as { packages?: string[] };
+		const removedSettings = fromPartial<{ packages?: string[] }>(JSON.parse(readFileSync(settingsPath, "utf-8")));
 		expect(removedSettings.packages ?? []).toHaveLength(0);
 	});
 
@@ -222,7 +223,7 @@ else fs.writeFileSync(${JSON.stringify(recordPath)},JSON.stringify(args));
 			expect(process.exitCode).toBeUndefined();
 			expect(errorSpy).not.toHaveBeenCalled();
 			expect(fetchMock).toHaveBeenCalledOnce();
-			const recordedArgs = JSON.parse(readFileSync(recordPath, "utf-8")) as string[];
+			const recordedArgs = fromPartial<string[]>(JSON.parse(readFileSync(recordPath, "utf-8")));
 			expect(recordedArgs).toContain(globalPrefix);
 			expect(recordedArgs).toContain(tarballUrl);
 			expect(recordedArgs).not.toContain(projectPrefix);
@@ -266,7 +267,7 @@ else fs.writeFileSync(${JSON.stringify(recordPath)},JSON.stringify(args));
 			expect(process.exitCode).toBeUndefined();
 			expect(errorSpy).not.toHaveBeenCalled();
 			expect(fetchMock).toHaveBeenCalledOnce();
-			const recordedArgs = JSON.parse(readFileSync(recordPath, "utf-8")) as string[];
+			const recordedArgs = fromPartial<string[]>(JSON.parse(readFileSync(recordPath, "utf-8")));
 			expect(recordedArgs).toContain(PACKAGE_NAME);
 		} finally {
 			logSpy.mockRestore();
@@ -314,7 +315,7 @@ else {
 
 			expect(process.exitCode).toBeUndefined();
 			expect(errorSpy).not.toHaveBeenCalled();
-			const recordedCalls = JSON.parse(readFileSync(recordPath, "utf-8")) as string[][];
+			const recordedCalls = fromPartial<string[][]>(JSON.parse(readFileSync(recordPath, "utf-8")));
 			expect(recordedCalls).toEqual([
 				expect.arrayContaining(["uninstall", "-g", PACKAGE_NAME]),
 				expect.arrayContaining(["install", "-g", activePackageName]),
@@ -367,7 +368,7 @@ else {
 
 			expect(process.exitCode).toBeUndefined();
 			expect(errorSpy).not.toHaveBeenCalled();
-			const recordedCalls = JSON.parse(readFileSync(recordPath, "utf-8")) as string[][];
+			const recordedCalls = fromPartial<string[][]>(JSON.parse(readFileSync(recordPath, "utf-8")));
 			expect(recordedCalls).toEqual([
 				expect.arrayContaining(["install", "-g", `${baseUrl}/${tarballPath}`]),
 				expect.arrayContaining(["uninstall", "-g", PACKAGE_NAME]),
@@ -474,7 +475,7 @@ if(args.includes("install")) process.exit(23);
 			const stderr = errorSpy.mock.calls.map(([message]) => String(message)).join("\n");
 			expect(stdout).not.toContain(`Updated pi`);
 			expect(stderr).toContain("exited with code 23");
-			const recordedCalls = JSON.parse(readFileSync(recordPath, "utf-8")) as string[][];
+			const recordedCalls = fromPartial<string[][]>(JSON.parse(readFileSync(recordPath, "utf-8")));
 			expect(recordedCalls).toEqual([
 				expect.arrayContaining(["uninstall", "-g", PACKAGE_NAME]),
 				expect.arrayContaining(["install", "-g", activePackageName]),
@@ -501,7 +502,7 @@ if(args.includes("install")) process.exit(23);
 			expect(stdout).not.toContain("Updated pi-formatter");
 			expect(process.exitCode).toBe(1);
 
-			const settings = JSON.parse(readFileSync(settingsPath, "utf-8")) as { packages?: string[] };
+			const settings = fromPartial<{ packages?: string[] }>(JSON.parse(readFileSync(settingsPath, "utf-8")));
 			expect(settings.packages).toContain("npm:pi-formatter");
 		} finally {
 			errorSpy.mockRestore();

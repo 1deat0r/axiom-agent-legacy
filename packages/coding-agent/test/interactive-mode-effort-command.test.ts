@@ -1,6 +1,7 @@
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { Api, Model, ServiceTier } from "@earendil-works/pi-ai";
 import type { AutocompleteItem, Component } from "@earendil-works/pi-tui";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { ThinkingSelectorComponent } from "../src/modes/interactive/components/thinking-selector.js";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.js";
@@ -32,7 +33,7 @@ type InteractiveModePrototype = {
 	applyThinkingLevel(this: EffortCommandContext, level: ThinkingLevel): void;
 };
 
-const interactiveModePrototype = InteractiveMode.prototype as unknown as InteractiveModePrototype;
+const interactiveModePrototype = fromAny<InteractiveModePrototype, unknown>(InteractiveMode.prototype);
 
 type FastCommandContext = {
 	connectionState?: { sessionId: string; serviceTier: ServiceTier; thinkingLevel: ThinkingLevel };
@@ -56,7 +57,7 @@ type FastInteractiveModePrototype = {
 	getModelTrayLabel(this: FastCommandContext): string;
 };
 
-const fastInteractiveModePrototype = InteractiveMode.prototype as unknown as FastInteractiveModePrototype;
+const fastInteractiveModePrototype = fromAny<FastInteractiveModePrototype, unknown>(InteractiveMode.prototype);
 
 function testModel(provider: string, id: string, api: Api): Model<Api> {
 	return {
@@ -77,13 +78,16 @@ function makeFastContext(model: Model<Api> = testModel("openai-codex", "gpt-5.5"
 	const context: FastCommandContext = {
 		connectionState: { sessionId: "session-1", serviceTier: "default", thinkingLevel: "high" },
 		fastModeToggleQueue: Promise.resolve(),
-		agentConnection: undefined as never,
+		agentConnection: fromAny<never, unknown>(undefined),
 		footer: { invalidate: vi.fn() },
 		subagentSummaryLine: { invalidate: vi.fn() },
 		showStatus: vi.fn(),
 		showError: vi.fn(),
 		patchConnectionState: vi.fn((patch: Record<string, unknown>) => {
-			context.connectionState = { ...context.connectionState, ...patch } as FastCommandContext["connectionState"];
+			context.connectionState = fromPartial<FastCommandContext["connectionState"]>({
+				...context.connectionState,
+				...patch,
+			});
 		}),
 		getCurrentModel: () => model,
 		currentModelSupportsFastMode: () => fastInteractiveModePrototype.currentModelSupportsFastMode.call(context),
@@ -186,7 +190,7 @@ describe("InteractiveMode /effort", () => {
 			const done = vi.fn();
 			const context = makeContext({
 				showSelector: (create) => {
-					selector = create(done).component as ThinkingSelectorComponent;
+					selector = fromPartial<ThinkingSelectorComponent>(create(done).component);
 				},
 			});
 
@@ -248,11 +252,12 @@ describe("InteractiveMode /effort", () => {
 				updateEditorBorderColor: () => void;
 				setupAutocompleteProvider: () => void;
 			};
-			const applySelectedModel = (
-				InteractiveMode.prototype as unknown as {
+			const applySelectedModel = fromAny<
+				{
 					applySelectedModel(this: ModelContext, model: unknown): Promise<void>;
-				}
-			).applySelectedModel;
+				},
+				unknown
+			>(InteractiveMode.prototype).applySelectedModel;
 			const patchConnectionState = vi.fn();
 			const setupAutocompleteProvider = vi.fn();
 			const model = { provider: "openai-codex", id: "gpt-5.5", reasoning: true };

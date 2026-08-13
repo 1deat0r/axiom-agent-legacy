@@ -1,6 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	DaemonUpdateRestartStatusWriter,
@@ -160,11 +161,11 @@ function requireSessionSummary(response: DaemonResponse): SessionSummary {
 	if (!response.data || typeof response.data !== "object") {
 		throw new Error("Daemon returned an invalid session summary");
 	}
-	const summary = response.data as Partial<SessionSummary>;
+	const summary = fromPartial<Partial<SessionSummary>>(response.data);
 	if (typeof summary.id !== "string" || typeof summary.sessionId !== "string") {
 		throw new Error("Daemon returned an invalid session summary");
 	}
-	return summary as SessionSummary;
+	return fromPartial<SessionSummary>(summary);
 }
 
 function requireSessionList(response: DaemonResponse): SessionSummary[] {
@@ -174,11 +175,11 @@ function requireSessionList(response: DaemonResponse): SessionSummary[] {
 	if (!response.data || typeof response.data !== "object" || !("sessions" in response.data)) {
 		throw new Error("Daemon returned an invalid session list");
 	}
-	const sessions = (response.data as { sessions: unknown }).sessions;
+	const sessions = fromPartial<{ sessions: unknown }>(response.data).sessions;
 	if (!Array.isArray(sessions)) {
 		throw new Error("Daemon returned an invalid session list");
 	}
-	return sessions as SessionSummary[];
+	return fromPartial<SessionSummary[]>(sessions);
 }
 
 function shellQuote(value: string): string {
@@ -213,7 +214,7 @@ function isProcessAlive(pid: number): boolean {
 		process.kill(pid, 0);
 		return true;
 	} catch (error) {
-		return (error as NodeJS.ErrnoException).code !== "ESRCH";
+		return fromAny<NodeJS.ErrnoException, unknown>(error).code !== "ESRCH";
 	}
 }
 
@@ -223,7 +224,9 @@ function listSupervisorOwnerRecords(registryDir: string): SupervisorOwnerRecord[
 	}
 	return readdirSync(registryDir)
 		.filter((name) => name.endsWith(".owner"))
-		.map((name) => JSON.parse(readFileSync(join(registryDir, name, "owner.json"), "utf8")) as SupervisorOwnerRecord);
+		.map((name) =>
+			fromPartial<SupervisorOwnerRecord>(JSON.parse(readFileSync(join(registryDir, name, "owner.json"), "utf8"))),
+		);
 }
 
 async function stopDaemon(socketPath: string): Promise<void> {

@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { createConnection, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import type { DaemonSocketClient } from "../src/modes/daemon/active-session-state.js";
 import { DaemonCatalogClient } from "../src/modes/daemon/daemon-catalog-process.js";
@@ -29,24 +30,26 @@ describe("daemon supervisor side-question routing", () => {
 			}),
 		);
 		const write = vi.fn();
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			ready: Promise.resolve(),
-			ownership: { assertCurrent: vi.fn(async () => undefined) },
-			workers: new Map(),
-			clients: new Set(),
-			protocolClientIds: new WeakMap(),
-			mutationDrain: new MutationDrainLatch(),
-			commandJournal: {
-				lookup: vi.fn(() => undefined),
-				begin: vi.fn(() => ({ status: "new" })),
-				recordResult: vi.fn(),
-			},
-			cancelOwnedWorkerCleanup: vi.fn(),
-			handleCommand,
-			write,
-			log: vi.fn(),
-		}) as SupervisorHarness;
-		const client = { id: "client-1" } as DaemonSocketClient;
+		const supervisor = fromPartial<SupervisorHarness>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				ready: Promise.resolve(),
+				ownership: { assertCurrent: vi.fn(async () => undefined) },
+				workers: new Map(),
+				clients: new Set(),
+				protocolClientIds: new WeakMap(),
+				mutationDrain: new MutationDrainLatch(),
+				commandJournal: {
+					lookup: vi.fn(() => undefined),
+					begin: vi.fn(() => ({ status: "new" })),
+					recordResult: vi.fn(),
+				},
+				cancelOwnedWorkerCleanup: vi.fn(),
+				handleCommand,
+				write,
+				log: vi.fn(),
+			}),
+		);
+		const client = fromPartial<DaemonSocketClient>({ id: "client-1" });
 		const commands = [
 			{
 				id: "start-1",
@@ -79,24 +82,26 @@ describe("daemon supervisor side-question routing", () => {
 	it("rejects an old client before forwarding a state request", async () => {
 		const handleCommand = vi.fn();
 		const write = vi.fn();
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			ready: Promise.resolve(),
-			ownership: { assertCurrent: vi.fn(async () => undefined) },
-			workers: new Map(),
-			clients: new Set(),
-			protocolClientIds: new WeakMap(),
-			mutationDrain: new MutationDrainLatch(),
-			commandJournal: {
-				lookup: vi.fn(() => undefined),
-				begin: vi.fn(() => ({ status: "new" })),
-				recordResult: vi.fn(),
-			},
-			cancelOwnedWorkerCleanup: vi.fn(),
-			handleCommand,
-			write,
-			log: vi.fn(),
-		}) as SupervisorHarness;
-		const client = { id: "old-client" } as DaemonSocketClient;
+		const supervisor = fromPartial<SupervisorHarness>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				ready: Promise.resolve(),
+				ownership: { assertCurrent: vi.fn(async () => undefined) },
+				workers: new Map(),
+				clients: new Set(),
+				protocolClientIds: new WeakMap(),
+				mutationDrain: new MutationDrainLatch(),
+				commandJournal: {
+					lookup: vi.fn(() => undefined),
+					begin: vi.fn(() => ({ status: "new" })),
+					recordResult: vi.fn(),
+				},
+				cancelOwnedWorkerCleanup: vi.fn(),
+				handleCommand,
+				write,
+				log: vi.fn(),
+			}),
+		);
+		const client = fromPartial<DaemonSocketClient>({ id: "old-client" });
 		const command = { type: "get_state", activeSessionId: "active-1" } as const;
 
 		await supervisor.handleLine(
@@ -152,7 +157,7 @@ describe("daemon supervisor side-question routing", () => {
 						buffer = buffer.slice(newline + 1);
 						newline = buffer.indexOf("\n");
 						if (!line) continue;
-						const message = JSON.parse(line) as Record<string, unknown>;
+						const message = fromPartial<Record<string, unknown>>(JSON.parse(line));
 						received.push(message);
 						if (message.type === "response") {
 							clearTimeout(timer);

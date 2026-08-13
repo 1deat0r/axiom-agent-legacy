@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import { getModel } from "../src/models.js";
 import { convertResponsesMessages } from "../src/providers/openai-responses-shared.js";
@@ -67,7 +68,7 @@ describe("openai-responses convertResponsesMessages", () => {
 		const messages = convertResponsesMessages(model, buildContext(toolResult, now), new Set(["openai"]));
 		const output = messages.find((m) => m.type === "function_call_output");
 		expect(Array.isArray(output?.output)).toBe(true);
-		const parts = output?.output as Array<{ type?: string }>;
+		const parts = fromAny<Array<{ type?: string }>, unknown>(output?.output);
 		expect(parts.some((p) => p.type === "input_image")).toBe(true);
 	});
 });

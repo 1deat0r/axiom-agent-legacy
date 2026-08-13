@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import type { ExtensionRunner } from "../src/core/extensions/runner.js";
 import type { RegisteredTool } from "../src/core/extensions/types.js";
@@ -9,19 +10,19 @@ const STALE = "This extension ctx is stale after session replacement or reload."
 // mirroring assertActive() on the real ExtensionRunner's guarded ctx getters.
 function makeRunner(id: string): ExtensionRunner & { invalidate(): void } {
 	let stale = false;
-	return {
+	return fromAny<ExtensionRunner & { invalidate(): void }, unknown>({
 		createContext() {
 			if (stale) throw new Error(STALE);
-			return { id } as unknown as ReturnType<ExtensionRunner["createContext"]>;
+			return fromAny<ReturnType<ExtensionRunner["createContext"]>, unknown>({ id });
 		},
 		invalidate() {
 			stale = true;
 		},
-	} as unknown as ExtensionRunner & { invalidate(): void };
+	});
 }
 
 function toolThatReturnsCtxId(): RegisteredTool {
-	return {
+	return fromAny<RegisteredTool, unknown>({
 		definition: {
 			name: "probe",
 			label: "probe",
@@ -32,7 +33,7 @@ function toolThatReturnsCtxId(): RegisteredTool {
 			}),
 		},
 		sourceInfo: { source: "builtin" },
-	} as unknown as RegisteredTool;
+	});
 }
 
 describe("wrapRegisteredTools runner rebinding", () => {
@@ -41,14 +42,14 @@ describe("wrapRegisteredTools runner rebinding", () => {
 		const [tool] = wrapRegisteredTools([toolThatReturnsCtxId()], () => runner);
 
 		const first = await tool.execute("c1", {}, new AbortController().signal);
-		expect((first.content[0] as { text: string }).text).toBe("first");
+		expect(fromAny<{ text: string }, unknown>(first.content[0]).text).toBe("first");
 
 		// Session rebuild: old runner invalidated, a fresh one takes its place.
 		runner.invalidate();
 		runner = makeRunner("second");
 
 		const second = await tool.execute("c2", {}, new AbortController().signal);
-		expect((second.content[0] as { text: string }).text).toBe("second");
+		expect(fromAny<{ text: string }, unknown>(second.content[0]).text).toBe("second");
 	});
 
 	it("stays wedged on a stale runner when bound to a fixed instance (old behavior)", async () => {

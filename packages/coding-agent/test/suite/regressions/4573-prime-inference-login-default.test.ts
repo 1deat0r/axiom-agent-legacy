@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { findInitialModel, PRIME_INFERENCE_DEFAULT_MODEL_ID } from "../../../src/core/model-resolver.js";
 import { PRIME_INFERENCE_PROVIDER_ID } from "../../../src/core/prime-inference-auth.js";
@@ -24,8 +25,9 @@ type LoginHarness = {
 	};
 };
 
-const prepareForModelSelectionAfterLogin = (InteractiveMode.prototype as unknown as LoginHarness)
-	.prepareForModelSelectionAfterLogin;
+const prepareForModelSelectionAfterLogin = fromAny<LoginHarness, unknown>(
+	InteractiveMode.prototype,
+).prepareForModelSelectionAfterLogin;
 
 describe("ENG-4573 Prime Inference login default", () => {
 	const harnesses: Harness[] = [];
@@ -84,7 +86,7 @@ describe("ENG-4573 Prime Inference login default", () => {
 			provider: "unknown",
 		};
 		const order: string[] = [];
-		const fakeThis = Object.create(InteractiveMode.prototype) as LoginHarness;
+		const fakeThis = fromPartial<LoginHarness>(Object.create(InteractiveMode.prototype));
 		fakeThis.getCurrentModel = vi.fn(() => placeholderModel);
 		fakeThis.getConnectionAvailableModels = vi.fn(async () => {
 			order.push("refresh");

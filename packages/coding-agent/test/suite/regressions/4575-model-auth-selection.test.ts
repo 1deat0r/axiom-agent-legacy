@@ -1,4 +1,5 @@
 import { type AutocompleteProvider, setKeybindings, type TUI } from "@earendil-works/pi-tui";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import stripAnsi from "strip-ansi";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { KeybindingsManager } from "../../../src/core/keybindings.js";
@@ -63,7 +64,7 @@ describe("ENG-4575 model authentication", () => {
 		const authenticated = { ...base, provider: "z-authenticated", id: "available" };
 		let selectedProvider: string | undefined;
 		const selector = new ModelSelectorComponent(
-			{ requestRender: () => {} } as unknown as TUI,
+			fromAny<TUI, unknown>({ requestRender: () => {} }),
 			unauthenticated,
 			harness.session.modelRegistry,
 			[],
@@ -97,7 +98,7 @@ describe("ENG-4575 model authentication", () => {
 		harnesses.push(harness);
 		const model = harness.getModel("base")!;
 		const selector = new ModelSelectorComponent(
-			{ requestRender: () => {} } as unknown as TUI,
+			fromAny<TUI, unknown>({ requestRender: () => {} }),
 			undefined,
 			harness.session.modelRegistry,
 			[],
@@ -120,9 +121,9 @@ describe("ENG-4575 model authentication", () => {
 	test("refetches configured providers after authentication changes", async () => {
 		const harness = await createHarness({ models: [{ id: "base", name: "Base", reasoning: true }] });
 		harnesses.push(harness);
-		const model = { ...harness.getModel("base")!, provider: "openai" } as AgentConnectionModel;
+		const model = fromPartial<AgentConnectionModel>({ ...harness.getModel("base")!, provider: "openai" });
 		const getModelCatalog = vi.fn(async () => ({ models: [model], configuredProviders: [] }));
-		const fakeThis = Object.create(InteractiveMode.prototype) as ConnectionAuthRefreshHarness;
+		const fakeThis = fromPartial<ConnectionAuthRefreshHarness>(Object.create(InteractiveMode.prototype));
 		fakeThis.agentConnection = { getModelCatalog };
 		fakeThis.connectionModels = [model];
 		fakeThis.connectionModelCatalog = [model];
@@ -142,8 +143,8 @@ describe("ENG-4575 model authentication", () => {
 	test("returns the full public catalog to catalog-facing selectors", async () => {
 		const harness = await createHarness({ models: [{ id: "base", name: "Base", reasoning: true }] });
 		harnesses.push(harness);
-		const model = { ...harness.getModel("base")!, provider: "openai" } as AgentConnectionModel;
-		const fakeThis = Object.create(InteractiveMode.prototype) as ConnectionAuthRefreshHarness;
+		const model = fromPartial<AgentConnectionModel>({ ...harness.getModel("base")!, provider: "openai" });
+		const fakeThis = fromPartial<ConnectionAuthRefreshHarness>(Object.create(InteractiveMode.prototype));
 		fakeThis.agentConnection = {
 			getModelCatalog: vi.fn(async () => ({ models: [model], configuredProviders: [] })),
 		};
@@ -162,9 +163,9 @@ describe("ENG-4575 model authentication", () => {
 		const harness = await createHarness({ models: [{ id: "base", name: "Base", reasoning: true }] });
 		harnesses.push(harness);
 		const base = harness.getModel("base")!;
-		const scoped = { ...base, provider: "custom", id: "scoped-only" } as AgentConnectionModel;
-		const publicModel = { ...base, provider: "openai", id: "gpt-5.4" } as AgentConnectionModel;
-		const fakeThis = Object.create(InteractiveMode.prototype) as InteractiveAutocompleteHarness;
+		const scoped = fromPartial<AgentConnectionModel>({ ...base, provider: "custom", id: "scoped-only" });
+		const publicModel = fromPartial<AgentConnectionModel>({ ...base, provider: "openai", id: "gpt-5.4" });
+		const fakeThis = fromPartial<InteractiveAutocompleteHarness>(Object.create(InteractiveMode.prototype));
 		fakeThis.connectionState = { scopedModels: [{ model: scoped }] };
 		fakeThis.connectionModelCatalog = [publicModel];
 		fakeThis.connectionCommands = [];

@@ -1,6 +1,7 @@
 import type { Socket } from "node:net";
 import { PassThrough } from "node:stream";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import type { ActiveSessionState, DaemonSocketClient } from "../../../src/modes/daemon/active-session-state.js";
 import { AgentDaemon } from "../../../src/modes/daemon/daemon-mode.js";
@@ -70,7 +71,7 @@ function streamedResult(messages: AgentMessage[]): DaemonAttachResult {
 		snapshot: {
 			activeSessionId,
 			summary: summary(),
-			state: { activeSessionId, sessionId: "session-4602" } as DaemonAttachResult["snapshot"]["state"],
+			state: fromPartial<DaemonAttachResult["snapshot"]["state"]>({ activeSessionId, sessionId: "session-4602" }),
 			messages,
 			lastEventSequence: 1,
 			lastEventCursor: { generation: "generation-4602", sequence: 1 },
@@ -129,15 +130,15 @@ function workerHarness() {
 }
 
 function socketClient(id: string, socket: PassThrough): DaemonSocketClient {
-	return {
+	return fromPartial<DaemonSocketClient>({
 		id,
-		socket: socket as unknown as Socket,
+		socket: fromAny<Socket, unknown>(socket),
 		attachedActiveSessionIds: new Set([activeSessionId]),
 		catchupActiveSessionIds: new Set<string>(),
 		detachInput: () => {},
 		supportsExtensionUi: false,
 		capabilities: new Set(["chunked_snapshot"]),
-	} as DaemonSocketClient;
+	});
 }
 
 function snapshotFrames(messages: AgentMessage[]) {
@@ -178,35 +179,38 @@ describe("ENG-4602 snapshot transfer containment", () => {
 				throw new Error("unexpected runtime creation");
 			},
 		});
-		const state = {
+		const state = fromAny<ActiveSessionState, unknown>({
 			activeSessionId,
 			clients: new Set<DaemonSocketClient>(),
 			eventGeneration: "generation-4602",
 			lastEventSequence: 1,
 			runtime: { metadata: { kind: "top-level", createdAt: 1 } },
-		} as unknown as ActiveSessionState;
+		});
 		const socket = new PassThrough();
-		const client = {
+		const client = fromPartial<DaemonSocketClient>({
 			id: "supervisor",
-			socket: socket as unknown as Socket,
+			socket: fromAny<Socket, unknown>(socket),
 			transport: "private-framed",
 			attachedActiveSessionIds: new Set<string>(),
 			detachInput: () => {},
 			supportsExtensionUi: false,
 			capabilities: new Set<string>(),
-		} as DaemonSocketClient;
+		});
 		const streamError = new Error("encoder failed after begin");
 		const log = vi.fn();
 		const streamWorkerSnapshot = vi.fn(async () => {
 			throw streamError;
 		});
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			createAttachResult(): DaemonAttachResult;
-			streamWorkerSnapshot: typeof streamWorkerSnapshot;
-			log: typeof log;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-		};
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				createAttachResult(): DaemonAttachResult;
+				streamWorkerSnapshot: typeof streamWorkerSnapshot;
+				log: typeof log;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(activeSessionId, state);
 		internals.createAttachResult = () => streamedResult([]);
 		internals.streamWorkerSnapshot = streamWorkerSnapshot;
@@ -254,23 +258,26 @@ describe("ENG-4602 snapshot transfer containment", () => {
 		socket.on("error", () => {});
 		const written: Buffer[] = [];
 		socket.on("data", (chunk: Buffer) => written.push(Buffer.from(chunk)));
-		const client = {
+		const client = fromPartial<DaemonSocketClient>({
 			id: "supervisor",
-			socket: socket as unknown as Socket,
+			socket: fromAny<Socket, unknown>(socket),
 			transport: "private-framed",
 			attachedActiveSessionIds: new Set([activeSessionId, "active-4602-sibling"]),
 			catchupActiveSessionIds: new Set<string>(),
 			detachInput: () => {},
 			supportsExtensionUi: false,
 			capabilities: new Set(["chunked_snapshot"]),
-		} as DaemonSocketClient;
-		const internals = daemon as unknown as {
-			streamWorkerSnapshot(
-				client: DaemonSocketClient,
-				result: DaemonAttachResult,
-				transcript: SnapshotTranscriptCache,
-			): Promise<void>;
-		};
+		});
+		const internals = fromAny<
+			{
+				streamWorkerSnapshot(
+					client: DaemonSocketClient,
+					result: DaemonAttachResult,
+					transcript: SnapshotTranscriptCache,
+				): Promise<void>;
+			},
+			unknown
+		>(daemon);
 
 		await expect(internals.streamWorkerSnapshot(client, streamedResult([]), transcript)).rejects.toBe(streamError);
 		const decoder = new PrivateFrameDecoder(isDaemonWorkerFrameHeader);
@@ -311,9 +318,12 @@ describe("ENG-4602 snapshot transfer containment", () => {
 		});
 		worker.snapshotCache.set(activeSessionId, streamedResult([]));
 		worker.transcriptCaches.set(activeSessionId, transcript);
-		const internals = supervisor as unknown as {
-			handleWorkerFrame(worker: WorkerHarness, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
-		};
+		const internals = fromAny<
+			{
+				handleWorkerFrame(worker: WorkerHarness, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
+			},
+			unknown
+		>(supervisor);
 
 		internals.handleWorkerFrame(
 			worker,
@@ -341,13 +351,16 @@ describe("ENG-4602 snapshot transfer containment", () => {
 		const { close, worker } = workerHarness();
 		const client = socketClient("public", new PassThrough());
 		const streamSnapshot = vi.fn(async () => {});
-		const internals = supervisor as unknown as {
-			clients: Set<DaemonSocketClient>;
-			workers: Map<string, WorkerHarness>;
-			syncWorkerExtensionUi: ReturnType<typeof vi.fn>;
-			streamSnapshot: typeof streamSnapshot;
-			handleWorkerFrame(worker: WorkerHarness, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
-		};
+		const internals = fromAny<
+			{
+				clients: Set<DaemonSocketClient>;
+				workers: Map<string, WorkerHarness>;
+				syncWorkerExtensionUi: ReturnType<typeof vi.fn>;
+				streamSnapshot: typeof streamSnapshot;
+				handleWorkerFrame(worker: WorkerHarness, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
+			},
+			unknown
+		>(supervisor);
 		internals.clients.add(client);
 		internals.workers.set(worker.descriptor.workerId, worker);
 		internals.syncWorkerExtensionUi = vi.fn(async () => {});
@@ -425,13 +438,16 @@ describe("ENG-4602 snapshot transfer containment", () => {
 		const { close, request, worker } = workerHarness();
 		const client = socketClient("catchup", new PassThrough());
 		const streamSnapshot = vi.fn(async () => {});
-		const internals = supervisor as unknown as {
-			clients: Set<DaemonSocketClient>;
-			workers: Map<string, WorkerHarness>;
-			streamSnapshot: typeof streamSnapshot;
-			catchUpClient(client: DaemonSocketClient): Promise<void>;
-			handleWorkerFrame(worker: WorkerHarness, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
-		};
+		const internals = fromAny<
+			{
+				clients: Set<DaemonSocketClient>;
+				workers: Map<string, WorkerHarness>;
+				streamSnapshot: typeof streamSnapshot;
+				catchUpClient(client: DaemonSocketClient): Promise<void>;
+				handleWorkerFrame(worker: WorkerHarness, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
+			},
+			unknown
+		>(supervisor);
 		internals.clients.add(client);
 		internals.workers.set(worker.descriptor.workerId, worker);
 		internals.streamSnapshot = streamSnapshot;
@@ -489,16 +505,19 @@ describe("ENG-4602 snapshot transfer containment", () => {
 		const client = socketClient("catchup", new PassThrough());
 		const streamSnapshot = vi.fn(async () => {});
 		const persistWorker = vi.fn();
-		const internals = supervisor as unknown as {
-			clients: Set<DaemonSocketClient>;
-			workers: Map<string, WorkerHarness>;
-			shuttingDown: boolean;
-			streamSnapshot: typeof streamSnapshot;
-			persistWorker: typeof persistWorker;
-			catchUpClient(client: DaemonSocketClient): Promise<void>;
-			handleWorkerFrame(worker: WorkerHarness, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
-			stopWorker(worker: WorkerHarness, removeDescriptor: boolean): Promise<void>;
-		};
+		const internals = fromAny<
+			{
+				clients: Set<DaemonSocketClient>;
+				workers: Map<string, WorkerHarness>;
+				shuttingDown: boolean;
+				streamSnapshot: typeof streamSnapshot;
+				persistWorker: typeof persistWorker;
+				catchUpClient(client: DaemonSocketClient): Promise<void>;
+				handleWorkerFrame(worker: WorkerHarness, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
+				stopWorker(worker: WorkerHarness, removeDescriptor: boolean): Promise<void>;
+			},
+			unknown
+		>(supervisor);
 		internals.clients.add(client);
 		internals.workers.set(worker.descriptor.workerId, worker);
 		internals.shuttingDown = true;
@@ -548,11 +567,14 @@ describe("ENG-4602 snapshot transfer containment", () => {
 		});
 		const { worker } = workerHarness();
 		const persistWorker = vi.fn();
-		const internals = supervisor as unknown as {
-			persistWorker: typeof persistWorker;
-			handleWorkerFrame(worker: WorkerHarness, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
-			stopWorker(worker: WorkerHarness, removeDescriptor: boolean): Promise<void>;
-		};
+		const internals = fromAny<
+			{
+				persistWorker: typeof persistWorker;
+				handleWorkerFrame(worker: WorkerHarness, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
+				stopWorker(worker: WorkerHarness, removeDescriptor: boolean): Promise<void>;
+			},
+			unknown
+		>(supervisor);
 		internals.persistWorker = persistWorker;
 		const frames = snapshotFrames([{ role: "user", content: "stable", timestamp: 1 }]);
 		for (const message of [frames.begin, frames.chunk, frames.end]) {
@@ -583,14 +605,17 @@ describe("ENG-4602 snapshot transfer containment", () => {
 		const persistWorker = vi.fn();
 		const syncAgentPeers = vi.fn(async () => {});
 		const assertRecoveryAllowed = vi.fn(async () => {});
-		const internals = supervisor as unknown as {
-			workers: Map<string, WorkerHarness>;
-			recoverWorker: typeof recoverWorker;
-			persistWorker: typeof persistWorker;
-			syncAgentPeers: typeof syncAgentPeers;
-			assertRecoveryAllowed: typeof assertRecoveryAllowed;
-			handleWorkerFrame(worker: WorkerHarness, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
-		};
+		const internals = fromAny<
+			{
+				workers: Map<string, WorkerHarness>;
+				recoverWorker: typeof recoverWorker;
+				persistWorker: typeof persistWorker;
+				syncAgentPeers: typeof syncAgentPeers;
+				assertRecoveryAllowed: typeof assertRecoveryAllowed;
+				handleWorkerFrame(worker: WorkerHarness, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
+			},
+			unknown
+		>(supervisor);
 		internals.recoverWorker = recoverWorker;
 		internals.persistWorker = persistWorker;
 		internals.syncAgentPeers = syncAgentPeers;
@@ -658,15 +683,18 @@ describe("ENG-4602 snapshot transfer containment", () => {
 		const { close, worker } = workerHarness();
 		worker.snapshotCache.set(activeSessionId, result);
 		worker.transcriptCaches.set(activeSessionId, transcript);
-		const internals = supervisor as unknown as {
-			clients: Set<DaemonSocketClient>;
-			streamSnapshot(
-				client: DaemonSocketClient,
-				worker: WorkerHarness,
-				result: DaemonAttachResult,
-				transcript: SnapshotTranscriptCache,
-			): Promise<void>;
-		};
+		const internals = fromAny<
+			{
+				clients: Set<DaemonSocketClient>;
+				streamSnapshot(
+					client: DaemonSocketClient,
+					worker: WorkerHarness,
+					result: DaemonAttachResult,
+					transcript: SnapshotTranscriptCache,
+				): Promise<void>;
+			},
+			unknown
+		>(supervisor);
 		internals.clients.add(failedClient);
 		internals.clients.add(siblingClient);
 
@@ -676,7 +704,7 @@ describe("ENG-4602 snapshot transfer containment", () => {
 			.toString("utf8")
 			.trim()
 			.split("\n")
-			.map((line) => JSON.parse(line) as DaemonOutbound);
+			.map((line) => fromPartial<DaemonOutbound>(JSON.parse(line)));
 		expect(records.map((record) => record.type)).toEqual(["session_snapshot_begin", "session_snapshot_failed"]);
 		expect(records[1]).toMatchObject({
 			type: "session_snapshot_failed",

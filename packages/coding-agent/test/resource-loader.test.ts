@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.js";
 import { ExtensionRunner } from "../src/core/extensions/runner.js";
@@ -137,9 +138,9 @@ description: project
 Project skill`,
 			);
 
-			const baseTheme = JSON.parse(
-				readFileSync(join(process.cwd(), "src", "modes", "interactive", "theme", "dark.json"), "utf-8"),
-			) as { name: string; vars?: Record<string, string> };
+			const baseTheme = fromPartial<{ name: string; vars?: Record<string, string> }>(
+				JSON.parse(readFileSync(join(process.cwd(), "src", "modes", "interactive", "theme", "dark.json"), "utf-8")),
+			);
 			baseTheme.name = "collision-theme";
 			const userThemePath = join(agentDir, "themes", "collision.json");
 			const projectThemePath = join(cwd, ".axiom", "agent", "themes", "collision.json");

@@ -1,4 +1,5 @@
 import { type Component, type OverlayHandle, setKeybindings, type TUI } from "@earendil-works/pi-tui";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { KeybindingsManager } from "../../../src/core/keybindings.js";
 import type { ModelRegistry } from "../../../src/core/model-registry.js";
@@ -79,7 +80,7 @@ describe("ENG-4658 onboarding transitions", () => {
 			showProgress: (message) => order.push(`progress:${message}`),
 			dismiss: () => order.push("dismiss"),
 		};
-		const fakeThis = Object.create(InteractiveMode.prototype) as InteractiveOnboardingHarness;
+		const fakeThis = fromPartial<InteractiveOnboardingHarness>(Object.create(InteractiveMode.prototype));
 		fakeThis.uiServices = { modelRegistry: harness.session.modelRegistry };
 		fakeThis.getModelCandidates = vi.fn(async () => []);
 		fakeThis.showOnboardingSplash = vi.fn(async () => splash);
@@ -138,12 +139,12 @@ describe("ENG-4658 onboarding transitions", () => {
 			unfocus: vi.fn(),
 			isFocused: () => true,
 		};
-		const model = harness.getModel() as AgentConnectionModel;
-		const fakeThis = Object.create(InteractiveMode.prototype) as ConfigurationHarness;
-		fakeThis.ui = {
+		const model = fromPartial<AgentConnectionModel>(harness.getModel());
+		const fakeThis = fromPartial<ConfigurationHarness>(Object.create(InteractiveMode.prototype));
+		fakeThis.ui = fromAny<TUI, unknown>({
 			terminal: { rows: 24 },
 			requestRender: vi.fn(),
-		} as unknown as TUI;
+		});
 		fakeThis.uiServices = {
 			modelRegistry: harness.session.modelRegistry,
 			settingsManager: harness.settingsManager,
@@ -157,7 +158,7 @@ describe("ENG-4658 onboarding transitions", () => {
 			loginProvider: () => login.promise,
 		});
 		fakeThis.showFullPaneOverlay = (component) => {
-			menu = component as ConfigurationMenuComponent;
+			menu = fromPartial<ConfigurationMenuComponent>(component);
 			return overlayHandle;
 		};
 		fakeThis.showError = vi.fn();

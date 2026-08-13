@@ -1,4 +1,5 @@
 import { setKeybindings } from "@earendil-works/pi-tui";
+import { fromPartial } from "@total-typescript/shoehorn";
 import stripAnsi from "strip-ansi";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { KeybindingsManager } from "../src/core/keybindings.js";
@@ -89,7 +90,7 @@ describe("SubagentSummaryLine", () => {
 	it("updates the rendered counts from consecutive child-status events", () => {
 		const line = new SubagentSummaryLine();
 		line.setOpenable(true);
-		const mode = Object.create(InteractiveMode.prototype) as InteractiveMode & Record<string, unknown>;
+		const mode = fromPartial<InteractiveMode & Record<string, unknown>>(Object.create(InteractiveMode.prototype));
 		Object.assign(mode, {
 			subagentSnapshots: new Map<string, AgentConnectionRlmChildAgentSnapshot>(),
 			rlmNodeId: undefined,
@@ -101,10 +102,9 @@ describe("SubagentSummaryLine", () => {
 			updateWorkingLoaderMessage: vi.fn(),
 			ui: { requestRender: vi.fn() },
 		});
-		const update = Reflect.get(InteractiveMode.prototype, "updateSubagentSummary") as (
-			this: typeof mode,
-			value: AgentConnectionRlmChildAgentSnapshot,
-		) => void;
+		const update = fromPartial<(this: typeof mode, value: AgentConnectionRlmChildAgentSnapshot) => void>(
+			Reflect.get(InteractiveMode.prototype, "updateSubagentSummary"),
+		);
 
 		update.call(mode, child("worker", "running"));
 		expect(stripAnsi(line.render(100).join("\n"))).toContain("1 running · 0 idle · 0 inactive");
@@ -115,7 +115,7 @@ describe("SubagentSummaryLine", () => {
 
 	it("counts a retained completed child as running while a follow-up turn is active", () => {
 		const line = new SubagentSummaryLine();
-		const mode = Object.create(InteractiveMode.prototype) as InteractiveMode & Record<string, unknown>;
+		const mode = fromPartial<InteractiveMode & Record<string, unknown>>(Object.create(InteractiveMode.prototype));
 		Object.assign(mode, {
 			subagentSnapshots: new Map<string, AgentConnectionRlmChildAgentSnapshot>(),
 			rlmNodeId: undefined,
@@ -127,10 +127,9 @@ describe("SubagentSummaryLine", () => {
 			updateWorkingLoaderMessage: vi.fn(),
 			ui: { requestRender: vi.fn() },
 		});
-		const update = Reflect.get(InteractiveMode.prototype, "updateSubagentSummary") as (
-			this: typeof mode,
-			value: AgentConnectionRlmChildAgentSnapshot,
-		) => void;
+		const update = fromPartial<(this: typeof mode, value: AgentConnectionRlmChildAgentSnapshot) => void>(
+			Reflect.get(InteractiveMode.prototype, "updateSubagentSummary"),
+		);
 
 		update.call(mode, child("worker", "done", { activeSessionId: "resident-worker" }));
 		expect(stripAnsi(line.render(100).join("\n"))).toContain("0 running · 1 idle · 0 inactive");
@@ -144,7 +143,7 @@ describe("SubagentSummaryLine", () => {
 
 	it("refreshes counts when startup seeding follows an early live child update", () => {
 		const line = new SubagentSummaryLine();
-		const mode = Object.create(InteractiveMode.prototype) as InteractiveMode & Record<string, unknown>;
+		const mode = fromPartial<InteractiveMode & Record<string, unknown>>(Object.create(InteractiveMode.prototype));
 		Object.assign(mode, {
 			subagentSnapshots: new Map<string, AgentConnectionRlmChildAgentSnapshot>(),
 			rlmNodeId: undefined,
@@ -157,14 +156,12 @@ describe("SubagentSummaryLine", () => {
 			ui: { requestRender: vi.fn() },
 		});
 		const worker = child("worker", "done", { parentId: "me" });
-		const update = Reflect.get(InteractiveMode.prototype, "updateSubagentSummary") as (
-			this: typeof mode,
-			value: AgentConnectionRlmChildAgentSnapshot,
-		) => void;
-		const seed = Reflect.get(InteractiveMode.prototype, "seedSubagentSummary") as (
-			this: typeof mode,
-			children: readonly AgentConnectionRlmChildAgentSnapshot[],
-		) => void;
+		const update = fromPartial<(this: typeof mode, value: AgentConnectionRlmChildAgentSnapshot) => void>(
+			Reflect.get(InteractiveMode.prototype, "updateSubagentSummary"),
+		);
+		const seed = fromPartial<(this: typeof mode, children: readonly AgentConnectionRlmChildAgentSnapshot[]) => void>(
+			Reflect.get(InteractiveMode.prototype, "seedSubagentSummary"),
+		);
 
 		update.call(mode, worker);
 		expect(line.render(100)).toEqual([]);
@@ -176,7 +173,7 @@ describe("SubagentSummaryLine", () => {
 
 	it("clears a resident session id when a terminal update reports an evicted child", () => {
 		const line = new SubagentSummaryLine();
-		const mode = Object.create(InteractiveMode.prototype) as InteractiveMode & Record<string, unknown>;
+		const mode = fromPartial<InteractiveMode & Record<string, unknown>>(Object.create(InteractiveMode.prototype));
 		Object.assign(mode, {
 			subagentSnapshots: new Map<string, AgentConnectionRlmChildAgentSnapshot>(),
 			rlmNodeId: undefined,
@@ -188,10 +185,9 @@ describe("SubagentSummaryLine", () => {
 			updateWorkingLoaderMessage: vi.fn(),
 			ui: { requestRender: vi.fn() },
 		});
-		const update = Reflect.get(InteractiveMode.prototype, "updateSubagentSummary") as (
-			this: typeof mode,
-			value: AgentConnectionRlmChildAgentSnapshot,
-		) => void;
+		const update = fromPartial<(this: typeof mode, value: AgentConnectionRlmChildAgentSnapshot) => void>(
+			Reflect.get(InteractiveMode.prototype, "updateSubagentSummary"),
+		);
 
 		update.call(mode, child("worker", "running", { activeSessionId: "resident-worker" }));
 		// Active partial updates retain the last known resident id.
@@ -203,15 +199,15 @@ describe("SubagentSummaryLine", () => {
 
 	it("turns a selection into the scoped agents-view run result", async () => {
 		const returnToAgentsView = vi.fn(async () => undefined);
-		const mode = Object.create(InteractiveMode.prototype) as InteractiveMode & Record<string, unknown>;
+		const mode = fromPartial<InteractiveMode & Record<string, unknown>>(Object.create(InteractiveMode.prototype));
 		Object.assign(mode, {
 			editor: { getText: () => "" },
 			options: { returnToAgentsView: true },
 			returnToAgentsView,
 		});
-		const open = Reflect.get(InteractiveMode.prototype, "openScopedAgentsView") as (
-			this: typeof mode,
-		) => Promise<void>;
+		const open = fromPartial<(this: typeof mode) => Promise<void>>(
+			Reflect.get(InteractiveMode.prototype, "openScopedAgentsView"),
+		);
 		const line = new SubagentSummaryLine();
 		line.setSubagentCounts({ total: 1, running: 1, idle: 0, inactive: 0 });
 		line.setOpenable(true);

@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.js";
 
@@ -17,7 +18,7 @@ type InteractiveModePrototype = {
 	handleCloneCommand(this: CloneCommandContext): Promise<void>;
 };
 
-const interactiveModePrototype = InteractiveMode.prototype as unknown as InteractiveModePrototype;
+const interactiveModePrototype = fromAny<InteractiveModePrototype, unknown>(InteractiveMode.prototype);
 
 describe("InteractiveMode /clone", () => {
 	it("clones the current leaf into a new session", async () => {

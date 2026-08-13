@@ -1,5 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { ProcessTerminal } from "../src/terminal.js";
 
 describe("ProcessTerminal dimensions", () => {
@@ -67,11 +68,13 @@ describe("ProcessTerminal alternate screen handoff", () => {
 		});
 		Object.defineProperty(process.stdin, "resume", { configurable: true, value: () => process.stdin });
 		Object.defineProperty(process.stdin, "pause", { configurable: true, value: () => process.stdin });
-		process.stdout.write = ((...args: Parameters<typeof process.stdout.write>): boolean => {
-			const callback = args.find((arg): arg is (error?: Error | null) => void => typeof arg === "function");
-			callback?.();
-			return true;
-		}) as typeof process.stdout.write;
+		process.stdout.write = fromPartial<typeof process.stdout.write>(
+			(...args: Parameters<typeof process.stdout.write>): boolean => {
+				const callback = args.find((arg): arg is (error?: Error | null) => void => typeof arg === "function");
+				callback?.();
+				return true;
+			},
+		);
 
 		try {
 			const first = new ProcessTerminal();
@@ -112,13 +115,15 @@ describe("ProcessTerminal alternate screen handoff", () => {
 	it("does not inherit an active alternate screen before it is preserved", () => {
 		const originalWrite = process.stdout.write;
 		const writes: string[] = [];
-		const patchedWrite = ((...args: Parameters<typeof process.stdout.write>): boolean => {
-			const chunk = args[0];
-			writes.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
-			const callback = args.find((arg): arg is (error?: Error | null) => void => typeof arg === "function");
-			callback?.();
-			return true;
-		}) as typeof process.stdout.write;
+		const patchedWrite = fromPartial<typeof process.stdout.write>(
+			(...args: Parameters<typeof process.stdout.write>): boolean => {
+				const chunk = args[0];
+				writes.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
+				const callback = args.find((arg): arg is (error?: Error | null) => void => typeof arg === "function");
+				callback?.();
+				return true;
+			},
+		);
 
 		process.stdout.write = patchedWrite;
 		try {
@@ -144,13 +149,15 @@ describe("ProcessTerminal alternate screen handoff", () => {
 	it("inherits a preserved alternate screen into the next terminal instance", () => {
 		const originalWrite = process.stdout.write;
 		const writes: string[] = [];
-		const patchedWrite = ((...args: Parameters<typeof process.stdout.write>): boolean => {
-			const chunk = args[0];
-			writes.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
-			const callback = args.find((arg): arg is (error?: Error | null) => void => typeof arg === "function");
-			callback?.();
-			return true;
-		}) as typeof process.stdout.write;
+		const patchedWrite = fromPartial<typeof process.stdout.write>(
+			(...args: Parameters<typeof process.stdout.write>): boolean => {
+				const chunk = args[0];
+				writes.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
+				const callback = args.find((arg): arg is (error?: Error | null) => void => typeof arg === "function");
+				callback?.();
+				return true;
+			},
+		);
 
 		process.stdout.write = patchedWrite;
 		try {
@@ -179,13 +186,15 @@ describe("ProcessTerminal alternate screen handoff", () => {
 	it("lets the preserving terminal cancel a handoff before it is consumed", () => {
 		const originalWrite = process.stdout.write;
 		const writes: string[] = [];
-		const patchedWrite = ((...args: Parameters<typeof process.stdout.write>): boolean => {
-			const chunk = args[0];
-			writes.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
-			const callback = args.find((arg): arg is (error?: Error | null) => void => typeof arg === "function");
-			callback?.();
-			return true;
-		}) as typeof process.stdout.write;
+		const patchedWrite = fromPartial<typeof process.stdout.write>(
+			(...args: Parameters<typeof process.stdout.write>): boolean => {
+				const chunk = args[0];
+				writes.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
+				const callback = args.find((arg): arg is (error?: Error | null) => void => typeof arg === "function");
+				callback?.();
+				return true;
+			},
+		);
 
 		process.stdout.write = patchedWrite;
 		try {
@@ -211,13 +220,15 @@ describe("ProcessTerminal alternate screen handoff", () => {
 	it("only hands a preserved alternate screen to one terminal instance", () => {
 		const originalWrite = process.stdout.write;
 		const writes: string[] = [];
-		const patchedWrite = ((...args: Parameters<typeof process.stdout.write>): boolean => {
-			const chunk = args[0];
-			writes.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
-			const callback = args.find((arg): arg is (error?: Error | null) => void => typeof arg === "function");
-			callback?.();
-			return true;
-		}) as typeof process.stdout.write;
+		const patchedWrite = fromPartial<typeof process.stdout.write>(
+			(...args: Parameters<typeof process.stdout.write>): boolean => {
+				const chunk = args[0];
+				writes.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
+				const callback = args.find((arg): arg is (error?: Error | null) => void => typeof arg === "function");
+				callback?.();
+				return true;
+			},
+		);
 
 		process.stdout.write = patchedWrite;
 		try {

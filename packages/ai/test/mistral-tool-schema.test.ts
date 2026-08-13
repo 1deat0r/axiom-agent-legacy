@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { getModel } from "../src/models.js";
@@ -40,7 +41,7 @@ describe("Mistral tool schema serialization", () => {
 		const response = await complete(model, context, {
 			apiKey: "fake-key",
 			onPayload: (payload) => {
-				capturedPayload = payload as MistralToolPayload;
+				capturedPayload = fromAny<MistralToolPayload, unknown>(payload);
 				return payload;
 			},
 		});
@@ -51,10 +52,10 @@ describe("Mistral tool schema serialization", () => {
 		expect(Object.getOwnPropertySymbols(payloadParameters ?? {})).toHaveLength(0);
 		const properties = payloadParameters?.properties;
 		expect(properties).toBeTruthy();
-		expect(Object.getOwnPropertySymbols((properties as Record<string, unknown>) ?? {})).toHaveLength(0);
-		const nested = (properties as Record<string, unknown> | undefined)?.nested;
+		expect(Object.getOwnPropertySymbols(fromAny<Record<string, unknown>, unknown>(properties) ?? {})).toHaveLength(0);
+		const nested = fromAny<Record<string, unknown> | undefined, unknown>(properties)?.nested;
 		expect(nested).toBeTruthy();
-		expect(Object.getOwnPropertySymbols((nested as Record<string, unknown>) ?? {})).toHaveLength(0);
+		expect(Object.getOwnPropertySymbols(fromAny<Record<string, unknown>, unknown>(nested) ?? {})).toHaveLength(0);
 		expect(response.stopReason).toBe("error");
 		expect(response.errorMessage).not.toContain("Input validation failed");
 	});

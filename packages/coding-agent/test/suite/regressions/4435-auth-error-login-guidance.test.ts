@@ -1,5 +1,6 @@
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import { type AssistantMessage, fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it } from "vitest";
 import { createHarness, type Harness } from "../harness.js";
 
@@ -38,10 +39,13 @@ describe("issue #4435 auth error login guidance", () => {
 			stopReason: "error",
 			errorMessage: "401 Unauthorized: invalid API key",
 		});
-		const event = { type: "agent_end", messages: [message] } as AgentEvent;
-		const session = harness.session as unknown as {
-			_addLoginGuidanceToAuthError(event: AgentEvent): void;
-		};
+		const event = fromPartial<AgentEvent>({ type: "agent_end", messages: [message] });
+		const session = fromAny<
+			{
+				_addLoginGuidanceToAuthError(event: AgentEvent): void;
+			},
+			unknown
+		>(harness.session);
 
 		session._addLoginGuidanceToAuthError(event);
 

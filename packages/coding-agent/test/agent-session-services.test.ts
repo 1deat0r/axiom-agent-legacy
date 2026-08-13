@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { registerFauxProvider } from "@earendil-works/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AGENT_MESSAGE_SKILL_NAME, type AgentSessionMessageController } from "../src/core/agent-messages.js";
 import { AGENT_OBSERVE_SKILL_NAME, type AgentObserveController } from "../src/core/agent-observe.js";
@@ -179,11 +180,12 @@ describe("createAgentSessionFromServices", () => {
 				"unknown agent message request",
 			);
 			expect(
-				(
-					session as unknown as {
+				fromAny<
+					{
 						_createKernelHostHandlers(): Record<string, unknown>;
-					}
-				)._createKernelHostHandlers(),
+					},
+					unknown
+				>(session)._createKernelHostHandlers(),
 			).not.toHaveProperty("agent_message.send");
 		} finally {
 			session.dispose();
@@ -211,19 +213,21 @@ describe("createAgentSessionFromServices", () => {
 			return session;
 		};
 		const visibleSkillNames = (session: unknown) =>
-			(
-				session as {
+			fromAny<
+				{
 					_modelVisibleSkills(): Array<{ name: string }>;
-				}
-			)
+				},
+				unknown
+			>(session)
 				._modelVisibleSkills()
 				.map((skill) => skill.name);
 		const kernelHostHandlers = (session: unknown) =>
-			(
-				session as {
+			fromAny<
+				{
 					_createKernelHostHandlers(): Record<string, unknown>;
-				}
-			)._createKernelHostHandlers();
+				},
+				unknown
+			>(session)._createKernelHostHandlers();
 
 		const withoutControllers = await createSession({
 			services,

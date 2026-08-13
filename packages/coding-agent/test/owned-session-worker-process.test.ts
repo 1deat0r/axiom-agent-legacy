@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it } from "vitest";
 
 const fixturePath = resolve(__dirname, "fixtures/owned-session-worker-fixture.ts");
@@ -92,7 +93,7 @@ async function waitForReplacementWorkerPid(path: string, previousPid: number): P
 
 async function waitForExit(child: ChildProcess): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
 	if (child.exitCode !== null || child.signalCode !== null) {
-		return { code: child.exitCode, signal: child.signalCode as NodeJS.Signals | null };
+		return { code: child.exitCode, signal: fromPartial<NodeJS.Signals | null>(child.signalCode) };
 	}
 	return new Promise((resolveExit, reject) => {
 		const timeout = setTimeout(() => reject(new Error("Timed out waiting for frontend exit")), 10_000);
@@ -109,7 +110,7 @@ async function waitForProcessGone(pid: number): Promise<void> {
 		try {
 			process.kill(pid, 0);
 		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code === "ESRCH") {
+			if (fromAny<NodeJS.ErrnoException, unknown>(error).code === "ESRCH") {
 				workerPids.delete(pid);
 				return;
 			}

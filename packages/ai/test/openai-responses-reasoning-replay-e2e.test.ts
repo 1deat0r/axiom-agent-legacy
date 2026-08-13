@@ -1,3 +1,4 @@
+import { fromPartial } from "@total-typescript/shoehorn";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { getModel } from "../src/models.js";
@@ -118,9 +119,9 @@ describe.skipIf(!process.env.OPENAI_API_KEY || !process.env.ANTHROPIC_API_KEY)(
 				},
 			);
 
-			const toolCallBlock = assistantResponse.content.find((block) => block.type === "toolCall") as
-				| ToolCall
-				| undefined;
+			const toolCallBlock = fromPartial<ToolCall | undefined>(
+				assistantResponse.content.find((block) => block.type === "toolCall"),
+			);
 
 			if (!toolCallBlock) {
 				throw new Error("Missing tool call from OpenAI Responses - model did not use the tool");
@@ -164,7 +165,7 @@ describe.skipIf(!process.env.OPENAI_API_KEY || !process.env.ANTHROPIC_API_KEY)(
 			expect(response.content.length).toBeGreaterThan(0);
 
 			// Log what was sent for debugging
-			const input = capturedPayload?.input as any[];
+			const input = fromPartial<any[]>(capturedPayload?.input);
 			const functionCalls = input?.filter((item: any) => item.type === "function_call") || [];
 			const reasoningItems = input?.filter((item: any) => item.type === "reasoning") || [];
 
@@ -219,9 +220,9 @@ describe.skipIf(!process.env.OPENAI_API_KEY || !process.env.ANTHROPIC_API_KEY)(
 				},
 			);
 
-			const toolCallBlock = assistantResponse.content.find((block) => block.type === "toolCall") as
-				| ToolCall
-				| undefined;
+			const toolCallBlock = fromPartial<ToolCall | undefined>(
+				assistantResponse.content.find((block) => block.type === "toolCall"),
+			);
 
 			if (!toolCallBlock) {
 				throw new Error("Missing tool call from Anthropic - model did not use the tool");
@@ -262,7 +263,7 @@ describe.skipIf(!process.env.OPENAI_API_KEY || !process.env.ANTHROPIC_API_KEY)(
 			});
 
 			// Log what was sent
-			const input = capturedPayload?.input as any[];
+			const input = fromPartial<any[]>(capturedPayload?.input);
 			const functionCalls = input?.filter((item: any) => item.type === "function_call") || [];
 			const reasoningItems = input?.filter((item: any) => item.type === "reasoning") || [];
 

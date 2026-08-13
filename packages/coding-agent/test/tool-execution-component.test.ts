@@ -1,4 +1,5 @@
 import { Container, resetCapabilitiesCache, setCapabilities, Text, TUI } from "@earendil-works/pi-tui";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import stripAnsi from "strip-ansi";
 import { Type } from "typebox";
 import { beforeAll, describe, expect, test } from "vitest";
@@ -25,9 +26,9 @@ function createBaseToolDefinition(name = "custom_tool"): ToolDefinition {
 }
 
 function createFakeTui(): TUI {
-	return {
+	return fromAny<TUI, unknown>({
 		requestRender: () => {},
-	} as unknown as TUI;
+	});
 }
 
 function createMetadataOnlyToolDefinition(definition: ToolDefinition<any, any>) {
@@ -403,8 +404,9 @@ describe("ToolExecutionComponent parity", () => {
 			"tool-bash-1",
 			{ command: "sleep 10" },
 			undefined,
-			(update) => updates.push(update as { content: Array<{ type: string; text?: string }>; details?: unknown }),
-			{} as never,
+			(update) =>
+				updates.push(fromPartial<{ content: Array<{ type: string; text?: string }>; details?: unknown }>(update)),
+			fromAny<never, unknown>({}),
 		);
 		expect(updates).toEqual([{ content: [], details: undefined }]);
 		await promise;
@@ -547,7 +549,7 @@ describe("ToolExecutionComponent parity", () => {
 			...createBaseToolDefinition(),
 			renderCall: () => new Text("call", 0, 0),
 			renderResult: (_result, _options, _theme, context) =>
-				new Text(`arg:${String((context.args as { foo: string }).foo)}`, 0, 0),
+				new Text(`arg:${String(fromAny<{ foo: string }, unknown>(context.args).foo)}`, 0, 0),
 		};
 
 		const component = new ToolExecutionComponent(

@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import { parseArgs } from "../../src/cli/args.js";
 import { handleProfileCommand } from "../../src/cli/profile-command.js";
@@ -85,26 +86,28 @@ describe("soul block", () => {
 
 	it("injects the profile SOUL.md into the system prompt", async () => {
 		const events = new Map<string, (e: unknown, c: unknown) => Promise<unknown>>();
-		const pi = {
+		const pi = fromAny<ExtensionAPI, unknown>({
 			on: (event: string, h: (e: unknown, c: unknown) => Promise<unknown>) => events.set(event, h),
-		} as unknown as ExtensionAPI;
+		});
 		createProfileExtension({
 			axiomHomeDir: () => "/profiles/coder",
 			readText: async (path) => (path.endsWith("SOUL.md") ? "I am coder." : null),
 		})(pi);
-		const result = (await events.get("before_agent_start")!(
-			{ type: "before_agent_start", prompt: "hi", systemPrompt: "base" },
-			null,
-		)) as { systemPrompt?: string };
+		const result = fromAny<{ systemPrompt?: string }, unknown>(
+			await events.get("before_agent_start")!(
+				{ type: "before_agent_start", prompt: "hi", systemPrompt: "base" },
+				null,
+			),
+		);
 		expect(result.systemPrompt).toContain("base");
 		expect(result.systemPrompt).toContain("I am coder.");
 	});
 
 	it("sets the active-profile footer status at agent_start", async () => {
 		const events = new Map<string, (e: unknown, c: unknown) => Promise<unknown>>();
-		const pi = {
+		const pi = fromAny<ExtensionAPI, unknown>({
 			on: (event: string, h: (e: unknown, c: unknown) => Promise<unknown>) => events.set(event, h),
-		} as unknown as ExtensionAPI;
+		});
 		const statuses: Array<[string, string | undefined]> = [];
 		createProfileExtension({
 			axiomHomeDir: () => "/custom/home/profiles/client-alpha",
@@ -123,9 +126,9 @@ describe("soul block", () => {
 
 	it("leaves the system prompt alone when SOUL.md is missing", async () => {
 		const events = new Map<string, (e: unknown, c: unknown) => Promise<unknown>>();
-		const pi = {
+		const pi = fromAny<ExtensionAPI, unknown>({
 			on: (event: string, h: (e: unknown, c: unknown) => Promise<unknown>) => events.set(event, h),
-		} as unknown as ExtensionAPI;
+		});
 		createProfileExtension({ axiomHomeDir: () => "/profiles/coder", readText: async () => null })(pi);
 		const result = await events.get("before_agent_start")!(
 			{ type: "before_agent_start", prompt: "hi", systemPrompt: "base" },
@@ -246,9 +249,9 @@ describe("handleProfileCommand", () => {
 describe("profile extension defaults", () => {
 	it("the default export registers the hook", () => {
 		const events = new Map<string, (e: unknown, c: unknown) => Promise<unknown>>();
-		const pi = {
+		const pi = fromAny<ExtensionAPI, unknown>({
 			on: (event: string, h: (e: unknown, c: unknown) => Promise<unknown>) => events.set(event, h),
-		} as unknown as ExtensionAPI;
+		});
 		axiomProfileExtension(pi);
 		expect(events.has("before_agent_start")).toBe(true);
 	});
@@ -258,9 +261,9 @@ describe("profile extension defaults", () => {
 		try {
 			vi.stubEnv(AXIOM_HOME_ENV, dir);
 			const events = new Map<string, (e: unknown, c: unknown) => Promise<unknown>>();
-			const pi = {
+			const pi = fromAny<ExtensionAPI, unknown>({
 				on: (event: string, h: (e: unknown, c: unknown) => Promise<unknown>) => events.set(event, h),
-			} as unknown as ExtensionAPI;
+			});
 			createProfileExtension()(pi);
 			const result = await events.get("before_agent_start")!(
 				{ type: "before_agent_start", prompt: "hi", systemPrompt: "base" },
@@ -279,9 +282,9 @@ describe("profile extension defaults", () => {
 			const { mkdir } = await import("node:fs/promises");
 			await mkdir(join(dir, "SOUL.md"));
 			const events = new Map<string, (e: unknown, c: unknown) => Promise<unknown>>();
-			const pi = {
+			const pi = fromAny<ExtensionAPI, unknown>({
 				on: (event: string, h: (e: unknown, c: unknown) => Promise<unknown>) => events.set(event, h),
-			} as unknown as ExtensionAPI;
+			});
 			createProfileExtension({ axiomHomeDir: () => dir })(pi);
 			await expect(
 				events.get("before_agent_start")!({ type: "before_agent_start", prompt: "hi", systemPrompt: "base" }, null),
@@ -329,12 +332,12 @@ describe("axiom extension paths follow the profile home", () => {
 
 	it("memory defaults into AXIOM_HOME", () => {
 		const tools: Array<{ name: string }> = [];
-		const pi = {
+		const pi = fromAny<ExtensionAPI, unknown>({
 			registerTool: (t: { name: string }) => {
 				tools.push(t);
 			},
 			on: () => {},
-		} as unknown as ExtensionAPI;
+		});
 		vi.stubEnv(AXIOM_HOME_ENV, "/profiles/coder");
 		try {
 			createMemoryExtension()(pi);

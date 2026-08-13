@@ -1,4 +1,5 @@
 import type { Api, Model } from "@earendil-works/pi-ai";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, test } from "vitest";
 import type { AuthStatus } from "../src/core/auth-storage.js";
 import { PRIME_INFERENCE_PROVIDER_ID } from "../src/core/prime-inference-auth.js";
@@ -9,7 +10,7 @@ import {
 } from "../src/modes/interactive/onboarding.js";
 
 function makeModel(provider: string): Model<Api> {
-	return { id: "test-model", provider } as Model<Api>;
+	return fromPartial<Model<Api>>({ id: "test-model", provider });
 }
 
 function makeState(overrides: {

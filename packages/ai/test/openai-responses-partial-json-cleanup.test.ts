@@ -1,3 +1,4 @@
+import { fromPartial } from "@total-typescript/shoehorn";
 import type { ResponseStreamEvent } from "openai/resources/responses/responses.js";
 import { describe, expect, it, vi } from "vitest";
 import { processResponsesStream } from "../src/providers/openai-responses-shared.js";
@@ -25,7 +26,7 @@ function createOutput(model: Model<"openai-responses">): AssistantMessage {
 }
 
 async function* createFunctionCallEvents(argumentsJson: string): AsyncIterable<ResponseStreamEvent> {
-	yield {
+	yield fromPartial<ResponseStreamEvent>({
 		type: "response.output_item.added",
 		item: {
 			type: "function_call",
@@ -34,20 +35,20 @@ async function* createFunctionCallEvents(argumentsJson: string): AsyncIterable<R
 			name: "edit",
 			arguments: "",
 		},
-	} as ResponseStreamEvent;
-	yield {
+	});
+	yield fromPartial<ResponseStreamEvent>({
 		type: "response.function_call_arguments.delta",
 		delta: '{"path":"README.md"',
-	} as ResponseStreamEvent;
-	yield {
+	});
+	yield fromPartial<ResponseStreamEvent>({
 		type: "response.function_call_arguments.delta",
 		delta: ',"content":"updated"}',
-	} as ResponseStreamEvent;
-	yield {
+	});
+	yield fromPartial<ResponseStreamEvent>({
 		type: "response.function_call_arguments.done",
 		arguments: argumentsJson,
-	} as ResponseStreamEvent;
-	yield {
+	});
+	yield fromPartial<ResponseStreamEvent>({
 		type: "response.output_item.done",
 		item: {
 			type: "function_call",
@@ -56,7 +57,7 @@ async function* createFunctionCallEvents(argumentsJson: string): AsyncIterable<R
 			name: "edit",
 			arguments: argumentsJson,
 		},
-	} as ResponseStreamEvent;
+	});
 }
 
 describe("openai responses partialJson cleanup", () => {
@@ -89,7 +90,7 @@ describe("openai responses partialJson cleanup", () => {
 		expect(persistedToolCall.arguments).toEqual({ path: "README.md", content: "updated" });
 		expect("partialJson" in persistedToolCall).toBe(false);
 
-		const emittedEvents = pushSpy.mock.calls.map(([event]) => event as AssistantMessageEvent);
+		const emittedEvents = pushSpy.mock.calls.map(([event]) => fromPartial<AssistantMessageEvent>(event));
 		const toolCallEnd = emittedEvents.find((event) => event.type === "toolcall_end");
 		expect(toolCallEnd).toBeDefined();
 		if (!toolCallEnd || toolCallEnd.type !== "toolcall_end") {

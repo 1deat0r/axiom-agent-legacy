@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { success } from "../src/modes/daemon/daemon-protocol.js";
 import type { SessionSummary } from "../src/modes/daemon/daemon-session-list.js";
@@ -92,10 +93,12 @@ function makeSupervisor(idleEvictionMinutes: number | "off" = 90): SupervisorInt
 	tempDirs.push(directory);
 	mkdirSync(directory, { recursive: true });
 	writeFileSync(join(directory, "settings.json"), JSON.stringify({ idleEvictionMinutes }));
-	const supervisor = new DaemonSupervisor(join(directory, "daemon.sock"), {
-		defaultSessionConfig: { agentDir: directory, cwd: directory },
-		descriptorDir: join(directory, "workers"),
-	}) as unknown as SupervisorInternals;
+	const supervisor = fromAny<SupervisorInternals, unknown>(
+		new DaemonSupervisor(join(directory, "daemon.sock"), {
+			defaultSessionConfig: { agentDir: directory, cwd: directory },
+			descriptorDir: join(directory, "workers"),
+		}),
+	);
 	supervisor.stopWorker = vi.fn(async (worker: WorkerFixture) => {
 		supervisor.workers.delete(worker.descriptor.workerId);
 	});
@@ -247,9 +250,11 @@ describe("daemon supervisor whole-tree eviction", () => {
 		idle.client!.request = vi.fn(() => listResponse);
 		supervisor.workers.set("idle", idle);
 		supervisor.catalog.stop = vi.fn(async () => undefined);
-		const exit = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
-			throw new Error(`exit ${code}`);
-		}) as typeof process.exit);
+		const exit = vi.spyOn(process, "exit").mockImplementation(
+			fromPartial<typeof process.exit>((code?: string | number | null) => {
+				throw new Error(`exit ${code}`);
+			}),
+		);
 
 		try {
 			supervisor.scheduleIdleEvictionSweep();

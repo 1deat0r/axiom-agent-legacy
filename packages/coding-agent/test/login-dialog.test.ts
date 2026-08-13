@@ -5,6 +5,7 @@ import {
 	type TUI,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
+import { fromAny } from "@total-typescript/shoehorn";
 import stripAnsi from "strip-ansi";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { KeybindingsManager } from "../src/core/keybindings.js";
@@ -26,9 +27,9 @@ vi.mock("../src/utils/clipboard.js", () => ({
 }));
 
 function createFakeTui(): TUI {
-	return {
+	return fromAny<TUI, unknown>({
 		requestRender: vi.fn(),
-	} as unknown as TUI;
+	});
 }
 
 describe("LoginDialogComponent", () => {

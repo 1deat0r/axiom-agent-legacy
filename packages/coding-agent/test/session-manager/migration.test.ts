@@ -1,9 +1,10 @@
+import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import { type FileEntry, migrateSessionEntries } from "../../src/core/session-manager.js";
 
 describe("migrateSessionEntries", () => {
 	it("should add id/parentId to v1 entries", () => {
-		const entries: FileEntry[] = [
+		const entries: FileEntry[] = fromPartial<FileEntry[]>([
 			{ type: "session", id: "sess-1", timestamp: "2025-01-01T00:00:00Z", cwd: "/tmp" },
 			{ type: "message", timestamp: "2025-01-01T00:00:01Z", message: { role: "user", content: "hi", timestamp: 1 } },
 			{
@@ -20,7 +21,7 @@ describe("migrateSessionEntries", () => {
 					timestamp: 2,
 				},
 			},
-		] as FileEntry[];
+		]);
 
 		migrateSessionEntries(entries);
 
@@ -41,7 +42,7 @@ describe("migrateSessionEntries", () => {
 	});
 
 	it("should be idempotent (skip already migrated)", () => {
-		const entries: FileEntry[] = [
+		const entries: FileEntry[] = fromPartial<FileEntry[]>([
 			{ type: "session", id: "sess-1", version: 2, timestamp: "2025-01-01T00:00:00Z", cwd: "/tmp" },
 			{
 				type: "message",
@@ -66,7 +67,7 @@ describe("migrateSessionEntries", () => {
 					timestamp: 2,
 				},
 			},
-		] as FileEntry[];
+		]);
 
 		migrateSessionEntries(entries);
 

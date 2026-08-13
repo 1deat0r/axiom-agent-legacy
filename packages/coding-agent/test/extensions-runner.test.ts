@@ -5,6 +5,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.js";
 import { createExtensionRuntime, discoverAndLoadExtensions } from "../src/core/extensions/loader.js";
@@ -119,7 +120,7 @@ describe("ExtensionRunner", () => {
 
 			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
 			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
-			const keybindings = { ...defaultKeybindings, "app.model.select": "ctrl+n" as KeyId };
+			const keybindings = { ...defaultKeybindings, "app.model.select": fromPartial<KeyId>("ctrl+n") };
 			const shortcuts = runner.getShortcuts(keybindings);
 
 			expect(shortcuts.has("ctrl+l")).toBe(true);
@@ -151,7 +152,7 @@ describe("ExtensionRunner", () => {
 			expect(warnSpy).toHaveBeenCalledWith(
 				expect.stringContaining("built-in shortcut for app.clipboard.pasteImage"),
 			);
-			expect(shortcuts.has(pasteImageKey as KeyId)).toBe(true);
+			expect(shortcuts.has(fromAny<KeyId, unknown>(pasteImageKey))).toBe(true);
 
 			warnSpy.mockRestore();
 		});
@@ -171,7 +172,7 @@ describe("ExtensionRunner", () => {
 
 			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
 			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
-			const keybindings = { ...defaultKeybindings, "app.interrupt": "ctrl+x" as KeyId };
+			const keybindings = { ...defaultKeybindings, "app.interrupt": fromPartial<KeyId>("ctrl+x") };
 			const shortcuts = runner.getShortcuts(keybindings);
 
 			expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("conflicts with built-in"));
@@ -218,7 +219,7 @@ describe("ExtensionRunner", () => {
 
 			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
 			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
-			const keybindings = { ...defaultKeybindings, "app.clear": ["ctrl+x", "ctrl+y"] as KeyId[] };
+			const keybindings = { ...defaultKeybindings, "app.clear": fromPartial<KeyId[]>(["ctrl+x", "ctrl+y"]) };
 			const shortcuts = runner.getShortcuts(keybindings);
 
 			expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("conflicts with built-in"));
@@ -242,7 +243,10 @@ describe("ExtensionRunner", () => {
 
 			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
 			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
-			const keybindings = { ...defaultKeybindings, "app.clipboard.pasteImage": ["ctrl+x", "ctrl+y"] as KeyId[] };
+			const keybindings = {
+				...defaultKeybindings,
+				"app.clipboard.pasteImage": fromPartial<KeyId[]>(["ctrl+x", "ctrl+y"]),
+			};
 			const shortcuts = runner.getShortcuts(keybindings);
 
 			expect(warnSpy).toHaveBeenCalledWith(

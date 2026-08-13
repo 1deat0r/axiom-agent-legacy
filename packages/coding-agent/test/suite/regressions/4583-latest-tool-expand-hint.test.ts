@@ -1,6 +1,7 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import type { TUI } from "@earendil-works/pi-tui";
+import { fromAny } from "@total-typescript/shoehorn";
 import stripAnsi from "strip-ansi";
 import { Type } from "typebox";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -51,7 +52,7 @@ describe("ENG-4583 latest tool expand hint", () => {
 		await harness.session.prompt("run three cells");
 
 		const components = buildConversationComponents(harness.session.messages, {
-			ui: { requestRender: vi.fn() } as unknown as TUI,
+			ui: fromAny<TUI, unknown>({ requestRender: vi.fn() }),
 			cwd: harness.tempDir,
 			toolOptions: {},
 			getToolDefinition: () => undefined,

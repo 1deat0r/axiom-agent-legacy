@@ -29,6 +29,7 @@ vi.mock("@google/genai", async (importOriginal) => {
 	};
 });
 
+import { fromAny } from "@total-typescript/shoehorn";
 import { getModel } from "../src/models.js";
 import { streamSimpleGoogleVertex } from "../src/providers/google-vertex.js";
 import type { Context } from "../src/types.js";
@@ -48,7 +49,7 @@ async function captureMinimalReasoningPayload(
 		apiKey: "fake-key",
 		reasoning: "minimal",
 		onPayload: (payload) => {
-			capturedPayload = payload as GenerateContentParameters;
+			capturedPayload = fromAny<GenerateContentParameters, unknown>(payload);
 			return payload;
 		},
 	});

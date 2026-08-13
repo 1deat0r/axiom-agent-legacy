@@ -1,6 +1,7 @@
 import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import type { ExtensionAPI } from "../../src/core/extensions/types.js";
 import { createWorkspaceGuard, isWithin, realpathX } from "../../src/extensions/workspace/index.js";
@@ -9,14 +10,14 @@ import { createWorkspaceGuard, isWithin, realpathX } from "../../src/extensions/
 function fakePi(): { pi: ExtensionAPI; toolCall: (event: Record<string, unknown>) => Promise<unknown> } {
 	const handlers = new Map<string, Array<(...a: unknown[]) => unknown>>();
 	return {
-		pi: {
+		pi: fromAny<ExtensionAPI, unknown>({
 			on: (evt: string, h: (...a: unknown[]) => unknown) => handlers.set(evt, [...(handlers.get(evt) ?? []), h]),
-		} as unknown as ExtensionAPI,
+		}),
 		toolCall: async (event) => {
 			let result: unknown;
 			for (const h of handlers.get("tool_call") ?? []) {
 				result = await h(event, undefined);
-				if (result && (result as { block?: boolean }).block) break;
+				if (result && fromPartial<{ block?: boolean }>(result).block) break;
 			}
 			return result;
 		},
@@ -100,12 +101,14 @@ describe("workspace guard tool_call handler", () => {
 			await writeFile(join(root, "a.ts"), "x");
 			const { pi, toolCall } = fakePi();
 			createWorkspaceGuard({ root, cwd: root })(pi);
-			const res = (await toolCall({
-				type: "tool_call",
-				toolName: "edit",
-				toolCallId: "3",
-				input: { path: "../outside.ts", edits: [] },
-			})) as { block: boolean; reason: string };
+			const res = fromAny<{ block: boolean; reason: string }, unknown>(
+				await toolCall({
+					type: "tool_call",
+					toolName: "edit",
+					toolCallId: "3",
+					input: { path: "../outside.ts", edits: [] },
+				}),
+			);
 			expect(res.block).toBe(true);
 			expect(res.reason).toContain(root);
 			expect(res.reason).toMatch(/outside/i);
@@ -120,12 +123,14 @@ describe("workspace guard tool_call handler", () => {
 		try {
 			const { pi, toolCall } = fakePi();
 			createWorkspaceGuard({ root, cwd: root })(pi);
-			const res = (await toolCall({
-				type: "tool_call",
-				toolName: "edit",
-				toolCallId: "4",
-				input: { path: join(other, "victim.ts"), edits: [] },
-			})) as { block: boolean };
+			const res = fromAny<{ block: boolean }, unknown>(
+				await toolCall({
+					type: "tool_call",
+					toolName: "edit",
+					toolCallId: "4",
+					input: { path: join(other, "victim.ts"), edits: [] },
+				}),
+			);
 			expect(res.block).toBe(true);
 		} finally {
 			await rm(root, { recursive: true, force: true });
@@ -141,12 +146,14 @@ describe("workspace guard tool_call handler", () => {
 			await symlink(join(other, "secret.ts"), join(root, "link.ts"));
 			const { pi, toolCall } = fakePi();
 			createWorkspaceGuard({ root, cwd: root })(pi);
-			const res = (await toolCall({
-				type: "tool_call",
-				toolName: "edit",
-				toolCallId: "5",
-				input: { path: "link.ts", edits: [] },
-			})) as { block: boolean };
+			const res = fromAny<{ block: boolean }, unknown>(
+				await toolCall({
+					type: "tool_call",
+					toolName: "edit",
+					toolCallId: "5",
+					input: { path: "link.ts", edits: [] },
+				}),
+			);
 			expect(res.block).toBe(true);
 		} finally {
 			await rm(root, { recursive: true, force: true });

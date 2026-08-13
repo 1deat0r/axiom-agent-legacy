@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
@@ -60,7 +61,7 @@ function runProbe(action: string): ProbeResult {
 		throw new Error(`Probe produced no output\nSTDERR:\n${result.stderr}`);
 	}
 
-	return JSON.parse(lastLine) as ProbeResult;
+	return fromPartial<ProbeResult>(JSON.parse(lastLine));
 }
 
 describe("lazy provider module loading", () => {

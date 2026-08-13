@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import { transformMessages } from "../src/providers/transform-messages.js";
 import type { AssistantMessage, Message, Model, ToolCall } from "../src/types.js";
@@ -78,7 +79,7 @@ describe("OpenAI to Anthropic session migration for Copilot Claude", () => {
 		];
 
 		const result = transformMessages(messages, model, anthropicNormalizeToolCallId);
-		const assistantMsg = result.find((m) => m.role === "assistant") as AssistantMessage;
+		const assistantMsg = fromAny<AssistantMessage, unknown>(result.find((m) => m.role === "assistant"));
 
 		// Thinking block should be converted to text since models differ
 		const textBlocks = assistantMsg.content.filter((b) => b.type === "text");
@@ -127,8 +128,8 @@ describe("OpenAI to Anthropic session migration for Copilot Claude", () => {
 		];
 
 		const result = transformMessages(messages, model, anthropicNormalizeToolCallId);
-		const assistantMsg = result.find((m) => m.role === "assistant") as AssistantMessage;
-		const toolCall = assistantMsg.content.find((b) => b.type === "toolCall") as ToolCall;
+		const assistantMsg = fromAny<AssistantMessage, unknown>(result.find((m) => m.role === "assistant"));
+		const toolCall = fromAny<ToolCall, unknown>(assistantMsg.content.find((b) => b.type === "toolCall"));
 
 		expect(toolCall.thoughtSignature).toBeUndefined();
 	});

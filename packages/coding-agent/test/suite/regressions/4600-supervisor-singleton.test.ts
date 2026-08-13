@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { createConnection } from "node:net";
 import { join, resolve } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it } from "vitest";
 import { ENV_AGENT_DIR, getCronJobsPath } from "../../../src/config.js";
 import { getProcessStartId } from "../../../src/core/session-lease.js";
@@ -229,9 +230,9 @@ function waitForType<T extends FixtureMessage["type"]>(
 	type: T,
 	timeoutMs?: number,
 ): Promise<Extract<FixtureMessage, { type: T }>> {
-	return waitForMessage(handle, (message) => message.type === type, timeoutMs) as Promise<
-		Extract<FixtureMessage, { type: T }>
-	>;
+	return fromPartial<Promise<Extract<FixtureMessage, { type: T }>>>(
+		waitForMessage(handle, (message) => message.type === type, timeoutMs),
+	);
 }
 
 function waitForExit(handle: FixtureHandle, timeoutMs = 20_000): Promise<void> {
@@ -332,10 +333,10 @@ function readStableIdentity(target: object, property: "clientId" | "protocolClie
 }
 
 function requireSessionSummary(value: unknown): SessionSummary {
-	if (!value || typeof value !== "object" || typeof (value as Partial<SessionSummary>).id !== "string") {
+	if (!value || typeof value !== "object" || typeof fromPartial<Partial<SessionSummary>>(value).id !== "string") {
 		throw new Error("Fixture did not return a session summary");
 	}
-	return value as SessionSummary;
+	return fromPartial<SessionSummary>(value);
 }
 
 function ownerRecordPath(registryDir: string, generation: string): string {
@@ -348,7 +349,7 @@ function ownerScopePath(registryDir: string, generation: string): string {
 
 function readOwnerRecord(registryDir: string, generation: string): OwnerRecord | undefined {
 	try {
-		return JSON.parse(readFileSync(ownerRecordPath(registryDir, generation), "utf8")) as OwnerRecord;
+		return fromPartial<OwnerRecord>(JSON.parse(readFileSync(ownerRecordPath(registryDir, generation), "utf8")));
 	} catch {
 		return undefined;
 	}
@@ -360,7 +361,7 @@ function listOwnerRecords(registryDir: string): OwnerRecord[] {
 	}
 	return readdirSync(registryDir)
 		.filter((name) => name.endsWith(".owner"))
-		.map((name) => JSON.parse(readFileSync(join(registryDir, name, "owner.json"), "utf8")) as OwnerRecord);
+		.map((name) => fromPartial<OwnerRecord>(JSON.parse(readFileSync(join(registryDir, name, "owner.json"), "utf8"))));
 }
 
 async function waitForOwnerCount(registryDir: string, count: number, timeoutMs = 20_000): Promise<OwnerRecord[]> {
@@ -413,7 +414,7 @@ function cleanupProcessState(identity: CleanupProcessIdentity): "exited" | "matc
 	try {
 		process.kill(identity.pid, 0);
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== "EPERM") {
+		if (fromAny<NodeJS.ErrnoException, unknown>(error).code !== "EPERM") {
 			return "exited";
 		}
 	}
@@ -710,7 +711,7 @@ describe("ENG-4600 daemon supervisor ownership", () => {
 			if (!listed.success) {
 				throw new Error(listed.error);
 			}
-			const listedSessions = (listed.data as { sessions: unknown[] }).sessions;
+			const listedSessions = fromAny<{ sessions: unknown[] }, unknown>(listed.data).sessions;
 			expect(listedSessions).toHaveLength(1);
 			const restored = requireSessionSummary(listedSessions[0]);
 			expect(restored.workerPid).toBe(originalWorkerPid);

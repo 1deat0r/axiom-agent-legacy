@@ -13,6 +13,7 @@ import { getZaiTestModel } from "./zai-test-model.js";
 
 type StreamOptionsWithExtras = StreamOptions & Record<string, unknown>;
 
+import { fromAny } from "@total-typescript/shoehorn";
 import { StringEnum } from "../src/utils/typebox-helpers.js";
 import { hasAzureOpenAICredentials, resolveAzureDeploymentName } from "./azure-utils.js";
 import { hasBedrockCredentials } from "./bedrock-utils.js";
@@ -1408,13 +1409,16 @@ describe("Generate E2E Tests", () => {
 			expect(response.stopReason, `Error: ${response.errorMessage}`).not.toBe("error");
 			expect(capturedPayload).toBeTruthy();
 
-			const payload = capturedPayload as {
-				additionalModelRequestFields?: {
-					thinking?: { type?: string; display?: string };
-					output_config?: { effort?: string };
-					anthropic_beta?: string[];
-				};
-			};
+			const payload = fromAny<
+				{
+					additionalModelRequestFields?: {
+						thinking?: { type?: string; display?: string };
+						output_config?: { effort?: string };
+						anthropic_beta?: string[];
+					};
+				},
+				unknown
+			>(capturedPayload);
 
 			expect(payload.additionalModelRequestFields?.thinking).toEqual({
 				type: "adaptive",
@@ -1449,7 +1453,7 @@ describe("Generate E2E Tests", () => {
 
 			expect(response.stopReason, `Error: ${response.errorMessage}`).not.toBe("error");
 			expect(capturedPayload).toBeTruthy();
-			expect((capturedPayload as { requestMetadata?: unknown }).requestMetadata).toEqual(metadata);
+			expect(fromAny<{ requestMetadata?: unknown }, unknown>(capturedPayload).requestMetadata).toEqual(metadata);
 		});
 
 		it("should omit requestMetadata from payload when not provided", { retry: 3 }, async () => {
@@ -1475,7 +1479,7 @@ describe("Generate E2E Tests", () => {
 
 			expect(response.stopReason, `Error: ${response.errorMessage}`).not.toBe("error");
 			expect(capturedPayload).toBeTruthy();
-			expect("requestMetadata" in (capturedPayload as object)).toBe(false);
+			expect("requestMetadata" in fromAny<object, unknown>(capturedPayload)).toBe(false);
 		});
 	});
 

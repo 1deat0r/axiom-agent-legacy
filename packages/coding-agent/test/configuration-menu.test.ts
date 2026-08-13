@@ -1,4 +1,5 @@
 import { setKeybindings, type TUI, visibleWidth } from "@earendil-works/pi-tui";
+import { fromAny } from "@total-typescript/shoehorn";
 import stripAnsi from "strip-ansi";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { KeybindingsManager } from "../src/core/keybindings.js";
@@ -10,9 +11,9 @@ import { initTheme } from "../src/modes/interactive/theme/theme.js";
 import { createHarness, type Harness } from "./suite/harness.js";
 
 function createFakeTui(): TUI {
-	return {
+	return fromAny<TUI, unknown>({
 		requestRender: () => {},
-	} as unknown as TUI;
+	});
 }
 
 describe("ConfigurationMenuComponent", () => {

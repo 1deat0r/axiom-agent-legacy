@@ -1,4 +1,5 @@
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AgentSessionRuntime } from "../../../src/core/agent-session-runtime.js";
 import { AgentCronJobStore, type AgentCronScheduler } from "../../../src/core/cron-jobs.js";
@@ -53,17 +54,17 @@ describe("ENG-4657 update heartbeat recovery", () => {
 			},
 			worker: { authenticationToken: "test-token", restoreActiveSessionId: activeSessionId },
 		});
-		const internals = daemon as unknown as AgentDaemonCronInternals;
+		const internals = fromAny<AgentDaemonCronInternals, unknown>(daemon);
 		const state: ActiveSessionState = {
 			activeSessionId,
-			runtime: {
+			runtime: fromAny<AgentSessionRuntime, unknown>({
 				session: harness.session,
 				metadata: { kind: "top-level", createdAt: Date.now() },
 				runtimeConfig: { cwd: harness.tempDir, agentDir: harness.tempDir },
 				cwd: harness.tempDir,
 				diagnostics: [],
 				dispose: async () => {},
-			} as unknown as AgentSessionRuntime,
+			}),
 			clients: new Set(),
 			pendingAttaches: 0,
 			extensionUiRequests: new Map(),

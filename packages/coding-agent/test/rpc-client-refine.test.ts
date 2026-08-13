@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import { REFINE_REQUEST_TIMEOUT_MS, RpcClient } from "../src/modes/rpc/rpc-client.js";
 
@@ -9,7 +10,7 @@ type RpcClientPrivate = {
 describe("RpcClient refine", () => {
 	it("sends the refine command with the extended timeout", async () => {
 		const client = new RpcClient();
-		const privateClient = client as unknown as RpcClientPrivate;
+		const privateClient = fromAny<RpcClientPrivate, unknown>(client);
 		const send = vi.fn(async () => ({
 			type: "response",
 			command: "refine",
@@ -18,7 +19,7 @@ describe("RpcClient refine", () => {
 		}));
 		privateClient.send = send;
 		privateClient.getData = <T>(response: unknown): T => {
-			return (response as { data: T }).data;
+			return fromAny<{ data: T }, unknown>(response).data;
 		};
 
 		const result = await client.refine({ instructions: "tighten validation" });

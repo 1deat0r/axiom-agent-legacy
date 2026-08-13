@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import { createAgentSessionRuntime } from "../src/core/agent-session-runtime.js";
 import { MissingSessionCwdError } from "../src/core/session-cwd.js";
@@ -73,7 +74,7 @@ describe("agents view open with a missing session cwd", () => {
 				throw new Error("stop after the cwd guard");
 			};
 			await expect(
-				createAgentSessionRuntime(okFactory as never, {
+				createAgentSessionRuntime(fromAny<never, unknown>(okFactory), {
 					cwd: overridden.getCwd(),
 					agentDir,
 					sessionManager: overridden,

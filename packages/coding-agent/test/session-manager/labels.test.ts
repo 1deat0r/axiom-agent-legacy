@@ -1,3 +1,4 @@
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import { type LabelEntry, SessionManager } from "../../src/core/session-manager.js";
 
@@ -16,7 +17,7 @@ describe("SessionManager labels", () => {
 
 		// Label entry should be in entries
 		const entries = session.getEntries();
-		const labelEntry = entries.find((e) => e.type === "label") as LabelEntry;
+		const labelEntry = fromAny<LabelEntry, unknown>(entries.find((e) => e.type === "label"));
 		expect(labelEntry).toBeDefined();
 		expect(labelEntry.id).toBe(labelId);
 		expect(labelEntry.targetId).toBe(msgId);
@@ -48,7 +49,7 @@ describe("SessionManager labels", () => {
 		expect(session.getLabel(msgId)).toBe("third");
 
 		const entries = session.getEntries();
-		const lastLabelEntry = entries.find((e) => e.id === lastLabelId) as LabelEntry;
+		const lastLabelEntry = fromAny<LabelEntry, unknown>(entries.find((e) => e.id === lastLabelId));
 		const tree = session.getTree();
 		const msgNode = tree.find((n) => n.entry.id === msgId);
 		expect(msgNode?.labelTimestamp).toBe(lastLabelEntry.timestamp);
@@ -80,8 +81,8 @@ describe("SessionManager labels", () => {
 		const msg2LabelId = session.appendLabelChange(msg2Id, "response");
 
 		const entries = session.getEntries();
-		const msg1LabelEntry = entries.find((e) => e.id === msg1LabelId) as LabelEntry;
-		const msg2LabelEntry = entries.find((e) => e.id === msg2LabelId) as LabelEntry;
+		const msg1LabelEntry = fromAny<LabelEntry, unknown>(entries.find((e) => e.id === msg1LabelId));
+		const msg2LabelEntry = fromAny<LabelEntry, unknown>(entries.find((e) => e.id === msg2LabelId));
 		const tree = session.getTree();
 
 		// Find the message nodes (skip label entries)
@@ -120,8 +121,8 @@ describe("SessionManager labels", () => {
 		const msg1LabelId = session.appendLabelChange(msg1Id, "important");
 		const msg2LabelId = session.appendLabelChange(msg2Id, "also-important");
 		const originalEntries = session.getEntries();
-		const msg1LabelEntry = originalEntries.find((e) => e.id === msg1LabelId) as LabelEntry;
-		const msg2LabelEntry = originalEntries.find((e) => e.id === msg2LabelId) as LabelEntry;
+		const msg1LabelEntry = fromAny<LabelEntry, unknown>(originalEntries.find((e) => e.id === msg1LabelId));
+		const msg2LabelEntry = fromAny<LabelEntry, unknown>(originalEntries.find((e) => e.id === msg2LabelId));
 
 		// Branch from msg2 (in-memory mode returns null, but updates internal state)
 		session.createBranchedSession(msg2Id);
@@ -132,7 +133,7 @@ describe("SessionManager labels", () => {
 
 		// New label entries should exist
 		const entries = session.getEntries();
-		const labelEntries = entries.filter((e) => e.type === "label") as LabelEntry[];
+		const labelEntries = fromPartial<LabelEntry[]>(entries.filter((e) => e.type === "label"));
 		expect(labelEntries).toHaveLength(2);
 
 		const tree = session.getTree();

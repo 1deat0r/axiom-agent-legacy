@@ -1,3 +1,4 @@
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, test, vi } from "vitest";
 import triggerCompactExtension from "../examples/extensions/trigger-compact.js";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "../src/core/extensions/index.js";
@@ -5,10 +6,10 @@ import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "..
 function createContext(tokens: number | null, compact = vi.fn()): ExtensionContext {
 	return {
 		hasUI: false,
-		ui: {} as ExtensionContext["ui"],
+		ui: fromPartial<ExtensionContext["ui"]>({}),
 		cwd: process.cwd(),
-		sessionManager: {} as ExtensionContext["sessionManager"],
-		modelRegistry: {} as ExtensionContext["modelRegistry"],
+		sessionManager: fromPartial<ExtensionContext["sessionManager"]>({}),
+		modelRegistry: fromPartial<ExtensionContext["modelRegistry"]>({}),
 		model: undefined,
 		isIdle: () => true,
 		signal: undefined,
@@ -27,14 +28,14 @@ describe("trigger-compact example extension", () => {
 			| ((event: { type: "turn_end" }, ctx: ExtensionContext | ExtensionCommandContext) => void)
 			| undefined;
 
-		const api = {
+		const api = fromAny<ExtensionAPI, unknown>({
 			on: (event: string, handler: (event: { type: "turn_end" }, ctx: ExtensionContext) => void) => {
 				if (event === "turn_end") {
 					turnEndHandler = handler;
 				}
 			},
 			registerCommand: vi.fn(),
-		} as unknown as ExtensionAPI;
+		});
 
 		triggerCompactExtension(api);
 		expect(turnEndHandler).toBeDefined();

@@ -1,3 +1,4 @@
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { Type } from "typebox";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getModel } from "../src/models.js";
@@ -5,21 +6,26 @@ import { streamSimple } from "../src/stream.js";
 import type { Tool } from "../src/types.js";
 import { getZaiTestModel } from "./zai-test-model.js";
 
-const mockState = vi.hoisted(() => ({
-	lastParams: undefined as unknown,
-	chunks: undefined as
-		| Array<null | {
-				id?: string;
-				choices?: Array<{ delta: Record<string, unknown>; finish_reason: string | null; usage?: unknown }>;
-				usage?: {
-					prompt_tokens: number;
-					completion_tokens: number;
-					prompt_tokens_details: { cached_tokens: number; cache_write_tokens?: number };
-					completion_tokens_details: { reasoning_tokens: number };
-				};
-		  }>
-		| undefined,
-}));
+const mockState = vi.hoisted(
+	(): {
+		lastParams: unknown;
+		chunks:
+			| Array<null | {
+					id?: string;
+					choices?: Array<{ delta: Record<string, unknown>; finish_reason: string | null; usage?: unknown }>;
+					usage?: {
+						prompt_tokens: number;
+						completion_tokens: number;
+						prompt_tokens_details: { cached_tokens: number; cache_write_tokens?: number };
+						completion_tokens_details: { reasoning_tokens: number };
+					};
+			  }>
+			| undefined;
+	} => ({
+		lastParams: undefined,
+		chunks: undefined,
+	}),
+);
 
 vi.mock("openai", () => {
 	class FakeOpenAI {
@@ -45,12 +51,14 @@ vi.mock("openai", () => {
 							}
 						},
 					};
-					const promise = Promise.resolve(stream) as Promise<typeof stream> & {
-						withResponse: () => Promise<{
-							data: typeof stream;
-							response: { status: number; headers: Headers };
-						}>;
-					};
+					const promise = fromPartial<
+						Promise<typeof stream> & {
+							withResponse: () => Promise<{
+								data: typeof stream;
+								response: { status: number; headers: Headers };
+							}>;
+						}
+					>(Promise.resolve(stream));
 					promise.withResponse = async () => ({
 						data: stream,
 						response: { status: 200, headers: new Headers() },
@@ -96,16 +104,16 @@ describe("openai-completions tool_choice", () => {
 				],
 				tools,
 			},
-			{
+			fromAny<Parameters<typeof streamSimple>[2], unknown>({
 				apiKey: "test",
 				toolChoice: "required",
 				onPayload: (params: unknown) => {
 					payload = params;
 				},
-			} as unknown as Parameters<typeof streamSimple>[2],
+			}),
 		).result();
 
-		const params = (payload ?? mockState.lastParams) as { tool_choice?: string; tools?: unknown[] };
+		const params = fromAny<{ tool_choice?: string; tools?: unknown[] }, unknown>(payload ?? mockState.lastParams);
 		expect(params.tool_choice).toBe("required");
 		expect(Array.isArray(params.tools)).toBe(true);
 		expect(params.tools?.length ?? 0).toBeGreaterThan(0);
@@ -141,15 +149,17 @@ describe("openai-completions tool_choice", () => {
 				],
 				tools,
 			},
-			{
+			fromAny<Parameters<typeof streamSimple>[2], unknown>({
 				apiKey: "test",
 				onPayload: (params: unknown) => {
 					payload = params;
 				},
-			} as unknown as Parameters<typeof streamSimple>[2],
+			}),
 		).result();
 
-		const params = (payload ?? mockState.lastParams) as { tools?: Array<{ function?: Record<string, unknown> }> };
+		const params = fromAny<{ tools?: Array<{ function?: Record<string, unknown> }> }, unknown>(
+			payload ?? mockState.lastParams,
+		);
 		const tool = params.tools?.[0]?.function;
 		expect(tool).toBeTruthy();
 		expect(tool?.strict).toBeUndefined();
@@ -180,7 +190,7 @@ describe("openai-completions tool_choice", () => {
 			},
 		).result();
 
-		const params = (payload ?? mockState.lastParams) as { reasoning_effort?: string };
+		const params = fromAny<{ reasoning_effort?: string }, unknown>(payload ?? mockState.lastParams);
 		expect(params.reasoning_effort).toBe("medium");
 	});
 
@@ -217,7 +227,7 @@ describe("openai-completions tool_choice", () => {
 			},
 		).result();
 
-		const params = (payload ?? mockState.lastParams) as { tool_stream?: boolean };
+		const params = fromAny<{ tool_stream?: boolean }, unknown>(payload ?? mockState.lastParams);
 		expect(params.tool_stream).toBe(true);
 	});
 
@@ -265,7 +275,7 @@ describe("openai-completions tool_choice", () => {
 			},
 		).result();
 
-		const params = (payload ?? mockState.lastParams) as { tool_stream?: boolean };
+		const params = fromAny<{ tool_stream?: boolean }, unknown>(payload ?? mockState.lastParams);
 		expect(params.tool_stream).toBeUndefined();
 	});
 
@@ -309,7 +319,7 @@ describe("openai-completions tool_choice", () => {
 			},
 		).result();
 
-		const params = (payload ?? mockState.lastParams) as { tool_stream?: boolean };
+		const params = fromAny<{ tool_stream?: boolean }, unknown>(payload ?? mockState.lastParams);
 		expect(params.tool_stream).toBe(true);
 	});
 
@@ -336,7 +346,7 @@ describe("openai-completions tool_choice", () => {
 			},
 		).result();
 
-		const params = (payload ?? mockState.lastParams) as { tool_stream?: boolean };
+		const params = fromAny<{ tool_stream?: boolean }, unknown>(payload ?? mockState.lastParams);
 		expect(params.tool_stream).toBeUndefined();
 	});
 
@@ -904,10 +914,13 @@ describe("openai-completions tool_choice", () => {
 			},
 		).result();
 
-		const params = (payload ?? mockState.lastParams) as {
-			reasoning?: { effort?: string };
-			reasoning_effort?: string;
-		};
+		const params = fromAny<
+			{
+				reasoning?: { effort?: string };
+				reasoning_effort?: string;
+			},
+			unknown
+		>(payload ?? mockState.lastParams);
 		expect(params.reasoning).toEqual({ effort: "high" });
 		expect(params.reasoning_effort).toBeUndefined();
 	});

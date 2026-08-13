@@ -1,3 +1,4 @@
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.js";
 
@@ -18,10 +19,10 @@ type InteractiveModePrototypeWithHandleCtrlZ = {
 };
 
 function callHandleCtrlZ(context: HandleCtrlZThis): void {
-	(interactiveModePrototype as InteractiveModePrototypeWithHandleCtrlZ).handleCtrlZ.call(context);
+	fromAny<InteractiveModePrototypeWithHandleCtrlZ, unknown>(interactiveModePrototype).handleCtrlZ.call(context);
 }
 
-const interactiveModePrototype = InteractiveMode.prototype as unknown;
+const interactiveModePrototype = fromAny<unknown, unknown>(InteractiveMode.prototype);
 
 describe("InteractiveMode.handleCtrlZ", () => {
 	afterEach(() => {
@@ -77,21 +78,27 @@ describe("InteractiveMode.handleCtrlZ", () => {
 
 		const setIntervalSpy = vi.spyOn(globalThis, "setInterval").mockReturnValue(keepAliveHandle);
 		const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval").mockImplementation(() => undefined);
-		const processOnSpy = vi.spyOn(process, "on").mockImplementation(((event: string, listener: () => void) => {
-			if (event === "SIGINT") {
-				sigintHandler = listener;
-			}
-			return process;
-		}) as typeof process.on);
-		const processOnceSpy = vi.spyOn(process, "once").mockImplementation(((event: string, listener: () => void) => {
-			if (event === "SIGCONT") {
-				sigcontHandler = listener;
-			}
-			return process;
-		}) as typeof process.once);
+		const processOnSpy = vi.spyOn(process, "on").mockImplementation(
+			fromPartial<typeof process.on>((event: string, listener: () => void) => {
+				if (event === "SIGINT") {
+					sigintHandler = listener;
+				}
+				return process;
+			}),
+		);
+		const processOnceSpy = vi.spyOn(process, "once").mockImplementation(
+			fromPartial<typeof process.once>((event: string, listener: () => void) => {
+				if (event === "SIGCONT") {
+					sigcontHandler = listener;
+				}
+				return process;
+			}),
+		);
 		const removeListenerSpy = vi
 			.spyOn(process, "removeListener")
-			.mockImplementation(((_event: string, _listener: () => void) => process) as typeof process.removeListener);
+			.mockImplementation(
+				fromPartial<typeof process.removeListener>((_event: string, _listener: () => void) => process),
+			);
 		const processKillSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
 
 		callHandleCtrlZ(context);
@@ -126,13 +133,15 @@ describe("InteractiveMode.handleCtrlZ", () => {
 		const setIntervalSpy = vi.spyOn(globalThis, "setInterval").mockReturnValue(keepAliveHandle);
 		const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval").mockImplementation(() => undefined);
 		vi.spyOn(process, "on").mockImplementation(
-			((_event: string, _listener: () => void) => process) as typeof process.on,
+			fromPartial<typeof process.on>((_event: string, _listener: () => void) => process),
 		);
 		const removeListenerSpy = vi
 			.spyOn(process, "removeListener")
-			.mockImplementation(((_event: string, _listener: () => void) => process) as typeof process.removeListener);
+			.mockImplementation(
+				fromPartial<typeof process.removeListener>((_event: string, _listener: () => void) => process),
+			);
 		vi.spyOn(process, "once").mockImplementation(
-			((_event: string, _listener: () => void) => process) as typeof process.once,
+			fromPartial<typeof process.once>((_event: string, _listener: () => void) => process),
 		);
 		vi.spyOn(process, "kill").mockImplementation(() => {
 			throw suspendError;

@@ -13,6 +13,7 @@ import {
 	type TUI,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import type { AgentSessionRuntime } from "../src/core/agent-session-runtime.js";
 import { formatNoModelsAvailableMessage } from "../src/core/auth-guidance.js";
@@ -124,10 +125,10 @@ describe("InteractiveMode update notifications", () => {
 
 	test("shows the slash update command in one compact line", () => {
 		const chatContainer = new Container();
-		const fakeThis = {
+		const fakeThis = fromAny<InteractiveMode, unknown>({
 			chatContainer,
 			ui: { requestRender: vi.fn() },
-		} as unknown as InteractiveMode;
+		});
 
 		InteractiveMode.prototype.showNewVersionNotification.call(fakeThis, "1.2.3");
 
@@ -138,10 +139,10 @@ describe("InteractiveMode update notifications", () => {
 
 	test("shows package updates in one compact line", () => {
 		const chatContainer = new Container();
-		const fakeThis = {
+		const fakeThis = fromAny<InteractiveMode, unknown>({
 			chatContainer,
 			ui: { requestRender: vi.fn() },
-		} as unknown as InteractiveMode;
+		});
 
 		InteractiveMode.prototype.showPackageUpdateNotification.call(fakeThis, ["npm:@foo/bar", "npm:@baz/qux"]);
 
@@ -230,15 +231,16 @@ type RenderSessionContextOptions = {
 	limitTranscript?: boolean;
 };
 
-const renderSessionContext = (
-	InteractiveMode.prototype as unknown as {
+const renderSessionContext = fromAny<
+	{
 		renderSessionContext(
 			this: RenderSessionContextHarness,
 			sessionContext: AgentConnectionSessionContext,
 			options?: RenderSessionContextOptions,
 		): Promise<void>;
-	}
-).renderSessionContext;
+	},
+	unknown
+>(InteractiveMode.prototype).renderSessionContext;
 
 function createRenderSessionContextHarness(overrides: Partial<RenderSessionContextHarness> = {}): {
 	harness: RenderSessionContextHarness;
@@ -436,12 +438,12 @@ describe("InteractiveMode.renderSessionContext", () => {
 	test("keeps equal-timestamp legacy messages after the compaction summary", async () => {
 		const { harness, addMessageToChat } = createRenderSessionContextHarness();
 		const earlier = userMessage("earlier", 4);
-		const summary = {
+		const summary = fromPartial<AgentMessage>({
 			role: "compactionSummary",
 			summary: "legacy summary",
 			tokensBefore: 123,
 			timestamp: 5,
-		} as AgentMessage;
+		});
 		const equalLater = userMessage("equal later", 5);
 
 		await renderMessages(harness, [summary, earlier, equalLater]);
@@ -451,13 +453,13 @@ describe("InteractiveMode.renderSessionContext", () => {
 	test("orders the compaction summary at its exact boundary before bounding the initial transcript", async () => {
 		const { harness, addMessageToChat } = createRenderSessionContextHarness();
 		const retained = Array.from({ length: 5 }, (_, index) => userMessage(`retained ${index}`, 5));
-		const summary = {
+		const summary = fromPartial<AgentMessage>({
 			role: "compactionSummary",
 			summary: "summary",
 			tokensBefore: 123,
 			retainedMessageCount: retained.length,
 			timestamp: 5,
-		} as AgentMessage;
+		});
 		const later = Array.from({ length: 399 }, (_, index) => userMessage(`later ${index}`, 5));
 
 		await renderMessages(harness, [summary, ...retained, ...later], { limitTranscript: true });
@@ -646,14 +648,15 @@ function createSubmitHandlerHarness(overrides: Partial<SubmitHandlerHarness> = {
 		pastedImages: new Map(),
 		getPromptStashImages: vi.fn(() => []),
 		snapshotPromptStash: vi.fn((text) => ({ text })),
-		retainSubmittedDraft: (
-			InteractiveMode.prototype as unknown as { retainSubmittedDraft(stash: unknown, generation: number): void }
+		retainSubmittedDraft: fromAny<{ retainSubmittedDraft(stash: unknown, generation: number): void }, unknown>(
+			InteractiveMode.prototype,
 		).retainSubmittedDraft,
-		retainStartupPromptDrafts: (
-			InteractiveMode.prototype as unknown as {
+		retainStartupPromptDrafts: fromAny<
+			{
 				retainStartupPromptDrafts(prompts: readonly { text: string; images?: readonly unknown[] }[]): void;
-			}
-		).retainStartupPromptDrafts,
+			},
+			unknown
+		>(InteractiveMode.prototype).retainStartupPromptDrafts,
 		nextImageMarkerId: 1,
 		submittedInputBehavior: "steer",
 		inputSubmissionGeneration: 0,
@@ -671,11 +674,12 @@ function createSubmitHandlerHarness(overrides: Partial<SubmitHandlerHarness> = {
 		},
 		...overrides,
 	};
-	(
-		InteractiveMode.prototype as unknown as {
+	fromAny<
+		{
 			setupEditorSubmitHandler(this: SubmitHandlerHarness): void;
-		}
-	).setupEditorSubmitHandler.call(fakeThis);
+		},
+		unknown
+	>(InteractiveMode.prototype).setupEditorSubmitHandler.call(fakeThis);
 	return fakeThis;
 }
 
@@ -692,7 +696,7 @@ describe("InteractiveMode submit handling", () => {
 			setText: (text: string) => {
 				editorText = text;
 			},
-			onSubmit: undefined as ((text: string) => Promise<void>) | undefined,
+			onSubmit: fromPartial<((text: string) => Promise<void>) | undefined>(undefined),
 		};
 		const fakeThis = createSubmitHandlerHarness({
 			editor,
@@ -701,17 +705,20 @@ describe("InteractiveMode submit handling", () => {
 			admitPendingStartupPrompts: vi.fn(async (): Promise<"lifecycle-cancelled"> => "lifecycle-cancelled"),
 		});
 		delete fakeThis.promptStash;
-		fakeThis.snapshotPromptStash = (
-			InteractiveMode.prototype as unknown as { snapshotPromptStash(text: string): unknown }
-		).snapshotPromptStash.bind({
-			editor,
-			snapshotPromptStashFrom: (
-				InteractiveMode.prototype as unknown as {
-					snapshotPromptStashFrom(editor: unknown, text: string): unknown;
-				}
-			).snapshotPromptStashFrom,
-			getPromptStashImages: fakeThis.getPromptStashImages,
-		} as never);
+		fakeThis.snapshotPromptStash = fromAny<{ snapshotPromptStash(text: string): unknown }, unknown>(
+			InteractiveMode.prototype,
+		).snapshotPromptStash.bind(
+			fromAny<never, unknown>({
+				editor,
+				snapshotPromptStashFrom: fromAny<
+					{
+						snapshotPromptStashFrom(editor: unknown, text: string): unknown;
+					},
+					unknown
+				>(InteractiveMode.prototype).snapshotPromptStashFrom,
+				getPromptStashImages: fakeThis.getPromptStashImages,
+			}),
+		);
 		fakeThis.latestEditorPromptStash = fakeThis.snapshotPromptStash(rawText);
 		editor.onSubmit = fakeThis.defaultEditor.onSubmit;
 
@@ -738,8 +745,8 @@ describe("InteractiveMode submit handling", () => {
 			const expandedText = "draft expanded paste [image #7]";
 			let oldText = rawText;
 			const oldEditor = {
-				onSubmit: undefined as ((text: string) => Promise<void>) | undefined,
-				onChange: undefined as ((text: string) => void) | undefined,
+				onSubmit: fromPartial<((text: string) => Promise<void>) | undefined>(undefined),
+				onChange: fromPartial<((text: string) => void) | undefined>(undefined),
 				getText: () => oldText,
 				getExpandedText: () => expandedText,
 				getPasteSnapshot: () => pasteSnapshot,
@@ -766,8 +773,8 @@ describe("InteractiveMode submit handling", () => {
 				},
 				handleInput: vi.fn(),
 				render: () => [],
-				onSubmit: undefined as ((text: string) => Promise<void>) | undefined,
-				onChange: undefined as ((text: string) => void) | undefined,
+				onSubmit: fromPartial<((text: string) => Promise<void>) | undefined>(undefined),
+				onChange: fromPartial<((text: string) => void) | undefined>(undefined),
 			};
 			const lifecycleBarrier = createDeferred<"admitted" | "lifecycle-cancelled">();
 			const promptStashState: PromptStashState = {};
@@ -793,28 +800,30 @@ describe("InteractiveMode submit handling", () => {
 					promptStashState.stash = stash;
 				},
 			});
-			fakeThis.snapshotPromptStash = (
-				InteractiveMode.prototype as unknown as { snapshotPromptStash(text: string): unknown }
-			).snapshotPromptStash.bind(fakeThis as never);
-			(
-				fakeThis as unknown as { snapshotPromptStashFrom(editor: unknown, text: string): unknown }
-			).snapshotPromptStashFrom = (
-				InteractiveMode.prototype as unknown as {
+			fakeThis.snapshotPromptStash = fromAny<{ snapshotPromptStash(text: string): unknown }, unknown>(
+				InteractiveMode.prototype,
+			).snapshotPromptStash.bind(fromAny<never, unknown>(fakeThis));
+			fromAny<{ snapshotPromptStashFrom(editor: unknown, text: string): unknown }, unknown>(
+				fakeThis,
+			).snapshotPromptStashFrom = fromAny<
+				{
 					snapshotPromptStashFrom(editor: unknown, text: string): unknown;
-				}
-			).snapshotPromptStashFrom;
-			(
-				InteractiveMode.prototype as unknown as { setupEditorSubmitHandler(this: SubmitHandlerHarness): void }
+				},
+				unknown
+			>(InteractiveMode.prototype).snapshotPromptStashFrom;
+			fromAny<{ setupEditorSubmitHandler(this: SubmitHandlerHarness): void }, unknown>(
+				InteractiveMode.prototype,
 			).setupEditorSubmitHandler.call(fakeThis);
 			oldEditor.onChange = (text: string) => {
 				if (text.length > 0) fakeThis.latestEditorPromptStash = fakeThis.snapshotPromptStash(text);
 			};
 
-			(
-				InteractiveMode.prototype as unknown as {
+			fromAny<
+				{
 					setCustomEditorComponent(this: unknown, factory: () => unknown): void;
-				}
-			).setCustomEditorComponent.call(fakeThis, () => customEditor);
+				},
+				unknown
+			>(InteractiveMode.prototype).setCustomEditorComponent.call(fakeThis, () => customEditor);
 
 			expect(customText).toBe(supportsSnapshotRestore ? rawText : expandedText);
 			expect(restoredSnapshot).toBe(supportsSnapshotRestore ? pasteSnapshot : undefined);
@@ -832,8 +841,8 @@ describe("InteractiveMode submit handling", () => {
 				images: [[7, image]],
 			});
 			restoredSnapshot = undefined;
-			(
-				InteractiveMode.prototype as unknown as { restorePromptStashIfEditorEmpty(this: unknown): boolean }
+			fromAny<{ restorePromptStashIfEditorEmpty(this: unknown): boolean }, unknown>(
+				InteractiveMode.prototype,
 			).restorePromptStashIfEditorEmpty.call(fakeThis);
 			expect(customText).toBe(supportsSnapshotRestore ? rawText : expandedText);
 			expect(restoredSnapshot).toBe(supportsSnapshotRestore ? pasteSnapshot : undefined);
@@ -860,20 +869,23 @@ describe("InteractiveMode submit handling", () => {
 		});
 		delete fakeThis.promptStash;
 		fakeThis.editor.onSubmit = fakeThis.defaultEditor.onSubmit;
-		fakeThis.snapshotPromptStash = (
-			InteractiveMode.prototype as unknown as { snapshotPromptStash(text: string): unknown }
-		).snapshotPromptStash.bind({
-			editor: fakeThis.editor,
-			snapshotPromptStashFrom: (
-				InteractiveMode.prototype as unknown as {
-					snapshotPromptStashFrom(editor: unknown, text: string): unknown;
-				}
-			).snapshotPromptStashFrom,
-			getPromptStashImages: fakeThis.getPromptStashImages,
-		} as never);
+		fakeThis.snapshotPromptStash = fromAny<{ snapshotPromptStash(text: string): unknown }, unknown>(
+			InteractiveMode.prototype,
+		).snapshotPromptStash.bind(
+			fromAny<never, unknown>({
+				editor: fakeThis.editor,
+				snapshotPromptStashFrom: fromAny<
+					{
+						snapshotPromptStashFrom(editor: unknown, text: string): unknown;
+					},
+					unknown
+				>(InteractiveMode.prototype).snapshotPromptStashFrom,
+				getPromptStashImages: fakeThis.getPromptStashImages,
+			}),
+		);
 
-		await (
-			InteractiveMode.prototype as unknown as { handleFollowUp(this: SubmitHandlerHarness): Promise<void> }
+		await fromAny<{ handleFollowUp(this: SubmitHandlerHarness): Promise<void> }, unknown>(
+			InteractiveMode.prototype,
 		).handleFollowUp.call(fakeThis);
 
 		expect(editorText).toBe("");
@@ -968,12 +980,12 @@ describe("InteractiveMode MCP command", () => {
 		showStatus(message: string): void;
 		handleMcpCommand(args: string | undefined): Promise<void>;
 	};
-	const handleMcpCommand = (InteractiveMode.prototype as unknown as McpCommandHarness).handleMcpCommand;
+	const handleMcpCommand = fromAny<McpCommandHarness, unknown>(InteractiveMode.prototype).handleMcpCommand;
 
 	test("opens bare /mcp on the MCP Connections tab", async () => {
-		const fakeThis = {
+		const fakeThis = fromAny<McpCommandHarness, unknown>({
 			showConfigurationMenu: vi.fn(async () => {}),
-		} as unknown as McpCommandHarness;
+		});
 
 		await handleMcpCommand.call(fakeThis, undefined);
 
@@ -981,12 +993,12 @@ describe("InteractiveMode MCP command", () => {
 	});
 
 	test("preserves the explicit /mcp list status output", async () => {
-		const fakeThis = {
+		const fakeThis = fromAny<McpCommandHarness, unknown>({
 			modelRegistry: { authStorage: { get: vi.fn(() => undefined) } },
 			settingsManager: { getMcpServers: vi.fn(() => ({})) },
 			showConfigurationMenu: vi.fn(async () => {}),
 			showStatus: vi.fn(),
-		} as unknown as McpCommandHarness;
+		});
 
 		await handleMcpCommand.call(fakeThis, "list");
 
@@ -1005,16 +1017,16 @@ describe("InteractiveMode pending bash components", () => {
 	test("keeps pending bash components visible across queue refreshes", () => {
 		const pendingMessagesContainer = new Container();
 		const component = bashComponent();
-		const fakeThis = {
+		const fakeThis = fromAny<InteractiveMode, unknown>({
 			pendingMessagesContainer,
 			queuedMessagesContainer: new Container(),
 			pendingBashComponents: [component],
 			getAllQueuedMessages: () => ({ steering: [], followUp: [] }),
 			featureHintSuppressedByQueue: false,
-		} as unknown as InteractiveMode;
+		});
 
-		(
-			InteractiveMode.prototype as unknown as { updatePendingMessagesDisplay(this: unknown): void }
+		fromAny<{ updatePendingMessagesDisplay(this: unknown): void }, unknown>(
+			InteractiveMode.prototype,
 		).updatePendingMessagesDisplay.call(fakeThis);
 
 		expect(pendingMessagesContainer.children).toContain(component);
@@ -1022,7 +1034,7 @@ describe("InteractiveMode pending bash components", () => {
 
 	test("does not double-prefix labeled injected queue previews", () => {
 		const queuedMessagesContainer = new Container();
-		const fakeThis = {
+		const fakeThis = fromAny<InteractiveMode, unknown>({
 			pendingMessagesContainer: new Container(),
 			queuedMessagesContainer,
 			pendingBashComponents: [],
@@ -1040,10 +1052,10 @@ describe("InteractiveMode pending bash components", () => {
 			getAppKeyDisplay: () => "Ctrl+Q",
 			featureHintSuppressedByQueue: false,
 			clearFeatureHintPresentation: vi.fn(),
-		} as unknown as InteractiveMode;
+		});
 
-		(
-			InteractiveMode.prototype as unknown as { updatePendingMessagesDisplay(this: unknown): void }
+		fromAny<{ updatePendingMessagesDisplay(this: unknown): void }, unknown>(
+			InteractiveMode.prototype,
 		).updatePendingMessagesDisplay.call(fakeThis);
 
 		const raw = queuedMessagesContainer.render(100).join("\n");
@@ -1067,26 +1079,26 @@ describe("InteractiveMode pending bash components", () => {
 		const chatContainer = new Container();
 		const component = bashComponent();
 		pendingMessagesContainer.addChild(component);
-		const fakeThis = {
+		const fakeThis = fromAny<InteractiveMode, unknown>({
 			pendingMessagesContainer,
 			chatContainer,
 			pendingBashComponents: [component],
-		} as unknown as InteractiveMode;
+		});
 
-		(
-			InteractiveMode.prototype as unknown as { flushPendingBashComponents(this: unknown): void }
+		fromAny<{ flushPendingBashComponents(this: unknown): void }, unknown>(
+			InteractiveMode.prototype,
 		).flushPendingBashComponents.call(fakeThis);
 
 		expect(pendingMessagesContainer.children).not.toContain(component);
 		expect(chatContainer.children).toContain(component);
-		expect((fakeThis as unknown as { pendingBashComponents: unknown[] }).pendingBashComponents).toHaveLength(0);
+		expect(fromAny<{ pendingBashComponents: unknown[] }, unknown>(fakeThis).pendingBashComponents).toHaveLength(0);
 	});
 
 	test("handles session events in emission order even when a handler suspends", async () => {
 		type ConnectionListener = (event: { type: string; event: { type: string } }) => Promise<void>;
 		let listener: ConnectionListener | undefined;
 		const order: string[] = [];
-		const fakeThis = {
+		const fakeThis = fromAny<InteractiveMode, unknown>({
 			agentConnection: {
 				subscribe: (l: ConnectionListener) => {
 					listener = l;
@@ -1102,9 +1114,9 @@ describe("InteractiveMode pending bash components", () => {
 				}
 				order.push(`end:${event.type}`);
 			},
-		} as unknown as InteractiveMode;
+		});
 
-		(InteractiveMode.prototype as unknown as { subscribeToAgent(this: unknown): void }).subscribeToAgent.call(
+		fromAny<{ subscribeToAgent(this: unknown): void }, unknown>(InteractiveMode.prototype).subscribeToAgent.call(
 			fakeThis,
 		);
 
@@ -1116,19 +1128,19 @@ describe("InteractiveMode pending bash components", () => {
 	});
 
 	test("stops an orphaned bash loader when session render state resets", () => {
-		const tuiStub = {
+		const tuiStub = fromAny<ConstructorParameters<typeof BashExecutionComponent>[1], unknown>({
 			terminal: { columns: 120, rows: 24 },
 			requestRender: () => {},
-		} as unknown as ConstructorParameters<typeof BashExecutionComponent>[1];
+		});
 		const component = new BashExecutionComponent("sleep 99", tuiStub);
-		const loader = (component as unknown as { loader: { intervalId: unknown } }).loader;
+		const loader = fromAny<{ loader: { intervalId: unknown } }, unknown>(component).loader;
 		expect(loader.intervalId).not.toBeNull();
 
 		const editorStub = { clearHistory: vi.fn(), setText: vi.fn() };
 		const endFeatureHintRun = vi.fn();
 		const queueSelection = new QueueSelection();
 		queueSelection.move({ steering: ["s1"], followUp: [] }, "draft", -1);
-		const fakeThis = {
+		const fakeThis = fromAny<InteractiveMode, unknown>({
 			endFeatureHintRun,
 			queueSelection,
 			chatContainer: new Container(),
@@ -1154,15 +1166,15 @@ describe("InteractiveMode pending bash components", () => {
 			setGoalAnnouncementBaseline: vi.fn(),
 			syncGoalTray: vi.fn(),
 			getGoalState: () => emptyGoalState(),
-		} as unknown as InteractiveMode;
+		});
 
-		(
-			InteractiveMode.prototype as unknown as { resetCurrentSessionRenderState(this: unknown): void }
+		fromAny<{ resetCurrentSessionRenderState(this: unknown): void }, unknown>(
+			InteractiveMode.prototype,
 		).resetCurrentSessionRenderState.call(fakeThis);
 
 		expect(loader.intervalId).toBeNull();
 		expect(endFeatureHintRun).toHaveBeenCalledOnce();
-		expect((fakeThis as unknown as { activeBashComponent: unknown }).activeBashComponent).toBeUndefined();
+		expect(fromAny<{ activeBashComponent: unknown }, unknown>(fakeThis).activeBashComponent).toBeUndefined();
 		// Queue browsing is session-scoped: Enter in the next session must be a
 		// fresh prompt, and the previous session's stashed draft is discarded.
 		expect(queueSelection.isBrowsing).toBe(false);
@@ -1182,24 +1194,25 @@ describe("InteractiveMode connection events", () => {
 		};
 
 		await expect(
-			(
-				InteractiveMode.prototype as unknown as {
+			fromAny<
+				{
 					renderCurrentSessionState(this: typeof harness): Promise<void>;
-				}
-			).renderCurrentSessionState.call(harness),
+				},
+				unknown
+			>(InteractiveMode.prototype).renderCurrentSessionState.call(harness),
 		).resolves.toBeUndefined();
 		expect(harness.syncWorkingLoader).toHaveBeenCalledOnce();
 	});
 
 	test("degrades heartbeat refresh failures without hiding queue refresh failures during rebind", async () => {
-		const rebindCurrentSession = (
-			InteractiveMode.prototype as unknown as { rebindCurrentSession(this: InteractiveMode): Promise<void> }
+		const rebindCurrentSession = fromAny<{ rebindCurrentSession(this: InteractiveMode): Promise<void> }, unknown>(
+			InteractiveMode.prototype,
 		).rebindCurrentSession;
 		const createHarness = (
 			refreshConnectionQueue: () => Promise<void>,
 			refreshHeartbeatCatalog: () => Promise<void>,
 		) =>
-			({
+			fromAny<InteractiveMode, unknown>({
 				unsubscribe: undefined,
 				localSessionHost: undefined,
 				toolDefinitionCache: { clear: vi.fn() },
@@ -1216,7 +1229,7 @@ describe("InteractiveMode connection events", () => {
 				syncGoalTray: vi.fn(),
 				syncWorkingLoader: vi.fn(),
 				getGoalState: () => emptyGoalState(),
-			}) as unknown as InteractiveMode;
+			});
 
 		await expect(
 			rebindCurrentSession.call(
@@ -1242,17 +1255,17 @@ describe("InteractiveMode connection events", () => {
 	});
 
 	test("restores in-flight assistant state on every session render", async () => {
-		const streamingMessage = {
+		const streamingMessage = fromPartial<AgentConnectionSnapshot["streamingMessage"]>({
 			role: "assistant",
 			content: [{ type: "text", text: "still streaming" }],
-		} as AgentConnectionSnapshot["streamingMessage"];
+		});
 		const snapshots: AgentConnectionSnapshot[] = [
 			{ state: createConnectionState(), messages: [] },
 			{ state: createConnectionState({ isStreaming: true }), messages: [], streamingMessage },
 		];
 		const renderSessionContextMock = vi.fn(async () => {});
 		const restoreStreamingMessageFromSnapshot = vi.fn(async () => {});
-		const fakeThis = {
+		const fakeThis = fromAny<InteractiveMode, unknown>({
 			agentConnection: { getInitialSnapshot: vi.fn(async () => snapshots.shift()!) },
 			getSessionContextFromConnectionSnapshot: vi.fn(() => ({
 				messages: [],
@@ -1265,17 +1278,17 @@ describe("InteractiveMode connection events", () => {
 			renderSessionContext: renderSessionContextMock,
 			restoreStreamingMessageFromSnapshot,
 			showStatus: vi.fn(),
-		} as unknown as InteractiveMode;
+		});
 
-		const renderInitialMessages = (
-			InteractiveMode.prototype as unknown as { renderInitialMessages(this: InteractiveMode): Promise<void> }
+		const renderInitialMessages = fromAny<{ renderInitialMessages(this: InteractiveMode): Promise<void> }, unknown>(
+			InteractiveMode.prototype,
 		).renderInitialMessages;
 		await renderInitialMessages.call(fakeThis);
 		await renderInitialMessages.call(fakeThis);
 
 		expect(
-			(fakeThis as unknown as { agentConnection: { getInitialSnapshot: ReturnType<typeof vi.fn> } }).agentConnection
-				.getInitialSnapshot,
+			fromAny<{ agentConnection: { getInitialSnapshot: ReturnType<typeof vi.fn> } }, unknown>(fakeThis)
+				.agentConnection.getInitialSnapshot,
 		).toHaveBeenCalledTimes(2);
 		expect(renderSessionContextMock).toHaveBeenCalledTimes(2);
 		expect(renderSessionContextMock).toHaveBeenNthCalledWith(1, expect.anything(), {
@@ -1316,9 +1329,9 @@ describe("InteractiveMode connection events", () => {
 			showError: vi.fn(),
 		};
 
-		(InteractiveMode.prototype as unknown as { subscribeToAgent(this: typeof fakeThis): void }).subscribeToAgent.call(
-			fakeThis,
-		);
+		fromAny<{ subscribeToAgent(this: typeof fakeThis): void }, unknown>(
+			InteractiveMode.prototype,
+		).subscribeToAgent.call(fakeThis);
 
 		const state = createConnectionState();
 		await listener?.({ type: "session_replaced", state, messages: [] });
@@ -1365,11 +1378,11 @@ describe("InteractiveMode connection events", () => {
 			showError: vi.fn(),
 		};
 
-		(InteractiveMode.prototype as unknown as { subscribeToAgent(this: typeof fakeThis): void }).subscribeToAgent.call(
-			fakeThis,
-		);
+		fromAny<{ subscribeToAgent(this: typeof fakeThis): void }, unknown>(
+			InteractiveMode.prototype,
+		).subscribeToAgent.call(fakeThis);
 
-		const snapshot = { state: createConnectionState(), messages: [] as [] };
+		const snapshot = { state: createConnectionState(), messages: fromPartial<[]>([]) };
 		await listener?.({ type: "session_resynced", snapshot });
 
 		expect(fakeThis.refreshCommandCatalogForCurrentSession).toHaveBeenCalledOnce();
@@ -1414,9 +1427,9 @@ describe("InteractiveMode connection events", () => {
 			handleConnectionExtensionUiRequest: vi.fn(),
 			showError: vi.fn(),
 		};
-		(InteractiveMode.prototype as unknown as { subscribeToAgent(this: typeof fakeThis): void }).subscribeToAgent.call(
-			fakeThis,
-		);
+		fromAny<{ subscribeToAgent(this: typeof fakeThis): void }, unknown>(
+			InteractiveMode.prototype,
+		).subscribeToAgent.call(fakeThis);
 
 		const resync = listener?.({
 			type: "session_resynced",
@@ -1435,10 +1448,10 @@ describe("InteractiveMode connection events", () => {
 		const sideQuestion = { id: "side-1", status: "running" };
 		const extensionRequests = new Map([["request-1", { cancelLocal: vi.fn() }]]);
 		const activeBashComponent = {};
-		const streamingMessage = {
+		const streamingMessage = fromPartial<AgentConnectionSnapshot["streamingMessage"]>({
 			role: "assistant",
 			content: [{ type: "thinking", thinking: "Still reasoning" }],
-		} as AgentConnectionSnapshot["streamingMessage"];
+		});
 		const snapshot: AgentConnectionSnapshot = {
 			state: createConnectionState({ isCompacting: true, isBashRunning: true, isStreaming: true }),
 			messages: [],
@@ -1451,7 +1464,7 @@ describe("InteractiveMode connection events", () => {
 			}
 		});
 		const refreshCommandCatalogForCurrentSession = vi.fn(async () => {});
-		const fakeThis = {
+		const fakeThis = fromAny<InteractiveMode, unknown>({
 			sideQuestionEvent: sideQuestion,
 			activeConnectionExtensionUiRequests: extensionRequests,
 			activeBashComponent,
@@ -1476,21 +1489,25 @@ describe("InteractiveMode connection events", () => {
 			syncGoalTray: vi.fn(),
 			syncWorkingLoader: vi.fn(),
 			getGoalState: () => emptyGoalState(),
-		} as unknown as InteractiveMode;
+		});
 
-		await (
-			InteractiveMode.prototype as unknown as {
+		await fromAny<
+			{
 				renderResyncedSession(this: unknown, value: AgentConnectionSnapshot): Promise<void>;
-			}
-		).renderResyncedSession.call(fakeThis, snapshot);
+			},
+			unknown
+		>(InteractiveMode.prototype).renderResyncedSession.call(fakeThis, snapshot);
 
-		expect((fakeThis as unknown as { sideQuestionEvent: unknown }).sideQuestionEvent).toBe(sideQuestion);
+		expect(fromAny<{ sideQuestionEvent: unknown }, unknown>(fakeThis).sideQuestionEvent).toBe(sideQuestion);
 		expect(
-			(fakeThis as unknown as { activeConnectionExtensionUiRequests: unknown }).activeConnectionExtensionUiRequests,
+			fromAny<{ activeConnectionExtensionUiRequests: unknown }, unknown>(fakeThis)
+				.activeConnectionExtensionUiRequests,
 		).toBe(extensionRequests);
-		expect((fakeThis as unknown as { activeBashComponent: unknown }).activeBashComponent).toBe(activeBashComponent);
+		expect(fromAny<{ activeBashComponent: unknown }, unknown>(fakeThis).activeBashComponent).toBe(
+			activeBashComponent,
+		);
 		expect(
-			(fakeThis as unknown as { renderSessionContext: ReturnType<typeof vi.fn> }).renderSessionContext,
+			fromAny<{ renderSessionContext: ReturnType<typeof vi.fn> }, unknown>(fakeThis).renderSessionContext,
 		).toHaveBeenCalledWith(expect.anything(), { clearChat: true, updateFooter: true });
 		expect(startAssistantStreamingMessage).toHaveBeenCalledWith(streamingMessage);
 		expect(refreshCommandCatalogForCurrentSession).not.toHaveBeenCalled();
@@ -1503,7 +1520,7 @@ describe("InteractiveMode connection events", () => {
 			state: createConnectionState({ isCompacting: false, isBashRunning: false, isStreaming: false }),
 			messages: [],
 		};
-		const fakeThis = {
+		const fakeThis = fromAny<InteractiveMode, unknown>({
 			activeBashComponent: bashComponent,
 			streamingComponent: {},
 			streamingMessage: {},
@@ -1525,16 +1542,17 @@ describe("InteractiveMode connection events", () => {
 			syncGoalTray: vi.fn(),
 			syncWorkingLoader: vi.fn(),
 			getGoalState: () => emptyGoalState(),
-		} as unknown as InteractiveMode;
+		});
 
-		await (
-			InteractiveMode.prototype as unknown as {
+		await fromAny<
+			{
 				renderResyncedSession(this: unknown, value: AgentConnectionSnapshot): Promise<void>;
-			}
-		).renderResyncedSession.call(fakeThis, snapshot);
+			},
+			unknown
+		>(InteractiveMode.prototype).renderResyncedSession.call(fakeThis, snapshot);
 
 		expect(bashComponent.setComplete).toHaveBeenCalledWith(undefined, false);
-		expect((fakeThis as unknown as { activeBashComponent: unknown }).activeBashComponent).toBeUndefined();
+		expect(fromAny<{ activeBashComponent: unknown }, unknown>(fakeThis).activeBashComponent).toBeUndefined();
 		expect(flushPendingBashComponents).toHaveBeenCalledOnce();
 	});
 
@@ -1559,11 +1577,12 @@ describe("InteractiveMode connection events", () => {
 			syncWorkingLoader: () => calls.push("loader"),
 		};
 
-		await (
-			InteractiveMode.prototype as unknown as {
+		await fromAny<
+			{
 				renderCurrentSessionState(this: typeof fakeThis): Promise<void>;
-			}
-		).renderCurrentSessionState.call(fakeThis);
+			},
+			unknown
+		>(InteractiveMode.prototype).renderCurrentSessionState.call(fakeThis);
 
 		expect(calls).toEqual(["replacement", "reset", "messages", "queue", "loader"]);
 	});
@@ -1596,9 +1615,9 @@ describe("InteractiveMode connection events", () => {
 			ui: { requestRender: vi.fn() },
 			showError: vi.fn(),
 		};
-		(InteractiveMode.prototype as unknown as { subscribeToAgent(this: typeof fakeThis): void }).subscribeToAgent.call(
-			fakeThis,
-		);
+		fromAny<{ subscribeToAgent(this: typeof fakeThis): void }, unknown>(
+			InteractiveMode.prototype,
+		).subscribeToAgent.call(fakeThis);
 
 		const staleEvent = listener?.({ type: "session_event", event: { type: "message_update" } });
 		const replacement = listener?.({ type: "session_replaced", state: createConnectionState() });
@@ -1629,11 +1648,11 @@ describe("InteractiveMode connection extension UI", () => {
 		handleConnectionExtensionUiRequest(request: AgentConnectionExtensionUiRequest): Promise<void>;
 	};
 
-	const prototype = InteractiveMode.prototype as unknown as ConnectionExtensionUiHandlerHarness;
+	const prototype = fromAny<ConnectionExtensionUiHandlerHarness, unknown>(InteractiveMode.prototype);
 
 	test("reset cancellation responds to active connection UI requests", async () => {
 		const cancelLocal = vi.fn();
-		const fakeThis = Object.create(InteractiveMode.prototype) as ConnectionExtensionUiCancelHarness;
+		const fakeThis = fromPartial<ConnectionExtensionUiCancelHarness>(Object.create(InteractiveMode.prototype));
 		fakeThis.activeConnectionExtensionUiRequests = new Map([["request-1", { cancelLocal }]]);
 		fakeThis.agentConnection = {
 			respondToExtensionUiRequest: vi.fn(async () => {}),
@@ -1652,7 +1671,7 @@ describe("InteractiveMode connection extension UI", () => {
 	});
 
 	test("connection UI handler does not double respond after reset cancellation", async () => {
-		const fakeThis = Object.create(InteractiveMode.prototype) as ConnectionExtensionUiHandlerHarness;
+		const fakeThis = fromPartial<ConnectionExtensionUiHandlerHarness>(Object.create(InteractiveMode.prototype));
 		fakeThis.activeConnectionExtensionUiRequests = new Map();
 		fakeThis.agentConnection = {
 			respondToExtensionUiRequest: vi.fn(async () => {}),
@@ -1700,7 +1719,7 @@ describe("InteractiveMode key handlers", () => {
 	};
 
 	test("routes Escape through the repeat handler", () => {
-		const fakeThis = Object.create(InteractiveMode.prototype) as KeyHandlerHarness;
+		const fakeThis = fromPartial<KeyHandlerHarness>(Object.create(InteractiveMode.prototype));
 		fakeThis.defaultEditor = {
 			onAction: vi.fn(),
 		};
@@ -1774,16 +1793,17 @@ describe("InteractiveMode tool event rendering", () => {
 			stopReason: "stop",
 			timestamp: 1,
 		};
-		const event = {
+		const event = fromAny<AgentConnectionSessionEvent, unknown>({
 			type: "message_update",
 			message,
 			assistantMessageEvent: { type: "toolcall_start", contentIndex: 0, partial: message },
-		} as unknown as AgentConnectionSessionEvent;
-		const handleEvent = (
-			InteractiveMode.prototype as unknown as {
+		});
+		const handleEvent = fromAny<
+			{
 				handleEvent(this: typeof fakeThis, event: AgentConnectionSessionEvent): Promise<void>;
-			}
-		).handleEvent;
+			},
+			unknown
+		>(InteractiveMode.prototype).handleEvent;
 
 		const firstUpdate = handleEvent.call(fakeThis, event);
 		const secondUpdate = handleEvent.call(fakeThis, event);
@@ -1807,7 +1827,7 @@ describe("InteractiveMode transcript rebuild", () => {
 	};
 
 	function createRebuildHarness(): RebuildHarness {
-		const fakeThis = Object.create(InteractiveMode.prototype) as RebuildHarness;
+		const fakeThis = fromPartial<RebuildHarness>(Object.create(InteractiveMode.prototype));
 		fakeThis.chatContainer = new Container();
 		fakeThis.chatContainer.addChild(new Container());
 		return fakeThis;
@@ -1858,15 +1878,16 @@ describe("InteractiveMode startup onboarding warnings", () => {
 		getModelFallbackWarningAction(modelFallbackMessage: string | undefined): "show" | "suppress";
 	};
 
-	const getModelFallbackWarningAction = (InteractiveMode.prototype as unknown as StartupWarningHarness)
-		.getModelFallbackWarningAction;
+	const getModelFallbackWarningAction = fromAny<StartupWarningHarness, unknown>(
+		InteractiveMode.prototype,
+	).getModelFallbackWarningAction;
 
 	const createHarness = (options: { currentModel?: AgentConnectionModel }): StartupWarningHarness => ({
 		getCurrentModel: vi.fn(() => options.currentModel),
 		getModelFallbackWarningAction,
 	});
 
-	const liveModel = { id: "gpt-5.5", provider: "prime-inference" } as AgentConnectionModel;
+	const liveModel = fromPartial<AgentConnectionModel>({ id: "gpt-5.5", provider: "prime-inference" });
 
 	test("suppresses the no-model warning when the live session has a model", () => {
 		const fakeThis = createHarness({ currentModel: liveModel });
@@ -1910,14 +1931,14 @@ describe("InteractiveMode model candidates", () => {
 			allModels: readonly AgentConnectionModel[],
 		): AgentConnectionState["scopedModels"];
 	};
-	const prototype = InteractiveMode.prototype as unknown as ModelCandidatesHarness;
+	const prototype = fromAny<ModelCandidatesHarness, unknown>(InteractiveMode.prototype);
 
 	const createModel = (provider: string, id: string): AgentConnectionModel =>
-		({
+		fromPartial<AgentConnectionModel>({
 			provider,
 			id,
 			name: id,
-		}) as AgentConnectionModel;
+		});
 
 	test("loads unscoped model candidates through AgentConnection", async () => {
 		const model = createModel("openai", "gpt-5.5");
@@ -2073,12 +2094,12 @@ describe("InteractiveMode model selection persistence", () => {
 	};
 
 	const createModel = (provider: string, id: string): AgentConnectionModel =>
-		({
+		fromPartial<AgentConnectionModel>({
 			provider,
 			id,
 			name: id,
-		}) as AgentConnectionModel;
-	const overlayPrototype = InteractiveMode.prototype as unknown as ModelSelectorOverlayHarness;
+		});
+	const overlayPrototype = fromAny<ModelSelectorOverlayHarness, unknown>(InteractiveMode.prototype);
 
 	function createSelectorOverlayHarness(options: {
 		connectionModels: AgentConnectionModel[];
@@ -2104,7 +2125,7 @@ describe("InteractiveMode model selection persistence", () => {
 		const configuredProviders = new Set(
 			options.configuredProviders ?? options.connectionModels.map((model) => model.provider),
 		);
-		const modelRegistry = {
+		const modelRegistry = fromAny<ModelRegistry, unknown>({
 			authStorage: AuthStorage.inMemory(),
 			refresh: vi.fn(),
 			getError: vi.fn(() => undefined),
@@ -2114,8 +2135,8 @@ describe("InteractiveMode model selection persistence", () => {
 			find: vi.fn((provider: string, modelId: string) =>
 				registryModels.find((model) => model.provider === provider && model.id === modelId),
 			),
-		} as unknown as ModelRegistry;
-		const fakeThis = Object.create(InteractiveMode.prototype) as ModelSelectorOverlayHarness;
+		});
+		const fakeThis = fromPartial<ModelSelectorOverlayHarness>(Object.create(InteractiveMode.prototype));
 		fakeThis.agentConnection = {
 			getModelCatalog:
 				options.getModelCatalog ??
@@ -2138,10 +2159,10 @@ describe("InteractiveMode model selection persistence", () => {
 		fakeThis.connectionModelsFetchedAt = options.connectionModelsFetchedAt ?? 0;
 		fakeThis.connectionModelsRefreshVersion = 0;
 		fakeThis.connectionModelsRefreshInFlight = undefined;
-		fakeThis.ui = {
+		fakeThis.ui = fromAny<TUI, unknown>({
 			requestRender: vi.fn(),
 			terminal: { rows: 24 },
-		} as unknown as TUI;
+		});
 		fakeThis.uiServices = {
 			modelRegistry,
 			settingsManager: {
@@ -2157,11 +2178,12 @@ describe("InteractiveMode model selection persistence", () => {
 		fakeThis.getScopedModelState = vi.fn(() => options.scopedModels ?? []);
 		fakeThis.getCurrentModel = vi.fn(() => options.currentModel);
 		fakeThis.applyConnectionModelCatalog = overlayPrototype.applyConnectionModelCatalog;
-		fakeThis.findExactModelMatch = (
-			InteractiveMode.prototype as unknown as {
+		fakeThis.findExactModelMatch = fromAny<
+			{
 				findExactModelMatch(searchTerm: string): Promise<AgentConnectionModel | undefined>;
-			}
-		).findExactModelMatch;
+			},
+			unknown
+		>(InteractiveMode.prototype).findExactModelMatch;
 		fakeThis.getConnectionAvailableModels = overlayPrototype.getConnectionAvailableModels;
 		fakeThis.getCachedModelCandidates = overlayPrototype.getCachedModelCandidates;
 		fakeThis.getModelSelectorRefreshPromise = overlayPrototype.getModelSelectorRefreshPromise;
@@ -2190,7 +2212,7 @@ describe("InteractiveMode model selection persistence", () => {
 				if (!overlayComponent) {
 					throw new Error("Expected model selector overlay to be shown");
 				}
-				return overlayComponent as ConfigurationMenuComponent;
+				return fromPartial<ConfigurationMenuComponent>(overlayComponent);
 			},
 		};
 	}
@@ -2202,7 +2224,7 @@ describe("InteractiveMode model selection persistence", () => {
 	test("persists local default only after the connection accepts the model", async () => {
 		const order: string[] = [];
 		const model = createModel("openai", "gpt-5.5");
-		const fakeThis = Object.create(InteractiveMode.prototype) as ModelSelectionHarness;
+		const fakeThis = fromPartial<ModelSelectionHarness>(Object.create(InteractiveMode.prototype));
 		fakeThis.agentConnection = {
 			setModel: vi.fn(async () => {
 				order.push("connection");
@@ -2240,7 +2262,7 @@ describe("InteractiveMode model selection persistence", () => {
 
 	test("does not persist local default when the connection rejects the model", async () => {
 		const model = createModel("openai", "missing-model");
-		const fakeThis = Object.create(InteractiveMode.prototype) as ModelSelectionHarness;
+		const fakeThis = fromPartial<ModelSelectionHarness>(Object.create(InteractiveMode.prototype));
 		fakeThis.agentConnection = {
 			setModel: vi.fn(async () => {
 				throw new Error("model unavailable");
@@ -2267,7 +2289,7 @@ describe("InteractiveMode model selection persistence", () => {
 
 	test("persists exact /model command selections after the connection accepts them", async () => {
 		const model = createModel("openai", "gpt-5.5");
-		const fakeThis = Object.create(InteractiveMode.prototype) as ModelSelectionHarness;
+		const fakeThis = fromPartial<ModelSelectionHarness>(Object.create(InteractiveMode.prototype));
 		fakeThis.agentConnection = {
 			setModel: vi.fn(async () => {}),
 			getState: vi.fn(async () =>
@@ -2655,21 +2677,23 @@ describe("InteractiveMode model selection persistence", () => {
 			.fn<() => Promise<AgentConnectionModelCatalog>>()
 			.mockImplementationOnce(() => oldModels.promise)
 			.mockImplementationOnce(async () => ({ models: [freshModel], configuredProviders: [freshModel.provider] }));
-		const fakeThis = Object.create(InteractiveMode.prototype) as ModelSelectorOverlayHarness & {
-			connectionCommands: unknown[];
-			connectionResourceSnapshot: unknown;
-			refreshConnectionCatalog(): Promise<void>;
-			applyConnectionStateSnapshot(state: AgentConnectionState): void;
-			invalidateConnectionModels(): void;
-			invalidateConnectionModelRefresh(): void;
-		};
-		fakeThis.agentConnection = {
+		const fakeThis = fromPartial<
+			ModelSelectorOverlayHarness & {
+				connectionCommands: unknown[];
+				connectionResourceSnapshot: unknown;
+				refreshConnectionCatalog(): Promise<void>;
+				applyConnectionStateSnapshot(state: AgentConnectionState): void;
+				invalidateConnectionModels(): void;
+				invalidateConnectionModelRefresh(): void;
+			}
+		>(Object.create(InteractiveMode.prototype));
+		fakeThis.agentConnection = fromAny<never, unknown>({
 			getModelCatalog,
 			getState: vi.fn(async () => createConnectionState()),
 			getCommands: vi.fn(async () => []),
 			getResourceSnapshot: vi.fn(async () => ({})),
 			setModel: vi.fn(async () => {}),
-		} as never;
+		});
 		fakeThis.connectionModels = [];
 		fakeThis.connectionModelCatalog = [];
 		fakeThis.connectionConfiguredProviders = new Set();
@@ -2679,14 +2703,14 @@ describe("InteractiveMode model selection persistence", () => {
 		fakeThis.getScopedModelState = vi.fn(() => []);
 		fakeThis.applyConnectionModelCatalog = overlayPrototype.applyConnectionModelCatalog;
 		fakeThis.getConnectionAvailableModels = overlayPrototype.getConnectionAvailableModels;
-		fakeThis.refreshConnectionCatalog = (
-			InteractiveMode.prototype as unknown as { refreshConnectionCatalog(): Promise<void> }
+		fakeThis.refreshConnectionCatalog = fromAny<{ refreshConnectionCatalog(): Promise<void> }, unknown>(
+			InteractiveMode.prototype,
 		).refreshConnectionCatalog;
-		fakeThis.invalidateConnectionModels = (
-			InteractiveMode.prototype as unknown as { invalidateConnectionModels(): void }
+		fakeThis.invalidateConnectionModels = fromAny<{ invalidateConnectionModels(): void }, unknown>(
+			InteractiveMode.prototype,
 		).invalidateConnectionModels;
-		fakeThis.invalidateConnectionModelRefresh = (
-			InteractiveMode.prototype as unknown as { invalidateConnectionModelRefresh(): void }
+		fakeThis.invalidateConnectionModelRefresh = fromAny<{ invalidateConnectionModelRefresh(): void }, unknown>(
+			InteractiveMode.prototype,
 		).invalidateConnectionModelRefresh;
 		fakeThis.applyConnectionStateSnapshot = vi.fn();
 
@@ -2701,14 +2725,16 @@ describe("InteractiveMode model selection persistence", () => {
 
 	test("keeps the cached model catalog when a catalog refresh fails", async () => {
 		const cachedModel = createModel("openai", "cached");
-		const fakeThis = Object.create(InteractiveMode.prototype) as ModelSelectorOverlayHarness & {
-			connectionCommands: unknown[];
-			connectionResourceSnapshot: unknown;
-			refreshConnectionCatalog(): Promise<void>;
-			applyConnectionStateSnapshot(state: AgentConnectionState): void;
-			invalidateConnectionModelRefresh(): void;
-		};
-		fakeThis.agentConnection = {
+		const fakeThis = fromPartial<
+			ModelSelectorOverlayHarness & {
+				connectionCommands: unknown[];
+				connectionResourceSnapshot: unknown;
+				refreshConnectionCatalog(): Promise<void>;
+				applyConnectionStateSnapshot(state: AgentConnectionState): void;
+				invalidateConnectionModelRefresh(): void;
+			}
+		>(Object.create(InteractiveMode.prototype));
+		fakeThis.agentConnection = fromAny<never, unknown>({
 			getModelCatalog: vi.fn(async () => {
 				const fresh = createModel("openai", "fresh");
 				return { models: [fresh], configuredProviders: [fresh.provider] };
@@ -2719,7 +2745,7 @@ describe("InteractiveMode model selection persistence", () => {
 			}),
 			getResourceSnapshot: vi.fn(async () => ({})),
 			setModel: vi.fn(async () => {}),
-		} as never;
+		});
 		fakeThis.connectionModels = [cachedModel];
 		fakeThis.connectionModelCatalog = [cachedModel];
 		fakeThis.connectionConfiguredProviders = new Set([cachedModel.provider]);
@@ -2727,11 +2753,11 @@ describe("InteractiveMode model selection persistence", () => {
 		fakeThis.connectionModelsRefreshVersion = 0;
 		fakeThis.connectionModelsRefreshInFlight = undefined;
 		fakeThis.applyConnectionModelCatalog = overlayPrototype.applyConnectionModelCatalog;
-		fakeThis.refreshConnectionCatalog = (
-			InteractiveMode.prototype as unknown as { refreshConnectionCatalog(): Promise<void> }
+		fakeThis.refreshConnectionCatalog = fromAny<{ refreshConnectionCatalog(): Promise<void> }, unknown>(
+			InteractiveMode.prototype,
 		).refreshConnectionCatalog;
-		fakeThis.invalidateConnectionModelRefresh = (
-			InteractiveMode.prototype as unknown as { invalidateConnectionModelRefresh(): void }
+		fakeThis.invalidateConnectionModelRefresh = fromAny<{ invalidateConnectionModelRefresh(): void }, unknown>(
+			InteractiveMode.prototype,
 		).invalidateConnectionModelRefresh;
 		fakeThis.applyConnectionStateSnapshot = vi.fn();
 
@@ -2763,7 +2789,7 @@ describe("InteractiveMode model selection persistence", () => {
 });
 
 function createFakeConnectionSession(commandName: string): AgentSessionRuntime["session"] {
-	return {
+	return fromAny<AgentSessionRuntime["session"], unknown>({
 		extensionRunner: { getRegisteredCommands: () => [] },
 		promptTemplates: [
 			{
@@ -2809,7 +2835,7 @@ function createFakeConnectionSession(commandName: string): AgentSessionRuntime["
 		scopedModels: [],
 		subscribe: () => () => {},
 		messages: [],
-	} as unknown as AgentSessionRuntime["session"];
+	});
 }
 
 class EventEmittingReplacementRuntime {
@@ -2852,7 +2878,7 @@ describe("InteractiveMode session switch command catalog", () => {
 			const sourceSession = createFakeConnectionSession("source-command");
 			const targetSession = createFakeConnectionSession("target-command");
 			const runtime = new EventEmittingReplacementRuntime(sourceSession, targetSession);
-			const connection = new InProcessAgentConnection(runtime as unknown as AgentSessionRuntime);
+			const connection = new InProcessAgentConnection(fromAny<AgentSessionRuntime, unknown>(runtime));
 			const getCommands = vi.spyOn(connection, "getCommands");
 			const calls: string[] = [];
 			const fakeThis = {
@@ -2891,10 +2917,12 @@ describe("InteractiveMode session switch command catalog", () => {
 				showError: vi.fn(),
 			};
 			Object.setPrototypeOf(fakeThis, InteractiveMode.prototype);
-			const interactiveHarness = fakeThis as typeof fakeThis & {
-				subscribeToAgent(): void;
-				renderCurrentSessionState(): Promise<void>;
-			};
+			const interactiveHarness = fromPartial<
+				typeof fakeThis & {
+					subscribeToAgent(): void;
+					renderCurrentSessionState(): Promise<void>;
+				}
+			>(fakeThis);
 			interactiveHarness.subscribeToAgent();
 
 			if (operation === "switchSession") await connection.switchSession("/target/session.jsonl");
@@ -2909,12 +2937,12 @@ describe("InteractiveMode session switch command catalog", () => {
 
 	test("keeps catalog refresh failures nonfatal and drops stale dynamic commands", async () => {
 		const setupAutocompleteProvider = vi.fn();
-		const fakeThis = Object.create(InteractiveMode.prototype) as {
+		const fakeThis = fromPartial<{
 			agentConnection: { getCommands(): Promise<never> };
 			connectionCommands: unknown[];
 			setupAutocompleteProvider(): void;
 			refreshCommandCatalogForCurrentSession(): Promise<void>;
-		};
+		}>(Object.create(InteractiveMode.prototype));
 		fakeThis.agentConnection = {
 			getCommands: vi.fn(async () => {
 				throw new Error("catalog unavailable");
@@ -2978,10 +3006,10 @@ describe("InteractiveMode Prime CLI onboarding", () => {
 		showConfigurationMenu?: (tab: "providers" | "models" | "mcp-connections") => Promise<void>;
 		getModelCandidates?: () => Promise<AgentConnectionModel[]>;
 	};
-	const shouldRunOnboarding = (InteractiveMode.prototype as unknown as OnboardingHarness).shouldRunOnboarding;
-	const markOnboardingShown = (InteractiveMode.prototype as unknown as OnboardingHarness).markOnboardingShown;
-	const runStartupOnboarding = (InteractiveMode.prototype as unknown as OnboardingHarness).runStartupOnboarding;
-	const runOnboardingFlow = (InteractiveMode.prototype as unknown as OnboardingHarness).runOnboardingFlow;
+	const shouldRunOnboarding = fromAny<OnboardingHarness, unknown>(InteractiveMode.prototype).shouldRunOnboarding;
+	const markOnboardingShown = fromAny<OnboardingHarness, unknown>(InteractiveMode.prototype).markOnboardingShown;
+	const runStartupOnboarding = fromAny<OnboardingHarness, unknown>(InteractiveMode.prototype).runStartupOnboarding;
+	const runOnboardingFlow = fromAny<OnboardingHarness, unknown>(InteractiveMode.prototype).runOnboardingFlow;
 	const startupRunResult = {
 		type: "agents_view",
 		source: {
@@ -3012,7 +3040,7 @@ describe("InteractiveMode Prime CLI onboarding", () => {
 		};
 	}
 
-	const primeModel: AgentConnectionModel = {
+	const primeModel: AgentConnectionModel = fromPartial<AgentConnectionModel>({
 		id: "openai/gpt-5.5",
 		name: "GPT-5.5",
 		api: "openai-completions",
@@ -3028,7 +3056,7 @@ describe("InteractiveMode Prime CLI onboarding", () => {
 		},
 		contextWindow: 1050000,
 		maxTokens: 128000,
-	} as AgentConnectionModel;
+	});
 
 	test("defers, retries transient startup failures, and skips a persistently failing prompt", async () => {
 		vi.useFakeTimers();
@@ -3067,7 +3095,7 @@ describe("InteractiveMode Prime CLI onboarding", () => {
 		);
 
 		try {
-			const run = InteractiveMode.prototype.run.call(fakeThis as never);
+			const run = InteractiveMode.prototype.run.call(fromAny<never, unknown>(fakeThis));
 			await vi.advanceTimersByTimeAsync(250);
 			expect(prompt).not.toHaveBeenCalled();
 
@@ -3154,7 +3182,7 @@ describe("InteractiveMode Prime CLI onboarding", () => {
 				),
 			);
 
-			const run = InteractiveMode.prototype.run.call(fakeThis as never);
+			const run = InteractiveMode.prototype.run.call(fromAny<never, unknown>(fakeThis));
 			await vi.waitFor(() => expect(prompt).toHaveBeenCalledOnce());
 			const blockedSubmission = fakeThis.defaultEditor.onSubmit?.("blocked user");
 			rejectStartup(new AgentConnectionPromptAdmissionError("daemon admission uncertain", status));
@@ -3207,7 +3235,7 @@ describe("InteractiveMode Prime CLI onboarding", () => {
 			),
 		);
 
-		const run = InteractiveMode.prototype.run.call(fakeThis as never);
+		const run = InteractiveMode.prototype.run.call(fromAny<never, unknown>(fakeThis));
 		await vi.waitFor(() => expect(prompt).toHaveBeenCalledTimes(2));
 		expect(prompt.mock.calls.map(([message]) => message)).toEqual(["owned startup", "next startup"]);
 		expect(fakeThis.promptStashState.stash).toBeUndefined();
@@ -3258,17 +3286,18 @@ describe("InteractiveMode Prime CLI onboarding", () => {
 			);
 
 			try {
-				const run = InteractiveMode.prototype.run.call(fakeThis as never);
+				const run = InteractiveMode.prototype.run.call(fromAny<never, unknown>(fakeThis));
 				await vi.advanceTimersByTimeAsync(250);
 				fakeThis.editor.onSubmit = fakeThis.defaultEditor.onSubmit;
 				const submit = () =>
 					scenario === "typing"
 						? fakeThis.defaultEditor.onSubmit?.(editorText)
-						: (
-								InteractiveMode.prototype as unknown as {
+						: fromAny<
+								{
 									handleFollowUp(this: SubmitHandlerHarness): Promise<void>;
-								}
-							).handleFollowUp.call(fakeThis);
+								},
+								unknown
+							>(InteractiveMode.prototype).handleFollowUp.call(fakeThis);
 				const firstSubmission = submit();
 				await Promise.resolve();
 				expect(editorText).toBe("");
@@ -3329,7 +3358,7 @@ describe("InteractiveMode Prime CLI onboarding", () => {
 			),
 		);
 
-		const run = InteractiveMode.prototype.run.call(fakeThis as never);
+		const run = InteractiveMode.prototype.run.call(fromAny<never, unknown>(fakeThis));
 		await vi.waitFor(() => expect(prompt).toHaveBeenCalledOnce());
 		expect(blockedSignal?.aborted).toBe(false);
 		inputDone.resolve(undefined);
@@ -3376,7 +3405,7 @@ describe("InteractiveMode Prime CLI onboarding", () => {
 				),
 			);
 
-			const run = InteractiveMode.prototype.run.call(fakeThis as never);
+			const run = InteractiveMode.prototype.run.call(fromAny<never, unknown>(fakeThis));
 			while (!fakeThis.admitPendingStartupPrompts) await Promise.resolve();
 			fakeThis.latestEditorPromptStash = {
 				text: submittedText,
@@ -3423,12 +3452,12 @@ describe("InteractiveMode Prime CLI onboarding", () => {
 				getState: vi.fn(async () => ({ isBashRunning: false })),
 			},
 		});
-		(fakeThis as unknown as { promptStashSessionId?: string }).promptStashSessionId = "session-old";
+		fromAny<{ promptStashSessionId?: string }, unknown>(fakeThis).promptStashSessionId = "session-old";
 
 		const submission = fakeThis.defaultEditor.onSubmit?.("typed for the old session");
 		await Promise.resolve();
 		// /new rebinds the live fields while the submit is paused on the barrier.
-		(fakeThis as unknown as { promptStashSessionId?: string }).promptStashSessionId = "session-new";
+		fromAny<{ promptStashSessionId?: string }, unknown>(fakeThis).promptStashSessionId = "session-new";
 		fakeThis.promptStashState = newState;
 		barrier.resolve("admitted");
 		await submission;
@@ -3443,19 +3472,21 @@ describe("InteractiveMode Prime CLI onboarding", () => {
 		const state = store.forSession("session-a");
 		const fakeThis = {
 			inputSubmissionsPending: 1,
-			pendingPromptStashReleases: [] as { sessionId: string; state: unknown }[],
+			pendingPromptStashReleases: fromPartial<{ sessionId: string; state: unknown }[]>([]),
 			promptStashStore: store,
 			promptStashSessionId: "session-a",
 			promptStashState: state,
 			retainedSubmissionGenerations: new WeakMap(),
 		};
-		const release = (InteractiveMode.prototype as unknown as { releasePromptStashSession(this: unknown): void })
-			.releasePromptStashSession;
-		const retain = (
-			InteractiveMode.prototype as unknown as {
+		const release = fromAny<{ releasePromptStashSession(this: unknown): void }, unknown>(
+			InteractiveMode.prototype,
+		).releasePromptStashSession;
+		const retain = fromAny<
+			{
 				retainSubmittedDraft(this: unknown, stash: { text: string }, generation: number): void;
-			}
-		).retainSubmittedDraft;
+			},
+			unknown
+		>(InteractiveMode.prototype).retainSubmittedDraft;
 
 		release.call(fakeThis);
 		expect(fakeThis.pendingPromptStashReleases).toEqual([{ sessionId: "session-a", state }]);
@@ -3472,15 +3503,18 @@ describe("InteractiveMode Prime CLI onboarding", () => {
 		const oldState = store.forSession("session-old");
 		const fakeThis = {
 			inputSubmissionsPending: 1,
-			pendingPromptStashReleases: [] as { sessionId: string; state: unknown }[],
+			pendingPromptStashReleases: fromPartial<{ sessionId: string; state: unknown }[]>([]),
 			promptStashStore: store,
 			promptStashSessionId: "session-old",
 			promptStashState: oldState,
 		};
-		const methods = InteractiveMode.prototype as unknown as {
-			releasePromptStashSession(this: unknown): void;
-			completeDeferredPromptStashRelease(this: unknown): void;
-		};
+		const methods = fromAny<
+			{
+				releasePromptStashSession(this: unknown): void;
+				completeDeferredPromptStashRelease(this: unknown): void;
+			},
+			unknown
+		>(InteractiveMode.prototype);
 
 		methods.releasePromptStashSession.call(fakeThis);
 		const newState = store.forSession("session-new");
@@ -3501,15 +3535,18 @@ describe("InteractiveMode Prime CLI onboarding", () => {
 		const oldState = store.forSession("session-old");
 		const fakeThis = {
 			inputSubmissionsPending: 1,
-			pendingPromptStashReleases: [] as { sessionId: string; state: unknown }[],
+			pendingPromptStashReleases: fromPartial<{ sessionId: string; state: unknown }[]>([]),
 			promptStashStore: store,
 			promptStashSessionId: "session-old",
 			promptStashState: oldState,
 		};
-		const methods = InteractiveMode.prototype as unknown as {
-			releasePromptStashSession(this: unknown): void;
-			completeDeferredPromptStashRelease(this: unknown): void;
-		};
+		const methods = fromAny<
+			{
+				releasePromptStashSession(this: unknown): void;
+				completeDeferredPromptStashRelease(this: unknown): void;
+			},
+			unknown
+		>(InteractiveMode.prototype);
 
 		// /new rebind defers the old session's release...
 		methods.releasePromptStashSession.call(fakeThis);
@@ -3543,11 +3580,12 @@ describe("InteractiveMode Prime CLI onboarding", () => {
 				state.stash = stash;
 			},
 		});
-		const retain = (
-			InteractiveMode.prototype as unknown as {
+		const retain = fromAny<
+			{
 				retainSubmittedDraft(this: unknown, stash: { text: string }, generation: number): void;
-			}
-		).retainSubmittedDraft;
+			},
+			unknown
+		>(InteractiveMode.prototype).retainSubmittedDraft;
 
 		retain.call(fakeThis, { text: "second" }, 2);
 		retain.call(fakeThis, { text: "first" }, 1);
@@ -3581,7 +3619,7 @@ describe("InteractiveMode Prime CLI onboarding", () => {
 			),
 		);
 
-		const run = InteractiveMode.prototype.run.call(fakeThis as never);
+		const run = InteractiveMode.prototype.run.call(fromAny<never, unknown>(fakeThis));
 		while (!fakeThis.admitPendingStartupPrompts) await Promise.resolve();
 		fakeThis.latestEditorPromptStash = { text: "first rich draft", expandedText: "first expanded" };
 		editorText = "";
@@ -3612,13 +3650,15 @@ describe("InteractiveMode Prime CLI onboarding", () => {
 			},
 		);
 
-		await expect(InteractiveMode.prototype.run.call(fakeThis as never)).resolves.toEqual(startupRunResult);
+		await expect(InteractiveMode.prototype.run.call(fromAny<never, unknown>(fakeThis))).resolves.toEqual(
+			startupRunResult,
+		);
 		expect(fakeThis.getUserInput).toHaveBeenCalledOnce();
 		expect(prompt).not.toHaveBeenCalled();
 	});
 
 	function createPrimeCliHarness(shown: boolean): OnboardingFake {
-		const fakeThis = Object.create(InteractiveMode.prototype) as OnboardingFake;
+		const fakeThis = fromPartial<OnboardingFake>(Object.create(InteractiveMode.prototype));
 		fakeThis.connectionState = createConnectionState({ model: primeModel });
 		fakeThis.connectionModels = [primeModel];
 		fakeThis.agentConnection = {
@@ -3785,9 +3825,10 @@ describe("InteractiveMode post-login model preparation", () => {
 		};
 	};
 
-	const prepareForModelSelectionAfterLogin = (InteractiveMode.prototype as unknown as LoginHarness)
-		.prepareForModelSelectionAfterLogin;
-	const loginPrimeModel: AgentConnectionModel = {
+	const prepareForModelSelectionAfterLogin = fromAny<LoginHarness, unknown>(
+		InteractiveMode.prototype,
+	).prepareForModelSelectionAfterLogin;
+	const loginPrimeModel: AgentConnectionModel = fromPartial<AgentConnectionModel>({
 		id: "openai/gpt-5.5",
 		name: "GPT-5.5",
 		api: "openai-completions",
@@ -3798,12 +3839,12 @@ describe("InteractiveMode post-login model preparation", () => {
 		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 		contextWindow: 1050000,
 		maxTokens: 128000,
-	} as AgentConnectionModel;
+	});
 
 	test("persists GLM 5.2 before model selection after Prime Inference login", async () => {
 		const fallbackModel = { ...loginPrimeModel, id: "z-ai/glm-5.2", name: "GLM 5.2" };
 		const flushSettings = vi.fn(async () => {});
-		const fakeThis = Object.create(InteractiveMode.prototype) as LoginHarness;
+		const fakeThis = fromPartial<LoginHarness>(Object.create(InteractiveMode.prototype));
 		fakeThis.invalidateConnectionModels = vi.fn();
 		fakeThis.getCurrentModel = vi.fn(() => undefined);
 		fakeThis.applySelectedModel = vi.fn(async () => {});
@@ -3833,7 +3874,7 @@ describe("InteractiveMode post-login model preparation", () => {
 	});
 
 	test("preserves refreshed models after any model-provider login", async () => {
-		const fakeThis = Object.create(InteractiveMode.prototype) as LoginHarness;
+		const fakeThis = fromPartial<LoginHarness>(Object.create(InteractiveMode.prototype));
 		fakeThis.invalidateConnectionModels = vi.fn();
 		fakeThis.getCurrentModel = vi.fn(() => loginPrimeModel);
 		fakeThis.applySelectedModel = vi.fn(async () => {});
@@ -3882,7 +3923,7 @@ describe("InteractiveMode goal status announcements", () => {
 			setGoalAnnouncementBaseline(goal: GoalState): void;
 			shouldAnnounceGoalUpdate(goal: GoalState): boolean;
 		};
-		const fakeThis = Object.create(InteractiveMode.prototype) as GoalAnnouncementHarness;
+		const fakeThis = fromPartial<GoalAnnouncementHarness>(Object.create(InteractiveMode.prototype));
 		const activeGoal: GoalState = {
 			active: true,
 			status: "active",
@@ -3916,7 +3957,7 @@ describe("InteractiveMode goal status announcements", () => {
 			setGoalAnnouncementBaseline(goal: GoalState): void;
 			shouldAnnounceGoalUpdate(goal: GoalState): boolean;
 		};
-		const fakeThis = Object.create(InteractiveMode.prototype) as GoalAnnouncementHarness;
+		const fakeThis = fromPartial<GoalAnnouncementHarness>(Object.create(InteractiveMode.prototype));
 		fakeThis.setGoalAnnouncementBaseline({
 			active: true,
 			status: "active",
@@ -3944,7 +3985,7 @@ describe("InteractiveMode tray goal label", () => {
 		uiServices: { getContextUsage(): TrayUsage | undefined };
 		getTrayContextLabel(): string | undefined;
 	};
-	const getTrayContextLabel = (InteractiveMode.prototype as unknown as TrayLabelHarness).getTrayContextLabel;
+	const getTrayContextLabel = fromAny<TrayLabelHarness, unknown>(InteractiveMode.prototype).getTrayContextLabel;
 
 	function createHeartbeat(status: AgentCronJob["status"]): AgentCronJob {
 		return {
@@ -3965,7 +4006,7 @@ describe("InteractiveMode tray goal label", () => {
 	}
 
 	test("shows active goals in the lower tray without an objective", () => {
-		const fakeThis = Object.create(InteractiveMode.prototype) as TrayLabelHarness;
+		const fakeThis = fromPartial<TrayLabelHarness>(Object.create(InteractiveMode.prototype));
 		fakeThis.heartbeats = [];
 		fakeThis.connectionState = {
 			goal: {
@@ -3984,7 +4025,7 @@ describe("InteractiveMode tray goal label", () => {
 	});
 
 	test("combines active goals with token/context usage in one lower-tray label", () => {
-		const fakeThis = Object.create(InteractiveMode.prototype) as TrayLabelHarness;
+		const fakeThis = fromPartial<TrayLabelHarness>(Object.create(InteractiveMode.prototype));
 		fakeThis.heartbeats = [];
 		fakeThis.connectionState = {
 			goal: {
@@ -4003,7 +4044,7 @@ describe("InteractiveMode tray goal label", () => {
 	});
 
 	test("combines active goals, active heartbeats, and context usage in one lower-tray label", () => {
-		const fakeThis = Object.create(InteractiveMode.prototype) as TrayLabelHarness;
+		const fakeThis = fromPartial<TrayLabelHarness>(Object.create(InteractiveMode.prototype));
 		fakeThis.heartbeats = [{ job: createHeartbeat("active") }];
 		fakeThis.connectionState = {
 			goal: {
@@ -4023,7 +4064,7 @@ describe("InteractiveMode tray goal label", () => {
 	});
 
 	test("omits the usage segment when token count is unknown", () => {
-		const fakeThis = Object.create(InteractiveMode.prototype) as TrayLabelHarness;
+		const fakeThis = fromPartial<TrayLabelHarness>(Object.create(InteractiveMode.prototype));
 		fakeThis.heartbeats = [];
 		fakeThis.connectionState = {
 			goal: {
@@ -4050,12 +4091,12 @@ describe("InteractiveMode live context usage", () => {
 		contextUsageTokenBaseline: number;
 		getConnectionContextUsage(): AgentConnectionState["contextUsage"];
 	};
-	const prototype = InteractiveMode.prototype as unknown as LiveContextHarness;
+	const prototype = fromAny<LiveContextHarness, unknown>(InteractiveMode.prototype);
 
 	function createHarness(
 		opts: { streaming?: boolean; inFlight?: number; baseline?: number } = {},
 	): LiveContextHarness {
-		const fakeThis = Object.create(InteractiveMode.prototype) as LiveContextHarness;
+		const fakeThis = fromPartial<LiveContextHarness>(Object.create(InteractiveMode.prototype));
 		fakeThis.connectionState = { contextUsage: undefined };
 		fakeThis.activityTracker = { getStatus: () => ({ tokens: opts.inFlight ?? 0 }) };
 		fakeThis.isAgentStreaming = () => opts.streaming ?? false;
@@ -4121,14 +4162,16 @@ describe("InteractiveMode live context usage", () => {
 		patchConnectionState(patch: Record<string, unknown>): void;
 		refreshConnectionContextUsage(): Promise<void>;
 	};
-	const refresh = (InteractiveMode.prototype as unknown as RefreshHarness).refreshConnectionContextUsage;
+	const refresh = fromAny<RefreshHarness, unknown>(InteractiveMode.prototype).refreshConnectionContextUsage;
 
 	function createRefreshHarness(
 		getSessionStats: RefreshHarness["agentConnection"]["getSessionStats"],
 	): RefreshHarness & { patched: Record<string, unknown>[] } {
-		const fakeThis = Object.create(InteractiveMode.prototype) as RefreshHarness & {
-			patched: Record<string, unknown>[];
-		};
+		const fakeThis = fromPartial<
+			RefreshHarness & {
+				patched: Record<string, unknown>[];
+			}
+		>(Object.create(InteractiveMode.prototype));
 		fakeThis.patched = [];
 		fakeThis.activityTracker = { getStatus: () => ({ tokens: 0 }) };
 		fakeThis.contextUsageTokenBaseline = 0;
@@ -4312,7 +4355,7 @@ describe("InteractiveMode.createExtensionUIContext addAutocompleteProvider", () 
 	test("stores wrapper factories and rebuilds autocomplete immediately", () => {
 		const wrapper: AutocompleteProviderFactory = (current) => current;
 		const fakeThis = {
-			autocompleteProviderWrappers: [] as AutocompleteProviderFactory[],
+			autocompleteProviderWrappers: fromPartial<AutocompleteProviderFactory[]>([]),
 			setupAutocompleteProvider: vi.fn(),
 		};
 
@@ -4370,7 +4413,7 @@ describe("InteractiveMode.setupAutocompleteProvider", () => {
 
 		expect(defaultEditor.setAutocompleteProvider).toHaveBeenCalledTimes(1);
 		expect(customEditor.setAutocompleteProvider).toHaveBeenCalledTimes(1);
-		const provider = defaultEditor.setAutocompleteProvider.mock.calls[0]?.[0] as AutocompleteProvider;
+		const provider = fromPartial<AutocompleteProvider>(defaultEditor.setAutocompleteProvider.mock.calls[0]?.[0]);
 		expect(provider).toBe(customEditor.setAutocompleteProvider.mock.calls[0]?.[0]);
 		expect(provider.shouldTriggerFileCompletion?.(["foo"], 0, 3)).toBe(true);
 		expect(calls).toEqual(["shouldTrigger:wrap2", "shouldTrigger:wrap1"]);

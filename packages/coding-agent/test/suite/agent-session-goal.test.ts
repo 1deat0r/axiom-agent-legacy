@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import type { AgentContext, AgentTool } from "@earendil-works/pi-agent-core";
 import { Agent } from "@earendil-works/pi-agent-core";
 import { type AssistantMessage, fauxAssistantMessage, fauxToolCall, type Usage } from "@earendil-works/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentSession } from "../../src/core/agent-session.js";
@@ -77,7 +78,7 @@ function createFauxIpythonTool(sessionRef: { current?: AgentSession }): AgentToo
 			if (!session) {
 				throw new Error("test session is not initialized");
 			}
-			const code = (params as { code: string }).code.trim();
+			const code = fromAny<{ code: string }, unknown>(params).code.trim();
 			let text = "";
 			if (code.startsWith("goal.")) {
 				const spaceIndex = code.indexOf(" ");
@@ -682,7 +683,7 @@ describe("AgentSession goals", () => {
 
 		expect(visibleAssistantTexts(harness)).toEqual(["Goal complete."]);
 		const contextKinds = goalContextMessages(harness).map(
-			(message) => (message as { details?: { kind?: string } }).details?.kind,
+			(message) => fromAny<{ details?: { kind?: string } }, unknown>(message).details?.kind,
 		);
 		expect(contextKinds).not.toContain("budget_limit");
 		expect(harness.session.goalState).toMatchObject({

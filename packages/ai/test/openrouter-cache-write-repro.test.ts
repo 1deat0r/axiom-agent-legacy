@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import { getModel } from "../src/models.js";
 import { completeSimple } from "../src/stream.js";
@@ -33,12 +34,15 @@ describe.skipIf(!process.env.OPENROUTER_API_KEY)("OpenRouter cache_write repro E
 			maxTokens: 32,
 			temperature: 0,
 			onPayload: (payload: unknown) => {
-				const params = payload as {
-					messages?: Array<{
-						role?: string;
-						content?: string | Array<{ type?: string; text?: string; cache_control?: { type: string } }>;
-					}>;
-				};
+				const params = fromAny<
+					{
+						messages?: Array<{
+							role?: string;
+							content?: string | Array<{ type?: string; text?: string; cache_control?: { type: string } }>;
+						}>;
+					},
+					unknown
+				>(payload);
 				const messages = params.messages;
 				if (!Array.isArray(messages)) return payload;
 

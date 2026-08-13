@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import { isProcessAlive, isZombieProcess, waitForChildProcess } from "../src/utils/child-process.js";
 
@@ -9,10 +10,10 @@ describe("waitForChildProcess", () => {
 			stdout: null,
 			stderr: null,
 			exitCode: null,
-			signalCode: "SIGTERM" as NodeJS.Signals,
+			signalCode: fromPartial<NodeJS.Signals>("SIGTERM"),
 		});
 
-		await expect(waitForChildProcess(child as unknown as ChildProcess)).resolves.toBe(143);
+		await expect(waitForChildProcess(fromAny<ChildProcess, unknown>(child))).resolves.toBe(143);
 	});
 });
 

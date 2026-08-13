@@ -1,5 +1,6 @@
 import type { AgentTool, ThinkingLevel } from "@earendil-works/pi-agent-core";
 import { fauxAssistantMessage, fauxToolCall, type Model } from "@earendil-works/pi-ai";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AgentCronJob } from "../../src/core/cron-jobs.js";
@@ -517,10 +518,14 @@ describe("AgentSession model and extension characterization", () => {
 		harnesses.push(harness);
 		const modelOne = harness.getModel("faux-1")!;
 		const modelTwo = harness.getModel("faux-2")!;
-		harness.session.setScopedModels([{ model: modelOne, thinkingLevel: "high" }, { model: modelTwo }] as Array<{
-			model: Model<string>;
-			thinkingLevel?: ThinkingLevel;
-		}>);
+		harness.session.setScopedModels(
+			fromPartial<
+				Array<{
+					model: Model<string>;
+					thinkingLevel?: ThinkingLevel;
+				}>
+			>([{ model: modelOne, thinkingLevel: "high" }, { model: modelTwo }]),
+		);
 		harness.session.setThinkingLevel("high");
 
 		await harness.session.cycleModel();

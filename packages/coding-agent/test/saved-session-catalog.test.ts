@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import type { DaemonClient, DaemonClientRequestOptions } from "../src/modes/daemon/daemon-client.js";
 import type { DaemonCommand, DaemonResponse } from "../src/modes/daemon/daemon-protocol.js";
@@ -84,7 +85,7 @@ class FakeDaemonClient {
 }
 
 function asDaemonClient(client: FakeDaemonClient): DaemonClient {
-	return client as unknown as DaemonClient;
+	return fromAny<DaemonClient, unknown>(client);
 }
 
 describe("saved session catalog", () => {

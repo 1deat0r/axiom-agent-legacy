@@ -3,6 +3,7 @@ import { constants, publicEncrypt } from "node:crypto";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	checkPrimeAgentTracesAccess,
@@ -36,7 +37,7 @@ function getJsonBody(init?: RequestInit): Record<string, unknown> {
 	if (typeof init?.body !== "string") {
 		throw new Error(`Expected string request body, got ${typeof init?.body}`);
 	}
-	return JSON.parse(init.body) as Record<string, unknown>;
+	return fromPartial<Record<string, unknown>>(JSON.parse(init.body));
 }
 
 function getAuthorization(init?: RequestInit): string | undefined {
@@ -47,7 +48,7 @@ function getAuthorization(init?: RequestInit): string | undefined {
 	if (headers instanceof Headers) {
 		return headers.get("Authorization") ?? undefined;
 	}
-	const headerRecord = headers as Record<string, string | undefined>;
+	const headerRecord = fromAny<Record<string, string | undefined>, unknown>(headers);
 	return headerRecord.Authorization ?? headerRecord.authorization;
 }
 

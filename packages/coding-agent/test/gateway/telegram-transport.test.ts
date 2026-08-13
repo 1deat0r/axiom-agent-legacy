@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import {
 	chunkTelegramText,
@@ -148,7 +149,7 @@ describe("TelegramTransport", () => {
 		f.queue.push(
 			{ update_id: 1, message: { chat: { id: 1, type: "private" } } }, // no text
 			update(2, 2, "ok"),
-			{ update_id: 3 } as TelegramUpdate, // no message
+			fromPartial<TelegramUpdate>({ update_id: 3 }), // no message
 		);
 		const t = new TelegramTransport(f.client, { pollIntervalMs: 1 });
 		const handler = vi.fn();
@@ -378,7 +379,7 @@ describe("telegram HTTP timeout bounds", () => {
 
 	it("aborts a hung sendMessage when the timeout fires", async () => {
 		let observedSignal: AbortSignal | undefined;
-		const fetchFn: typeof fetch = (async (_input, init) => {
+		const fetchFn: typeof fetch = fromPartial<typeof fetch>(async (_input: unknown, init?: RequestInit) => {
 			observedSignal = init?.signal ?? undefined;
 			await new Promise<void>((_resolve, reject) => {
 				observedSignal?.addEventListener("abort", () => {
@@ -386,7 +387,7 @@ describe("telegram HTTP timeout bounds", () => {
 				});
 			});
 			throw new Error("unreachable");
-		}) as typeof fetch;
+		});
 		const client = new HttpTelegramClient({ token: "T", timeoutMs: 40, fetchFn });
 		const started = Date.now();
 		await expect(client.sendMessage({ chatId: "1", text: "hi" })).rejects.toThrow();
@@ -403,7 +404,9 @@ describe("telegram HTTP timeout bounds", () => {
 			});
 			throw new Error("unreachable");
 		};
-		const fetchFn = (async (_input: unknown, init?: RequestInit) => hang(init?.signal ?? undefined)) as typeof fetch;
+		const fetchFn = fromPartial<typeof fetch>(async (_input: unknown, init?: RequestInit) =>
+			hang(init?.signal ?? undefined),
+		);
 		const client = new HttpTelegramClient({ token: "T", timeoutMs: 40, fetchFn });
 		await expect(client.editMessageText({ chatId: "1", messageId: 7, text: "x" })).rejects.toThrow();
 		await expect(client.sendChatAction({ chatId: "1", action: "typing" })).rejects.toThrow();
@@ -512,7 +515,7 @@ describe("HttpTelegramClient (local server boundary)", () => {
 				});
 			});
 			server.on("error", reject);
-			server.listen(0, "127.0.0.1", () => resolve((server!.address() as { port: number }).port));
+			server.listen(0, "127.0.0.1", () => resolve(fromAny<{ port: number }, unknown>(server!.address()).port));
 		});
 		try {
 			const client = new HttpTelegramClient({
@@ -549,7 +552,7 @@ describe("HttpTelegramClient (local server boundary)", () => {
 				});
 			});
 			server.on("error", reject);
-			server.listen(0, "127.0.0.1", () => resolve((server!.address() as { port: number }).port));
+			server.listen(0, "127.0.0.1", () => resolve(fromAny<{ port: number }, unknown>(server!.address()).port));
 		});
 		try {
 			const client = new HttpTelegramClient({ token: "TESTTOKEN", baseUrl: `http://127.0.0.1:${port}` });
@@ -570,7 +573,7 @@ describe("HttpTelegramClient (local server boundary)", () => {
 				res.end(JSON.stringify({ ok: false, error_code: 401, description: "Unauthorized" }));
 			});
 			server.on("error", reject);
-			server.listen(0, "127.0.0.1", () => resolve((server!.address() as { port: number }).port));
+			server.listen(0, "127.0.0.1", () => resolve(fromAny<{ port: number }, unknown>(server!.address()).port));
 		});
 		try {
 			const client = new HttpTelegramClient({

@@ -1,6 +1,7 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ToolResultMessage, Usage } from "@earendil-works/pi-ai";
 import { Container, Text, type TUI } from "@earendil-works/pi-tui";
+import { fromAny } from "@total-typescript/shoehorn";
 import stripAnsi from "strip-ansi";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import type {
@@ -82,7 +83,7 @@ function createFakeInteractiveModeThis(): RenderSessionContextThis {
 		},
 		chatContainer,
 		footer: { invalidate: vi.fn() },
-		ui: { requestRender: vi.fn() } as unknown as TUI,
+		ui: fromAny<TUI, unknown>({ requestRender: vi.fn() }),
 		settingsManager: {
 			getShowImages: () => false,
 		},
@@ -155,10 +156,10 @@ describe("InteractiveMode.renderSessionContext", () => {
 
 	test("keeps unresolved rendered tool calls registered for live completion events", async () => {
 		const fakeThis = createFakeInteractiveModeThis();
-		const renderSessionContext = (
-			InteractiveMode.prototype as unknown as { renderSessionContext: RenderSessionContext }
+		const renderSessionContext = fromAny<{ renderSessionContext: RenderSessionContext }, unknown>(
+			InteractiveMode.prototype,
 		).renderSessionContext;
-		const handleEvent = (InteractiveMode.prototype as unknown as { handleEvent: HandleEvent }).handleEvent;
+		const handleEvent = fromAny<{ handleEvent: HandleEvent }, unknown>(InteractiveMode.prototype).handleEvent;
 
 		await renderSessionContext.call(fakeThis, createSessionContext([createAssistantToolCallMessage()]));
 
@@ -178,8 +179,8 @@ describe("InteractiveMode.renderSessionContext", () => {
 
 	test("does not keep completed historical tool calls registered as pending", async () => {
 		const fakeThis = createFakeInteractiveModeThis();
-		const renderSessionContext = (
-			InteractiveMode.prototype as unknown as { renderSessionContext: RenderSessionContext }
+		const renderSessionContext = fromAny<{ renderSessionContext: RenderSessionContext }, unknown>(
+			InteractiveMode.prototype,
 		).renderSessionContext;
 
 		await renderSessionContext.call(

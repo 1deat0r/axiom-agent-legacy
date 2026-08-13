@@ -1,3 +1,4 @@
+import { fromPartial } from "@total-typescript/shoehorn";
 import stripAnsi from "strip-ansi";
 import { describe, expect, test, vi } from "vitest";
 import { AgentsViewMode } from "../../../src/modes/agents-view/agents-view-mode.js";
@@ -55,7 +56,7 @@ function refreshHarness() {
 		heartbeatCatalogGeneration: 0,
 		liveCatalogRefreshPending: false,
 		savedCatalogRefreshPending: false,
-		heartbeats: [] as unknown[],
+		heartbeats: fromPartial<unknown[]>([]),
 		persistentState,
 		applySessionList,
 		reconcileCatalogs,
@@ -66,7 +67,7 @@ function refreshHarness() {
 }
 
 function privateMethod<T>(name: string): T {
-	const member = Reflect.get(AgentsViewMode.prototype, name) as T;
+	const member = fromPartial<T>(Reflect.get(AgentsViewMode.prototype, name));
 	if (typeof member !== "function") {
 		throw new Error(`AgentsViewMode.${name} no longer exists; update this regression harness`);
 	}
@@ -158,7 +159,7 @@ describe("#502 unified session view regressions", () => {
 		};
 		const harness = {
 			...refreshHarness(),
-			reconnectPromise: undefined as Promise<void> | undefined,
+			reconnectPromise: fromPartial<Promise<void> | undefined>(undefined),
 			savedSessions: previous,
 			lastSuccessfulSavedSessions: previous,
 			requireClient: () => client,
@@ -319,7 +320,7 @@ describe("#502 unified session view regressions", () => {
 			liveCatalogRefreshPending: false,
 			savedCatalogRefreshPending: true,
 			selectedIndex: 0,
-			selectedActiveSessionId: undefined as string | undefined,
+			selectedActiveSessionId: fromPartial<string | undefined>(undefined),
 			selectedRowIdentity: "identity-intended",
 			rows: [{ selectable: true, kind: "agent", summary: fallback }],
 			isPendingDeleteRow: () => false,

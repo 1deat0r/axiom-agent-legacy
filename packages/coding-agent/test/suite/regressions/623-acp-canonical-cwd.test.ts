@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, realpathSync, rmSync, statSync, symlinkSync } 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as acp from "@agentclientprotocol/sdk";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AgentSessionRuntime } from "../../../src/core/agent-session-runtime.js";
 import { AXIOM_META_NAMESPACE } from "../../../src/modes/acp/acp-meta.js";
@@ -10,12 +11,12 @@ import { InProcessAgentConnection } from "../../../src/modes/agent-connection/in
 import { createHarness, type Harness } from "../harness.js";
 
 function runtimeHostFor(session: unknown): AgentSessionRuntime {
-	return {
+	return fromAny<AgentSessionRuntime, unknown>({
 		session,
 		setRebindSession() {},
 		setBeforeSessionInvalidate() {},
 		async dispose() {},
-	} as unknown as AgentSessionRuntime;
+	});
 }
 
 async function newAcpSession(harness: Harness, cwd: string) {
@@ -31,7 +32,7 @@ async function newAcpSession(harness: Harness, cwd: string) {
 }
 
 function cwdMeta(created: { _meta?: Record<string, unknown> | null }): unknown {
-	return (created._meta?.[AXIOM_META_NAMESPACE] as { cwd?: unknown } | undefined)?.cwd;
+	return fromAny<{ cwd?: unknown } | undefined, unknown>(created._meta?.[AXIOM_META_NAMESPACE])?.cwd;
 }
 
 function findExistingCaseVariant(path: string): string | undefined {

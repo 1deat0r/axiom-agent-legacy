@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	addAutonomousUsage,
@@ -302,9 +303,12 @@ describe("AgentSession autonomous mode", () => {
 		});
 		harnesses.push(harness);
 		harness.setResponses([fauxAssistantMessage("Still failing.")]);
-		const sessionInternals = harness.session as unknown as {
-			_compactionAbortController?: AbortController;
-		};
+		const sessionInternals = fromAny<
+			{
+				_compactionAbortController?: AbortController;
+			},
+			unknown
+		>(harness.session);
 		sessionInternals._compactionAbortController = new AbortController();
 		const heartbeatJob = {
 			id: "heartbeat-test",

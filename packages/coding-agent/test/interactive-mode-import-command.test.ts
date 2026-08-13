@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import { SessionImportFileNotFoundError } from "../src/core/session-import-errors.js";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.js";
@@ -23,7 +24,7 @@ type ImportCommandContext = {
 	getPathCommandArgument: (text: string, command: PathCommand) => string | undefined;
 };
 
-const interactiveModePrototype = InteractiveMode.prototype as unknown as InteractiveModePrototype;
+const interactiveModePrototype = fromAny<InteractiveModePrototype, unknown>(InteractiveMode.prototype);
 
 describe("InteractiveMode /import parsing", () => {
 	it("strips quotes from /import path arguments", () => {

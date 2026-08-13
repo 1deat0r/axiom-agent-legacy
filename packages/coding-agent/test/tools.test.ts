@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -284,7 +285,7 @@ describe("Coding Agent Tools", () => {
 				}
 
 				expect(error).toBeInstanceOf(Error);
-				const message = (error as Error).message;
+				const message = fromAny<Error, unknown>(error).message;
 				expect(message).toContain(testCase.expected);
 				expect(message).toMatch(/\[Showing lines \d+-\d+ of \d+\. Full output: /);
 				expect(message).not.toContain("Full output: undefined");

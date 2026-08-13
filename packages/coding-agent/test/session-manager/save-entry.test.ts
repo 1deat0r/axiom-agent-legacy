@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import { type CustomEntry, SessionManager } from "../../src/core/session-manager.js";
 
@@ -34,7 +35,7 @@ describe("SessionManager.saveCustomEntry", () => {
 		const entries = session.getEntries();
 		expect(entries).toHaveLength(3);
 
-		const customEntry = entries.find((e) => e.type === "custom") as CustomEntry;
+		const customEntry = fromAny<CustomEntry, unknown>(entries.find((e) => e.type === "custom"));
 		expect(customEntry).toBeDefined();
 		expect(customEntry.customType).toBe("my_data");
 		expect(customEntry.data).toEqual({ foo: "bar" });

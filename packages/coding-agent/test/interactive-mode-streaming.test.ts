@@ -1,5 +1,6 @@
 import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
 import { Container, type MarkdownTheme, type TUI } from "@earendil-works/pi-tui";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import stripAnsi from "strip-ansi";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import type { AgentConnectionSessionEvent } from "../src/modes/agent-connection/index.js";
@@ -80,7 +81,7 @@ function createFakeInteractiveModeThis(): HandleEventThis {
 		toolOutputExpanded: false,
 		footer: { invalidate: vi.fn() },
 		activityTracker: new AgentActivityTracker(),
-		ui: { requestRender: vi.fn() } as unknown as TUI,
+		ui: fromAny<TUI, unknown>({ requestRender: vi.fn() }),
 		chatContainer: new Container(),
 		recapContainer: new Container(),
 		sessionRecap: "Updated files",
@@ -134,7 +135,7 @@ describe("InteractiveMode streaming events", () => {
 
 	test("renders assistant updates when attaching after message_start", async () => {
 		const fakeThis = createFakeInteractiveModeThis();
-		const handleEvent = (InteractiveMode.prototype as unknown as { handleEvent: HandleEvent }).handleEvent;
+		const handleEvent = fromAny<{ handleEvent: HandleEvent }, unknown>(InteractiveMode.prototype).handleEvent;
 
 		await handleEvent.call(fakeThis, {
 			type: "message_update",
@@ -161,7 +162,7 @@ describe("InteractiveMode streaming events", () => {
 
 	test("renders assistant end events when attaching after all updates", async () => {
 		const fakeThis = createFakeInteractiveModeThis();
-		const handleEvent = (InteractiveMode.prototype as unknown as { handleEvent: HandleEvent }).handleEvent;
+		const handleEvent = fromAny<{ handleEvent: HandleEvent }, unknown>(InteractiveMode.prototype).handleEvent;
 
 		await handleEvent.call(fakeThis, {
 			type: "message_end",
@@ -182,7 +183,7 @@ describe("InteractiveMode streaming events", () => {
 					resolveRefresh = resolve;
 				}),
 		);
-		const handleEvent = (InteractiveMode.prototype as unknown as { handleEvent: HandleEvent }).handleEvent;
+		const handleEvent = fromAny<{ handleEvent: HandleEvent }, unknown>(InteractiveMode.prototype).handleEvent;
 
 		await expect(handleEvent.call(fakeThis, { type: "agent_end", messages: [] })).resolves.toBeUndefined();
 		expect(fakeThis.refreshConnectionContextUsage).toHaveBeenCalledOnce();
@@ -191,7 +192,7 @@ describe("InteractiveMode streaming events", () => {
 
 	test("keeps attached partial assistant text when agent_end arrives without message_end", async () => {
 		const fakeThis = createFakeInteractiveModeThis();
-		const handleEvent = (InteractiveMode.prototype as unknown as { handleEvent: HandleEvent }).handleEvent;
+		const handleEvent = fromAny<{ handleEvent: HandleEvent }, unknown>(InteractiveMode.prototype).handleEvent;
 
 		await handleEvent.call(fakeThis, {
 			type: "message_update",
@@ -212,7 +213,7 @@ describe("InteractiveMode streaming events", () => {
 
 	test("renders one agent-run edit total only when files changed", async () => {
 		const fakeThis = createFakeInteractiveModeThis();
-		const handleEvent = (InteractiveMode.prototype as unknown as { handleEvent: HandleEvent }).handleEvent;
+		const handleEvent = fromAny<{ handleEvent: HandleEvent }, unknown>(InteractiveMode.prototype).handleEvent;
 		const message = createAssistantMessage("");
 		message.content = [{ type: "toolCall", id: "edit-1", name: "edit", arguments: { path: "a.ts" } }];
 
@@ -247,7 +248,7 @@ describe("InteractiveMode streaming events", () => {
 		const fakeThis = createFakeInteractiveModeThis();
 		fakeThis.agentRunFileChanges.set("/tmp/a.ts", { path: "a.ts", added: 1, removed: 1 });
 		fakeThis.getRetryAttempt = () => 1;
-		const handleEvent = (InteractiveMode.prototype as unknown as { handleEvent: HandleEvent }).handleEvent;
+		const handleEvent = fromAny<{ handleEvent: HandleEvent }, unknown>(InteractiveMode.prototype).handleEvent;
 
 		await handleEvent.call(fakeThis, { type: "agent_start" });
 
@@ -257,7 +258,7 @@ describe("InteractiveMode streaming events", () => {
 	test("keeps edit totals when compaction restarts the agent", async () => {
 		const fakeThis = createFakeInteractiveModeThis();
 		fakeThis.agentRunFileChanges.set("/tmp/a.ts", { path: "a.ts", added: 1, removed: 1 });
-		const handleEvent = (InteractiveMode.prototype as unknown as { handleEvent: HandleEvent }).handleEvent;
+		const handleEvent = fromAny<{ handleEvent: HandleEvent }, unknown>(InteractiveMode.prototype).handleEvent;
 
 		await handleEvent.call(fakeThis, { type: "agent_start" });
 
@@ -267,7 +268,7 @@ describe("InteractiveMode streaming events", () => {
 	test("clears edit totals when a new user prompt starts", async () => {
 		const fakeThis = createFakeInteractiveModeThis();
 		fakeThis.agentRunFileChanges.set("/tmp/a.ts", { path: "a.ts", added: 1, removed: 1 });
-		const handleEvent = (InteractiveMode.prototype as unknown as { handleEvent: HandleEvent }).handleEvent;
+		const handleEvent = fromAny<{ handleEvent: HandleEvent }, unknown>(InteractiveMode.prototype).handleEvent;
 		await handleEvent.call(fakeThis, { type: "agent_end", messages: [] });
 		expect(renderChat(fakeThis.recapContainer)).toContain("1 file changed");
 
@@ -282,15 +283,18 @@ describe("InteractiveMode streaming events", () => {
 	});
 
 	test("resolves input immediately after return to agents view was requested", async () => {
-		const getUserInput = (InteractiveMode.prototype as unknown as { getUserInput: GetUserInput }).getUserInput;
+		const getUserInput = fromAny<{ getUserInput: GetUserInput }, unknown>(InteractiveMode.prototype).getUserInput;
 
 		await expect(getUserInput.call({ agentsViewRequest: "agents_view" })).resolves.toBeUndefined();
 	});
 
 	test("forwards typed keys from focused subagent summary back to the editor", () => {
-		const handleSubagentSummaryChatAction = (
-			InteractiveMode.prototype as unknown as { handleSubagentSummaryChatAction: HandleSubagentSummaryChatAction }
-		).handleSubagentSummaryChatAction;
+		const handleSubagentSummaryChatAction = fromAny<
+			{
+				handleSubagentSummaryChatAction: HandleSubagentSummaryChatAction;
+			},
+			unknown
+		>(InteractiveMode.prototype).handleSubagentSummaryChatAction;
 		const fakeThis = {
 			keybindings: { matches: vi.fn(() => false) },
 			editor: { handleInput: vi.fn() },
@@ -308,9 +312,12 @@ describe("InteractiveMode streaming events", () => {
 	});
 
 	test("keeps focused subagent summary shortcuts in the chat surface", () => {
-		const handleSubagentSummaryChatAction = (
-			InteractiveMode.prototype as unknown as { handleSubagentSummaryChatAction: HandleSubagentSummaryChatAction }
-		).handleSubagentSummaryChatAction;
+		const handleSubagentSummaryChatAction = fromAny<
+			{
+				handleSubagentSummaryChatAction: HandleSubagentSummaryChatAction;
+			},
+			unknown
+		>(InteractiveMode.prototype).handleSubagentSummaryChatAction;
 		const fakeThis = {
 			keybindings: { matches: vi.fn((_data: string, action: string) => action === "app.tools.expand") },
 			editor: { handleInput: vi.fn() },
@@ -330,16 +337,16 @@ describe("InteractiveMode streaming events", () => {
 		vi.useFakeTimers();
 		try {
 			const requestRender = vi.fn();
-			const mode = Object.create(InteractiveMode.prototype) as InteractiveMode & Record<string, unknown>;
+			const mode = fromPartial<InteractiveMode & Record<string, unknown>>(Object.create(InteractiveMode.prototype));
 			Object.assign(mode, {
 				connectionState: { isStreaming: false },
 				subagentSnapshots: new Map([["worker", { id: "worker", status: "running" }]]),
 				pulseTimer: undefined,
 				ui: { requestRender },
 			});
-			const updatePulse = Reflect.get(InteractiveMode.prototype, "updateWorkingPulse") as (
-				this: typeof mode,
-			) => void;
+			const updatePulse = fromPartial<(this: typeof mode) => void>(
+				Reflect.get(InteractiveMode.prototype, "updateWorkingPulse"),
+			);
 
 			updatePulse.call(mode);
 			vi.advanceTimersByTime(1000);

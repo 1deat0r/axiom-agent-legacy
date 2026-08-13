@@ -1,6 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	getOpenAICodexWebSocketDebugStats,
@@ -155,7 +156,7 @@ describe("openai-codex streaming", () => {
 			return new Response("not found", { status: 404 });
 		});
 
-		global.fetch = fetchMock as typeof fetch;
+		global.fetch = fromPartial<typeof fetch>(fetchMock);
 
 		const model: Model<"openai-codex-responses"> = {
 			id: "gpt-5.1-codex",
@@ -206,22 +207,24 @@ describe("openai-codex streaming", () => {
 			},
 		});
 
-		global.fetch = vi.fn(async (input: string | URL) => {
-			const url = typeof input === "string" ? input : input.toString();
-			if (url === "https://api.github.com/repos/openai/codex/releases/latest") {
-				return new Response(JSON.stringify({ tag_name: "rust-v0.0.0" }), { status: 200 });
-			}
-			if (url.startsWith("https://raw.githubusercontent.com/openai/codex/")) {
-				return new Response("PROMPT", { status: 200, headers: { etag: '"etag"' } });
-			}
-			if (url === "https://chatgpt.com/backend-api/codex/responses") {
-				return new Response(stream, {
-					status: 200,
-					headers: { "content-type": "text/event-stream" },
-				});
-			}
-			return new Response("not found", { status: 404 });
-		}) as typeof fetch;
+		global.fetch = fromPartial<typeof fetch>(
+			vi.fn(async (input: string | URL) => {
+				const url = typeof input === "string" ? input : input.toString();
+				if (url === "https://api.github.com/repos/openai/codex/releases/latest") {
+					return new Response(JSON.stringify({ tag_name: "rust-v0.0.0" }), { status: 200 });
+				}
+				if (url.startsWith("https://raw.githubusercontent.com/openai/codex/")) {
+					return new Response("PROMPT", { status: 200, headers: { etag: '"etag"' } });
+				}
+				if (url === "https://chatgpt.com/backend-api/codex/responses") {
+					return new Response(stream, {
+						status: 200,
+						headers: { "content-type": "text/event-stream" },
+					});
+				}
+				return new Response("not found", { status: 404 });
+			}),
+		);
 
 		const model: Model<"openai-codex-responses"> = {
 			id: "gpt-5.1-codex",
@@ -265,22 +268,24 @@ describe("openai-codex streaming", () => {
 			},
 		});
 
-		global.fetch = vi.fn(async (input: string | URL) => {
-			const url = typeof input === "string" ? input : input.toString();
-			if (url === "https://api.github.com/repos/openai/codex/releases/latest") {
-				return new Response(JSON.stringify({ tag_name: "rust-v0.0.0" }), { status: 200 });
-			}
-			if (url.startsWith("https://raw.githubusercontent.com/openai/codex/")) {
-				return new Response("PROMPT", { status: 200, headers: { etag: '"etag"' } });
-			}
-			if (url === "https://chatgpt.com/backend-api/codex/responses") {
-				return new Response(stream, {
-					status: 200,
-					headers: { "content-type": "text/event-stream" },
-				});
-			}
-			return new Response("not found", { status: 404 });
-		}) as typeof fetch;
+		global.fetch = fromPartial<typeof fetch>(
+			vi.fn(async (input: string | URL) => {
+				const url = typeof input === "string" ? input : input.toString();
+				if (url === "https://api.github.com/repos/openai/codex/releases/latest") {
+					return new Response(JSON.stringify({ tag_name: "rust-v0.0.0" }), { status: 200 });
+				}
+				if (url.startsWith("https://raw.githubusercontent.com/openai/codex/")) {
+					return new Response("PROMPT", { status: 200, headers: { etag: '"etag"' } });
+				}
+				if (url === "https://chatgpt.com/backend-api/codex/responses") {
+					return new Response(stream, {
+						status: 200,
+						headers: { "content-type": "text/event-stream" },
+					});
+				}
+				return new Response("not found", { status: 404 });
+			}),
+		);
 
 		const model: Model<"openai-codex-responses"> = {
 			id: "gpt-5.1-codex",
@@ -376,7 +381,8 @@ describe("openai-codex streaming", () => {
 				expect(headers?.get("x-client-request-id")).toBe(sessionId);
 
 				// Verify sessionId is set in request body as prompt_cache_key
-				const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : null;
+				const body =
+					typeof init?.body === "string" ? fromPartial<Record<string, unknown>>(JSON.parse(init.body)) : null;
 				expect(body?.prompt_cache_key).toBe(sessionId);
 
 				return new Response(stream, {
@@ -387,7 +393,7 @@ describe("openai-codex streaming", () => {
 			return new Response("not found", { status: 404 });
 		});
 
-		global.fetch = fetchMock as typeof fetch;
+		global.fetch = fromPartial<typeof fetch>(fetchMock);
 
 		const model: Model<"openai-codex-responses"> = {
 			id: "gpt-5.1-codex",
@@ -425,24 +431,27 @@ describe("openai-codex streaming", () => {
 		});
 		let requestedReasoning: unknown;
 
-		global.fetch = vi.fn(async (input: string | URL, init?: RequestInit) => {
-			const url = typeof input === "string" ? input : input.toString();
-			if (url === "https://api.github.com/repos/openai/codex/releases/latest") {
-				return new Response(JSON.stringify({ tag_name: "rust-v0.0.0" }), { status: 200 });
-			}
-			if (url.startsWith("https://raw.githubusercontent.com/openai/codex/")) {
-				return new Response("PROMPT", { status: 200, headers: { etag: '"etag"' } });
-			}
-			if (url === "https://chatgpt.com/backend-api/codex/responses") {
-				const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : null;
-				requestedReasoning = body?.reasoning;
-				return new Response(stream, {
-					status: 200,
-					headers: { "content-type": "text/event-stream" },
-				});
-			}
-			return new Response("not found", { status: 404 });
-		}) as typeof fetch;
+		global.fetch = fromPartial<typeof fetch>(
+			vi.fn(async (input: string | URL, init?: RequestInit) => {
+				const url = typeof input === "string" ? input : input.toString();
+				if (url === "https://api.github.com/repos/openai/codex/releases/latest") {
+					return new Response(JSON.stringify({ tag_name: "rust-v0.0.0" }), { status: 200 });
+				}
+				if (url.startsWith("https://raw.githubusercontent.com/openai/codex/")) {
+					return new Response("PROMPT", { status: 200, headers: { etag: '"etag"' } });
+				}
+				if (url === "https://chatgpt.com/backend-api/codex/responses") {
+					const body =
+						typeof init?.body === "string" ? fromPartial<Record<string, unknown>>(JSON.parse(init.body)) : null;
+					requestedReasoning = body?.reasoning;
+					return new Response(stream, {
+						status: 200,
+						headers: { "content-type": "text/event-stream" },
+					});
+				}
+				return new Response("not found", { status: 404 });
+			}),
+		);
 
 		const model: Model<"openai-codex-responses"> = {
 			id: "gpt-5.5",
@@ -525,7 +534,8 @@ describe("openai-codex streaming", () => {
 				return new Response("PROMPT", { status: 200, headers: { etag: '"etag"' } });
 			}
 			if (url === "https://chatgpt.com/backend-api/codex/responses") {
-				const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : null;
+				const body =
+					typeof init?.body === "string" ? fromPartial<Record<string, unknown>>(JSON.parse(init.body)) : null;
 				expect(body?.reasoning).toEqual({ effort: "low", summary: "auto" });
 
 				return new Response(stream, {
@@ -536,7 +546,7 @@ describe("openai-codex streaming", () => {
 			return new Response("not found", { status: 404 });
 		});
 
-		global.fetch = fetchMock as typeof fetch;
+		global.fetch = fromPartial<typeof fetch>(fetchMock);
 
 		const model: Model<"openai-codex-responses"> = {
 			id: modelId,
@@ -616,24 +626,26 @@ describe("openai-codex streaming", () => {
 				},
 			});
 
-			global.fetch = vi.fn(async (input: string | URL, init?: RequestInit) => {
-				const url = typeof input === "string" ? input : input.toString();
-				if (url === "https://api.github.com/repos/openai/codex/releases/latest") {
-					return new Response(JSON.stringify({ tag_name: "rust-v0.0.0" }), { status: 200 });
-				}
-				if (url.startsWith("https://raw.githubusercontent.com/openai/codex/")) {
-					return new Response("PROMPT", { status: 200, headers: { etag: '"etag"' } });
-				}
-				if (url === "https://chatgpt.com/backend-api/codex/responses") {
-					const body = JSON.parse(String(init?.body)) as { service_tier?: string };
-					expect(body.service_tier).toBe(serviceTier);
-					return new Response(stream, {
-						status: 200,
-						headers: { "content-type": "text/event-stream" },
-					});
-				}
-				return new Response("not found", { status: 404 });
-			}) as typeof fetch;
+			global.fetch = fromPartial<typeof fetch>(
+				vi.fn(async (input: string | URL, init?: RequestInit) => {
+					const url = typeof input === "string" ? input : input.toString();
+					if (url === "https://api.github.com/repos/openai/codex/releases/latest") {
+						return new Response(JSON.stringify({ tag_name: "rust-v0.0.0" }), { status: 200 });
+					}
+					if (url.startsWith("https://raw.githubusercontent.com/openai/codex/")) {
+						return new Response("PROMPT", { status: 200, headers: { etag: '"etag"' } });
+					}
+					if (url === "https://chatgpt.com/backend-api/codex/responses") {
+						const body = JSON.parse(String(init?.body)) as { service_tier?: string };
+						expect(body.service_tier).toBe(serviceTier);
+						return new Response(stream, {
+							status: 200,
+							headers: { "content-type": "text/event-stream" },
+						});
+					}
+					return new Response("not found", { status: 404 });
+				}),
+			);
 
 			const model: Model<"openai-codex-responses"> = {
 				id: modelId,
@@ -732,7 +744,7 @@ describe("openai-codex streaming", () => {
 			return new Response("not found", { status: 404 });
 		});
 
-		global.fetch = fetchMock as typeof fetch;
+		global.fetch = fromPartial<typeof fetch>(fetchMock);
 
 		const model: Model<"openai-codex-responses"> = {
 			id: "gpt-5.1-codex",
@@ -760,7 +772,7 @@ describe("openai-codex streaming", () => {
 		const token = mockToken();
 		const sentBodies: unknown[] = [];
 
-		global.fetch = vi.fn(async () => new Response("unexpected fetch", { status: 500 })) as typeof fetch;
+		global.fetch = fromPartial<typeof fetch>(vi.fn(async () => new Response("unexpected fetch", { status: 500 })));
 
 		class MockWebSocket {
 			private listeners = new Map<string, Set<(event: unknown) => void>>();
@@ -830,7 +842,7 @@ describe("openai-codex streaming", () => {
 			}
 		}
 
-		globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
+		globalThis.WebSocket = fromAny<typeof WebSocket, unknown>(MockWebSocket);
 
 		const model: Model<"openai-codex-responses"> = {
 			id: "gpt-5.1-codex",
@@ -953,7 +965,7 @@ describe("openai-codex streaming", () => {
 			}
 		}
 
-		globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
+		globalThis.WebSocket = fromAny<typeof WebSocket, unknown>(MockWebSocket);
 
 		const model: Model<"openai-codex-responses"> = {
 			id: "gpt-5.1-codex",
@@ -989,8 +1001,12 @@ describe("openai-codex streaming", () => {
 		}).result();
 
 		expect(sentBodies).toHaveLength(2);
-		const firstBody = sentBodies[0] as { input: unknown[]; previous_response_id?: string; store?: boolean };
-		const secondBody = sentBodies[1] as { input: unknown[]; previous_response_id?: string; store?: boolean };
+		const firstBody = fromAny<{ input: unknown[]; previous_response_id?: string; store?: boolean }, unknown>(
+			sentBodies[0],
+		);
+		const secondBody = fromAny<{ input: unknown[]; previous_response_id?: string; store?: boolean }, unknown>(
+			sentBodies[1],
+		);
 		expect(firstBody.store).toBe(false);
 		expect(firstBody.previous_response_id).toBeUndefined();
 		expect(firstBody.input).toEqual([{ role: "user", content: [{ type: "input_text", text: "Say hello" }] }]);

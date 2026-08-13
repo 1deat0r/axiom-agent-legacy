@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getBundledSkillsDir } from "../src/config.js";
 import type { KernelManager } from "../src/core/kernel/index.js";
@@ -33,13 +34,13 @@ const AGENT_MESSAGE_SKILL = bundledSkill("agent-message", "agent_message");
 
 /** Wrap kernel output the way the ipython tool result reaches the event stream. */
 function toolEndEvent(toolCallId: string, output: string, isError = false): AgentConnectionSessionEvent {
-	return {
+	return fromPartial<AgentConnectionSessionEvent>({
 		type: "tool_execution_end",
 		toolCallId,
 		toolName: "ipython",
 		result: { output },
 		isError,
-	} as AgentConnectionSessionEvent;
+	});
 }
 
 describe("ACP mode over a real IPython kernel", () => {
@@ -145,13 +146,15 @@ print(json.dumps({
 		expect(payload.after).toBeNull();
 
 		// A refinement outcome for that CRUD is expressible as namespaced metadata.
-		const refined = acpUpdatesForSessionEvent({
-			type: "refine_complete",
-			result: {
-				summary: "persisted ACP verification memory",
-				appliedEdits: [{ applied: true, action: "create", kind: "memory", id: payload.created }],
-			},
-		} as AgentConnectionSessionEvent);
+		const refined = acpUpdatesForSessionEvent(
+			fromPartial<AgentConnectionSessionEvent>({
+				type: "refine_complete",
+				result: {
+					summary: "persisted ACP verification memory",
+					appliedEdits: [{ applied: true, action: "create", kind: "memory", id: payload.created }],
+				},
+			}),
+		);
 		expect(refined[0]?._meta).toMatchObject({
 			[AXIOM_META_NAMESPACE]: { refinement: { status: "complete" } },
 		});
@@ -263,11 +266,13 @@ print(json.dumps({
 		const sentMessages = result.sentAgentMessages ?? [];
 		expect(sentMessages.length).toBeGreaterThan(0);
 		const sent = sentMessages[0];
-		const updates = acpUpdatesForSessionEvent({
-			type: "ipython_sent_agent_message",
-			toolCallId: "cell-msg",
-			message: sent,
-		} as AgentConnectionSessionEvent);
+		const updates = acpUpdatesForSessionEvent(
+			fromPartial<AgentConnectionSessionEvent>({
+				type: "ipython_sent_agent_message",
+				toolCallId: "cell-msg",
+				message: sent,
+			}),
+		);
 		expect(updates[0]?._meta).toMatchObject({
 			[AXIOM_META_NAMESPACE]: { agentMessage: { toolCallId: "cell-msg", deliveryStatus: "queued" } },
 		});

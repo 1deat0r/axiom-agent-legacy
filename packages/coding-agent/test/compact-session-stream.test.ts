@@ -1,4 +1,5 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import {
 	CompactAssistantStreamReconstructor,
@@ -82,9 +83,9 @@ describe("compact daemon assistant streaming", () => {
 			},
 			meta: { cursor: { generation: "generation-1", sequence: 2 } },
 		});
-		expect((reconstructed as Extract<DaemonOutbound, { type: "session_event" }>).event).not.toHaveProperty(
-			"assistantMessageEvent.partial",
-		);
+		expect(
+			fromAny<Extract<DaemonOutbound, { type: "session_event" }>, unknown>(reconstructed).event,
+		).not.toHaveProperty("assistantMessageEvent.partial");
 	});
 
 	it("keeps delta payload size independent of the growing assistant message", () => {

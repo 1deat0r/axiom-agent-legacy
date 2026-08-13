@@ -7,6 +7,7 @@ import { createRpcClientBridge, parseModelRef } from "../../src/extensions/deleg
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+import { fromAny } from "@total-typescript/shoehorn";
 import type { ExtensionAPI } from "../../src/core/extensions/types.js";
 import type { SessionStats } from "../../src/core/session-stats.js";
 import type { RpcDelegateBridge, RpcDelegateRunResult } from "../../src/extensions/delegate/bridge.js";
@@ -134,7 +135,7 @@ function fakePi() {
 			handlers.push({ event, handler });
 		},
 	};
-	return { pi: pi as unknown as ExtensionAPI, tools, handlers };
+	return { pi: fromAny<ExtensionAPI, unknown>(pi), tools, handlers };
 }
 
 async function waitUntil(cond: () => unknown, timeoutMs = 2000): Promise<void> {
@@ -216,10 +217,13 @@ describe("createDelegateExtension", () => {
 		const stub = new StubBridge();
 		createDelegateExtension({ bridge: () => stub })(pi);
 		const tool = tools.find((t) => t.name === "delegate")!;
-		const out = (await tool.execute!("c1", { task: "tidy the repo" })) as {
-			content: Array<{ type: string; text: string }>;
-			details: { ok: boolean; summary: string; tokens: { total: number }; cost: number };
-		};
+		const out = fromAny<
+			{
+				content: Array<{ type: string; text: string }>;
+				details: { ok: boolean; summary: string; tokens: { total: number }; cost: number };
+			},
+			unknown
+		>(await tool.execute!("c1", { task: "tidy the repo" }));
 		expect(stub.started).toBe(1);
 		expect(stub.stopped).toBe(1);
 		expect(out.content[0]!.text).toContain("[delegate ok]");
@@ -237,10 +241,13 @@ describe("createDelegateExtension", () => {
 		stub.runError = new Error("provider refused");
 		createDelegateExtension({ bridge: () => stub })(pi);
 		const tool = tools.find((t) => t.name === "delegate")!;
-		const out = (await tool.execute!("c1", { task: "do it" })) as {
-			content: Array<{ type: string; text: string }>;
-			details: { ok: boolean; error: string };
-		};
+		const out = fromAny<
+			{
+				content: Array<{ type: string; text: string }>;
+				details: { ok: boolean; error: string };
+			},
+			unknown
+		>(await tool.execute!("c1", { task: "do it" }));
 		expect(out.details.ok).toBe(false);
 		expect(out.details.error).toBe("provider refused");
 		expect(out.content[0]!.text).toContain("[delegate failed]");
@@ -254,7 +261,9 @@ describe("createDelegateExtension", () => {
 		stub.hang = true;
 		createDelegateExtension({ bridge: () => stub, timeoutMs: 50 })(pi);
 		const tool = tools.find((t) => t.name === "delegate")!;
-		const out = (await tool.execute!("c1", { task: "hang" })) as { details: { ok: boolean; error: string } };
+		const out = fromAny<{ details: { ok: boolean; error: string } }, unknown>(
+			await tool.execute!("c1", { task: "hang" }),
+		);
 		expect(out.details.ok).toBe(false);
 		expect(out.details.error).toContain("timed out");
 		expect(stub.stopped).toBe(1);
@@ -339,9 +348,14 @@ describe("createDelegateExtension", () => {
 			},
 		})(pi);
 		const tool = tools.find((t) => t.name === "delegate")!;
-		const out = (await tool.execute!("c1", { task: "t" }, undefined, undefined, {
-			model: { provider: "anthropic", id: "claude-sonnet-4-5" },
-		})) as { details: { helper: { model: string | undefined; sessionId: string | undefined } } };
+		const out = fromAny<
+			{ details: { helper: { model: string | undefined; sessionId: string | undefined } } },
+			unknown
+		>(
+			await tool.execute!("c1", { task: "t" }, undefined, undefined, {
+				model: { provider: "anthropic", id: "claude-sonnet-4-5" },
+			}),
+		);
 		expect(seen).toBe("anthropic/claude-sonnet-4-5");
 		expect(out.details.helper!.model).toBe("anthropic/claude-sonnet-4-5");
 		expect(out.details.helper!.sessionId).toBe("s");
@@ -400,15 +414,18 @@ describe("createDelegateExtension", () => {
 			},
 		})(pi);
 		const tool = tools.find((t) => t.name === "delegate")!;
-		const out = (await tool.execute!("c1", { tasks: ["a", "b", "c"] })) as {
-			content: Array<{ type: string; text: string }>;
-			details: {
-				ok: boolean;
-				delegations: Array<{ ok: boolean; tokens: { total: number }; cost: number }>;
-				tokens: { total: number };
-				cost: number;
-			};
-		};
+		const out = fromAny<
+			{
+				content: Array<{ type: string; text: string }>;
+				details: {
+					ok: boolean;
+					delegations: Array<{ ok: boolean; tokens: { total: number }; cost: number }>;
+					tokens: { total: number };
+					cost: number;
+				};
+			},
+			unknown
+		>(await tool.execute!("c1", { tasks: ["a", "b", "c"] }));
 		expect(built).toHaveLength(3); // one fresh helper per task (per-call reset holds per delegation)
 		expect(out.details.ok).toBe(true);
 		expect(out.details.delegations).toHaveLength(3);
@@ -435,7 +452,7 @@ describe("createDelegateExtension", () => {
 		expect(stub.maxRunning).toBeLessThanOrEqual(BATCH_CONCURRENCY);
 		expect(stub.maxRunning).toBe(BATCH_CONCURRENCY); // exactly 4 in-flight, not 8
 		stub.release();
-		const out = (await promise) as { details: { ok: boolean; delegations: unknown[] } };
+		const out = fromAny<{ details: { ok: boolean; delegations: unknown[] } }, unknown>(await promise);
 		expect(out.details.ok).toBe(true);
 		expect(out.details.delegations).toHaveLength(8);
 	});
@@ -454,9 +471,12 @@ describe("createDelegateExtension", () => {
 		stub.failOnTask = "b";
 		createDelegateExtension({ bridge: () => stub })(pi);
 		const tool = tools.find((t) => t.name === "delegate")!;
-		const out = (await tool.execute!("c1", { tasks: ["a", "b"] })) as {
-			details: { ok: boolean; delegations: Array<{ ok: boolean; error?: string }> };
-		};
+		const out = fromAny<
+			{
+				details: { ok: boolean; delegations: Array<{ ok: boolean; error?: string }> };
+			},
+			unknown
+		>(await tool.execute!("c1", { tasks: ["a", "b"] }));
 		expect(out.details.ok).toBe(false);
 		expect(out.details.delegations[0]!.ok).toBe(true);
 		expect(out.details.delegations[1]!.ok).toBe(false);
@@ -508,9 +528,12 @@ describe("background delegate", () => {
 		stub.gateOn = true;
 		createDelegateExtension({ bridge: () => stub, resultsDir: tmpResultsDir() })(pi);
 		const tool = tools.find((t) => t.name === "delegate")!;
-		const out = (await tool.execute!("c1", { task: "long job", background: true })) as {
-			details: { background: boolean; handle: string; resultFile: string; status: string };
-		};
+		const out = fromAny<
+			{
+				details: { background: boolean; handle: string; resultFile: string; status: string };
+			},
+			unknown
+		>(await tool.execute!("c1", { task: "long job", background: true }));
 		expect(stub.started).toBe(1);
 		expect(stub.runCalls).toHaveLength(1);
 		expect(stub.stopped).toBe(0);
@@ -527,9 +550,12 @@ describe("background delegate", () => {
 		const stub = new StubBridge();
 		createDelegateExtension({ bridge: () => stub, resultsDir: tmpResultsDir() })(pi);
 		const tool = tools.find((t) => t.name === "delegate")!;
-		const out = (await tool.execute!("c1", { task: "job", background: true })) as {
-			details: { resultFile: string };
-		};
+		const out = fromAny<
+			{
+				details: { resultFile: string };
+			},
+			unknown
+		>(await tool.execute!("c1", { task: "job", background: true }));
 		await waitUntil(() => existsSync(out.details.resultFile));
 		const payload = JSON.parse(readFileSync(out.details.resultFile, "utf8"));
 		expect(payload.status).toBe("done");
@@ -543,14 +569,20 @@ describe("background delegate", () => {
 		const stub = new StubBridge();
 		createDelegateExtension({ bridge: () => stub, resultsDir: tmpResultsDir() })(pi);
 		const tool = tools.find((t) => t.name === "delegate")!;
-		const started = (await tool.execute!("c1", { task: "job", background: true })) as {
-			details: { handle: string };
-		};
+		const started = fromAny<
+			{
+				details: { handle: string };
+			},
+			unknown
+		>(await tool.execute!("c1", { task: "job", background: true }));
 		await waitUntil(() => stub.stopped === 1);
-		const out = (await tool.execute!("c2", { handle: started.details.handle })) as {
-			content: Array<{ type: string; text: string }>;
-			details: { ok: boolean; summary: string };
-		};
+		const out = fromAny<
+			{
+				content: Array<{ type: string; text: string }>;
+				details: { ok: boolean; summary: string };
+			},
+			unknown
+		>(await tool.execute!("c2", { handle: started.details.handle }));
 		expect(out.details.ok).toBe(true);
 		expect(out.details.summary).toBe("default summary");
 		expect(out.content[0]!.text).toContain("[delegate ok]");
@@ -562,12 +594,18 @@ describe("background delegate", () => {
 		stub.gateOn = true;
 		createDelegateExtension({ bridge: () => stub, resultsDir: tmpResultsDir() })(pi);
 		const tool = tools.find((t) => t.name === "delegate")!;
-		const started = (await tool.execute!("c1", { task: "long", background: true })) as {
-			details: { handle: string };
-		};
-		const out = (await tool.execute!("c2", { handle: started.details.handle })) as {
-			details: { status: string };
-		};
+		const started = fromAny<
+			{
+				details: { handle: string };
+			},
+			unknown
+		>(await tool.execute!("c1", { task: "long", background: true }));
+		const out = fromAny<
+			{
+				details: { status: string };
+			},
+			unknown
+		>(await tool.execute!("c2", { handle: started.details.handle }));
 		expect(out.details.status).toBe("running");
 		stub.release();
 		await waitUntil(() => stub.stopped === 1);
@@ -579,13 +617,19 @@ describe("background delegate", () => {
 		stub.gateOn = true;
 		createDelegateExtension({ bridge: () => stub, resultsDir: tmpResultsDir() })(pi);
 		const tool = tools.find((t) => t.name === "delegate")!;
-		const started = (await tool.execute!("c1", { task: "long", background: true })) as {
-			details: { handle: string };
-		};
+		const started = fromAny<
+			{
+				details: { handle: string };
+			},
+			unknown
+		>(await tool.execute!("c1", { task: "long", background: true }));
 		setTimeout(() => stub.release(), 20);
-		const out = (await tool.execute!("c2", { handle: started.details.handle, waitMs: 1000 })) as {
-			details: { ok: boolean };
-		};
+		const out = fromAny<
+			{
+				details: { ok: boolean };
+			},
+			unknown
+		>(await tool.execute!("c2", { handle: started.details.handle, waitMs: 1000 }));
 		expect(out.details.ok).toBe(true);
 	});
 
@@ -595,9 +639,12 @@ describe("background delegate", () => {
 		stub.hang = true;
 		createDelegateExtension({ bridge: () => stub, timeoutMs: 50, resultsDir: tmpResultsDir() })(pi);
 		const tool = tools.find((t) => t.name === "delegate")!;
-		const started = (await tool.execute!("c1", { task: "hang", background: true })) as {
-			details: { resultFile: string };
-		};
+		const started = fromAny<
+			{
+				details: { resultFile: string };
+			},
+			unknown
+		>(await tool.execute!("c1", { task: "hang", background: true }));
 		await waitUntil(() => existsSync(started.details.resultFile));
 		const payload = JSON.parse(readFileSync(started.details.resultFile, "utf8"));
 		expect(payload.status).toBe("timeout");
@@ -618,9 +665,12 @@ describe("background delegate", () => {
 		const stub = new StubBridge();
 		createDelegateExtension({ bridge: () => stub, resultsDir: tmpResultsDir() })(pi);
 		const tool = tools.find((t) => t.name === "delegate")!;
-		const out = (await tool.execute!("c1", { tasks: ["a", "b"], background: true })) as {
-			details: { background: boolean; handles: string[]; resultFiles: string[] };
-		};
+		const out = fromAny<
+			{
+				details: { background: boolean; handles: string[]; resultFiles: string[] };
+			},
+			unknown
+		>(await tool.execute!("c1", { tasks: ["a", "b"], background: true }));
 		expect(out.details.background).toBe(true);
 		expect(out.details.handles).toHaveLength(2);
 		expect(out.details.resultFiles).toHaveLength(2);

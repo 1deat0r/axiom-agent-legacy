@@ -1,4 +1,5 @@
 import type { Component } from "@earendil-works/pi-tui";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { readFileSync } from "fs";
 import { describe, expect, it } from "vitest";
 import { ansiLinesToHtml } from "../src/core/export-html/ansi-to-html.js";
@@ -23,15 +24,15 @@ describe("export HTML tool output whitespace", () => {
 
 	it("trims TUI spacing lines from custom tool result HTML", () => {
 		const component: Component = { render: () => ["", "\u001b[31mone\u001b[0m", "two", ""], invalidate: () => {} };
-		const tool = {
+		const tool = fromAny<ToolDefinition, unknown>({
 			name: "custom",
 			label: "custom",
 			description: "custom",
 			renderResult: () => component,
-		} as unknown as ToolDefinition;
+		});
 		const renderer = createToolHtmlRenderer({
 			getToolDefinition: () => tool,
-			theme: {} as Theme,
+			theme: fromPartial<Theme>({}),
 			cwd: "/tmp",
 		});
 

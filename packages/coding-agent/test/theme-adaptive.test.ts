@@ -1,4 +1,5 @@
 import { clearDefaultTerminalColors, setDefaultTerminalColors } from "@earendil-works/pi-tui";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getEditorTheme, initTheme, setThemeInstance, Theme, theme } from "../src/modes/interactive/theme/theme.js";
 
@@ -148,8 +149,8 @@ describe("adaptive TUI theme colors", () => {
 	it("crosses the background when the selection sits at the blend endpoint", () => {
 		setThemeInstance(
 			new Theme(
-				{} as ConstructorParameters<typeof Theme>[0],
-				{ selectedBg: "#000000" } as ConstructorParameters<typeof Theme>[1],
+				fromPartial<ConstructorParameters<typeof Theme>[0]>({}),
+				fromPartial<ConstructorParameters<typeof Theme>[1]>({ selectedBg: "#000000" }),
 				"truecolor",
 			),
 		);
@@ -184,8 +185,8 @@ describe("adaptive TUI theme colors", () => {
 	it("keeps contrast after 256-color quantization", () => {
 		setThemeInstance(
 			new Theme(
-				{} as ConstructorParameters<typeof Theme>[0],
-				{ selectedBg: "#e93e4d" } as ConstructorParameters<typeof Theme>[1],
+				fromPartial<ConstructorParameters<typeof Theme>[0]>({}),
+				fromPartial<ConstructorParameters<typeof Theme>[1]>({ selectedBg: "#e93e4d" }),
 				"256color",
 			),
 		);
@@ -209,8 +210,8 @@ describe("adaptive TUI theme colors", () => {
 	it("searches stronger blends when 256-color quantization undershoots", () => {
 		setThemeInstance(
 			new Theme(
-				{} as ConstructorParameters<typeof Theme>[0],
-				{ selectedBg: "#2f4d50" } as ConstructorParameters<typeof Theme>[1],
+				fromPartial<ConstructorParameters<typeof Theme>[0]>({}),
+				fromPartial<ConstructorParameters<typeof Theme>[1]>({ selectedBg: "#2f4d50" }),
 				"256color",
 			),
 		);
@@ -233,8 +234,8 @@ describe("adaptive TUI theme colors", () => {
 	it("adapts when 256-color quantization erases the configured contrast", () => {
 		setThemeInstance(
 			new Theme(
-				{} as ConstructorParameters<typeof Theme>[0],
-				{ selectedBg: "#e82d6a" } as ConstructorParameters<typeof Theme>[1],
+				fromPartial<ConstructorParameters<typeof Theme>[0]>({}),
+				fromPartial<ConstructorParameters<typeof Theme>[1]>({ selectedBg: "#e82d6a" }),
 				"256color",
 			),
 		);
@@ -257,8 +258,8 @@ describe("adaptive TUI theme colors", () => {
 	it("leaves terminal-defined basic ANSI selection colors alone", () => {
 		setThemeInstance(
 			new Theme(
-				{} as ConstructorParameters<typeof Theme>[0],
-				{ selectedBg: 0 } as ConstructorParameters<typeof Theme>[1],
+				fromPartial<ConstructorParameters<typeof Theme>[0]>({}),
+				fromPartial<ConstructorParameters<typeof Theme>[1]>({ selectedBg: 0 }),
 				"256color",
 			),
 		);
@@ -275,8 +276,8 @@ describe("adaptive TUI theme colors", () => {
 	it("derives a contrasting selection when selectedBg uses the terminal default", () => {
 		setThemeInstance(
 			new Theme(
-				{} as ConstructorParameters<typeof Theme>[0],
-				{ selectedBg: "" } as ConstructorParameters<typeof Theme>[1],
+				fromPartial<ConstructorParameters<typeof Theme>[0]>({}),
+				fromPartial<ConstructorParameters<typeof Theme>[1]>({ selectedBg: "" }),
 				"256color",
 			),
 		);

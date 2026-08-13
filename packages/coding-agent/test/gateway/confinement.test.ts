@@ -19,6 +19,7 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { bwrapCreatesNamespace } from "../../src/extensions/workspace/sandbox.js";
 import { CliCompletionRunner } from "../../src/gateway/completion.js";
@@ -88,7 +89,7 @@ maybeDescribe("OS-tier confinement (real bwrap)", () => {
 
 			let report: { inside?: string; homeW?: string; etc?: string; ssh?: string; confined?: string | null } = {};
 			try {
-				report = JSON.parse(await readFile(join(out, "report.json"), "utf8")) as typeof report;
+				report = fromPartial<typeof report>(JSON.parse(await readFile(join(out, "report.json"), "utf8")));
 			} catch {
 				/* child may have failed to boot */
 			}

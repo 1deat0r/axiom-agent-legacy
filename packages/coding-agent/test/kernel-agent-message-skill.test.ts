@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getBundledSkillsDir } from "../src/config.js";
 import { KernelManager, type KernelSentAgentMessage } from "../src/core/kernel/index.js";
@@ -267,7 +268,7 @@ background_send = asyncio.create_task(send_later())`,
 
 	it("bounds retained handlers for late sent messages", async () => {
 		const manager = new KernelManager({ cwd: tempDir });
-		const host = manager as unknown as LateHandlerRetentionHost;
+		const host = fromAny<LateHandlerRetentionHost, unknown>(manager);
 		const handler = () => {};
 
 		for (let index = 0; index < 300; index += 1) {

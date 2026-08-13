@@ -11,6 +11,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CreateAgentSessionRuntimeFactory } from "../../src/core/agent-session-runtime.js";
 import { SessionManager } from "../../src/core/session-manager.js";
@@ -53,12 +54,12 @@ describe("Daemon-backed serializedRefine propagation", () => {
 				persistSession: true,
 				serializedRefine: options.sessionConfig?.serializedRefine ?? false,
 			});
-			return {
+			return fromAny<never, unknown>({
 				session: harness.session,
-				extensionsResult: { extensions: [], errors: [], runtime: {} } as never,
-				services: { cwd: options.cwd, agentDir: options.agentDir } as never,
+				extensionsResult: { extensions: [], errors: [], runtime: {} },
+				services: { cwd: options.cwd, agentDir: options.agentDir },
 				diagnostics: [],
-			} as never;
+			});
 		});
 
 		const daemon = new AgentDaemon(join(tempDir, "daemon.sock"), {
@@ -66,9 +67,12 @@ describe("Daemon-backed serializedRefine propagation", () => {
 			createRuntime,
 		});
 
-		const internals = daemon as unknown as {
-			createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-		};
+		const internals = fromAny<
+			{
+				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+			},
+			unknown
+		>(daemon);
 
 		const sessionManager = SessionManager.create(tempDir, sessionDir);
 		sessionManager.newSession();
@@ -80,7 +84,7 @@ describe("Daemon-backed serializedRefine propagation", () => {
 		expect(capturedConfig?.serializedRefine).toBe(true);
 
 		// The session created by the daemon has _serializedRefine=true.
-		const sessionInternals = state.runtime.session as unknown as SerializedInternals;
+		const sessionInternals = fromAny<SerializedInternals, unknown>(state.runtime.session);
 		expect(sessionInternals._serializedRefine).toBe(true);
 
 		state.runtime.session.dispose();
@@ -96,12 +100,12 @@ describe("Daemon-backed serializedRefine propagation", () => {
 				persistSession: true,
 				serializedRefine: options.sessionConfig?.serializedRefine ?? false,
 			});
-			return {
+			return fromAny<never, unknown>({
 				session: harness.session,
-				extensionsResult: { extensions: [], errors: [], runtime: {} } as never,
-				services: { cwd: options.cwd, agentDir: options.agentDir } as never,
+				extensionsResult: { extensions: [], errors: [], runtime: {} },
+				services: { cwd: options.cwd, agentDir: options.agentDir },
 				diagnostics: [],
-			} as never;
+			});
 		});
 
 		const daemon = new AgentDaemon(join(tempDir, "daemon.sock"), {
@@ -109,9 +113,12 @@ describe("Daemon-backed serializedRefine propagation", () => {
 			createRuntime,
 		});
 
-		const internals = daemon as unknown as {
-			createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-		};
+		const internals = fromAny<
+			{
+				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+			},
+			unknown
+		>(daemon);
 
 		const sessionManager = SessionManager.create(tempDir, sessionDir);
 		sessionManager.newSession();
@@ -119,7 +126,7 @@ describe("Daemon-backed serializedRefine propagation", () => {
 
 		const state = await internals.createRuntime({ type: "create", sessionPath: sessionFile });
 
-		const sessionInternals = state.runtime.session as unknown as SerializedInternals;
+		const sessionInternals = fromAny<SerializedInternals, unknown>(state.runtime.session);
 		expect(sessionInternals._serializedRefine).toBe(false);
 
 		state.runtime.session.dispose();
@@ -147,7 +154,7 @@ describe("Daemon-backed serializedRefine propagation", () => {
 			});
 			stashedHarness = harness;
 			const session = harness.session;
-			const internals = session as unknown as SerializedInternals;
+			const internals = fromAny<SerializedInternals, unknown>(session);
 			vi.spyOn(internals, "_planRefine").mockResolvedValue({ id: "p", proposal: { edits: [] } });
 			vi.spyOn(internals, "_applyRefine").mockResolvedValue({
 				id: "refine_test",
@@ -157,12 +164,12 @@ describe("Daemon-backed serializedRefine propagation", () => {
 				appliedEdits: [],
 				harnessStatePath: "/tmp/harness_state.json",
 			});
-			return {
+			return fromAny<never, unknown>({
 				session,
-				extensionsResult: { extensions: [], errors: [], runtime: {} } as never,
-				services: { cwd: options.cwd, agentDir: options.agentDir } as never,
+				extensionsResult: { extensions: [], errors: [], runtime: {} },
+				services: { cwd: options.cwd, agentDir: options.agentDir },
 				diagnostics: [],
-			} as never;
+			});
 		});
 
 		const daemon = new AgentDaemon(join(tempDir, "daemon.sock"), {
@@ -170,9 +177,12 @@ describe("Daemon-backed serializedRefine propagation", () => {
 			createRuntime,
 		});
 
-		const internals = daemon as unknown as {
-			createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-		};
+		const internals = fromAny<
+			{
+				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+			},
+			unknown
+		>(daemon);
 
 		const sessionManager = SessionManager.create(tempDir, sessionDir);
 		sessionManager.newSession();
@@ -180,7 +190,7 @@ describe("Daemon-backed serializedRefine propagation", () => {
 
 		const state = await internals.createRuntime({ type: "create", sessionPath: sessionFile });
 		const session = state.runtime.session;
-		const sessionInternals = session as unknown as SerializedInternals;
+		const sessionInternals = fromAny<SerializedInternals, unknown>(session);
 		const harness = stashedHarness!;
 
 		// Turn 1: counter goes to 1 (< threshold 2)

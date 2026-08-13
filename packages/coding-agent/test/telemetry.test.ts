@@ -2,6 +2,7 @@ import { lstatSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileS
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentSession, AgentSessionEvent } from "../src/core/agent-session.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
@@ -169,10 +170,10 @@ describe("telemetry identity and transport", () => {
 
 		expect(requests).toHaveLength(1);
 		expect(requests[0].url).toBe("https://api.example.test/api/v1/agent-analytics/events");
-		const body = JSON.parse(String(requests[0].init.body)) as {
+		const body = fromPartial<{
 			installation_id: string;
 			events: TelemetryEvent[];
-		};
+		}>(JSON.parse(String(requests[0].init.body)));
 		expect(body.installation_id).toMatch(/^[0-9a-f-]{36}$/);
 		expect(body.events).toEqual([
 			expect.objectContaining({
@@ -204,7 +205,7 @@ describe("telemetry identity and transport", () => {
 		const client = new TelemetryClient({
 			agentDir: mkdtempSync(join(tmpdir(), "axiom-telemetry-")),
 			fetch: async (_input, init) => {
-				const body = JSON.parse(String(init?.body)) as { events: TelemetryEvent[] };
+				const body = fromPartial<{ events: TelemetryEvent[] }>(JSON.parse(String(init?.body)));
 				batchSizes.push(body.events.length);
 				return new Response(null, { status: 204 });
 			},
@@ -260,8 +261,8 @@ describe("telemetry controls", () => {
 	});
 
 	it("normalizes malformed telemetry settings before updating them", async () => {
-		const settings = SettingsManager.inMemory({ telemetry: true as never });
-		const disabledSettings = SettingsManager.inMemory({ telemetry: false as never });
+		const settings = SettingsManager.inMemory({ telemetry: fromAny<never, unknown>(true) });
+		const disabledSettings = SettingsManager.inMemory({ telemetry: fromAny<never, unknown>(false) });
 
 		expect(disabledSettings.getTelemetryEnabled()).toBe(false);
 		expect(() => settings.setTelemetryNoticeShown(true)).not.toThrow();
@@ -340,7 +341,7 @@ describe("agent telemetry aggregation", () => {
 		const sink = new FakeTelemetrySink();
 		const fakeSession = new FakeAgentSession();
 
-		installAgentTelemetry(fakeSession as unknown as AgentSession, {
+		installAgentTelemetry(fromAny<AgentSession, unknown>(fakeSession), {
 			agentDir: "/not-used",
 			settingsManager: SettingsManager.inMemory(),
 			executionMode: "interactive",
@@ -430,7 +431,7 @@ describe("agent telemetry aggregation", () => {
 		const sink = new FakeTelemetrySink();
 		const fakeSession = new FakeAgentSession();
 
-		installAgentTelemetry(fakeSession as unknown as AgentSession, {
+		installAgentTelemetry(fromAny<AgentSession, unknown>(fakeSession), {
 			agentDir: "/not-used",
 			settingsManager: SettingsManager.inMemory(),
 			sink,
@@ -463,7 +464,7 @@ describe("agent telemetry aggregation", () => {
 		const sink = new FakeTelemetrySink();
 		const fakeSession = new FakeAgentSession();
 
-		installAgentTelemetry(fakeSession as unknown as AgentSession, {
+		installAgentTelemetry(fromAny<AgentSession, unknown>(fakeSession), {
 			agentDir: "/not-used",
 			settingsManager: SettingsManager.inMemory(),
 			sink,
@@ -509,7 +510,7 @@ describe("agent telemetry aggregation", () => {
 			await flushGate;
 		});
 
-		installAgentTelemetry(fakeSession as unknown as AgentSession, {
+		installAgentTelemetry(fromAny<AgentSession, unknown>(fakeSession), {
 			agentDir: "/not-used",
 			settingsManager: SettingsManager.inMemory(),
 			sink,

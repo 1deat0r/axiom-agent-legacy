@@ -4,6 +4,7 @@ import { join } from "node:path";
 import * as acp from "@agentclientprotocol/sdk";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import { ENV_AGENT_DIR } from "../../src/config.js";
 import type { AgentSessionRuntime } from "../../src/core/agent-session-runtime.js";
@@ -22,12 +23,12 @@ import { createHarness, type Harness } from "./harness.js";
  */
 
 function runtimeHostFor(session: unknown): AgentSessionRuntime {
-	return {
+	return fromAny<AgentSessionRuntime, unknown>({
 		session,
 		setRebindSession() {},
 		setBeforeSessionInvalidate() {},
 		async dispose() {},
-	} as unknown as AgentSessionRuntime;
+	});
 }
 
 interface AcpFixture {
@@ -117,7 +118,7 @@ function withMidTurnRebuild(
 	rebuild: (messages: AgentMessage[]) => AgentMessage[] | undefined,
 ): { connection: InProcessAgentConnection; arm: () => void } {
 	const connection = new InProcessAgentConnection(runtimeHostFor(harness.session));
-	const promptAndWait = connection.promptAndWait.bind(connection) as (...args: any[]) => Promise<any>;
+	const promptAndWait = fromPartial<(...args: any[]) => Promise<any>>(connection.promptAndWait.bind(connection));
 	let armed = false;
 	(connection as any).promptAndWait = async (...args: any[]) => {
 		const result = await promptAndWait(...args);
@@ -143,7 +144,7 @@ function rematerialize(messages: AgentMessage[]): AgentMessage[] {
 
 describe("ACP mode preserves axiom features", () => {
 	it("streams IPython execution as an execute tool call with its cell source", async () => {
-		const harness = await createHarness({ tools: [ipythonTool as never] });
+		const harness = await createHarness({ tools: [fromAny<never, unknown>(ipythonTool)] });
 		harness.setResponses([
 			fauxAssistantMessage([fauxToolCall("ipython", { code: "x = 41 + 1\nprint(x)" })], { stopReason: "toolUse" }),
 			fauxAssistantMessage("x is 42"),
@@ -298,7 +299,7 @@ describe("ACP mode preserves axiom features", () => {
 			mcpServers: [],
 		});
 		expect(created.sessionId).toBeTruthy();
-		const cwdMeta = (created._meta?.[AXIOM_META_NAMESPACE] as { cwd?: unknown } | undefined)?.cwd;
+		const cwdMeta = fromAny<{ cwd?: unknown } | undefined, unknown>(created._meta?.[AXIOM_META_NAMESPACE])?.cwd;
 		expect(cwdMeta).toMatchObject({ requested: "/definitely/not/the/agent/cwd" });
 		harness.cleanup();
 	}, 30_000);
@@ -423,9 +424,12 @@ describe("ACP mode preserves axiom features", () => {
 			// Stub ONLY the planner, which is the refiner's LLM call. The apply phase
 			// then runs for real: it applies the proposal, persists harness state, and
 			// emits the genuine refine_complete event this test is about.
-			const internals = harness.session as unknown as {
-				_planRefine: (...args: unknown[]) => Promise<unknown>;
-			};
+			const internals = fromAny<
+				{
+					_planRefine: (...args: unknown[]) => Promise<unknown>;
+				},
+				unknown
+			>(harness.session);
 			vi.spyOn(internals, "_planRefine").mockResolvedValue({
 				id: "acp_refine_plan",
 				proposal: {
@@ -553,7 +557,7 @@ describe("ACP mode preserves axiom features", () => {
 		// The in-flight turn must not surface as a clean completion after a close.
 		const outcome = await turn;
 		if (typeof outcome === "object" && outcome && "stopReason" in outcome) {
-			expect(["cancelled", "end_turn"]).toContain((outcome as { stopReason: string }).stopReason);
+			expect(["cancelled", "end_turn"]).toContain(fromPartial<{ stopReason: string }>(outcome).stopReason);
 		}
 		harness.cleanup();
 	}, 30_000);

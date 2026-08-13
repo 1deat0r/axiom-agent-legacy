@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Usage } from "@earendil-works/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import type { ExtensionAPI } from "../../src/core/extensions/types.js";
 import type { SessionEntry } from "../../src/core/session-manager.js";
@@ -39,7 +40,7 @@ function assistantEntry(options: {
 	usage: Usage;
 }): SessionEntry {
 	const { provider, model, responseModel, usage: u } = options;
-	return {
+	return fromAny<SessionEntry, unknown>({
 		type: "message",
 		id: "m1",
 		parentId: null,
@@ -55,17 +56,17 @@ function assistantEntry(options: {
 			stopReason: "stop",
 			timestamp: 1,
 		},
-	} as unknown as SessionEntry;
+	});
 }
 
 function userEntry(): SessionEntry {
-	return {
+	return fromAny<SessionEntry, unknown>({
 		type: "message",
 		id: "u1",
 		parentId: null,
 		timestamp: "2026-08-11T00:00:00.000Z",
 		message: { role: "user", content: "hi", timestamp: 1 },
-	} as unknown as SessionEntry;
+	});
 }
 
 function fakePi() {
@@ -82,7 +83,7 @@ function fakePi() {
 			events.set(event, handler);
 		},
 	};
-	return { pi: pi as unknown as ExtensionAPI, commands, events };
+	return { pi: fromAny<ExtensionAPI, unknown>(pi), commands, events };
 }
 
 function fakeCtx(entries: SessionEntry[]) {
@@ -128,7 +129,7 @@ describe("aggregateUsage", () => {
 	it("ignores non-assistant entries (v0.7.2 records usage only on assistant messages)", () => {
 		const buckets = aggregateUsage([
 			userEntry(),
-			{
+			fromAny<SessionEntry, unknown>({
 				type: "message",
 				id: "t1",
 				parentId: null,
@@ -140,8 +141,8 @@ describe("aggregateUsage", () => {
 					timestamp: 1,
 					content: [],
 				},
-			} as unknown as SessionEntry,
-			{
+			}),
+			fromAny<SessionEntry, unknown>({
 				type: "compaction",
 				id: "s1",
 				parentId: null,
@@ -149,7 +150,7 @@ describe("aggregateUsage", () => {
 				summary: "s",
 				firstKeptEntryId: "x",
 				tokensBefore: 1,
-			} as unknown as SessionEntry,
+			}),
 		]);
 		expect(buckets).toEqual([]);
 	});
@@ -447,7 +448,7 @@ describe("createLedgerExtension", () => {
 			loadEntries: () => entries,
 		};
 		createLedgerExtension(deps)(pi);
-		await commands.get("cost")!.handler("", ctx as never);
+		await commands.get("cost")!.handler("", fromAny<never, unknown>(ctx));
 		expect(notified.join(" ")).toContain("session $1.00");
 		expect(notified.join(" ")).toContain("lifetime $2.00");
 	});
@@ -464,7 +465,7 @@ describe("createLedgerExtension", () => {
 			loadEntries: () => [],
 		};
 		createLedgerExtension(deps)(pi);
-		await events.get("agent_end")!(null, ctx as never);
+		await events.get("agent_end")!(null, fromAny<never, unknown>(ctx));
 		expect(statuses).toContainEqual(["axiom.cost", "$0.5000"]);
 	});
 });

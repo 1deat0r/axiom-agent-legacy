@@ -1,4 +1,5 @@
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import type { HostRequestHandlers } from "../../../src/core/kernel/index.js";
 import { SessionManager } from "../../../src/core/session-manager.js";
@@ -22,8 +23,8 @@ describe("ENG-4649 subagent model selection", () => {
 		try {
 			const prompt = harness.session.agent.state.systemPrompt;
 			expect(prompt).not.toContain(`${provider}/model-319`);
-			const handlers = (
-				harness.session as unknown as { _createKernelHostHandlers(): HostRequestHandlers }
+			const handlers = fromAny<{ _createKernelHostHandlers(): HostRequestHandlers }, unknown>(
+				harness.session,
 			)._createKernelHostHandlers();
 			const findModels = handlers["rlm.find_models"];
 			if (!findModels) throw new Error("Missing rlm.find_models host handler");

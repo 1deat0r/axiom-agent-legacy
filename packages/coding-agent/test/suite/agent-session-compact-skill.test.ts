@@ -1,5 +1,6 @@
 import type { ShouldStopAfterTurnContext } from "@earendil-works/pi-agent-core";
 import { type AssistantMessage, fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHarness, type Harness } from "./harness.js";
 
@@ -27,7 +28,7 @@ function createAssistant(
 }
 
 function setStreaming(harness: Harness, streaming: boolean) {
-	(harness.session.agent.state as { isStreaming: boolean }).isStreaming = streaming;
+	fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = streaming;
 }
 
 /** Extension that supplies compaction content so no provider call is needed. */
@@ -69,7 +70,7 @@ describe("AgentSession compact skill host requests", () => {
 		expect(runResult.scheduled).toBe(true);
 		expect(harness.session.handleCompactHostRequest("compact.status").scheduled).toBe(true);
 
-		const internals = harness.session as unknown as SessionInternals;
+		const internals = fromAny<SessionInternals, unknown>(harness.session);
 		const compacted = await internals._checkCompaction(createAssistant(harness));
 		expect(compacted).toBe(false); // no retry needed
 
@@ -108,9 +109,9 @@ describe("AgentSession compact skill host requests", () => {
 		expect(harness.session.handleCompactHostRequest("compact.run").scheduled).toBe(true);
 		setStreaming(harness, false);
 
-		const internals = harness.session as unknown as SessionInternals;
+		const internals = fromAny<SessionInternals, unknown>(harness.session);
 		await expect(
-			internals._shouldStopAfterTurn({ message: createAssistant(harness) } as ShouldStopAfterTurnContext),
+			internals._shouldStopAfterTurn(fromPartial<ShouldStopAfterTurnContext>({ message: createAssistant(harness) })),
 		).resolves.toBe(true);
 		await internals._checkCompaction(createAssistant(harness));
 
@@ -131,7 +132,7 @@ describe("AgentSession compact skill host requests", () => {
 		expect(harness.session.handleCompactHostRequest("compact.run").scheduled).toBe(true);
 		setStreaming(harness, false);
 
-		const internals = harness.session as unknown as SessionInternals;
+		const internals = fromAny<SessionInternals, unknown>(harness.session);
 		const compacted = await internals._checkCompaction(createAssistant(harness, { stopReason: "aborted" }));
 		expect(compacted).toBe(false);
 		expect(harness.session.handleCompactHostRequest("compact.status").scheduled).toBe(false);
@@ -151,7 +152,7 @@ describe("AgentSession compact skill host requests", () => {
 		expect(harness.session.handleCompactHostRequest("compact.run").scheduled).toBe(true);
 		setStreaming(harness, false);
 
-		const internals = harness.session as unknown as SessionInternals;
+		const internals = fromAny<SessionInternals, unknown>(harness.session);
 		const compacted = await internals._checkCompaction(createAssistant(harness, { stopReason: "aborted" }), false);
 		expect(compacted).toBe(false);
 		expect(harness.session.handleCompactHostRequest("compact.status").scheduled).toBe(false);
@@ -191,7 +192,7 @@ describe("AgentSession compact skill host requests", () => {
 		setStreaming(harness, false);
 
 		const continueSpy = vi.spyOn(harness.session.agent, "continue").mockResolvedValue();
-		const internals = harness.session as unknown as SessionInternals;
+		const internals = fromAny<SessionInternals, unknown>(harness.session);
 		const overflow = createAssistant(harness, { stopReason: "error", errorMessage: "prompt is too long" });
 		const compacted = await internals._checkCompaction(overflow);
 		await vi.advanceTimersByTimeAsync(100);
@@ -212,7 +213,7 @@ describe("AgentSession compact skill host requests", () => {
 		harnesses.push(harness);
 		await harness.session.prompt("one");
 
-		(harness.session as unknown as { _pendingRequestedCompaction?: object })._pendingRequestedCompaction = {};
+		fromAny<{ _pendingRequestedCompaction?: object }, unknown>(harness.session)._pendingRequestedCompaction = {};
 		harness.session.agent.followUp({
 			role: "custom",
 			customType: "test",
@@ -222,7 +223,7 @@ describe("AgentSession compact skill host requests", () => {
 		});
 		const continueSpy = vi.spyOn(harness.session.agent, "continue").mockResolvedValue();
 
-		const internals = harness.session as unknown as SessionInternals;
+		const internals = fromAny<SessionInternals, unknown>(harness.session);
 		const compacted = await internals._checkCompaction(createAssistant(harness));
 		await vi.advanceTimersByTimeAsync(100);
 		vi.useRealTimers();
@@ -287,12 +288,12 @@ describe("AgentSession compact skill host requests", () => {
 		expect(() => harness.session.handleCompactHostRequest("compact.run")).toThrow(
 			"the compact skill is disabled in this session",
 		);
-		const internals = harness.session as unknown as SessionInternals;
+		const internals = fromAny<SessionInternals, unknown>(harness.session);
 		expect(Object.keys(internals._createKernelHostHandlers())).not.toContain("compact.run");
 
 		const enabledHarness = await createHarness();
 		harnesses.push(enabledHarness);
-		const enabledInternals = enabledHarness.session as unknown as SessionInternals;
+		const enabledInternals = fromAny<SessionInternals, unknown>(enabledHarness.session);
 		expect(Object.keys(enabledInternals._createKernelHostHandlers())).toEqual(
 			expect.arrayContaining(["compact.run", "compact.status"]),
 		);

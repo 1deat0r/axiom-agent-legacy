@@ -1,6 +1,7 @@
 import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
 import { fauxAssistantMessage, fauxToolCall, type Message } from "@earendil-works/pi-ai";
 import { Container, type MarkdownTheme } from "@earendil-works/pi-tui";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { Type } from "typebox";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { type AgentCronJob, shouldDeferHeartbeatCronJob } from "../../../src/core/cron-jobs.js";
@@ -76,23 +77,25 @@ function createHeartbeat(): AgentCronJob {
 }
 
 function createMessageStartMode(sessionRecap = "previous recap"): MessageStartHandleMode {
-	return Object.assign(Object.create(InteractiveMode.prototype), {
-		isInitialized: true,
-		footer: { invalidate: vi.fn() },
-		updateConnectionStateFromEvent: vi.fn(),
-		contextUsageTokenBaseline: 12,
-		activityTracker: { handleEvent: vi.fn() },
-		updateWorkingLoaderMessage: vi.fn(),
-		addMessageToChat: vi.fn(),
-		ui: { requestRender: vi.fn() },
-		sessionRecap,
-		renderRecap: vi.fn(),
-		updatePendingMessagesDisplay: vi.fn(),
-	}) as MessageStartHandleMode;
+	return fromPartial<MessageStartHandleMode>(
+		Object.assign(Object.create(InteractiveMode.prototype), {
+			isInitialized: true,
+			footer: { invalidate: vi.fn() },
+			updateConnectionStateFromEvent: vi.fn(),
+			contextUsageTokenBaseline: 12,
+			activityTracker: { handleEvent: vi.fn() },
+			updateWorkingLoaderMessage: vi.fn(),
+			addMessageToChat: vi.fn(),
+			ui: { requestRender: vi.fn() },
+			sessionRecap,
+			renderRecap: vi.fn(),
+			updatePendingMessagesDisplay: vi.fn(),
+		}),
+	);
 }
 
 async function handleMessageStart(mode: MessageStartHandleMode, message: AgentMessage): Promise<void> {
-	await (InteractiveMode.prototype as unknown as MessageStartHandleHost).handleEvent.call(mode, {
+	await fromAny<MessageStartHandleHost, unknown>(InteractiveMode.prototype).handleEvent.call(mode, {
 		type: "message_start",
 		message,
 	});
@@ -179,7 +182,7 @@ describe("ENG-4482 heartbeat injected prompt UI", () => {
 	it("resets overflow recovery state when heartbeat prompt turns start", async () => {
 		const harness = await createHarness();
 		harnesses.push(harness);
-		const sessionInternals = harness.session as unknown as { _overflowRecovery: string };
+		const sessionInternals = fromAny<{ _overflowRecovery: string }, unknown>(harness.session);
 		sessionInternals._overflowRecovery = "attempted";
 		harness.setResponses([fauxAssistantMessage("heartbeat handled")]);
 
@@ -558,7 +561,7 @@ describe("ENG-4482 heartbeat injected prompt UI", () => {
 			const timestamp = Date.parse(heartbeat.nextRunAt ?? heartbeat.lastRunAt ?? heartbeat.createdAt);
 			const chatContainer = new Container();
 			const addToHistory = vi.fn();
-			const mode = Object.create(InteractiveMode.prototype) as LegacyHeartbeatRenderMode;
+			const mode = fromPartial<LegacyHeartbeatRenderMode>(Object.create(InteractiveMode.prototype));
 			mode.connectionState = { heartbeat };
 			mode.chatContainer = chatContainer;
 			mode.toolOutputExpanded = false;
@@ -571,7 +574,7 @@ describe("ENG-4482 heartbeat injected prompt UI", () => {
 				timestamp,
 			};
 
-			(InteractiveMode.prototype as unknown as AddMessageToChatHost).addMessageToChat.call(mode, message, {
+			fromAny<AddMessageToChatHost, unknown>(InteractiveMode.prototype).addMessageToChat.call(mode, message, {
 				populateHistory: true,
 			});
 
@@ -586,7 +589,7 @@ describe("ENG-4482 heartbeat injected prompt UI", () => {
 	it("does not render matching user messages at interval phases as heartbeat panels", () => {
 		const heartbeat = createHeartbeat();
 		const chatContainer = new Container();
-		const mode = Object.create(InteractiveMode.prototype) as LegacyHeartbeatRenderMode;
+		const mode = fromPartial<LegacyHeartbeatRenderMode>(Object.create(InteractiveMode.prototype));
 		mode.connectionState = { heartbeat };
 		mode.chatContainer = chatContainer;
 		mode.toolOutputExpanded = false;
@@ -599,7 +602,7 @@ describe("ENG-4482 heartbeat injected prompt UI", () => {
 			timestamp: Date.parse("2026-01-01T00:15:00.000Z"),
 		};
 
-		(InteractiveMode.prototype as unknown as AddMessageToChatHost).addMessageToChat.call(mode, message);
+		fromAny<AddMessageToChatHost, unknown>(InteractiveMode.prototype).addMessageToChat.call(mode, message);
 
 		const rendered = stripAnsi(chatContainer.render(120).join("\n"));
 		expect(rendered).not.toContain("Heartbeat prompt");

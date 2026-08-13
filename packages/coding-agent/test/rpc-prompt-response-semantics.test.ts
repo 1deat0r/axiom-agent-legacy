@@ -9,6 +9,7 @@ import {
 	getModel,
 	type Model,
 } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentSession } from "../src/core/agent-session.js";
 import type { AgentSessionRuntime } from "../src/core/agent-session-runtime.js";
@@ -19,10 +20,15 @@ import { SettingsManager } from "../src/core/settings-manager.js";
 import { runRpcMode } from "../src/modes/rpc/rpc-mode.js";
 import { createTestResourceLoader } from "./utilities.js";
 
-const rpcIo = vi.hoisted(() => ({
-	outputLines: [] as string[],
-	lineHandler: undefined as ((line: string) => void) | undefined,
-}));
+const rpcIo = vi.hoisted(
+	(): {
+		outputLines: string[];
+		lineHandler: ((line: string) => void) | undefined;
+	} => ({
+		outputLines: [],
+		lineHandler: undefined,
+	}),
+);
 
 vi.mock("../src/core/output-guard.js", () => ({
 	takeOverStdout: vi.fn(),
@@ -80,7 +86,7 @@ function parseOutputLines(outputLines: string[]): ParsedOutputLine[] {
 	return outputLines
 		.flatMap((line) => line.split("\n"))
 		.filter((line) => line.trim().length > 0)
-		.map((line) => JSON.parse(line) as ParsedOutputLine);
+		.map((line) => fromPartial<ParsedOutputLine>(JSON.parse(line)));
 }
 
 function getPromptResponses(outputLines: string[], id: string): ParsedOutputLine[] {
@@ -142,14 +148,14 @@ function createRuntimeHost(options: { withAuth: boolean; responseDelayMs: number
 		resourceLoader: createTestResourceLoader(),
 	});
 
-	const runtimeHost = {
+	const runtimeHost = fromAny<AgentSessionRuntime, unknown>({
 		session,
 		newSession: vi.fn(async () => ({ cancelled: true })),
 		switchSession: vi.fn(async () => ({ cancelled: true })),
 		fork: vi.fn(async () => ({ cancelled: true, selectedText: "" })),
 		dispose: vi.fn(async () => {}),
 		setRebindSession: vi.fn(),
-	} as unknown as AgentSessionRuntime;
+	});
 
 	return {
 		runtimeHost,

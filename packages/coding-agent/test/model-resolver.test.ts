@@ -1,4 +1,5 @@
 import type { Model } from "@earendil-works/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, test } from "vitest";
 import {
 	defaultModelPerProvider,
@@ -257,9 +258,9 @@ describe("parseModelPattern", () => {
 
 describe("resolveCliModel", () => {
 	test("resolves --model provider/id without --provider", () => {
-		const registry = {
+		const registry = fromAny<Parameters<typeof resolveCliModel>[0]["modelRegistry"], unknown>({
 			getAll: () => allModels,
-		} as unknown as Parameters<typeof resolveCliModel>[0]["modelRegistry"];
+		});
 
 		const result = resolveCliModel({
 			cliModel: "openai/gpt-4o",
@@ -272,9 +273,9 @@ describe("resolveCliModel", () => {
 	});
 
 	test("resolves fuzzy patterns within an explicit provider", () => {
-		const registry = {
+		const registry = fromAny<Parameters<typeof resolveCliModel>[0]["modelRegistry"], unknown>({
 			getAll: () => allModels,
-		} as unknown as Parameters<typeof resolveCliModel>[0]["modelRegistry"];
+		});
 
 		const result = resolveCliModel({
 			cliProvider: "openai",
@@ -288,9 +289,9 @@ describe("resolveCliModel", () => {
 	});
 
 	test("supports --model <pattern>:<thinking> (without explicit --thinking)", () => {
-		const registry = {
+		const registry = fromAny<Parameters<typeof resolveCliModel>[0]["modelRegistry"], unknown>({
 			getAll: () => allModels,
-		} as unknown as Parameters<typeof resolveCliModel>[0]["modelRegistry"];
+		});
 
 		const result = resolveCliModel({
 			cliModel: "sonnet:high",
@@ -303,9 +304,9 @@ describe("resolveCliModel", () => {
 	});
 
 	test("prefers exact model id match over provider inference (OpenRouter-style ids)", () => {
-		const registry = {
+		const registry = fromAny<Parameters<typeof resolveCliModel>[0]["modelRegistry"], unknown>({
 			getAll: () => allModels,
-		} as unknown as Parameters<typeof resolveCliModel>[0]["modelRegistry"];
+		});
 
 		const result = resolveCliModel({
 			cliModel: "openai/gpt-4o:extended",
@@ -318,9 +319,9 @@ describe("resolveCliModel", () => {
 	});
 
 	test("does not strip invalid :suffix as thinking level in --model (treat as raw id)", () => {
-		const registry = {
+		const registry = fromAny<Parameters<typeof resolveCliModel>[0]["modelRegistry"], unknown>({
 			getAll: () => allModels,
-		} as unknown as Parameters<typeof resolveCliModel>[0]["modelRegistry"];
+		});
 
 		const result = resolveCliModel({
 			cliProvider: "openai",
@@ -334,9 +335,9 @@ describe("resolveCliModel", () => {
 	});
 
 	test("allows custom model ids for explicit providers without double prefixing", () => {
-		const registry = {
+		const registry = fromAny<Parameters<typeof resolveCliModel>[0]["modelRegistry"], unknown>({
 			getAll: () => allModels,
-		} as unknown as Parameters<typeof resolveCliModel>[0]["modelRegistry"];
+		});
 
 		const result = resolveCliModel({
 			cliProvider: "openrouter",
@@ -350,9 +351,9 @@ describe("resolveCliModel", () => {
 	});
 
 	test("returns a clear error when there are no models", () => {
-		const registry = {
+		const registry = fromAny<Parameters<typeof resolveCliModel>[0]["modelRegistry"], unknown>({
 			getAll: () => [],
-		} as unknown as Parameters<typeof resolveCliModel>[0]["modelRegistry"];
+		});
 
 		const result = resolveCliModel({
 			cliProvider: "openai",
@@ -391,9 +392,9 @@ describe("resolveCliModel", () => {
 			contextWindow: 128000,
 			maxTokens: 8192,
 		};
-		const registry = {
+		const registry = fromAny<Parameters<typeof resolveCliModel>[0]["modelRegistry"], unknown>({
 			getAll: () => [...allModels, zaiModel, gatewayModel],
-		} as unknown as Parameters<typeof resolveCliModel>[0]["modelRegistry"];
+		});
 
 		const result = resolveCliModel({
 			cliModel: "zai/glm-5",
@@ -406,9 +407,9 @@ describe("resolveCliModel", () => {
 	});
 
 	test("resolves provider-prefixed fuzzy patterns (openrouter/qwen -> openrouter model)", () => {
-		const registry = {
+		const registry = fromAny<Parameters<typeof resolveCliModel>[0]["modelRegistry"], unknown>({
 			getAll: () => allModels,
-		} as unknown as Parameters<typeof resolveCliModel>[0]["modelRegistry"];
+		});
 
 		const result = resolveCliModel({
 			cliModel: "openrouter/qwen",
@@ -440,9 +441,9 @@ describe("default model selection", () => {
 	});
 
 	test("findInitialModel accepts explicit provider custom model ids", async () => {
-		const registry = {
+		const registry = fromAny<Parameters<typeof findInitialModel>[0]["modelRegistry"], unknown>({
 			getAll: () => allModels,
-		} as unknown as Parameters<typeof findInitialModel>[0]["modelRegistry"];
+		});
 
 		const result = await findInitialModel({
 			cliProvider: "openrouter",
@@ -458,9 +459,9 @@ describe("default model selection", () => {
 
 	test("findInitialModel uses medium as the built-in default thinking level", async () => {
 		const reasoningModel = mockModels[0];
-		const registry = {
+		const registry = fromAny<Parameters<typeof findInitialModel>[0]["modelRegistry"], unknown>({
 			refreshAvailableModels: async () => [reasoningModel],
-		} as unknown as Parameters<typeof findInitialModel>[0]["modelRegistry"];
+		});
 
 		const result = await findInitialModel({
 			scopedModels: [],
@@ -490,9 +491,9 @@ describe("default model selection", () => {
 			contextWindow: 1048576,
 			maxTokens: 101376,
 		};
-		const registry = {
+		const registry = fromAny<Parameters<typeof findInitialModel>[0]["modelRegistry"], unknown>({
 			refreshAvailableModels: async () => [anthropicModel, primeModel],
-		} as unknown as Parameters<typeof findInitialModel>[0]["modelRegistry"];
+		});
 
 		const result = await findInitialModel({
 			scopedModels: [],
@@ -509,9 +510,9 @@ describe("default model selection", () => {
 			id: "claude-opus-4-7",
 			name: "Claude Opus 4.7",
 		};
-		const registry = {
+		const registry = fromAny<Parameters<typeof findInitialModel>[0]["modelRegistry"], unknown>({
 			refreshAvailableModels: async () => [anthropicModel],
-		} as unknown as Parameters<typeof findInitialModel>[0]["modelRegistry"];
+		});
 
 		const result = await findInitialModel({
 			scopedModels: [],
@@ -536,9 +537,9 @@ describe("default model selection", () => {
 			maxTokens: 8192,
 		};
 
-		const registry = {
+		const registry = fromAny<Parameters<typeof findInitialModel>[0]["modelRegistry"], unknown>({
 			refreshAvailableModels: async () => [aiGatewayModel],
-		} as unknown as Parameters<typeof findInitialModel>[0]["modelRegistry"];
+		});
 
 		const result = await findInitialModel({
 			scopedModels: [],
@@ -564,12 +565,12 @@ describe("default model selection", () => {
 			contextWindow: 128000,
 			maxTokens: 8192,
 		};
-		const registry = {
+		const registry = fromAny<Parameters<typeof findInitialModel>[0]["modelRegistry"], unknown>({
 			find: (provider: string, modelId: string) =>
 				[savedDefault, primeModel].find((model) => model.provider === provider && model.id === modelId),
 			hasConfiguredAuth: (model: Model<"anthropic-messages">) => model.provider === "prime-inference",
 			refreshAvailableModels: async () => [primeModel],
-		} as unknown as Parameters<typeof findInitialModel>[0]["modelRegistry"];
+		});
 
 		const result = await findInitialModel({
 			scopedModels: [],
@@ -596,12 +597,12 @@ describe("default model selection", () => {
 			contextWindow: 128000,
 			maxTokens: 8192,
 		};
-		const registry = {
+		const registry = fromAny<Parameters<typeof findInitialModel>[0]["modelRegistry"], unknown>({
 			find: () => undefined,
 			getAll: () => [primeSnapshotModel],
 			hasConfiguredAuth: (model: Model<"anthropic-messages">) => model.provider === "prime-inference",
 			refreshAvailableModels: async () => [primeSnapshotModel],
-		} as unknown as Parameters<typeof findInitialModel>[0]["modelRegistry"];
+		});
 
 		const result = await findInitialModel({
 			scopedModels: [],
@@ -628,12 +629,12 @@ describe("default model selection", () => {
 			contextWindow: 128000,
 			maxTokens: 8192,
 		};
-		const registry = {
+		const registry = fromAny<Parameters<typeof findInitialModel>[0]["modelRegistry"], unknown>({
 			find: () => undefined,
 			getAll: () => [...mockModels, primeSnapshotModel],
 			hasConfiguredAuth: (model: Model<"anthropic-messages">) => model.provider === "prime-inference",
 			refreshAvailableModels: async () => [primeSnapshotModel],
-		} as unknown as Parameters<typeof findInitialModel>[0]["modelRegistry"];
+		});
 
 		const result = await findInitialModel({
 			scopedModels: [],

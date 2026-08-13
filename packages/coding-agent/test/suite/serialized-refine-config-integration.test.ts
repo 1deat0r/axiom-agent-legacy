@@ -6,6 +6,7 @@
  */
 
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type AgentSessionRuntimeConfig, mergeAgentSessionRuntimeConfig } from "../../src/core/agent-session-config.js";
 import type { AgentRlmHeartbeatController } from "../../src/core/cron-jobs.js";
@@ -63,7 +64,7 @@ describe("Serialized refine config integration (unit)", () => {
 		});
 		harnesses.push(harness);
 
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		expect(internals._serializedRefine).toBe(true);
 	});
 
@@ -73,7 +74,7 @@ describe("Serialized refine config integration (unit)", () => {
 		});
 		harnesses.push(harness);
 
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		expect(internals._serializedRefine).toBe(false);
 	});
 
@@ -93,10 +94,13 @@ describe("Serialized refine config integration (unit)", () => {
 		});
 		harnesses.push(harness);
 
-		const internals = harness.session as unknown as SerializedInternals & {
-			_planRefine: (opts: { instructions?: string }, signal: AbortSignal) => Promise<unknown>;
-			_applyRefine: (plan: unknown, opts: unknown, abort: AbortController) => Promise<unknown>;
-		};
+		const internals = fromAny<
+			SerializedInternals & {
+				_planRefine: (opts: { instructions?: string }, signal: AbortSignal) => Promise<unknown>;
+				_applyRefine: (plan: unknown, opts: unknown, abort: AbortController) => Promise<unknown>;
+			},
+			unknown
+		>(harness.session);
 
 		vi.spyOn(internals, "_planRefine").mockResolvedValue({ id: "p", proposal: { edits: [] } });
 		vi.spyOn(internals, "_applyRefine").mockResolvedValue({
@@ -147,17 +151,17 @@ describe("Serialized refine controller availability (unit)", () => {
 		});
 		harnesses.push(harness);
 
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		expect(internals._rlmHeartbeatController).toBeUndefined();
 		const initialProvisioner = internals._ipythonKernelProvisioner;
 
 		// Simulate print/headless mode attaching a controller after construction.
-		const fakeController = {
+		const fakeController = fromAny<AgentRlmHeartbeatController, unknown>({
 			listRlmHeartbeats: () => [],
 			createRlmHeartbeat: () => ({ id: "test", status: "active" }),
 			updateRlmHeartbeat: () => undefined,
 			deleteRlmHeartbeat: () => undefined,
-		} as unknown as AgentRlmHeartbeatController;
+		});
 		harness.session.setRlmHeartbeatController(fakeController);
 
 		expect(internals._rlmHeartbeatController).toBe(fakeController);
@@ -182,9 +186,12 @@ describe("Serialized refine controller availability (unit)", () => {
 		});
 		harnesses.push(harness);
 
-		const internals = harness.session as unknown as SerializedInternals & {
-			_planRefine: (opts: { instructions?: string }, signal: AbortSignal) => Promise<unknown>;
-		};
+		const internals = fromAny<
+			SerializedInternals & {
+				_planRefine: (opts: { instructions?: string }, signal: AbortSignal) => Promise<unknown>;
+			},
+			unknown
+		>(harness.session);
 
 		// Initially not in flight.
 		const statusBefore = harness.session.handleRefineHostRequest("refine.status");
@@ -200,9 +207,9 @@ describe("Serialized refine controller availability (unit)", () => {
 			return { id: "p", proposal: { edits: [] } };
 		});
 
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = true;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = true;
 		harness.session.handleRefineHostRequest("refine.run", { instructions: "test" });
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = false;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = false;
 
 		// Wait for the plan to start.
 		await new Promise<void>((resolve) => setTimeout(resolve, 10));
@@ -215,8 +222,8 @@ describe("Serialized refine controller availability (unit)", () => {
 		await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 		// Run the checkpoint to consume the background plan.
-		await (
-			harness.session as unknown as { _runSerializedRefineCheckpoint: () => Promise<void> }
+		await fromAny<{ _runSerializedRefineCheckpoint: () => Promise<void> }, unknown>(
+			harness.session,
 		)._runSerializedRefineCheckpoint();
 
 		// After the checkpoint, nothing should be in flight.
@@ -261,10 +268,13 @@ describe("PR #503 model preservation (unit)", () => {
 		});
 		harnesses.push(harness);
 
-		const internals = harness.session as unknown as SerializedInternals & {
-			_planRefine: (opts: { instructions?: string }, signal: AbortSignal) => Promise<unknown>;
-			_applyRefine: (plan: unknown, opts: unknown, abort: AbortController) => Promise<unknown>;
-		};
+		const internals = fromAny<
+			SerializedInternals & {
+				_planRefine: (opts: { instructions?: string }, signal: AbortSignal) => Promise<unknown>;
+				_applyRefine: (plan: unknown, opts: unknown, abort: AbortController) => Promise<unknown>;
+			},
+			unknown
+		>(harness.session);
 
 		vi.spyOn(internals, "_planRefine").mockResolvedValue({ id: "p", proposal: { edits: [] } });
 		vi.spyOn(internals, "_applyRefine").mockResolvedValue({

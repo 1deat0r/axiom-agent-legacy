@@ -37,6 +37,7 @@ vi.mock("child_process", () => ({
 	}),
 }));
 
+import { fromAny } from "@total-typescript/shoehorn";
 import { FooterDataProvider } from "../src/core/footer-data-provider.js";
 
 type WorktreeFixture = {
@@ -241,9 +242,12 @@ describe("FooterDataProvider reftable branch detection", () => {
 
 		const provider = new FooterDataProvider(repoDir);
 		try {
-			const providerWithInternals = provider as unknown as {
-				headWatcher: FSWatcher | null;
-			};
+			const providerWithInternals = fromAny<
+				{
+					headWatcher: FSWatcher | null;
+				},
+				unknown
+			>(provider);
 			const originalWatcher = providerWithInternals.headWatcher;
 			expect(originalWatcher).not.toBeNull();
 			expect(originalWatcher?.listenerCount("error")).toBeGreaterThan(0);

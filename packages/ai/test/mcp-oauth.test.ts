@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMcpOAuthProvider } from "../src/mcp/oauth.js";
 
@@ -130,13 +131,15 @@ describe.sequential("MCP OAuth provider", () => {
 		vi.stubGlobal("fetch", fetchMock);
 
 		const provider = createMcpOAuthProvider({ server: "demo", url: "https://srv.test/mcp" });
-		const refreshed = await provider.refreshToken({
-			access: "access-1",
-			refresh: "old-refresh",
-			expires: Date.now() - 1000,
-			tokenEndpoint: META.token_endpoint,
-			clientId: "client-xyz",
-		} as never);
+		const refreshed = await provider.refreshToken(
+			fromAny<never, unknown>({
+				access: "access-1",
+				refresh: "old-refresh",
+				expires: Date.now() - 1000,
+				tokenEndpoint: META.token_endpoint,
+				clientId: "client-xyz",
+			}),
+		);
 
 		expect(refreshed.access).toBe("access-2");
 		expect(refreshed.refresh).toBe("old-refresh");

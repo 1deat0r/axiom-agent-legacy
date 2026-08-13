@@ -8,6 +8,7 @@
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import { handleProfileCommand } from "../../src/cli/profile-command.js";
 import {
@@ -49,40 +50,52 @@ describe("round-1 synthetic users", () => {
 			const pi = bootAxiom(profileHome);
 			const { ctx, notified, aborted } = userCtx();
 			// 3. SOUL.md rides the system prompt
-			const soul = (await emitEvent(
-				pi,
-				"before_agent_start",
-				{ type: "before_agent_start", prompt: "hello", systemPrompt: "base" },
-				ctx,
-			)) as {
-				systemPrompt?: string;
-			};
+			const soul = fromAny<
+				{
+					systemPrompt?: string;
+				},
+				unknown
+			>(
+				await emitEvent(
+					pi,
+					"before_agent_start",
+					{ type: "before_agent_start", prompt: "hello", systemPrompt: "base" },
+					ctx,
+				),
+			);
 			expect(soul.systemPrompt).toContain("client-alpha");
 			log.push("SOUL.md injected into the system prompt");
 			// 4. /cost on a fresh session
-			await pi.commands.get("cost")!.handler("", ctx as never);
+			await pi.commands.get("cost")!.handler("", fromAny<never, unknown>(ctx));
 			expect(notified[0]).toContain("session $0.0000");
 			log.push(`ran /cost -> "${notified[0]}"`);
 			// 5. persist a durable fact with the memory tool
 			const tool = pi.tools.find((t) => t.name === "memory")!;
-			const added = (await tool.execute("c1", {
-				action: "add",
-				content: "Client Alpha wants weekly summaries",
-				scope: "user",
-			})) as {
+			const added = fromPartial<{
 				content: Array<{ type: string; text: string }>;
-			};
+			}>(
+				await tool.execute("c1", {
+					action: "add",
+					content: "Client Alpha wants weekly summaries",
+					scope: "user",
+				}),
+			);
 			expect(added.content[0]!.text).toContain("Remembered");
 			log.push("memory tool persisted a durable fact");
 			// 6. memory rides the prompt on the next run
-			const withMemory = (await emitEvent(
-				pi,
-				"before_agent_start",
-				{ type: "before_agent_start", prompt: "hello", systemPrompt: "base" },
-				ctx,
-			)) as {
-				systemPrompt?: string;
-			};
+			const withMemory = fromAny<
+				{
+					systemPrompt?: string;
+				},
+				unknown
+			>(
+				await emitEvent(
+					pi,
+					"before_agent_start",
+					{ type: "before_agent_start", prompt: "hello", systemPrompt: "base" },
+					ctx,
+				),
+			);
 			expect(withMemory.systemPrompt).toContain("weekly summaries");
 			log.push("memory fact rides the next run's prompt");
 			// 7. set a run cap and hit it mid-run (the hard guard)
@@ -113,7 +126,7 @@ describe("round-1 synthetic users", () => {
 					usage({ input: 600_000, cost: { input: 0.6, output: 0, cacheRead: 0, cacheWrite: 0, total: 0.6 } }),
 				),
 			]);
-			await pi.commands.get("cost")!.handler("", ctx3 as never);
+			await pi.commands.get("cost")!.handler("", fromAny<never, unknown>(ctx3));
 			expect(n3.at(-1)).toContain("session $0.6000");
 			log.push(`ran /cost after the run -> "${n3.at(-1)}"`);
 			// 9. the footer status tracks session cost (the session holds the run's message)
@@ -151,28 +164,38 @@ describe("round-1 synthetic users", () => {
 			vi.stubEnv("PI_CODING_AGENT_DIR", profileHome);
 			const pi = bootAxiom(profileHome);
 			const { ctx } = userCtx();
-			const soul = (await emitEvent(
-				pi,
-				"before_agent_start",
-				{ type: "before_agent_start", prompt: "hi", systemPrompt: "base" },
-				ctx,
-			)) as {
-				systemPrompt?: string;
-			};
+			const soul = fromAny<
+				{
+					systemPrompt?: string;
+				},
+				unknown
+			>(
+				await emitEvent(
+					pi,
+					"before_agent_start",
+					{ type: "before_agent_start", prompt: "hi", systemPrompt: "base" },
+					ctx,
+				),
+			);
 			expect(soul.systemPrompt).toContain("my-bot");
 			expect(soul.systemPrompt).toContain("<<<profile>>>");
 			log.push("system prompt carries the profile identity block");
 			// 4. the memory block is delimited and human-readable
 			const tool = pi.tools.find((t) => t.name === "memory")!;
 			await tool.execute("c1", { action: "add", content: "Tom prefers plain English", scope: "user" });
-			const mem = (await emitEvent(
-				pi,
-				"before_agent_start",
-				{ type: "before_agent_start", prompt: "hi", systemPrompt: "base" },
-				ctx,
-			)) as {
-				systemPrompt?: string;
-			};
+			const mem = fromAny<
+				{
+					systemPrompt?: string;
+				},
+				unknown
+			>(
+				await emitEvent(
+					pi,
+					"before_agent_start",
+					{ type: "before_agent_start", prompt: "hi", systemPrompt: "base" },
+					ctx,
+				),
+			);
 			expect(mem.systemPrompt).toContain("<<<memory>>>");
 			expect(mem.systemPrompt).toContain("- [user] Tom prefers plain English");
 			log.push("memory block readable in the prompt");
@@ -239,7 +262,7 @@ describe("round-1 synthetic users", () => {
 					usage({ input: 1_000_000, cost: { input: 9.0, output: 0, cacheRead: 0, cacheWrite: 0, total: 9.0 } }),
 				),
 			]);
-			await pi.commands.get("cost")!.handler("", costCtx as never);
+			await pi.commands.get("cost")!.handler("", fromAny<never, unknown>(costCtx));
 			expect(costNotified.at(-1)).toContain("repriced at override rates");
 			expect(costNotified.at(-1)).toContain("session $0.5000");
 			log.push(`/cost notes -> "${costNotified.at(-1)}"`);
@@ -323,14 +346,19 @@ describe("round-1 synthetic users", () => {
 			vi.stubEnv("PI_CODING_AGENT_DIR", writingHome);
 			const writing = bootAxiom(writingHome);
 			const { ctx } = userCtx();
-			const mem = (await emitEvent(
-				writing,
-				"before_agent_start",
-				{ type: "before_agent_start", prompt: "hi", systemPrompt: "base" },
-				ctx,
-			)) as {
-				systemPrompt?: string;
-			};
+			const mem = fromAny<
+				{
+					systemPrompt?: string;
+				},
+				unknown
+			>(
+				await emitEvent(
+					writing,
+					"before_agent_start",
+					{ type: "before_agent_start", prompt: "hi", systemPrompt: "base" },
+					ctx,
+				),
+			);
 			expect(mem.systemPrompt).not.toContain("mock endpoint");
 			log.push("writing profile has no memory of research");
 			// costs are isolated per home too
@@ -365,9 +393,9 @@ describe("round-1 synthetic users", () => {
 			for (let i = 0; i < 55; i++) {
 				await tool.execute("c1", { action: "add", content: `fact ${i}`, scope: "user" });
 			}
-			const listed = (await tool.execute("c1", { action: "list" })) as {
+			const listed = fromPartial<{
 				content: Array<{ type: string; text: string }>;
-			};
+			}>(await tool.execute("c1", { action: "list" }));
 			const lines = listed.content[0]!.text.split("\n");
 			expect(lines.length).toBe(50);
 			log.push("memory capped at 50/scope after flooding 55 facts");
@@ -419,7 +447,7 @@ describe("round-1 synthetic users", () => {
 					"gpt-5.6",
 				),
 			]);
-			await pi.commands.get("cost")!.handler("", costCtx as never);
+			await pi.commands.get("cost")!.handler("", fromAny<never, unknown>(costCtx));
 			expect(costNotified.at(-1)).toContain("session $0.5100");
 			log.push(`/cost totals two models -> "${costNotified.at(-1)}"`);
 			// 4. the report now carries the per-model rows (regression flip from plan v2)

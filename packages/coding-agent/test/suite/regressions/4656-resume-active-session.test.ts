@@ -1,4 +1,5 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import { DaemonAgentConnection } from "../../../src/modes/agent-connection/daemon-agent-connection.js";
 import type { AgentConnectionEvent, AgentConnectionState } from "../../../src/modes/agent-connection/types.js";
@@ -190,13 +191,13 @@ function createAttachResult(activeSessionId: string, messages: AgentMessage[] = 
 }
 
 function asDaemonClient(client: ResumeDaemonClient): DaemonClient {
-	return client as unknown as DaemonClient;
+	return fromAny<DaemonClient, unknown>(client);
 }
 
 function createSocketClient(id: string, attachedActiveSessionIds: string[]): DaemonSocketClient {
 	return {
 		id,
-		socket: { destroyed: false } as DaemonSocketClient["socket"],
+		socket: fromPartial<DaemonSocketClient["socket"]>({ destroyed: false }),
 		attachedActiveSessionIds: new Set(attachedActiveSessionIds),
 		detachInput: () => {},
 		supportsExtensionUi: true,
@@ -251,34 +252,36 @@ describe("ENG-4656 active session resume", () => {
 			operations.push(message.type === "response" ? "response" : message.type);
 			return true;
 		});
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			clients: new Set([movingClient, sourcePeer, targetPeer]),
-			findWorker: vi.fn(async () => ({ worker: targetWorker, summary: targetSummary })),
-			reserveSnapshotStream: vi.fn(() => {
-				operations.push("reserve");
-				return releaseReservation;
+		const supervisor = fromPartial<SupervisorHarness>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				clients: new Set([movingClient, sourcePeer, targetPeer]),
+				findWorker: vi.fn(async () => ({ worker: targetWorker, summary: targetSummary })),
+				reserveSnapshotStream: vi.fn(() => {
+					operations.push("reserve");
+					return releaseReservation;
+				}),
+				attachClient: vi.fn(async (client: DaemonSocketClient) => {
+					expect(client.attachedActiveSessionIds.has(targetActiveSessionId)).toBe(true);
+					operations.push("attach");
+					client.attachedActiveSessionIds.add(targetActiveSessionId);
+					return { worker: targetWorker, result: createAttachResult(targetActiveSessionId) };
+				}),
+				getOrCreateTranscriptCache: vi.fn(() => ({})),
+				createStreamedAttachResult: vi.fn((result: DaemonAttachResult) => ({
+					...result,
+					snapshotStream: { id: "snapshot-1", messageCount: 0, targetChunkBytes: 512 * 1024 },
+				})),
+				streamSnapshot: vi.fn(async () => {
+					operations.push("stream");
+					releaseReservation();
+				}),
+				matchWorkers: vi.fn(() => []),
+				dropPendingReplacementSnapshot: vi.fn(),
+				syncWorkerExtensionUi: vi.fn(async () => undefined),
+				write,
+				log: vi.fn(),
 			}),
-			attachClient: vi.fn(async (client: DaemonSocketClient) => {
-				expect(client.attachedActiveSessionIds.has(targetActiveSessionId)).toBe(true);
-				operations.push("attach");
-				client.attachedActiveSessionIds.add(targetActiveSessionId);
-				return { worker: targetWorker, result: createAttachResult(targetActiveSessionId) };
-			}),
-			getOrCreateTranscriptCache: vi.fn(() => ({})),
-			createStreamedAttachResult: vi.fn((result: DaemonAttachResult) => ({
-				...result,
-				snapshotStream: { id: "snapshot-1", messageCount: 0, targetChunkBytes: 512 * 1024 },
-			})),
-			streamSnapshot: vi.fn(async () => {
-				operations.push("stream");
-				releaseReservation();
-			}),
-			matchWorkers: vi.fn(() => []),
-			dropPendingReplacementSnapshot: vi.fn(),
-			syncWorkerExtensionUi: vi.fn(async () => undefined),
-			write,
-			log: vi.fn(),
-		}) as SupervisorHarness;
+		);
 
 		await supervisor.handleCommand(movingClient, {
 			type: "reattach",

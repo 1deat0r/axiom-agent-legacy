@@ -1,4 +1,5 @@
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CustomMessage } from "../../src/core/messages.js";
 import type { ActionStore, SessionAction } from "../../src/core/session-action-store.js";
@@ -57,7 +58,7 @@ describe("AgentSession action commit-fence races", () => {
 	it.each([
 		...["turn", "command"].flatMap((kind) =>
 			(["pause", "clear", "restart", "dispose"] as const).map((interruption) => ({
-				kind: kind as ActionKind,
+				kind: fromAny<ActionKind, unknown>(kind),
 				interruption,
 			})),
 		),
@@ -68,7 +69,7 @@ describe("AgentSession action commit-fence races", () => {
 		const text = kind === "turn" ? "commit-fence turn" : "/autonomous status";
 		const reached = createDeferred();
 		const releaseFence = createDeferred();
-		const internals = harness.session as unknown as CommitFenceInternals;
+		const internals = fromAny<CommitFenceInternals, unknown>(harness.session);
 		const acquireFence = internals._acquireSessionActionCommitFence.bind(internals);
 		internals._acquireSessionActionCommitFence = async () => {
 			if (internals._actionStore.unfinishedActions().length === 0) return acquireFence();
@@ -129,7 +130,7 @@ describe("AgentSession action commit-fence races", () => {
 	it("reports a queued commit-fence waiter while its predecessor releases", async () => {
 		const harness = await createHarness();
 		harnesses.push(harness);
-		const internals = harness.session as unknown as CommitFenceInternals;
+		const internals = fromAny<CommitFenceInternals, unknown>(harness.session);
 		const heldFence = await internals._acquireSessionActionCommitFence();
 		const nextFencePromise = internals._acquireSessionActionCommitFence();
 		await vi.waitFor(() => expect(internals._pendingSessionActionFenceWaiters).toBe(1));
@@ -146,7 +147,7 @@ describe("AgentSession action commit-fence races", () => {
 	it("aborts a prompt waiting for the commit fence without leaking the fence", async () => {
 		const harness = await createHarness();
 		harnesses.push(harness);
-		const internals = harness.session as unknown as CommitFenceInternals;
+		const internals = fromAny<CommitFenceInternals, unknown>(harness.session);
 		const heldFence = await internals._acquireSessionActionCommitFence();
 		const controller = new AbortController();
 		const prompt = harness.session.prompt("blocked prompt", { signal: controller.signal });
@@ -215,7 +216,7 @@ describe("AgentSession action commit-fence races", () => {
 	it("does not restart a session command cancelled while waiting for the commit fence", async () => {
 		const harness = await createHarness();
 		harnesses.push(harness);
-		const internals = harness.session as unknown as CommitFenceInternals;
+		const internals = fromAny<CommitFenceInternals, unknown>(harness.session);
 		const schedule = vi.spyOn(internals, "_scheduleSessionInputPump").mockImplementation(() => {});
 		const text = "/autonomous status";
 		const completion = harness.session.promptAndWait(text);
@@ -237,7 +238,7 @@ describe("AgentSession action commit-fence races", () => {
 	it("rechecks refinement before running a command parked on the commit fence", async () => {
 		const harness = await createHarness();
 		harnesses.push(harness);
-		const internals = harness.session as unknown as CommitFenceInternals;
+		const internals = fromAny<CommitFenceInternals, unknown>(harness.session);
 		const schedule = vi.spyOn(internals, "_scheduleSessionInputPump").mockImplementation(() => {});
 		const command = harness.session.promptAndWait("/autonomous status");
 		await vi.waitFor(() => expect(internals._actionStore.unfinishedActions()).toHaveLength(1));
@@ -265,7 +266,7 @@ describe("AgentSession action commit-fence races", () => {
 	it("releases the direct-turn fence when suspension wins after acquisition", async () => {
 		const harness = await createHarness();
 		harnesses.push(harness);
-		const internals = harness.session as unknown as CommitFenceInternals;
+		const internals = fromAny<CommitFenceInternals, unknown>(harness.session);
 		await harness.session.followUp("queued work");
 
 		const admission = internals._acquireDirectTurnAdmissionFence();
@@ -292,7 +293,7 @@ describe("AgentSession action commit-fence races", () => {
 		const harness = await createHarness();
 		harnesses.push(harness);
 		harness.setResponses([fauxAssistantMessage("first done"), fauxAssistantMessage("second done")]);
-		const internals = harness.session as unknown as CommitFenceInternals;
+		const internals = fromAny<CommitFenceInternals, unknown>(harness.session);
 		const pause = harness.session.acquireQueuedWorkPause();
 		const injectedMessage = {
 			role: "custom" as const,

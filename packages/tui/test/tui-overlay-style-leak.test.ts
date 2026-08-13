@@ -1,5 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
+import { fromAny } from "@total-typescript/shoehorn";
 import type { Terminal as XtermTerminalType } from "@xterm/headless";
 import { type Component, TUI } from "../src/tui.js";
 import { VirtualTerminal } from "./virtual-terminal.js";
@@ -25,7 +26,7 @@ class StaticOverlay implements Component {
 }
 
 function getCellItalic(terminal: VirtualTerminal, row: number, col: number): number {
-	const xterm = (terminal as unknown as { xterm: XtermTerminalType }).xterm;
+	const xterm = fromAny<{ xterm: XtermTerminalType }, unknown>(terminal).xterm;
 	const buffer = xterm.buffer.active;
 	const line = buffer.getLine(buffer.viewportY + row);
 	assert.ok(line, `Missing buffer line at row ${row}`);

@@ -3,6 +3,7 @@ import { stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ENV_AGENT_DIR, getAgentTracesLogPath } from "../src/config.js";
 import {
@@ -426,7 +427,7 @@ describe("agent trace upload", () => {
 
 		const failingFetch: typeof fetch = async () => {
 			const error = new TypeError("fetch failed");
-			(error as { cause?: unknown }).cause = { code: "ENOTFOUND", message: "getaddrinfo ENOTFOUND host" };
+			fromPartial<{ cause?: unknown }>(error).cause = { code: "ENOTFOUND", message: "getaddrinfo ENOTFOUND host" };
 			throw error;
 		};
 
@@ -460,7 +461,7 @@ describe("agent trace upload", () => {
 			attempts += 1;
 			if (attempts === 1) {
 				const error = new TypeError("fetch failed");
-				(error as { cause?: unknown }).cause = { code: "ECONNRESET" };
+				fromPartial<{ cause?: unknown }>(error).cause = { code: "ECONNRESET" };
 				throw error;
 			}
 			return createFetchRecorder(calls)(input, init);
@@ -490,7 +491,7 @@ describe("agent trace upload", () => {
 		const failingFetch: typeof fetch = async () => {
 			attempts += 1;
 			const error = new TypeError("fetch failed");
-			(error as { cause?: unknown }).cause = { code: "ECONNRESET" };
+			fromPartial<{ cause?: unknown }>(error).cause = { code: "ECONNRESET" };
 			throw error;
 		};
 
@@ -697,7 +698,7 @@ describe("agent trace upload", () => {
 			attempts += 1;
 			controller.abort(abortReason);
 			const error = new TypeError("fetch failed");
-			(error as { cause?: unknown }).cause = { code: "ECONNRESET" };
+			fromPartial<{ cause?: unknown }>(error).cause = { code: "ECONNRESET" };
 			throw error;
 		};
 
@@ -729,7 +730,7 @@ describe("agent trace upload", () => {
 		let attempts = 0;
 		const fetchFn: typeof fetch = async () => {
 			attempts += 1;
-			return {
+			return fromAny<Response, unknown>({
 				status: 503,
 				headers: new Headers(),
 				body: {
@@ -737,7 +738,7 @@ describe("agent trace upload", () => {
 						controller.abort(abortReason);
 					},
 				},
-			} as unknown as Response;
+			});
 		};
 
 		const upload = uploadAgentTraceFile({
@@ -766,7 +767,7 @@ describe("agent trace upload", () => {
 		const dnsFailFetch: typeof fetch = async () => {
 			attempts += 1;
 			const error = new TypeError("fetch failed");
-			(error as { cause?: unknown }).cause = { code: "ENOTFOUND", message: "getaddrinfo ENOTFOUND host" };
+			fromPartial<{ cause?: unknown }>(error).cause = { code: "ENOTFOUND", message: "getaddrinfo ENOTFOUND host" };
 			throw error;
 		};
 

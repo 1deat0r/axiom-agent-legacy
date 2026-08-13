@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, registerFauxProvider } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentSession } from "../../src/core/agent-session.js";
 import type { AgentSessionRuntimeConfig } from "../../src/core/agent-session-config.js";
@@ -149,7 +150,7 @@ describe("AgentSessionRuntime characterization", () => {
 
 	function createRuntimeWithFakeSession(options?: { onShutdown?: () => void }) {
 		const disposeSession = vi.fn();
-		const session = {
+		const session = fromAny<AgentSession, unknown>({
 			extensionRunner: {
 				hasHandlers: (event: string) => event === "session_shutdown" && options?.onShutdown !== undefined,
 				emit: async () => {
@@ -159,8 +160,8 @@ describe("AgentSessionRuntime characterization", () => {
 			setSubagentRuntimeHost: vi.fn(),
 			dispose: disposeSession,
 			disposeAsync: disposeSession,
-		} as unknown as AgentSession;
-		const services = { cwd: "/tmp", agentDir: "/tmp" } as unknown as AgentSessionServices;
+		});
+		const services = fromAny<AgentSessionServices, unknown>({ cwd: "/tmp", agentDir: "/tmp" });
 		const createRuntime: CreateAgentSessionRuntimeFactory = async () => {
 			throw new Error("unexpected runtime creation");
 		};
@@ -279,9 +280,9 @@ describe("AgentSessionRuntime characterization", () => {
 			throw new Error("first child failed");
 		});
 		const secondDispose = vi.fn(async () => {});
-		const firstChild = { dispose: firstDispose } as unknown as AgentSessionRuntime;
-		const secondChild = { dispose: secondDispose } as unknown as AgentSessionRuntime;
-		const runtimeWithSubagents = runtime as unknown as RuntimeSubagentMapAccess;
+		const firstChild = fromAny<AgentSessionRuntime, unknown>({ dispose: firstDispose });
+		const secondChild = fromAny<AgentSessionRuntime, unknown>({ dispose: secondDispose });
+		const runtimeWithSubagents = fromAny<RuntimeSubagentMapAccess, unknown>(runtime);
 		runtimeWithSubagents.subagentRuntimes.set("first", firstChild);
 		runtimeWithSubagents.subagentRuntimes.set("second", secondChild);
 
@@ -293,10 +294,10 @@ describe("AgentSessionRuntime characterization", () => {
 
 	it("deletes exact and replaced in-process RLM child runtimes and retained sessions", async () => {
 		const { runtime } = await createRuntimeForTest(() => {});
-		const childSession = {} as AgentSession;
+		const childSession = fromPartial<AgentSession>({});
 		const disposeRuntime = vi.fn(async () => {});
-		const childRuntime = { session: childSession, dispose: disposeRuntime } as unknown as AgentSessionRuntime;
-		const runtimeWithSubagents = runtime as unknown as RuntimeSubagentMapAccess;
+		const childRuntime = fromAny<AgentSessionRuntime, unknown>({ session: childSession, dispose: disposeRuntime });
+		const runtimeWithSubagents = fromAny<RuntimeSubagentMapAccess, unknown>(runtime);
 		runtimeWithSubagents.subagentRuntimes.set("child-1", childRuntime);
 
 		await runtime.deleteRlmSubagentRuntime("child-1", childSession);
@@ -304,14 +305,14 @@ describe("AgentSessionRuntime characterization", () => {
 		expect(disposeRuntime).toHaveBeenCalledOnce();
 		expect(runtimeWithSubagents.subagentRuntimes.has("child-1")).toBe(false);
 
-		const currentSession = {} as AgentSession;
+		const currentSession = fromPartial<AgentSession>({});
 		const disposeReplacedRuntime = vi.fn(async () => {});
-		const replacedRuntime = {
+		const replacedRuntime = fromAny<AgentSessionRuntime, unknown>({
 			session: currentSession,
 			dispose: disposeReplacedRuntime,
-		} as unknown as AgentSessionRuntime;
+		});
 		const disposeStaleSession = vi.fn(async () => {});
-		const staleSession = { disposeAsync: disposeStaleSession } as unknown as AgentSession;
+		const staleSession = fromAny<AgentSession, unknown>({ disposeAsync: disposeStaleSession });
 		runtimeWithSubagents.subagentRuntimes.set("replaced-child", replacedRuntime);
 
 		await runtime.deleteRlmSubagentRuntime("replaced-child", staleSession);
@@ -321,7 +322,7 @@ describe("AgentSessionRuntime characterization", () => {
 		expect(runtimeWithSubagents.subagentRuntimes.has("replaced-child")).toBe(false);
 
 		const disposeRetained = vi.fn(async () => {});
-		const retainedSession = { disposeAsync: disposeRetained } as unknown as AgentSession;
+		const retainedSession = fromAny<AgentSession, unknown>({ disposeAsync: disposeRetained });
 		await runtime.deleteRlmSubagentRuntime("retained-child", retainedSession);
 		expect(disposeRetained).toHaveBeenCalledOnce();
 	});
@@ -372,7 +373,7 @@ describe("AgentSessionRuntime characterization", () => {
 				rlmParentNodeId: "cancelled-child",
 			}),
 		).rejects.toThrow("startup was cancelled");
-		expect((runtime as unknown as RuntimeSubagentMapAccess).subagentRuntimes.has("cancelled-child")).toBe(false);
+		expect(fromAny<RuntimeSubagentMapAccess, unknown>(runtime).subagentRuntimes.has("cancelled-child")).toBe(false);
 	});
 
 	it("releases a failed child run from the inline runtime host", async () => {

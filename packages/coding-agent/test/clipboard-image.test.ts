@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import type { SpawnSyncReturns } from "child_process";
 import { writeFileSync } from "fs";
 import { beforeEach, describe, expect, test, vi } from "vitest";
@@ -83,7 +84,7 @@ describe("readClipboardImage", () => {
 		});
 
 		const enoent = new Error("spawn ENOENT");
-		(enoent as { code?: string }).code = "ENOENT";
+		fromAny<{ code?: string }, unknown>(enoent).code = "ENOENT";
 
 		mocks.spawnSync.mockImplementation((command, args, _options) => {
 			if (command === "wl-paste") {
@@ -125,7 +126,7 @@ describe("readClipboardImage", () => {
 			}
 
 			if (command === "powershell.exe") {
-				const spawnOptions = options as { env?: NodeJS.ProcessEnv };
+				const spawnOptions = fromAny<{ env?: NodeJS.ProcessEnv }, unknown>(options);
 				expect(spawnOptions.env?.PI_WSL_CLIPBOARD_IMAGE_PATH).toBeUndefined();
 				expect(args[2]).toContain("$path = 'C:\\Users\\O''Hare\\clip.png'");
 				if (!tmpFile) {

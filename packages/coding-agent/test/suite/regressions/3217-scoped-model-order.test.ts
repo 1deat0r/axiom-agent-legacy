@@ -1,4 +1,5 @@
 import { setKeybindings, type TUI } from "@earendil-works/pi-tui";
+import { fromAny } from "@total-typescript/shoehorn";
 import stripAnsi from "strip-ansi";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { KeybindingsManager } from "../../../src/core/keybindings.js";
@@ -8,9 +9,9 @@ import { initTheme } from "../../../src/modes/interactive/theme/theme.js";
 import { createHarness, type Harness } from "../harness.js";
 
 function createFakeTui(): TUI {
-	return {
+	return fromAny<TUI, unknown>({
 		requestRender: () => {},
-	} as unknown as TUI;
+	});
 }
 
 async function waitForAsyncRender(): Promise<void> {

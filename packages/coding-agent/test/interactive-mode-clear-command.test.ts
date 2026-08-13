@@ -1,4 +1,5 @@
 import { Container } from "@earendil-works/pi-tui";
+import { fromAny } from "@total-typescript/shoehorn";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.js";
 import { initTheme } from "../src/modes/interactive/theme/theme.js";
@@ -25,7 +26,7 @@ type InteractiveModePrototype = {
 	handleClearCommand(this: ClearCommandContext, options?: { name?: string; prompt?: string }): Promise<void>;
 };
 
-const interactiveModePrototype = InteractiveMode.prototype as unknown as InteractiveModePrototype;
+const interactiveModePrototype = fromAny<InteractiveModePrototype, unknown>(InteractiveMode.prototype);
 
 function renderAll(container: Container, width = 120): string {
 	return container.children

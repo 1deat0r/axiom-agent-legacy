@@ -29,6 +29,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it } from "vitest";
 import { ENV_AGENT_DIR } from "../../src/config.js";
 import { ORPHAN_PROCESS_JOURNAL_ENV } from "../../src/core/orphan-process-journal.js";
@@ -125,7 +126,7 @@ async function runCli(
 		}, 120_000);
 		child.once("exit", (code, signal) => {
 			clearTimeout(timeout);
-			resolveExit({ code, signal: signal as NodeJS.Signals | null });
+			resolveExit({ code, signal: fromPartial<NodeJS.Signals | null>(signal) });
 		});
 	});
 	children.delete(child);
@@ -145,7 +146,7 @@ function readEventLog(path: string): EventLogEntry[] {
 	return content
 		.split("\n")
 		.filter(Boolean)
-		.map((line) => JSON.parse(line) as EventLogEntry);
+		.map((line) => fromPartial<EventLogEntry>(JSON.parse(line)));
 }
 
 function writeAutoRefineSettings(agentDir: string): void {
@@ -262,7 +263,7 @@ describe("Real-process serializedRefine — JSON mode", () => {
 					try {
 						const raw = readFileSync(fullPath, "utf8").trim().split("\n")[0];
 						if (raw) {
-							const first = JSON.parse(raw) as { type?: string };
+							const first = fromPartial<{ type?: string }>(JSON.parse(raw));
 							if (first.type === "session") return fullPath;
 						}
 					} catch {
@@ -289,7 +290,7 @@ describe("Real-process serializedRefine — JSON mode", () => {
 			.trim()
 			.split("\n")
 			.filter(Boolean)
-			.map((line) => JSON.parse(line) as JsonlEntry);
+			.map((line) => fromPartial<JsonlEntry>(JSON.parse(line)));
 
 		// Find the first thread_goal_state custom entry.
 		const goalEntries = jsonlEntries.filter((e) => e.type === "custom" && e.customType === "thread_goal_state");
@@ -324,7 +325,7 @@ describe("Real-process serializedRefine — JSON mode", () => {
 		// message, proving the goal consumed real usage and stopped the
 		// agent from auto-continuing.
 		const budgetLimitedEntries = goalEntries.filter(
-			(e) => (e.data as Record<string, unknown>)?.status === "budget_limited",
+			(e) => fromAny<Record<string, unknown>, unknown>(e.data)?.status === "budget_limited",
 		);
 		expect(budgetLimitedEntries.length).toBeGreaterThanOrEqual(1);
 		const budgetLimitedIndex = jsonlEntries.indexOf(budgetLimitedEntries[0]!);

@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import type { ExtensionAPI } from "../../src/core/extensions/types.js";
 import { listPeers, resolvePeerScopeDir } from "../../src/core/peers/index.js";
@@ -23,11 +24,11 @@ function fakePi(): Fake {
 	const tools = new Map<string, { execute: (...args: unknown[]) => Promise<unknown> }>();
 	const notify: Fake["notify"] = [];
 	const ctx = { hasUI: true, ui: { notify: (m: string, t?: string) => notify.push({ message: m, type: t }) } };
-	const pi = {
+	const pi = fromAny<ExtensionAPI, unknown>({
 		on: (evt: string, h: (...args: unknown[]) => unknown) => handlers.set(evt, [...(handlers.get(evt) ?? []), h]),
 		registerTool: (t: { name: string; execute: (...args: unknown[]) => Promise<unknown> }) =>
 			tools.set(t.name, { execute: t.execute }),
-	} as unknown as ExtensionAPI;
+	});
 	return { pi, tools, handlers, notify, ctx };
 }
 
@@ -43,9 +44,12 @@ async function fire(
 async function tool(fake: Fake, name: string, params: Record<string, unknown>): Promise<string> {
 	const t = fake.tools.get(name);
 	if (!t) throw new Error(`tool ${name} not registered`);
-	const result = (await t.execute("id", params, undefined, undefined, fake.ctx)) as {
-		content: Array<{ text: string }>;
-	};
+	const result = fromAny<
+		{
+			content: Array<{ text: string }>;
+		},
+		unknown
+	>(await t.execute("id", params, undefined, undefined, fake.ctx));
 	return result.content.map((c) => c.text).join("\n");
 }
 

@@ -1,6 +1,7 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import {
 	CliSignalClient,
@@ -48,8 +49,8 @@ describe("SignalTransport", () => {
 	it("skips records without text or source", async () => {
 		const { cli, queue } = fakeCli();
 		queue.push(
-			{ envelope: { source: "+1", timestamp: 1, dataMessage: {} } } as SignalMessage,
-			{ envelope: { timestamp: 2, dataMessage: { message: "x" } } } as SignalMessage,
+			fromPartial<SignalMessage>({ envelope: { source: "+1", timestamp: 1, dataMessage: {} } }),
+			fromPartial<SignalMessage>({ envelope: { timestamp: 2, dataMessage: { message: "x" } } }),
 		);
 		const t = new SignalTransport(cli);
 		const handler = vi.fn();
@@ -78,7 +79,7 @@ describe("CliSignalClient", () => {
 			process.env.SHIM_OUT = join(outDir, "argv.json");
 			const cli = new CliSignalClient(shim, "+64272811798");
 			await cli.send("+1", "hi");
-			const argv = JSON.parse(await readFile(join(outDir, "argv.json"), "utf8")) as string[];
+			const argv = fromPartial<string[]>(JSON.parse(await readFile(join(outDir, "argv.json"), "utf8")));
 			expect(argv).toEqual(["-a", "+64272811798", "send", "-m", "hi", "+1"]);
 		} finally {
 			delete process.env.SHIM_OUT;
@@ -102,7 +103,7 @@ describe("CliSignalClient", () => {
 			const cli = new CliSignalClient(shim);
 			await chmod(shim, 0o755);
 			await cli.send("+1", "hello");
-			const argv = JSON.parse(await readFile(join(outDir, "argv.json"), "utf8")) as string[];
+			const argv = fromPartial<string[]>(JSON.parse(await readFile(join(outDir, "argv.json"), "utf8")));
 			expect(argv).toEqual(["send", "-m", "hello", "+1"]);
 		} finally {
 			delete process.env.SHIM_OUT;

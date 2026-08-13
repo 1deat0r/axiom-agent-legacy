@@ -1,5 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
+import { fromAny } from "@total-typescript/shoehorn";
 import type { Terminal as XtermTerminalType } from "@xterm/headless";
 import { deleteKittyImage, encodeKitty } from "../src/terminal-image.js";
 import { type Component, TUI } from "../src/tui.js";
@@ -55,7 +56,7 @@ async function withEnv<T>(updates: Record<string, string | undefined>, run: () =
 }
 
 function getCellItalic(terminal: VirtualTerminal, row: number, col: number): number {
-	const xterm = (terminal as unknown as { xterm: XtermTerminalType }).xterm;
+	const xterm = fromAny<{ xterm: XtermTerminalType }, unknown>(terminal).xterm;
 	const buffer = xterm.buffer.active;
 	const line = buffer.getLine(buffer.viewportY + row);
 	assert.ok(line, `Missing buffer line at row ${row}`);
@@ -65,7 +66,7 @@ function getCellItalic(terminal: VirtualTerminal, row: number, col: number): num
 }
 
 function getCellBg(terminal: VirtualTerminal, row: number, col: number): { mode: number; color: number } {
-	const xterm = (terminal as unknown as { xterm: XtermTerminalType }).xterm;
+	const xterm = fromAny<{ xterm: XtermTerminalType }, unknown>(terminal).xterm;
 	const buffer = xterm.buffer.active;
 	const line = buffer.getLine(buffer.viewportY + row);
 	assert.ok(line, `Missing buffer line at row ${row}`);

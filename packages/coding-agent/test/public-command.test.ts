@@ -1,13 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SELF_UPDATE_INTERACTIVE_CHILD_ENV } from "../src/config.js";
 
-const mocks = vi.hoisted(() => ({
-	daemonCommands: [] as string[][],
-	packageCommands: [] as string[][],
-	psCalls: [] as boolean[],
-	reapCalls: [] as Array<[boolean, boolean]>,
-	shutdownCalls: [] as Array<[boolean, boolean]>,
-}));
+const mocks = vi.hoisted(
+	(): {
+		daemonCommands: string[][];
+		packageCommands: string[][];
+		psCalls: boolean[];
+		reapCalls: Array<[boolean, boolean]>;
+		shutdownCalls: Array<[boolean, boolean]>;
+	} => ({
+		daemonCommands: [],
+		packageCommands: [],
+		psCalls: [],
+		reapCalls: [],
+		shutdownCalls: [],
+	}),
+);
 
 vi.mock("../src/cli/daemon-command.js", () => ({
 	handleDaemonCommand: async (args: string[]) => {

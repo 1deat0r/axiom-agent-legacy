@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import type { ExtensionAPI } from "../../src/core/extensions/types.js";
 import axiomMemoryExtension, { createMemoryExtension } from "../../src/extensions/memory/index.js";
@@ -17,7 +18,7 @@ async function tempDir(): Promise<string> {
 }
 
 async function readScope(dir: string, scope: "user" | "agent"): Promise<MemoryEntry[]> {
-	return JSON.parse(await readFile(join(dir, `${scope}.json`), "utf8")) as MemoryEntry[];
+	return fromPartial<MemoryEntry[]>(JSON.parse(await readFile(join(dir, `${scope}.json`), "utf8")));
 }
 
 describe("FileMemoryStore", () => {
@@ -278,7 +279,7 @@ describe("createMemoryExtension", () => {
 				events.set(event, handler);
 			},
 		};
-		return { pi: pi as unknown as ExtensionAPI, tools, events };
+		return { pi: fromAny<ExtensionAPI, unknown>(pi), tools, events };
 	}
 
 	function depsWith(store: MemoryStore) {
@@ -301,8 +302,10 @@ describe("createMemoryExtension", () => {
 			{ type: "before_agent_start", prompt: "hi", systemPrompt: "base" },
 			null,
 		);
-		expect((result as { systemPrompt?: string }).systemPrompt).toContain("base");
-		expect((result as { systemPrompt?: string }).systemPrompt).toContain("- [user] User prefers concise answers");
+		expect(fromAny<{ systemPrompt?: string }, unknown>(result).systemPrompt).toContain("base");
+		expect(fromAny<{ systemPrompt?: string }, unknown>(result).systemPrompt).toContain(
+			"- [user] User prefers concise answers",
+		);
 	});
 
 	it("leaves the system prompt alone when memory is empty", async () => {
@@ -320,18 +323,27 @@ describe("createMemoryExtension", () => {
 		const store = new InMemoryMemoryStore();
 		createMemoryExtension(depsWith(store))(pi);
 		const tool = tools.find((t) => t.name === "memory")!;
-		const added = (await tool.execute!("c1", { action: "add", content: "User likes tea", scope: "user" })) as {
-			content: Array<{ type: string; text: string }>;
-		};
+		const added = fromAny<
+			{
+				content: Array<{ type: string; text: string }>;
+			},
+			unknown
+		>(await tool.execute!("c1", { action: "add", content: "User likes tea", scope: "user" }));
 		expect(added.content[0]!.text).toContain("Remembered [user]");
 		expect(added.content[0]!.text).not.toContain("evicted");
-		const listed = (await tool.execute!("c2", { action: "list" })) as {
-			content: Array<{ type: string; text: string }>;
-		};
+		const listed = fromAny<
+			{
+				content: Array<{ type: string; text: string }>;
+			},
+			unknown
+		>(await tool.execute!("c2", { action: "list" }));
 		expect(listed.content[0]!.text).toContain("[user] User likes tea");
-		const removed = (await tool.execute!("c3", { action: "remove", id: (await store.list())[0]!.id })) as {
-			content: Array<{ type: string; text: string }>;
-		};
+		const removed = fromAny<
+			{
+				content: Array<{ type: string; text: string }>;
+			},
+			unknown
+		>(await tool.execute!("c3", { action: "remove", id: (await store.list())[0]!.id }));
 		expect(removed.content[0]!.text).toContain("Forgot");
 		expect(await store.list()).toEqual([]);
 	});
@@ -344,13 +356,19 @@ describe("createMemoryExtension", () => {
 		await tool.execute!("c1", { action: "add", content: "a", scope: "user" });
 		await tool.execute!("c2", { action: "add", content: "b", scope: "user" });
 		// Each over-cap add evicts exactly one stale entry (per-add eviction <= 1).
-		const third = (await tool.execute!("c3", { action: "add", content: "c", scope: "user" })) as {
-			content: Array<{ type: string; text: string }>;
-		};
+		const third = fromAny<
+			{
+				content: Array<{ type: string; text: string }>;
+			},
+			unknown
+		>(await tool.execute!("c3", { action: "add", content: "c", scope: "user" }));
 		expect(third.content[0]!.text).toContain("evicted 1 stale entry");
-		const fourth = (await tool.execute!("c4", { action: "add", content: "d", scope: "user" })) as {
-			content: Array<{ type: string; text: string }>;
-		};
+		const fourth = fromAny<
+			{
+				content: Array<{ type: string; text: string }>;
+			},
+			unknown
+		>(await tool.execute!("c4", { action: "add", content: "d", scope: "user" }));
 		expect(fourth.content[0]!.text).toContain("evicted 1 stale entry");
 	});
 
@@ -361,9 +379,12 @@ describe("createMemoryExtension", () => {
 		const tool = tools.find((t) => t.name === "memory")!;
 		await tool.execute!("c1", { action: "add", content: "a", scope: "user" });
 		await tool.execute!("c2", { action: "add", content: "b", scope: "user" });
-		const third = (await tool.execute!("c3", { action: "add", content: "c", scope: "user" })) as {
-			content: Array<{ type: string; text: string }>;
-		};
+		const third = fromAny<
+			{
+				content: Array<{ type: string; text: string }>;
+			},
+			unknown
+		>(await tool.execute!("c3", { action: "add", content: "c", scope: "user" }));
 		expect(third.content[0]!.text).toContain("evicted 1 stale");
 	});
 
@@ -390,9 +411,12 @@ describe("createMemoryExtension", () => {
 		const { pi, tools } = fakePi();
 		createMemoryExtension(depsWith(new InMemoryMemoryStore()))(pi);
 		const tool = tools.find((t) => t.name === "memory")!;
-		const result = (await tool.execute!("c1", { action: "list" })) as {
-			content: Array<{ type: string; text: string }>;
-		};
+		const result = fromAny<
+			{
+				content: Array<{ type: string; text: string }>;
+			},
+			unknown
+		>(await tool.execute!("c1", { action: "list" }));
 		expect(result.content[0]!.text).toBe("(memory is empty)");
 	});
 });

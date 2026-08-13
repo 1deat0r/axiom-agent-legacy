@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import {
 	chunkDiscordText,
@@ -279,8 +280,8 @@ describe("DiscordTransport", () => {
 	it("skips messages without an author or content", async () => {
 		const f = fakeClient([{ id: "c", type: 0 }]);
 		f.queue.set("c", [
-			{ id: "1", channel_id: "c" } as DiscordMessage, // no author/content
-			{ id: "2", channel_id: "c", author: { id: "x" } } as DiscordMessage, // no content
+			fromPartial<DiscordMessage>({ id: "1", channel_id: "c" }), // no author/content
+			fromPartial<DiscordMessage>({ id: "2", channel_id: "c", author: { id: "x" } }), // no content
 			msg("3", "c", "real"),
 		]);
 		const t = new DiscordTransport(f.client, { pollIntervalMs: 1 });
@@ -360,7 +361,7 @@ describe("HttpDiscordClient (local server boundary)", () => {
 				});
 			});
 			server.on("error", reject);
-			server.listen(0, "127.0.0.1", () => resolve((server!.address() as { port: number }).port));
+			server.listen(0, "127.0.0.1", () => resolve(fromAny<{ port: number }, unknown>(server!.address()).port));
 		});
 		try {
 			const client = new HttpDiscordClient({ token: "T", baseUrl: `http://127.0.0.1:${port}` });
@@ -395,7 +396,7 @@ describe("HttpDiscordClient (local server boundary)", () => {
 				res.end(JSON.stringify({ message: "401: Unauthorized" }));
 			});
 			server.on("error", reject);
-			server.listen(0, "127.0.0.1", () => resolve((server!.address() as { port: number }).port));
+			server.listen(0, "127.0.0.1", () => resolve(fromAny<{ port: number }, unknown>(server!.address()).port));
 		});
 		try {
 			const client = new HttpDiscordClient({ token: "BAD", baseUrl: `http://127.0.0.1:${port}` });

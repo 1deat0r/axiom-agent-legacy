@@ -1,6 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it } from "vitest";
 import { handleSkillCaptureCommand, parseSkillCaptureArgs, readStepsFile } from "../src/cli/skill-capture-command.js";
 import {
@@ -68,7 +69,7 @@ describe("buildSkillDocument", () => {
 		const { frontmatter, body } = parseFrontmatter<Record<string, unknown>>(document.markdown);
 		expect(frontmatter.name).toBe("deploy-the-lambda");
 		expect(frontmatter.description).toBe("Deploys a serverless function to AWS and verifies the alias.");
-		const metadata = frontmatter.metadata as { provenance?: Record<string, unknown> };
+		const metadata = fromAny<{ provenance?: Record<string, unknown> }, unknown>(frontmatter.metadata);
 		expect(metadata.provenance).toEqual({
 			source: "session",
 			createdAt: "2026-08-12T00:00:00.000Z",
@@ -102,7 +103,7 @@ describe("buildSkillDocument", () => {
 
 	it("builds a valid skill even when steps are omitted", () => {
 		const { name, steps, ...rest } = capture();
-		const result = buildSkillDocument({ ...rest, name: "n", steps: undefined as never });
+		const result = buildSkillDocument({ ...rest, name: "n", steps: fromAny<never, unknown>(undefined) });
 		expect(result.ok).toBe(true);
 	});
 
@@ -121,7 +122,9 @@ describe("buildSkillDocument", () => {
 		expect(built.ok).toBe(true);
 		if (!built.ok) return;
 		const reparsed = parseFrontmatter<Record<string, unknown>>(built.document.markdown);
-		const provenance = (reparsed.frontmatter.metadata as { provenance: { createdAt: string } }).provenance;
+		const provenance = fromAny<{ provenance: { createdAt: string } }, unknown>(
+			reparsed.frontmatter.metadata,
+		).provenance;
 		expect(provenance.createdAt).toBe("2026-08-12T00:00:00.000Z");
 	});
 });

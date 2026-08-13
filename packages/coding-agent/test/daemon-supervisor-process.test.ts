@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it } from "vitest";
 import { ENV_AGENT_DIR, getCronJobsPath } from "../src/config.js";
 import { AgentCronJobStore } from "../src/core/cron-jobs.js";
@@ -125,7 +126,9 @@ function readWorkerDescriptor(agentDir: string): DaemonWorkerDescriptor {
 		const descriptorDirectory = join(workersRoot, directory);
 		for (const name of readdirSync(descriptorDirectory)) {
 			if (name.endsWith(".json")) {
-				return JSON.parse(readFileSync(join(descriptorDirectory, name), "utf8")) as DaemonWorkerDescriptor;
+				return fromPartial<DaemonWorkerDescriptor>(
+					JSON.parse(readFileSync(join(descriptorDirectory, name), "utf8")),
+				);
 			}
 		}
 	}
@@ -164,9 +167,9 @@ function readSupervisorConfig(agentDir: string): { defaultSessionConfig?: { sess
 	for (const directory of readdirSync(workersRoot)) {
 		const path = join(workersRoot, directory, "supervisor-config");
 		try {
-			return JSON.parse(readFileSync(path, "utf8")) as {
+			return fromPartial<{
 				defaultSessionConfig?: { sessionDir?: string; noTools?: boolean };
-			};
+			}>(JSON.parse(readFileSync(path, "utf8")));
 		} catch {
 			// Continue looking for the descriptor directory for this daemon socket.
 		}
@@ -219,18 +222,18 @@ function requireSummary(responseData: unknown): SessionSummary {
 	if (!responseData || typeof responseData !== "object") {
 		throw new Error("Missing daemon session summary");
 	}
-	return responseData as SessionSummary;
+	return fromPartial<SessionSummary>(responseData);
 }
 
 function requireSessionList(responseData: unknown): SessionSummary[] {
 	if (!responseData || typeof responseData !== "object" || !("sessions" in responseData)) {
 		throw new Error("Missing daemon session list");
 	}
-	const sessions = (responseData as { sessions: unknown }).sessions;
+	const sessions = fromPartial<{ sessions: unknown }>(responseData).sessions;
 	if (!Array.isArray(sessions)) {
 		throw new Error("Invalid daemon session list");
 	}
-	return sessions as SessionSummary[];
+	return fromPartial<SessionSummary[]>(sessions);
 }
 
 async function waitForExit(child: ChildProcess): Promise<void> {
@@ -252,7 +255,7 @@ async function waitForProcessGone(pid: number): Promise<void> {
 		try {
 			process.kill(pid, 0);
 		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code === "ESRCH") {
+			if (fromAny<NodeJS.ErrnoException, unknown>(error).code === "ESRCH") {
 				return;
 			}
 		}
@@ -474,7 +477,7 @@ describe("daemon supervisor resident workers", () => {
 		if (!cronResponse.success || !cronResponse.data || typeof cronResponse.data !== "object") {
 			throw new Error(cronResponse.success ? "Cron response was missing its job" : cronResponse.error);
 		}
-		const cronJob = (cronResponse.data as { job: { id: string } }).job;
+		const cronJob = fromPartial<{ job: { id: string } }>(cronResponse.data).job;
 		await expect(connection.listCronJobs()).resolves.toEqual([expect.objectContaining({ id: cronJob.id })]);
 		await expect(connection.cancelCronJob(cronJob.id)).resolves.toMatchObject({ id: cronJob.id });
 
@@ -791,7 +794,7 @@ describe("daemon supervisor resident workers", () => {
 		if (!heartbeatResponse.success || !heartbeatResponse.data || typeof heartbeatResponse.data !== "object") {
 			throw new Error(heartbeatResponse.success ? "Heartbeat response was missing data" : heartbeatResponse.error);
 		}
-		const heartbeat = (heartbeatResponse.data as { heartbeat: { id: string } }).heartbeat;
+		const heartbeat = fromPartial<{ heartbeat: { id: string } }>(heartbeatResponse.data).heartbeat;
 		const cronStore = AgentCronJobStore.forSessionArtifacts();
 		cronStore.registerSessionArtifact(summary.sessionId, sessionManager.getSessionArtifactDir()!);
 		const observer = await connectEventually(socketPath, supervisor);
@@ -1014,7 +1017,7 @@ describe("daemon supervisor resident workers", () => {
 		if (!heartbeatResponse.success || !heartbeatResponse.data || typeof heartbeatResponse.data !== "object") {
 			throw new Error(heartbeatResponse.success ? "Heartbeat response was missing data" : heartbeatResponse.error);
 		}
-		const heartbeat = (heartbeatResponse.data as { heartbeat: { id: string } }).heartbeat;
+		const heartbeat = fromPartial<{ heartbeat: { id: string } }>(heartbeatResponse.data).heartbeat;
 		const cronStore = AgentCronJobStore.forSessionArtifacts();
 		cronStore.registerSessionArtifact(summary.sessionId, sessionManager.getSessionArtifactDir()!);
 		process.kill(summary.workerPid, "SIGSTOP");
@@ -1191,7 +1194,9 @@ describe("daemon supervisor resident workers", () => {
 			prompt: "check status",
 		});
 		expect(addedCron.success).toBe(true);
-		const cronJob = (addedCron.success ? addedCron.data : undefined) as { job?: { id?: string } } | undefined;
+		const cronJob = fromAny<{ job?: { id?: string } } | undefined, unknown>(
+			addedCron.success ? addedCron.data : undefined,
+		);
 		if (!cronJob?.job?.id) {
 			throw new Error("Supervisor did not persist the cron job");
 		}
@@ -1482,7 +1487,7 @@ describe("daemon supervisor resident workers", () => {
 		if (!scheduled.success || !scheduled.data || typeof scheduled.data !== "object") {
 			throw new Error(scheduled.success ? "Heartbeat response was missing its job" : scheduled.error);
 		}
-		const job = (scheduled.data as { heartbeat: { id: string } }).heartbeat;
+		const job = fromPartial<{ heartbeat: { id: string } }>(scheduled.data).heartbeat;
 
 		client.close();
 		supervisor.kill("SIGKILL");

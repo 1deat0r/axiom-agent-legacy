@@ -1,3 +1,4 @@
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import type { ExtensionAPI } from "../../src/core/extensions/types.js";
 import { createSecurityFence } from "../../src/extensions/security/index.js";
@@ -6,14 +7,14 @@ import { createSecurityFence } from "../../src/extensions/security/index.js";
 function fakePi(): { pi: ExtensionAPI; toolCall: (event: Record<string, unknown>) => Promise<unknown> } {
 	const handlers = new Map<string, Array<(...a: unknown[]) => unknown>>();
 	return {
-		pi: {
+		pi: fromAny<ExtensionAPI, unknown>({
 			on: (evt: string, h: (...a: unknown[]) => unknown) => handlers.set(evt, [...(handlers.get(evt) ?? []), h]),
-		} as unknown as ExtensionAPI,
+		}),
 		toolCall: async (event) => {
 			let result: unknown;
 			for (const h of handlers.get("tool_call") ?? []) {
 				result = await h(event, undefined);
-				if (result && (result as { block?: boolean }).block) break;
+				if (result && fromPartial<{ block?: boolean }>(result).block) break;
 			}
 			return result;
 		},
@@ -24,12 +25,14 @@ describe("createSecurityFence wiring", () => {
 	it("blocks a URL-bearing tool call whose URL is unsafe, when anchored", async () => {
 		const { pi, toolCall } = fakePi();
 		createSecurityFence({ root: "/srv/proj" })(pi);
-		const res = (await toolCall({
-			type: "tool_call",
-			toolName: "fetch",
-			toolCallId: "1",
-			input: { url: "http://169.254.169.254/latest/meta-data" },
-		})) as { block: boolean; reason: string };
+		const res = fromAny<{ block: boolean; reason: string }, unknown>(
+			await toolCall({
+				type: "tool_call",
+				toolName: "fetch",
+				toolCallId: "1",
+				input: { url: "http://169.254.169.254/latest/meta-data" },
+			}),
+		);
 		expect(res.block).toBe(true);
 		expect(res.reason).toMatch(/SSRF|address/i);
 	});
@@ -48,12 +51,14 @@ describe("createSecurityFence wiring", () => {
 	it("blocks a configured sensitive tool unless approved, when anchored", async () => {
 		const { pi, toolCall } = fakePi();
 		createSecurityFence({ root: "/srv/proj", sensitiveTools: ["ext_publish"] })(pi);
-		const res = (await toolCall({
-			type: "tool_call",
-			toolName: "ext_publish",
-			toolCallId: "3",
-			input: {},
-		})) as { block: true; reason: string };
+		const res = fromAny<{ block: true; reason: string }, unknown>(
+			await toolCall({
+				type: "tool_call",
+				toolName: "ext_publish",
+				toolCallId: "3",
+				input: {},
+			}),
+		);
 		expect(res.block).toBe(true);
 		expect(res.reason).toMatch(/approved-tool fence/i);
 	});

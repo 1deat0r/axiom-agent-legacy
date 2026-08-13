@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ActiveSessionState, DaemonSocketClient } from "../../../src/modes/daemon/active-session-state.js";
 import { AgentDaemon, markClientSnapshotStreaming } from "../../../src/modes/daemon/daemon-mode.js";
@@ -66,10 +67,10 @@ function streamedResult(
 				messageCount,
 				sessionActions: { queuedCount: 0, steering: [], followUps: [] },
 			},
-			state: {
+			state: fromPartial<DaemonAttachResult["snapshot"]["state"]>({
 				activeSessionId: resultActiveSessionId,
 				sessionId: `session-${resultActiveSessionId}`,
-			} as DaemonAttachResult["snapshot"]["state"],
+			}),
 			messages: [],
 			lastEventSequence: 1,
 		},
@@ -86,7 +87,7 @@ function socketClient(id: string): { client: DaemonSocketClient; socket: PassThr
 		socket,
 		client: {
 			id,
-			socket: socket as unknown as Socket,
+			socket: fromAny<Socket, unknown>(socket),
 			transport: "private-framed",
 			attachedActiveSessionIds: new Set([activeSessionId]),
 			catchupActiveSessionIds: new Set<string>(),
@@ -129,18 +130,21 @@ describe("ENG-4601 worker snapshot cache", () => {
 			});
 			const releases: Array<(accepted: boolean) => void> = [];
 			const produced: string[] = [];
-			const internals = daemon as unknown as {
-				writeWorkerSnapshotBuffer(
-					client: DaemonSocketClient,
-					buffer: Buffer,
-					message: DaemonOutbound,
-				): Promise<boolean>;
-				streamWorkerSnapshot(
-					client: DaemonSocketClient,
-					result: DaemonAttachResult,
-					transcript: SnapshotTranscriptChunkSource,
-				): Promise<void>;
-			};
+			const internals = fromAny<
+				{
+					writeWorkerSnapshotBuffer(
+						client: DaemonSocketClient,
+						buffer: Buffer,
+						message: DaemonOutbound,
+					): Promise<boolean>;
+					streamWorkerSnapshot(
+						client: DaemonSocketClient,
+						result: DaemonAttachResult,
+						transcript: SnapshotTranscriptChunkSource,
+					): Promise<void>;
+				},
+				unknown
+			>(daemon);
 			internals.writeWorkerSnapshotBuffer = async (_client, _buffer, message) => {
 				if (message.type !== "session_snapshot_chunk" || message.index !== 0) {
 					return true;
@@ -196,27 +200,30 @@ describe("ENG-4601 worker snapshot cache", () => {
 		const siblingActiveSessionId = "active-4601-pre-begin-sibling";
 		const siblingSnapshotId = "snapshot-4601-pre-begin-sibling";
 		client.attachedActiveSessionIds.add(siblingActiveSessionId);
-		const state = {
+		const state = fromAny<ActiveSessionState, unknown>({
 			activeSessionId,
 			clients: new Set([client]),
 			extensionUiRequests: new Map(),
 			runtime: { metadata: { kind: "subagent" } },
-		} as unknown as ActiveSessionState;
+		});
 		const written: DaemonOutbound[] = [];
 		const signal = markClientSnapshotStreaming(client, activeSessionId);
 		const siblingSignal = markClientSnapshotStreaming(client, siblingActiveSessionId);
-		const internals = daemon as unknown as {
-			writeSerialized(client: DaemonSocketClient, buffer: string | Buffer, message?: DaemonOutbound): boolean;
-			streamWorkerSnapshot(
-				client: DaemonSocketClient,
-				result: DaemonAttachResult,
-				transcript: SnapshotTranscriptChunkSource,
-				purpose: "attach",
-				signal: AbortSignal,
-				snapshotAlreadyMarked: boolean,
-			): Promise<void>;
-			detachClientFromSession(client: DaemonSocketClient, state: ActiveSessionState): void;
-		};
+		const internals = fromAny<
+			{
+				writeSerialized(client: DaemonSocketClient, buffer: string | Buffer, message?: DaemonOutbound): boolean;
+				streamWorkerSnapshot(
+					client: DaemonSocketClient,
+					result: DaemonAttachResult,
+					transcript: SnapshotTranscriptChunkSource,
+					purpose: "attach",
+					signal: AbortSignal,
+					snapshotAlreadyMarked: boolean,
+				): Promise<void>;
+				detachClientFromSession(client: DaemonSocketClient, state: ActiveSessionState): void;
+			},
+			unknown
+		>(daemon);
 		internals.writeSerialized = (_client, _buffer, message) => {
 			if (message) written.push(message);
 			return true;
@@ -277,12 +284,12 @@ describe("ENG-4601 worker snapshot cache", () => {
 		const siblingActiveSessionId = "active-4601-sibling";
 		const siblingSnapshotId = "snapshot-4601-sibling";
 		client.attachedActiveSessionIds.add(siblingActiveSessionId);
-		const state = {
+		const state = fromAny<ActiveSessionState, unknown>({
 			activeSessionId,
 			clients: new Set([client]),
 			extensionUiRequests: new Map(),
 			runtime: { metadata: { kind: "subagent" } },
-		} as unknown as ActiveSessionState;
+		});
 		const written: DaemonOutbound[] = [];
 		const produced: number[] = [];
 		const signal = markClientSnapshotStreaming(client, activeSessionId);
@@ -310,18 +317,21 @@ describe("ENG-4601 worker snapshot cache", () => {
 			targetChunkBytes: 1,
 			signal: siblingSignal,
 		});
-		const internals = daemon as unknown as {
-			writeSerialized(client: DaemonSocketClient, buffer: string | Buffer, message?: DaemonOutbound): boolean;
-			streamWorkerSnapshot(
-				client: DaemonSocketClient,
-				result: DaemonAttachResult,
-				transcript: SnapshotTranscriptChunkSource,
-				purpose: "attach",
-				signal: AbortSignal,
-				snapshotAlreadyMarked: boolean,
-			): Promise<void>;
-			detachClientFromSession(client: DaemonSocketClient, state: ActiveSessionState): void;
-		};
+		const internals = fromAny<
+			{
+				writeSerialized(client: DaemonSocketClient, buffer: string | Buffer, message?: DaemonOutbound): boolean;
+				streamWorkerSnapshot(
+					client: DaemonSocketClient,
+					result: DaemonAttachResult,
+					transcript: SnapshotTranscriptChunkSource,
+					purpose: "attach",
+					signal: AbortSignal,
+					snapshotAlreadyMarked: boolean,
+				): Promise<void>;
+				detachClientFromSession(client: DaemonSocketClient, state: ActiveSessionState): void;
+			},
+			unknown
+		>(daemon);
 		internals.writeSerialized = (_client, _buffer, message) => {
 			if (message) written.push(message);
 			return message?.type !== "session_snapshot_chunk" || message.activeSessionId === siblingActiveSessionId;
@@ -392,25 +402,28 @@ describe("ENG-4601 worker snapshot cache", () => {
 			const siblingActiveSessionId = "active-4601-backpressure-sibling";
 			client.attachedActiveSessionIds.add(siblingActiveSessionId);
 			socket.on("error", () => {});
-			const state = {
+			const state = fromAny<ActiveSessionState, unknown>({
 				activeSessionId,
 				clients: new Set([client]),
 				extensionUiRequests: new Map(),
 				runtime: { metadata: { kind: "subagent" } },
-			} as unknown as ActiveSessionState;
+			});
 			const signal = markClientSnapshotStreaming(client, activeSessionId);
-			const internals = daemon as unknown as {
-				writeSerialized(client: DaemonSocketClient, buffer: string | Buffer, message?: DaemonOutbound): boolean;
-				streamWorkerSnapshot(
-					client: DaemonSocketClient,
-					result: DaemonAttachResult,
-					transcript: SnapshotTranscriptChunkSource,
-					purpose: "attach",
-					signal: AbortSignal,
-					snapshotAlreadyMarked: boolean,
-				): Promise<void>;
-				detachClientFromSession(client: DaemonSocketClient, state: ActiveSessionState): void;
-			};
+			const internals = fromAny<
+				{
+					writeSerialized(client: DaemonSocketClient, buffer: string | Buffer, message?: DaemonOutbound): boolean;
+					streamWorkerSnapshot(
+						client: DaemonSocketClient,
+						result: DaemonAttachResult,
+						transcript: SnapshotTranscriptChunkSource,
+						purpose: "attach",
+						signal: AbortSignal,
+						snapshotAlreadyMarked: boolean,
+					): Promise<void>;
+					detachClientFromSession(client: DaemonSocketClient, state: ActiveSessionState): void;
+				},
+				unknown
+			>(daemon);
 			internals.writeSerialized = () => false;
 			const stream = internals.streamWorkerSnapshot(
 				client,

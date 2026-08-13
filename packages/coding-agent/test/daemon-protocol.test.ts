@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import {
 	createDaemonCommandEnvelope,
@@ -279,7 +280,7 @@ describe("daemon protocol helpers", () => {
 
 	it("salvages command ids from rejected lines regardless of shape validity", () => {
 		const oldEnvelope = JSON.stringify(
-			createDaemonCommandEnvelope({ type: "list" } as DaemonCommand, "list-1", "old-client", 6),
+			createDaemonCommandEnvelope(fromPartial<DaemonCommand>({ type: "list" }), "list-1", "old-client", 6),
 		);
 		expect(salvageDaemonCommandId(oldEnvelope)).toBe("list-1");
 		expect(salvageDaemonCommandId(JSON.stringify({ type: "list", id: "bare-1" }))).toBe("bare-1");

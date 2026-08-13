@@ -1,3 +1,4 @@
+import { fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getModel } from "../src/models.js";
 import { streamOpenAICompletions } from "../src/providers/openai-completions.js";
@@ -15,10 +16,15 @@ interface CapturedCompletionsPayload {
 	prompt_cache_retention?: "24h" | "in-memory" | null;
 }
 
-const mockState = vi.hoisted(() => ({
-	lastParams: undefined as CapturedCompletionsPayload | undefined,
-	lastClientOptions: undefined as FakeOpenAIClientOptions | undefined,
-}));
+const mockState = vi.hoisted(
+	(): {
+		lastParams: CapturedCompletionsPayload | undefined;
+		lastClientOptions: FakeOpenAIClientOptions | undefined;
+	} => ({
+		lastParams: undefined,
+		lastClientOptions: undefined,
+	}),
+);
 
 vi.mock("openai", () => {
 	class FakeOpenAI {
@@ -39,12 +45,14 @@ vi.mock("openai", () => {
 							};
 						},
 					};
-					const promise = Promise.resolve(stream) as Promise<typeof stream> & {
-						withResponse: () => Promise<{
-							data: typeof stream;
-							response: { status: number; headers: Headers };
-						}>;
-					};
+					const promise = fromPartial<
+						Promise<typeof stream> & {
+							withResponse: () => Promise<{
+								data: typeof stream;
+								response: { status: number; headers: Headers };
+							}>;
+						}
+					>(Promise.resolve(stream));
 					promise.withResponse = async () => ({
 						data: stream,
 						response: { status: 200, headers: new Headers() },
@@ -82,7 +90,7 @@ describe("openai-completions prompt caching", () => {
 	function createModel(overrides: Partial<Model<"openai-completions">> = {}): Model<"openai-completions"> {
 		const { compat: _compat, ...baseModel } = getModel("openai", "gpt-4o-mini");
 		return {
-			...(baseModel as Omit<Model<"openai-completions">, "api">),
+			...fromPartial<Omit<Model<"openai-completions">, "api">>(baseModel),
 			api: "openai-completions",
 			...overrides,
 		};

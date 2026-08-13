@@ -1,3 +1,4 @@
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import type { Tool, ToolCall } from "../src/types.js";
@@ -13,13 +14,13 @@ function createToolCallWithPlainSchema(
 	const tool: Tool = {
 		name: "echo",
 		description: "Echo tool",
-		parameters: {
+		parameters: fromPartial<Tool["parameters"]>({
 			type: "object",
 			properties: {
 				value: schema,
 			},
 			required: ["value"],
-		} as Tool["parameters"],
+		}),
 	};
 
 	const toolCall: ToolCall = {
@@ -46,12 +47,12 @@ describe("validateToolArguments", () => {
 			type: "toolCall",
 			id: "tool-1",
 			name: "echo",
-			arguments: { count: "42" as unknown as number },
+			arguments: { count: fromAny<number, unknown>("42") },
 		};
 
-		globalThis.Function = (() => {
+		globalThis.Function = fromAny<FunctionConstructor, unknown>(() => {
 			throw new EvalError("Code generation from strings disallowed for this context");
-		}) as unknown as FunctionConstructor;
+		});
 
 		try {
 			expect(validateToolArguments(tool, toolCall)).toEqual({ count: 42 });
@@ -66,26 +67,26 @@ describe("validateToolArguments", () => {
 			input: unknown;
 			expected: unknown;
 		}> = [
-			{ schema: { type: "number" } as Tool["parameters"], input: "42", expected: 42 },
-			{ schema: { type: "number" } as Tool["parameters"], input: true, expected: 1 },
-			{ schema: { type: "number" } as Tool["parameters"], input: null, expected: 0 },
-			{ schema: { type: "integer" } as Tool["parameters"], input: "42", expected: 42 },
-			{ schema: { type: "boolean" } as Tool["parameters"], input: "true", expected: true },
-			{ schema: { type: "boolean" } as Tool["parameters"], input: "false", expected: false },
-			{ schema: { type: "boolean" } as Tool["parameters"], input: 1, expected: true },
-			{ schema: { type: "boolean" } as Tool["parameters"], input: 0, expected: false },
-			{ schema: { type: "string" } as Tool["parameters"], input: null, expected: "" },
-			{ schema: { type: "string" } as Tool["parameters"], input: true, expected: "true" },
-			{ schema: { type: "null" } as Tool["parameters"], input: "", expected: null },
-			{ schema: { type: "null" } as Tool["parameters"], input: 0, expected: null },
-			{ schema: { type: "null" } as Tool["parameters"], input: false, expected: null },
+			{ schema: fromPartial<Tool["parameters"]>({ type: "number" }), input: "42", expected: 42 },
+			{ schema: fromPartial<Tool["parameters"]>({ type: "number" }), input: true, expected: 1 },
+			{ schema: fromPartial<Tool["parameters"]>({ type: "number" }), input: null, expected: 0 },
+			{ schema: fromPartial<Tool["parameters"]>({ type: "integer" }), input: "42", expected: 42 },
+			{ schema: fromPartial<Tool["parameters"]>({ type: "boolean" }), input: "true", expected: true },
+			{ schema: fromPartial<Tool["parameters"]>({ type: "boolean" }), input: "false", expected: false },
+			{ schema: fromPartial<Tool["parameters"]>({ type: "boolean" }), input: 1, expected: true },
+			{ schema: fromPartial<Tool["parameters"]>({ type: "boolean" }), input: 0, expected: false },
+			{ schema: fromPartial<Tool["parameters"]>({ type: "string" }), input: null, expected: "" },
+			{ schema: fromPartial<Tool["parameters"]>({ type: "string" }), input: true, expected: "true" },
+			{ schema: fromPartial<Tool["parameters"]>({ type: "null" }), input: "", expected: null },
+			{ schema: fromPartial<Tool["parameters"]>({ type: "null" }), input: 0, expected: null },
+			{ schema: fromPartial<Tool["parameters"]>({ type: "null" }), input: false, expected: null },
 			{
-				schema: { type: ["number", "string"] } as Tool["parameters"],
+				schema: fromPartial<Tool["parameters"]>({ type: ["number", "string"] }),
 				input: "1",
 				expected: "1",
 			},
 			{
-				schema: { type: ["boolean", "number"] } as Tool["parameters"],
+				schema: fromPartial<Tool["parameters"]>({ type: ["boolean", "number"] }),
 				input: "1",
 				expected: 1,
 			},
@@ -102,10 +103,10 @@ describe("validateToolArguments", () => {
 			schema: Tool["parameters"];
 			input: unknown;
 		}> = [
-			{ schema: { type: "boolean" } as Tool["parameters"], input: "1" },
-			{ schema: { type: "boolean" } as Tool["parameters"], input: "0" },
-			{ schema: { type: "null" } as Tool["parameters"], input: "null" },
-			{ schema: { type: "integer" } as Tool["parameters"], input: "42.1" },
+			{ schema: fromPartial<Tool["parameters"]>({ type: "boolean" }), input: "1" },
+			{ schema: fromPartial<Tool["parameters"]>({ type: "boolean" }), input: "0" },
+			{ schema: fromPartial<Tool["parameters"]>({ type: "null" }), input: "null" },
+			{ schema: fromPartial<Tool["parameters"]>({ type: "integer" }), input: "42.1" },
 		];
 
 		for (const testCase of failingCases) {

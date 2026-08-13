@@ -1,4 +1,5 @@
 import { setKeybindings } from "@earendil-works/pi-tui";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { KeybindingsManager } from "../src/core/keybindings.js";
 import type { ModelRegistry } from "../src/core/model-registry.js";
@@ -76,7 +77,9 @@ function summary(overrides: Partial<SessionSummary> = {}): SessionSummary {
 }
 
 function invoke(method: string, self: object, ...args: unknown[]): unknown {
-	const member = Reflect.get(AgentsViewMode.prototype, method) as ((...a: unknown[]) => unknown) | undefined;
+	const member = fromPartial<((...a: unknown[]) => unknown) | undefined>(
+		Reflect.get(AgentsViewMode.prototype, method),
+	);
 	if (typeof member !== "function") throw new Error(`AgentsViewMode.${method} no longer exists`);
 	return member.call(self, ...args);
 }
@@ -284,7 +287,7 @@ describe("AgentsViewMode", () => {
 			.spyOn(AgentsViewMode.prototype, "run")
 			.mockResolvedValueOnce({ type: "open", summary: opened })
 			.mockImplementationOnce(function (this: AgentsViewMode) {
-				const state = (this as unknown as { persistentState: AgentsViewPersistentState }).persistentState;
+				const state = fromAny<{ persistentState: AgentsViewPersistentState }, unknown>(this).persistentState;
 				expect(state.backSession).toMatchObject({ sessionId: opened.sessionId });
 				return Promise.resolve({ type: "exit" });
 			});
@@ -292,11 +295,11 @@ describe("AgentsViewMode", () => {
 
 		await runAgentsViewMode({
 			socketPath: "/tmp/fake-daemon.sock",
-			config: { cwd: "/tmp", telemetryDisabled: true } as never,
+			config: fromAny<never, unknown>({ cwd: "/tmp", telemetryDisabled: true }),
 			initialSession: previous,
 			uiServices: {
-				settingsManager: settingsManager as never,
-				modelRegistry: {} as never,
+				settingsManager: fromAny<never, unknown>(settingsManager),
+				modelRegistry: fromAny<never, unknown>({}),
 				getInitialCwd: () => "/tmp",
 				getInitialSessionName: () => undefined,
 				getThemes: () => [],
@@ -319,7 +322,7 @@ describe("AgentsViewMode", () => {
 		const runView = vi
 			.spyOn(AgentsViewMode.prototype, "run")
 			.mockImplementationOnce(function (this: AgentsViewMode) {
-				const state = (this as unknown as { persistentState: AgentsViewPersistentState }).persistentState;
+				const state = fromAny<{ persistentState: AgentsViewPersistentState }, unknown>(this).persistentState;
 				state.scopeFrames = [
 					{ scope: { sessionId: parent.sessionId, activeSessionId: parent.activeSessionId } },
 					{ scope: { sessionId: child.sessionId, activeSessionId: child.activeSessionId } },
@@ -333,17 +336,17 @@ describe("AgentsViewMode", () => {
 				});
 			})
 			.mockImplementationOnce(function (this: AgentsViewMode) {
-				const state = (this as unknown as { persistentState: AgentsViewPersistentState }).persistentState;
+				const state = fromAny<{ persistentState: AgentsViewPersistentState }, unknown>(this).persistentState;
 				expect(state.scopeFrames).toHaveLength(1);
 				expect(state.scopeRootSummary).toBeUndefined();
 				return Promise.resolve({ type: "exit" });
 			});
 
 		await runAgentsViewMode({
-			config: { cwd: "/tmp" } as never,
+			config: fromAny<never, unknown>({ cwd: "/tmp" }),
 			uiServices: {
-				settingsManager: settingsManager as never,
-				modelRegistry: {} as never,
+				settingsManager: fromAny<never, unknown>(settingsManager),
+				modelRegistry: fromAny<never, unknown>({}),
 				getInitialCwd: () => "/tmp",
 				getInitialSessionName: () => undefined,
 				getThemes: () => [],
@@ -359,34 +362,36 @@ describe("AgentsViewMode", () => {
 		const runView = vi
 			.spyOn(AgentsViewMode.prototype, "run")
 			.mockImplementationOnce(function (this: AgentsViewMode) {
-				const state = (this as unknown as { persistentState: AgentsViewPersistentState }).persistentState;
+				const state = fromAny<{ persistentState: AgentsViewPersistentState }, unknown>(this).persistentState;
 				state.scopeFrames = [{ scope: { sessionId: parent.sessionId, activeSessionId: parent.activeSessionId } }];
 				state.scopeRootSummary = parent;
 				return Promise.resolve({ type: "open", summary: child });
 			})
 			.mockImplementationOnce(function (this: AgentsViewMode) {
-				const state = (this as unknown as { persistentState: AgentsViewPersistentState }).persistentState;
+				const state = fromAny<{ persistentState: AgentsViewPersistentState }, unknown>(this).persistentState;
 				expect(state.scopeFrames).toHaveLength(2);
 				expect(state.scopeRootSummary).toBeUndefined();
 				return Promise.resolve({ type: "exit" });
 			});
-		modeMocks.interactiveRun.mockResolvedValueOnce({
-			type: "scoped_agents_view",
-			source: {
-				activeSessionId: child.activeSessionId,
-				sessionFile: child.sessionFile,
-				sessionId: child.sessionId,
-				sessionName: child.sessionName,
-				cwd: child.cwd,
-			},
-		} as never);
+		modeMocks.interactiveRun.mockResolvedValueOnce(
+			fromAny<never, unknown>({
+				type: "scoped_agents_view",
+				source: {
+					activeSessionId: child.activeSessionId,
+					sessionFile: child.sessionFile,
+					sessionId: child.sessionId,
+					sessionName: child.sessionName,
+					cwd: child.cwd,
+				},
+			}),
+		);
 
 		await runAgentsViewMode({
 			socketPath: "/tmp/fake-daemon.sock",
-			config: { cwd: "/tmp" } as never,
+			config: fromAny<never, unknown>({ cwd: "/tmp" }),
 			uiServices: {
-				settingsManager: settingsManager as never,
-				modelRegistry: {} as never,
+				settingsManager: fromAny<never, unknown>(settingsManager),
+				modelRegistry: fromAny<never, unknown>({}),
 				getInitialCwd: () => "/tmp",
 				getInitialSessionName: () => undefined,
 				getThemes: () => [],
@@ -422,7 +427,7 @@ describe("AgentsViewMode", () => {
 			resolveMissingSelectionAnchor: vi.fn(),
 		};
 
-		const refresh = invoke("refreshSavedSessions", self) as Promise<boolean>;
+		const refresh = fromAny<Promise<boolean>, unknown>(invoke("refreshSavedSessions", self));
 		await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
 		expect(self.savedCatalogReady).toBe(false);
 
@@ -502,20 +507,22 @@ describe("AgentsViewMode", () => {
 		invoke("reconcileCatalogs", self);
 		expect(persistentState.scopeRootSummary).toMatchObject({ sessionId: root.sessionId });
 
-		const remount = new AgentsViewMode(
-			{
-				config: { cwd: "/tmp" } as never,
-				uiServices: {
-					settingsManager: settingsManager as never,
-					modelRegistry: {} as never,
-					getInitialCwd: () => "/tmp",
-					getInitialSessionName: () => undefined,
-					getThemes: () => [],
+		const remount = fromAny<AgentsViewMode & Record<string, unknown>, unknown>(
+			new AgentsViewMode(
+				{
+					config: { cwd: "/tmp" } as never,
+					uiServices: {
+						settingsManager: settingsManager as never,
+						modelRegistry: {} as never,
+						getInitialCwd: () => "/tmp",
+						getInitialSessionName: () => undefined,
+						getThemes: () => [],
+					},
 				},
-			},
-			persistentState,
-		) as AgentsViewMode & Record<string, unknown>;
-		const remountedRoot = Reflect.get(remount, "scopeRootSummary") as SessionSummary;
+				persistentState,
+			),
+		);
+		const remountedRoot = fromAny<SessionSummary, unknown>(Reflect.get(remount, "scopeRootSummary"));
 		expect(remountedRoot).toMatchObject({ sessionName: "Scoped root" });
 		expect(resolveAgentsViewLeftResult(remountedRoot)).toMatchObject({
 			type: "scope_back",
@@ -527,20 +534,24 @@ describe("AgentsViewMode", () => {
 		const persistentState: AgentsViewPersistentState = {};
 		const view = new AgentsViewMode({ config: {}, uiServices: createUiServices() }, persistentState);
 		try {
-			(Reflect.get(view, "expandedSubagentParents") as Set<string>).add("file:/tmp/root.jsonl");
-			(Reflect.get(view, "programShownParents") as Set<string>).add("file:/tmp/root.jsonl");
+			fromPartial<Set<string>>(Reflect.get(view, "expandedSubagentParents")).add("file:/tmp/root.jsonl");
+			fromPartial<Set<string>>(Reflect.get(view, "programShownParents")).add("file:/tmp/root.jsonl");
 
 			const remount = new AgentsViewMode({ config: {}, uiServices: createUiServices() }, persistentState);
-			expect((Reflect.get(remount, "expandedSubagentParents") as Set<string>).has("file:/tmp/root.jsonl")).toBe(
+			expect(
+				fromPartial<Set<string>>(Reflect.get(remount, "expandedSubagentParents")).has("file:/tmp/root.jsonl"),
+			).toBe(true);
+			expect(fromPartial<Set<string>>(Reflect.get(remount, "programShownParents")).has("file:/tmp/root.jsonl")).toBe(
 				true,
 			);
-			expect((Reflect.get(remount, "programShownParents") as Set<string>).has("file:/tmp/root.jsonl")).toBe(true);
 
 			// A collapsed-back list persists that way too.
-			(Reflect.get(remount, "expandedSubagentParents") as Set<string>).delete("file:/tmp/root.jsonl");
+			fromPartial<Set<string>>(Reflect.get(remount, "expandedSubagentParents")).delete("file:/tmp/root.jsonl");
 			const collapsedRemount = new AgentsViewMode({ config: {}, uiServices: createUiServices() }, persistentState);
 			expect(
-				(Reflect.get(collapsedRemount, "expandedSubagentParents") as Set<string>).has("file:/tmp/root.jsonl"),
+				fromPartial<Set<string>>(Reflect.get(collapsedRemount, "expandedSubagentParents")).has(
+					"file:/tmp/root.jsonl",
+				),
 			).toBe(false);
 		} finally {
 			stopThemeWatcher();
@@ -548,7 +559,7 @@ describe("AgentsViewMode", () => {
 	});
 
 	it("keeps subagent expansion across the active-to-persisted identity flip", () => {
-		const rowsOf = (self: Record<string, unknown>) => Reflect.get(self, "rows") as AgentsViewRow[];
+		const rowsOf = (self: Record<string, unknown>) => fromAny<AgentsViewRow[], unknown>(Reflect.get(self, "rows"));
 		const buildView = (expand: boolean) => {
 			const parent = summary({
 				id: "root-active",
@@ -653,7 +664,7 @@ describe("AgentsViewMode", () => {
 function createUiServices(): InteractiveModeUiServices {
 	return {
 		settingsManager: SettingsManager.inMemory({ theme: "dark" }),
-		modelRegistry: {} as ModelRegistry,
+		modelRegistry: fromPartial<ModelRegistry>({}),
 		getInitialCwd: () => process.cwd(),
 		getInitialSessionName: () => undefined,
 		getThemes: () => [],
@@ -766,7 +777,7 @@ describe("AgentsViewMode persistent catalog state", () => {
 		let runs = 0;
 		vi.spyOn(AgentsViewMode.prototype, "run").mockImplementation(async function (this: AgentsViewMode) {
 			runs += 1;
-			const persistentState = Reflect.get(this, "persistentState") as AgentsViewPersistentState;
+			const persistentState = fromPartial<AgentsViewPersistentState>(Reflect.get(this, "persistentState"));
 			if (runs === 1) {
 				persistentState.lastSuccessfulLiveSummaries = [other];
 				persistentState.lastSuccessfulSavedSessions = [];
@@ -784,15 +795,17 @@ describe("AgentsViewMode persistent catalog state", () => {
 			expect(persistentState.scopeFrames).toEqual([{ scope, returnChat: returnedRoot }]);
 			return { type: "exit" };
 		});
-		modeMocks.interactiveRun.mockResolvedValue({
-			type: "scoped_agents_view",
-			source: {
-				activeSessionId: root.activeSessionId!,
-				sessionId: root.sessionId,
-				sessionName: returnedRoot.sessionName,
-				cwd: root.cwd,
-			},
-		} as never);
+		modeMocks.interactiveRun.mockResolvedValue(
+			fromAny<never, unknown>({
+				type: "scoped_agents_view",
+				source: {
+					activeSessionId: root.activeSessionId!,
+					sessionId: root.sessionId,
+					sessionName: returnedRoot.sessionName,
+					cwd: root.cwd,
+				},
+			}),
+		);
 
 		await runAgentsViewMode({
 			config: { cwd: process.cwd() },
@@ -844,14 +857,16 @@ describe("agents view startup notices", () => {
 			success: true,
 			data: { ...root, cwd: process.cwd(), activeSessionId: "resumed-active", lifecycle: "live" },
 		});
-		modeMocks.interactiveRun.mockResolvedValue({
-			type: "agents_view",
-			source: {
-				activeSessionId: "resumed-active",
-				sessionId: root.sessionId,
-				cwd: process.cwd(),
-			},
-		} as never);
+		modeMocks.interactiveRun.mockResolvedValue(
+			fromAny<never, unknown>({
+				type: "agents_view",
+				source: {
+					activeSessionId: "resumed-active",
+					sessionId: root.sessionId,
+					cwd: process.cwd(),
+				},
+			}),
+		);
 
 		await runAgentsViewMode({
 			config: { cwd: process.cwd() },

@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { KernelManager } from "../src/core/kernel/index.js";
 
@@ -39,7 +40,7 @@ describeIfKernel("kernel state snapshot round-trip (real kernel)", { tags: ["ker
 
 	function newManager(): KernelManager {
 		return new KernelManager({
-			python: python as string,
+			python: fromAny<string, unknown>(python),
 			cwd: dir,
 			snapshot: { path: snapshotPath, manifestPath },
 		});
@@ -79,7 +80,7 @@ describeIfKernel("kernel state snapshot round-trip (real kernel)", { tags: ["ker
 	it("treats a missing snapshot as an empty restore (clean start)", async () => {
 		const freshDir = mkdtempSync(join(tmpdir(), "axiom-state-empty-"));
 		const manager = new KernelManager({
-			python: python as string,
+			python: fromAny<string, unknown>(python),
 			cwd: freshDir,
 			snapshot: { path: join(freshDir, "missing.dill"), manifestPath: join(freshDir, "missing.json") },
 		});
@@ -96,7 +97,7 @@ describeIfKernel("kernel state snapshot round-trip (real kernel)", { tags: ["ker
 		const dir = mkdtempSync(join(tmpdir(), "axiom-state-shadow-"));
 		const path = join(dir, "shadow.dill");
 		const cfg = { path, manifestPath: join(dir, "shadow.json") };
-		const writer = new KernelManager({ python: python as string, cwd: dir, snapshot: cfg });
+		const writer = new KernelManager({ python: fromAny<string, unknown>(python), cwd: dir, snapshot: cfg });
 		try {
 			// Shadow builtins the snapshot helper itself relies on (list/print) plus a
 			// plain builtin-named var (id); the helper must still run and capture them.
@@ -108,7 +109,7 @@ describeIfKernel("kernel state snapshot round-trip (real kernel)", { tags: ["ker
 			await writer.dispose();
 		}
 
-		const reader = new KernelManager({ python: python as string, cwd: dir, snapshot: cfg });
+		const reader = new KernelManager({ python: fromAny<string, unknown>(python), cwd: dir, snapshot: cfg });
 		try {
 			const restore = await reader.restoreState();
 			expect(restore?.restored).toEqual(expect.arrayContaining(["list", "print", "id"]));
@@ -122,7 +123,7 @@ describeIfKernel("kernel state snapshot round-trip (real kernel)", { tags: ["ker
 		const badDir = mkdtempSync(join(tmpdir(), "axiom-state-corrupt-"));
 		const badPath = join(badDir, "corrupt.dill");
 		const manager = new KernelManager({
-			python: python as string,
+			python: fromAny<string, unknown>(python),
 			cwd: badDir,
 			snapshot: { path: badPath, manifestPath: join(badDir, "corrupt.json") },
 		});
@@ -142,7 +143,7 @@ describeIfKernel("kernel state snapshot round-trip (real kernel)", { tags: ["ker
 
 	it("lists live user-defined names, filtering internals and live handles", async () => {
 		const listDir = mkdtempSync(join(tmpdir(), "axiom-state-list-"));
-		const manager = new KernelManager({ python: python as string, cwd: listDir });
+		const manager = new KernelManager({ python: fromAny<string, unknown>(python), cwd: listDir });
 		try {
 			// A fresh, unstarted kernel reports no names.
 			expect(await manager.listNamespaceNames()).toBeNull();
@@ -162,7 +163,7 @@ describeIfKernel("kernel state snapshot round-trip (real kernel)", { tags: ["ker
 		const autoDir = mkdtempSync(join(tmpdir(), "axiom-state-auto-"));
 		const autoPath = join(autoDir, "auto.dill");
 		const manager = new KernelManager({
-			python: python as string,
+			python: fromAny<string, unknown>(python),
 			cwd: autoDir,
 			snapshot: { path: autoPath, manifestPath: join(autoDir, "auto.json"), debounceMs: 50 },
 		});

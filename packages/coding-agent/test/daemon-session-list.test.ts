@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import type { AgentCronJob } from "../src/core/cron-jobs.js";
 import type { SessionInfo } from "../src/core/session-manager.js";
@@ -14,8 +15,8 @@ import {
 
 describe("buildSessionList", () => {
 	it("derives active session lifecycle and activity", () => {
-		const oneMessage = [{ role: "user", content: "hi" }] as unknown as AgentMessage[];
-		const currentSummary = { basedOnMessageCount: 1 } as ActiveSessionState["summaryState"];
+		const oneMessage = fromAny<AgentMessage[], unknown>([{ role: "user", content: "hi" }]);
+		const currentSummary = fromPartial<ActiveSessionState["summaryState"]>({ basedOnMessageCount: 1 });
 		const entries = buildSessionList(
 			[
 				makeState({
@@ -66,28 +67,28 @@ describe("buildSessionList", () => {
 	});
 
 	it("takes last activity from custom messages and tool results", () => {
-		const oldMessage = {
+		const oldMessage = fromPartial<AgentMessage>({
 			role: "user",
 			content: "old",
 			timestamp: Date.parse("2026-05-02T00:00:00.000Z"),
-		} as AgentMessage;
+		});
 		const customTimestamp = Date.parse("2026-05-03T00:00:00.000Z");
-		const customMessage = {
+		const customMessage = fromPartial<AgentMessage>({
 			role: "custom",
 			customType: "activity",
 			content: "newer",
 			display: false,
 			timestamp: customTimestamp,
-		} as AgentMessage;
+		});
 		const toolResultTimestamp = Date.parse("2026-05-04T00:00:00.000Z");
-		const toolResult = {
+		const toolResult = fromPartial<AgentMessage>({
 			role: "toolResult",
 			toolCallId: "tool-1",
 			toolName: "example",
 			content: [],
 			isError: false,
 			timestamp: toolResultTimestamp,
-		} as AgentMessage;
+		});
 
 		expect(
 			summaryForActiveSession(makeState({ activeSessionId: "custom-active", messages: [oldMessage, customMessage] }))
@@ -101,10 +102,10 @@ describe("buildSessionList", () => {
 
 	it("ignores message timestamps outside the valid Date range", () => {
 		const validTimestamp = Date.parse("2026-05-04T00:00:00.000Z");
-		const messages = [
+		const messages = fromAny<AgentMessage[], unknown>([
 			{ role: "user", content: "valid", timestamp: validTimestamp },
 			{ role: "assistant", content: "corrupt", timestamp: 8.64e15 + 1 },
-		] as AgentMessage[];
+		]);
 
 		const summary = summaryForActiveSession(makeState({ activeSessionId: "invalid-timestamp", messages }));
 
@@ -112,7 +113,7 @@ describe("buildSessionList", () => {
 	});
 
 	it("keeps a session working while background subagents run", () => {
-		const oneMessage = [{ role: "user", content: "hi" }] as unknown as AgentMessage[];
+		const oneMessage = fromAny<AgentMessage[], unknown>([{ role: "user", content: "hi" }]);
 		const entries = buildSessionList(
 			[
 				makeState({
@@ -121,7 +122,7 @@ describe("buildSessionList", () => {
 					isStreaming: false,
 					hasRunningRlmChildren: true,
 					messages: oneMessage,
-					summaryState: { basedOnMessageCount: 1 } as ActiveSessionState["summaryState"],
+					summaryState: fromPartial<ActiveSessionState["summaryState"]>({ basedOnMessageCount: 1 }),
 				}),
 			],
 			[],
@@ -131,8 +132,8 @@ describe("buildSessionList", () => {
 	});
 
 	it("marks sessions with active standard or RLM heartbeats", () => {
-		const messages = [{ role: "user", content: "hi" }] as unknown as AgentMessage[];
-		const summaryState = { basedOnMessageCount: 1 } as ActiveSessionState["summaryState"];
+		const messages = fromAny<AgentMessage[], unknown>([{ role: "user", content: "hi" }]);
+		const summaryState = fromPartial<ActiveSessionState["summaryState"]>({ basedOnMessageCount: 1 });
 		const activeSessionIds = ["heartbeat", "rlm-heartbeat", "paused-heartbeat", "cron"];
 		const entries = buildSessionList(
 			activeSessionIds.map((activeSessionId) => makeState({ activeSessionId, messages, summaryState })),
@@ -204,12 +205,12 @@ describe("buildSessionList", () => {
 	});
 
 	it("reports accepted in-flight prompts as active with no queued work", () => {
-		const oneMessage = [{ role: "user", content: "hi" }] as unknown as AgentMessage[];
+		const oneMessage = fromAny<AgentMessage[], unknown>([{ role: "user", content: "hi" }]);
 		const summary = summaryForActiveSession(
 			makeState({
 				activeSessionId: "accepted",
 				messages: oneMessage,
-				summaryState: { basedOnMessageCount: 1 } as ActiveSessionState["summaryState"],
+				summaryState: fromPartial<ActiveSessionState["summaryState"]>({ basedOnMessageCount: 1 }),
 				hasAcceptedPromptInFlight: true,
 			}),
 		);
@@ -232,7 +233,7 @@ describe("buildSessionList", () => {
 	});
 
 	it("marks a finished subagent idle instead of holding it at working", () => {
-		const oneMessage = [{ role: "user", content: "hi" }] as unknown as AgentMessage[];
+		const oneMessage = fromAny<AgentMessage[], unknown>([{ role: "user", content: "hi" }]);
 		const entries = buildSessionList(
 			[
 				makeState({
@@ -251,7 +252,7 @@ describe("buildSessionList", () => {
 	});
 
 	it("marks a retained completed subagent with an active RLM heartbeat", () => {
-		const messages = [{ role: "user", content: "initialize a heartbeat" }] as unknown as AgentMessage[];
+		const messages = fromAny<AgentMessage[], unknown>([{ role: "user", content: "initialize a heartbeat" }]);
 		const entries = buildSessionList(
 			[
 				makeState({
@@ -305,8 +306,8 @@ describe("buildSessionList", () => {
 					activeSessionId: "active-1",
 					sessionFile: activePath,
 					sessionId: "saved-active",
-					messages: [{ role: "user", content: "hi" }] as unknown as AgentMessage[],
-					summaryState: { basedOnMessageCount: 1 } as ActiveSessionState["summaryState"],
+					messages: fromAny<AgentMessage[], unknown>([{ role: "user", content: "hi" }]),
+					summaryState: fromPartial<ActiveSessionState["summaryState"]>({ basedOnMessageCount: 1 }),
 				}),
 			],
 			savedSessions,
@@ -456,10 +457,10 @@ describe("buildSessionList", () => {
 });
 
 describe("summaryForActiveSession recap currency", () => {
-	const twoMessages = [
+	const twoMessages = fromAny<AgentMessage[], unknown>([
 		{ role: "user", content: "hi" },
 		{ role: "assistant", content: "ok" },
-	] as AgentMessage[];
+	]);
 
 	it("surfaces both recap and verdict while the summary matches the turn", () => {
 		const summary = summaryForActiveSession(
@@ -479,7 +480,7 @@ describe("summaryForActiveSession recap currency", () => {
 		const summary = summaryForActiveSession(
 			makeState({
 				activeSessionId: "s1",
-				messages: [...twoMessages, { role: "user", content: "next" } as AgentMessage],
+				messages: [...twoMessages, fromPartial<AgentMessage>({ role: "user", content: "next" })],
 				summaryState: { summary: "Editing the router", taskState: "completed", basedOnMessageCount: 2 },
 			}),
 		);
@@ -511,7 +512,7 @@ describe("buildRlmChildSnapshots", () => {
 				prompt: "Summarize   the repo\nlayout",
 				sessionDir: "/tmp/artifacts/sub-aaa",
 			},
-			messages: [
+			messages: fromPartial<AgentMessage[]>([
 				{ role: "user", content: "Summarize the repo layout" },
 				{
 					role: "assistant",
@@ -520,7 +521,7 @@ describe("buildRlmChildSnapshots", () => {
 						{ type: "toolCall", id: "tool-1", name: "ipython", arguments: {} },
 					],
 				},
-			] as AgentMessage[],
+			]),
 			contextTokens: 41_000,
 		});
 		const grandchild = makeState({
@@ -622,13 +623,13 @@ describe("buildRlmChildSnapshots", () => {
 				parentActiveSessionId: "parent",
 				rlmChildId: "sub-aaa",
 			},
-			streamingMessage: {
+			streamingMessage: fromPartial<AgentMessage>({
 				role: "assistant",
 				content: [
 					{ type: "text", text: "Still investigating" },
 					{ type: "toolCall", id: "tool-1", name: "search", arguments: {} },
 				],
-			} as AgentMessage,
+			}),
 		});
 
 		expect(buildRlmChildSnapshots("parent", [parent, child])[0]).toMatchObject({
@@ -670,7 +671,9 @@ describe("resolveAttachModelFallbackMessage", () => {
 	});
 
 	it("ignores the attaching process's snapshot when the session has a model", () => {
-		const summary = makeSummary({ model: { provider: "prime-inference", id: "gpt-5.5" } as SessionSummary["model"] });
+		const summary = makeSummary({
+			model: fromPartial<SessionSummary["model"]>({ provider: "prime-inference", id: "gpt-5.5" }),
+		});
 
 		expect(resolveAttachModelFallbackMessage(summary, startupMessage)).toBeUndefined();
 	});
@@ -714,10 +717,10 @@ interface StateOptions {
 function makeState(options: StateOptions): ActiveSessionState {
 	const clients = new Set<DaemonSocketClient>();
 	for (let index = 0; index < (options.clients ?? 0); index++) {
-		clients.add({ id: `client-${index}` } as unknown as DaemonSocketClient);
+		clients.add(fromAny<DaemonSocketClient, unknown>({ id: `client-${index}` }));
 	}
 
-	return {
+	return fromAny<ActiveSessionState, unknown>({
 		activeSessionId: options.activeSessionId,
 		clients,
 		lastEventSequence: 0,
@@ -740,7 +743,7 @@ function makeState(options: StateOptions): ActiveSessionState {
 					getSessionDir: () => "/tmp/sessions",
 					hasUserContent: () => options.hasUserContent ?? false,
 				},
-				messages: options.messages ?? ([] as AgentMessage[]),
+				messages: options.messages ?? fromPartial<AgentMessage[]>([]),
 				getRlmChildRunStatus: (childId: string) => options.childRunStatuses?.[childId],
 				hasRunningRlmChildren: () => options.hasRunningRlmChildren ?? false,
 				hasAcceptedPromptInFlight: options.hasAcceptedPromptInFlight ?? false,
@@ -762,7 +765,7 @@ function makeState(options: StateOptions): ActiveSessionState {
 				},
 			},
 		},
-	} as unknown as ActiveSessionState;
+	});
 }
 
 function makeSessionInfo(overrides: Pick<SessionInfo, "path" | "id"> & Partial<SessionInfo>): SessionInfo {

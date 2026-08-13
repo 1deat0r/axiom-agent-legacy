@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import { RpcClient } from "../src/modes/rpc/rpc-client.js";
 
@@ -9,7 +10,7 @@ type RpcClientPrivate = {
 describe("RpcClient clone", () => {
 	it("sends the clone RPC command", async () => {
 		const client = new RpcClient();
-		const privateClient = client as unknown as RpcClientPrivate;
+		const privateClient = fromAny<RpcClientPrivate, unknown>(client);
 		const send = vi.fn(async () => ({
 			type: "response",
 			command: "clone",
@@ -18,7 +19,7 @@ describe("RpcClient clone", () => {
 		}));
 		privateClient.send = send;
 		privateClient.getData = <T>(response: unknown): T => {
-			return (response as { data: T }).data;
+			return fromAny<{ data: T }, unknown>(response).data;
 		};
 
 		const result = await client.clone();

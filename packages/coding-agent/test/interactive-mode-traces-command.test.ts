@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import type { AgentTraceUploadAllResult, AgentTraceUploadResult } from "../src/core/agent-traces.js";
 import { AuthStorage } from "../src/core/auth-storage.js";
@@ -26,7 +27,7 @@ interface TracesCommandPrototype {
 	handleTracesCommand(this: TracesCommandContext, text: string): Promise<void>;
 }
 
-const prototype = InteractiveMode.prototype as unknown as TracesCommandPrototype;
+const prototype = fromAny<TracesCommandPrototype, unknown>(InteractiveMode.prototype);
 
 function makeContext(enabled = true): TracesCommandContext {
 	return {

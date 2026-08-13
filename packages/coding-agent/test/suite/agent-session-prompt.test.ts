@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { fauxAssistantMessage, fauxToolCall, type Model } from "@earendil-works/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BashResult } from "../../src/core/bash-executor.js";
@@ -563,13 +564,16 @@ stale extension instructions`,
 			],
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as {
-			_baseSystemPrompt: string;
-			_refineInFlight?: Promise<void>;
-			_refineAbortController?: AbortController;
-			_planRefine(options: unknown, signal: AbortSignal): Promise<unknown>;
-			_applyRefine(plan: unknown, options: unknown, abort: AbortController): Promise<unknown>;
-		};
+		const internals = fromAny<
+			{
+				_baseSystemPrompt: string;
+				_refineInFlight?: Promise<void>;
+				_refineAbortController?: AbortController;
+				_planRefine(options: unknown, signal: AbortSignal): Promise<unknown>;
+				_applyRefine(plan: unknown, options: unknown, abort: AbortController): Promise<unknown>;
+			},
+			unknown
+		>(harness.session);
 		vi.spyOn(internals, "_planRefine").mockResolvedValue({ id: "race-plan", proposal: { edits: [] } });
 		vi.spyOn(internals, "_applyRefine").mockImplementation(async () => {
 			internals._baseSystemPrompt = "refined $& base";
@@ -628,12 +632,15 @@ stale extension instructions`,
 			],
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as {
-			_baseSystemPrompt: string;
-			_refineAbortController?: AbortController;
-			_planRefine(options: unknown, signal: AbortSignal): Promise<unknown>;
-			_applyRefine(plan: unknown, options: unknown, abort: AbortController): Promise<unknown>;
-		};
+		const internals = fromAny<
+			{
+				_baseSystemPrompt: string;
+				_refineAbortController?: AbortController;
+				_planRefine(options: unknown, signal: AbortSignal): Promise<unknown>;
+				_applyRefine(plan: unknown, options: unknown, abort: AbortController): Promise<unknown>;
+			},
+			unknown
+		>(harness.session);
 		vi.spyOn(internals, "_planRefine").mockResolvedValue({ id: "race-plan", proposal: { edits: [] } });
 		vi.spyOn(internals, "_applyRefine").mockImplementation(async () => {
 			internals._baseSystemPrompt = "refined base";
@@ -697,24 +704,27 @@ stale injected extension instructions`,
 			],
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as {
-			_baseSystemPrompt: string;
-			_refineInFlight?: Promise<void>;
-			_refineAbortController?: AbortController;
-			_planRefine(options: unknown, signal: AbortSignal): Promise<unknown>;
-			_applyRefine(plan: unknown, options: unknown, abort: AbortController): Promise<unknown>;
-			_promptInjectedMessage(
-				text: string,
-				message: {
-					role: "custom";
-					customType: string;
-					content: string;
-					display: boolean;
-					details: Record<string, never>;
-					timestamp: number;
-				},
-			): Promise<void>;
-		};
+		const internals = fromAny<
+			{
+				_baseSystemPrompt: string;
+				_refineInFlight?: Promise<void>;
+				_refineAbortController?: AbortController;
+				_planRefine(options: unknown, signal: AbortSignal): Promise<unknown>;
+				_applyRefine(plan: unknown, options: unknown, abort: AbortController): Promise<unknown>;
+				_promptInjectedMessage(
+					text: string,
+					message: {
+						role: "custom";
+						customType: string;
+						content: string;
+						display: boolean;
+						details: Record<string, never>;
+						timestamp: number;
+					},
+				): Promise<void>;
+			},
+			unknown
+		>(harness.session);
 		vi.spyOn(internals, "_planRefine").mockResolvedValue({ id: "race-plan", proposal: { edits: [] } });
 		vi.spyOn(internals, "_applyRefine").mockImplementation(async () => {
 			internals._baseSystemPrompt = "refined injected base";
@@ -761,19 +771,22 @@ stale injected extension instructions`,
 		const hook = gatedHook({ prompt: "injected prompt" });
 		const harness = await createHarness({ extensionFactories: [hook.factory] });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as {
-			_promptInjectedMessage(
-				text: string,
-				message: {
-					role: "custom";
-					customType: string;
-					content: string;
-					display: boolean;
-					details: Record<string, never>;
-					timestamp: number;
-				},
-			): Promise<void>;
-		};
+		const internals = fromAny<
+			{
+				_promptInjectedMessage(
+					text: string,
+					message: {
+						role: "custom";
+						customType: string;
+						content: string;
+						display: boolean;
+						details: Record<string, never>;
+						timestamp: number;
+					},
+				): Promise<void>;
+			},
+			unknown
+		>(harness.session);
 		harness.setResponses([fauxAssistantMessage("injected done"), fauxAssistantMessage("follow-up done")]);
 
 		const injectedPrompt = internals._promptInjectedMessage("injected prompt", {
@@ -830,7 +843,7 @@ stale injected extension instructions`,
 			],
 		});
 		harnesses.push(harness);
-		sessionInternals = harness.session as unknown as typeof sessionInternals;
+		sessionInternals = fromAny<typeof sessionInternals, unknown>(harness.session);
 		let providerSystemPrompt = "not observed";
 		harness.setResponses([
 			(context) => {
@@ -876,7 +889,7 @@ extension instructions`,
 			],
 		});
 		harnesses.push(harness);
-		sessionInternals = harness.session as unknown as { _refineInFlight?: Promise<void> };
+		sessionInternals = fromAny<{ _refineInFlight?: Promise<void> }, unknown>(harness.session);
 		let providerSystemPrompt = "";
 		harness.setResponses([
 			(context) => {
@@ -924,7 +937,7 @@ stale post-hook extension instructions`,
 			],
 		});
 		harnesses.push(harness);
-		sessionInternals = harness.session as unknown as typeof sessionInternals;
+		sessionInternals = fromAny<typeof sessionInternals, unknown>(harness.session);
 		vi.spyOn(sessionInternals, "_planRefine").mockResolvedValue({ id: "race-plan", proposal: { edits: [] } });
 		vi.spyOn(sessionInternals, "_applyRefine").mockImplementation(async () => {
 			sessionInternals._baseSystemPrompt = "refined post-hook base";
@@ -972,9 +985,12 @@ stale post-hook extension instructions`,
 			{ customType: "next-turn", content: "queued context", display: true, details: {} },
 			{ deliverAs: "nextTurn" },
 		);
-		const sessionInternals = harness.session as unknown as {
-			_compactionAbortController?: AbortController;
-		};
+		const sessionInternals = fromAny<
+			{
+				_compactionAbortController?: AbortController;
+			},
+			unknown
+		>(harness.session);
 		sessionInternals._compactionAbortController = new AbortController();
 
 		await harness.session.acceptAgentMessagePrompt(agentPrompt, {
@@ -1014,9 +1030,12 @@ stale post-hook extension instructions`,
 		harnesses.push(harness);
 		const agentPrompt =
 			"Agent-to-agent message received.\nSource: agent_message\nTo: Target, active target, session session-target\nMessage id: agentmsg_handoff_busy\n\nqueue at handoff";
-		const sessionInternals = harness.session as unknown as {
-			_sessionInputCheckpointWaiters: Set<() => void>;
-		};
+		const sessionInternals = fromAny<
+			{
+				_sessionInputCheckpointWaiters: Set<() => void>;
+			},
+			unknown
+		>(harness.session);
 		const pause = harness.session.acquireQueuedWorkPause();
 		let acceptedSettled = false;
 		const accepted = harness.session
@@ -1054,10 +1073,13 @@ stale post-hook extension instructions`,
 		const refineGate = new Promise<void>((resolve) => {
 			releaseRefine = resolve;
 		});
-		const sessionInternals = harness.session as unknown as {
-			_refineInFlight?: Promise<void>;
-			_userBashRunning?: boolean;
-		};
+		const sessionInternals = fromAny<
+			{
+				_refineInFlight?: Promise<void>;
+				_userBashRunning?: boolean;
+			},
+			unknown
+		>(harness.session);
 		sessionInternals._refineInFlight = refineGate;
 
 		const accepted = harness.session.acceptAgentMessagePrompt(
@@ -1090,10 +1112,13 @@ stale post-hook extension instructions`,
 	it("flushes pending bash messages before accepted agent messages", async () => {
 		const harness = await createHarness();
 		harnesses.push(harness);
-		const sessionInternals = harness.session as unknown as {
-			recordBashResult(command: string, result: BashResult): void;
-			_flushPendingBashMessages(): void;
-		};
+		const sessionInternals = fromAny<
+			{
+				recordBashResult(command: string, result: BashResult): void;
+				_flushPendingBashMessages(): void;
+			},
+			unknown
+		>(harness.session);
 		const contextRoles: string[][] = [];
 		const contextTexts: string[][] = [];
 		harness.setResponses([
@@ -1244,8 +1269,9 @@ stale post-hook extension instructions`,
 		await harness.session.agent.waitForIdle();
 		await new Promise<void>((resolve) => setImmediate(resolve));
 
-		const store = (harness.session as unknown as { _actionStore: { ownedActions(): readonly unknown[] } })
-			._actionStore;
+		const store = fromAny<{ _actionStore: { ownedActions(): readonly unknown[] } }, unknown>(
+			harness.session,
+		)._actionStore;
 		expect(idle).toBe(false);
 		expect(store.ownedActions()).toHaveLength(1);
 		eventQueueGate.resolve();
@@ -1261,7 +1287,7 @@ stale post-hook extension instructions`,
 			{ customType: "next-turn", content: "retry me", display: true, details: {} },
 			{ deliverAs: "nextTurn" },
 		);
-		const agent = harness.session.agent as unknown as { prompt(messages: unknown): Promise<void> };
+		const agent = fromAny<{ prompt(messages: unknown): Promise<void> }, unknown>(harness.session.agent);
 		const originalPrompt = agent.prompt;
 		agent.prompt = async () => {
 			throw new Error("prompt failed before delivery");
@@ -1392,7 +1418,7 @@ stale post-hook extension instructions`,
 			},
 			fauxAssistantMessage("second done"),
 		]);
-		const internals = harness.session as unknown as { _agentMessageOutcomes: Map<string, unknown> };
+		const internals = fromAny<{ _agentMessageOutcomes: Map<string, unknown> }, unknown>(harness.session);
 
 		const first = harness.session.prompt("first");
 		await vi.waitFor(() => expect(harness.session.isStreaming).toBe(true));
@@ -1435,9 +1461,12 @@ stale post-hook extension instructions`,
 	it("does not run built-in slash commands immediately while queueIfBusy backpressure is active", async () => {
 		const harness = await createHarness();
 		harnesses.push(harness);
-		const sessionInternals = harness.session as unknown as {
-			_compactionAbortController?: AbortController;
-		};
+		const sessionInternals = fromAny<
+			{
+				_compactionAbortController?: AbortController;
+			},
+			unknown
+		>(harness.session);
 		sessionInternals._compactionAbortController = new AbortController();
 
 		await harness.session.prompt("/autonomous on", {
@@ -1636,13 +1665,14 @@ stale post-hook extension instructions`,
 		await harness.session.followUp("handed off", undefined, { resumeIfIdle: true });
 		pause.release();
 		await vi.waitFor(() => {
-			const store = (
-				harness.session as unknown as {
+			const store = fromAny<
+				{
 					_actionStore: {
 						activeActions(): readonly { lifecycle: { state: string }; payload: { kind: string } }[];
 					};
-				}
-			)._actionStore;
+				},
+				unknown
+			>(harness.session)._actionStore;
 			const active = store.activeActions()[0];
 			expect(active?.payload.kind).toBe("turn");
 			expect(active?.lifecycle.state).toBe("committing");
@@ -1691,9 +1721,12 @@ stale post-hook extension instructions`,
 				await earlierStartGate.promise;
 			}
 		});
-		const internals = harness.session as unknown as {
-			_promptInjectedMessage(text: string, message: typeof injectedMessage): Promise<void>;
-		};
+		const internals = fromAny<
+			{
+				_promptInjectedMessage(text: string, message: typeof injectedMessage): Promise<void>;
+			},
+			unknown
+		>(harness.session);
 
 		const prompt = internals._promptInjectedMessage("injected prompt", injectedMessage);
 		await earlierStarted.promise;
@@ -1876,7 +1909,7 @@ stale post-hook extension instructions`,
 		harness.setResponses([fauxAssistantMessage("done")]);
 		const prompt = harness.session.prompt("pending extension event");
 		await extensionReached.promise;
-		const eventQueue = (harness.session as unknown as { _agentEventQueue: Promise<void> })._agentEventQueue;
+		const eventQueue = fromAny<{ _agentEventQueue: Promise<void> }, unknown>(harness.session)._agentEventQueue;
 		let queueDrained = false;
 		void eventQueue.then(() => {
 			queueDrained = true;
@@ -1900,7 +1933,7 @@ stale post-hook extension instructions`,
 	it("propagates a snapshotted event queue rejection without flushing", async () => {
 		const harness = await createHarness();
 		harnesses.push(harness);
-		(harness.session as unknown as { _agentEventQueue: Promise<void> })._agentEventQueue = Promise.reject(
+		fromAny<{ _agentEventQueue: Promise<void> }, unknown>(harness.session)._agentEventQueue = Promise.reject(
 			new Error("event queue failed"),
 		);
 		const flushNow = vi.spyOn(harness.sessionManager, "flushNow");
@@ -1912,19 +1945,22 @@ stale post-hook extension instructions`,
 	it("releases the injected action checkpoint when dispatch fails", async () => {
 		const harness = await createHarness();
 		harnesses.push(harness);
-		const internals = harness.session as unknown as {
-			_promptInjectedMessage(
-				text: string,
-				message: {
-					role: "custom";
-					customType: string;
-					content: string;
-					display: boolean;
-					details: Record<string, never>;
-					timestamp: number;
-				},
-			): Promise<void>;
-		};
+		const internals = fromAny<
+			{
+				_promptInjectedMessage(
+					text: string,
+					message: {
+						role: "custom";
+						customType: string;
+						content: string;
+						display: boolean;
+						details: Record<string, never>;
+						timestamp: number;
+					},
+				): Promise<void>;
+			},
+			unknown
+		>(harness.session);
 		vi.spyOn(harness.session.agent, "prompt").mockRejectedValue(new Error("dispatch failed"));
 
 		await expect(
@@ -1954,7 +1990,7 @@ stale post-hook extension instructions`,
 	it("throws when prompting without a model", async () => {
 		const harness = await createHarness();
 		harnesses.push(harness);
-		harness.session.agent.state.model = undefined as unknown as Model<any>;
+		harness.session.agent.state.model = fromAny<Model<any>, unknown>(undefined);
 
 		await expect(harness.session.prompt("hi")).rejects.toThrow("No model selected.");
 	});
@@ -2055,7 +2091,7 @@ stale post-hook extension instructions`,
 		await expect(accepted).rejects.toThrow("cleared before delivery");
 		await expect(delivery).rejects.toThrow("cleared before delivery");
 		await harness.session.agent.waitForIdle();
-		await (harness.session as unknown as { _agentEventQueue: Promise<void> })._agentEventQueue;
+		await fromAny<{ _agentEventQueue: Promise<void> }, unknown>(harness.session)._agentEventQueue;
 		const persistedAfter = harness.sessionManager.getEntries().filter((entry) => entry.type === "message").length;
 		expect(persistedAfter).toBe(persistedBefore);
 		expect(getUserTexts(harness)).not.toContain(clearedAgentPrompt);

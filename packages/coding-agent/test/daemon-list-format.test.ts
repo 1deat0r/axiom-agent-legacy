@@ -1,4 +1,5 @@
 import type { Api, Model } from "@earendil-works/pi-ai";
+import { fromPartial } from "@total-typescript/shoehorn";
 import stripAnsi from "strip-ansi";
 import { describe, expect, it } from "vitest";
 import { formatSessionListTable } from "../src/cli/daemon-list-format.js";
@@ -31,7 +32,7 @@ describe("formatSessionListTable", () => {
 						lifecycle: "live",
 						activity: "idle",
 						clients: 1,
-						model: { provider: "openai-codex", id: "gpt-5.5" } as Model<Api>,
+						model: fromPartial<Model<Api>>({ provider: "openai-codex", id: "gpt-5.5" }),
 					}),
 				],
 				nowMs,

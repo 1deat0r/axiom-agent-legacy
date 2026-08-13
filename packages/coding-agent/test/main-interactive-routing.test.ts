@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, test } from "vitest";
 import { mergeAgentSessionRuntimeConfig } from "../src/core/agent-session-config.js";
 import type { CreateAgentSessionOptions } from "../src/core/sdk.js";
@@ -375,8 +376,8 @@ describe("runtime session option resolution", () => {
 	});
 
 	test("preserves daemon-provided RLM heartbeat controller when creating sessions", () => {
-		const preparedModel = { id: "prepared-model" } as unknown as CreateAgentSessionOptions["model"];
-		const runtimeModel = { id: "runtime-model" } as unknown as CreateAgentSessionOptions["model"];
+		const preparedModel = fromAny<CreateAgentSessionOptions["model"], unknown>({ id: "prepared-model" });
+		const runtimeModel = fromAny<CreateAgentSessionOptions["model"], unknown>({ id: "runtime-model" });
 		const rlmHeartbeatController: NonNullable<CreateAgentSessionOptions["rlmHeartbeatController"]> = {
 			listRlmHeartbeats: () => [],
 			createRlmHeartbeat: () => {

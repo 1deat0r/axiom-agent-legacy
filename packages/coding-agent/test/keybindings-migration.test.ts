@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it } from "vitest";
 import { ENV_AGENT_DIR } from "../src/config.js";
 import { KeybindingsManager } from "../src/core/keybindings.js";
@@ -37,10 +38,9 @@ describe("keybindings migration", () => {
 			process.env[ENV_AGENT_DIR] = previousAgentDir;
 		}
 
-		const migrated = JSON.parse(fs.readFileSync(path.join(agentDir, "keybindings.json"), "utf-8")) as Record<
-			string,
-			unknown
-		>;
+		const migrated = fromPartial<Record<string, unknown>>(
+			JSON.parse(fs.readFileSync(path.join(agentDir, "keybindings.json"), "utf-8")),
+		);
 		expect(migrated).toEqual({
 			"tui.editor.cursorUp": ["up", "ctrl+p"],
 			"app.tools.expand": "ctrl+x",
@@ -62,10 +62,9 @@ describe("keybindings migration", () => {
 			process.env[ENV_AGENT_DIR] = previousAgentDir;
 		}
 
-		const migrated = JSON.parse(fs.readFileSync(path.join(agentDir, "keybindings.json"), "utf-8")) as Record<
-			string,
-			unknown
-		>;
+		const migrated = fromPartial<Record<string, unknown>>(
+			JSON.parse(fs.readFileSync(path.join(agentDir, "keybindings.json"), "utf-8")),
+		);
 		expect(migrated).toEqual({
 			"app.tools.expand": "ctrl+y",
 		});

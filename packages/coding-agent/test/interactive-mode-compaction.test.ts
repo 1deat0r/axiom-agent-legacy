@@ -1,20 +1,18 @@
 import { Container } from "@earendil-works/pi-tui";
+import { fromPartial } from "@total-typescript/shoehorn";
 import stripAnsi from "strip-ansi";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import { AgentActivityTracker } from "../src/modes/interactive/agent-activity.js";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.js";
 import { initTheme } from "../src/modes/interactive/theme/theme.js";
 
-const handleEvent = Reflect.get(InteractiveMode.prototype, "handleEvent") as (
-	this: unknown,
-	event: Record<string, unknown>,
-) => Promise<void>;
+const handleEvent = fromPartial<(this: unknown, event: Record<string, unknown>) => Promise<void>>(
+	Reflect.get(InteractiveMode.prototype, "handleEvent"),
+);
 
-const startCompactionLoader = Reflect.get(InteractiveMode.prototype, "startCompactionLoader") as (
-	this: unknown,
-	reason: string,
-	customInstructions?: string,
-) => void;
+const startCompactionLoader = fromPartial<(this: unknown, reason: string, customInstructions?: string) => void>(
+	Reflect.get(InteractiveMode.prototype, "startCompactionLoader"),
+);
 
 function createFakeThis(overrides: Record<string, unknown> = {}) {
 	return {
@@ -133,7 +131,7 @@ describe("InteractiveMode compaction events", () => {
 			startWorkingLoader: vi.fn(),
 		});
 
-		(Reflect.get(InteractiveMode.prototype, "syncWorkingLoader") as (this: unknown) => void).call(fakeThis);
+		fromPartial<(this: unknown) => void>(Reflect.get(InteractiveMode.prototype, "syncWorkingLoader")).call(fakeThis);
 
 		expect(stripAnsi(statusContainer.render(80).join("\n"))).toContain("Compacting context");
 	});

@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import { convertMessages } from "../src/providers/openai-completions.js";
 import type { AssistantMessage, Context, Model, OpenAICompletionsCompat, Usage } from "../src/types.js";
@@ -80,7 +81,7 @@ describe("openai-completions reasoning replay", () => {
 			compat,
 		);
 
-		const assistant = messages[1] as unknown as Record<string, unknown>;
+		const assistant = fromAny<Record<string, unknown>, unknown>(messages[1]);
 		expect(assistant.content).toBe("answer");
 		expect(assistant.reasoning).toBe("step by step");
 	});
@@ -95,7 +96,7 @@ describe("openai-completions reasoning replay", () => {
 			compat,
 		);
 
-		const assistant = messages[1] as unknown as Record<string, unknown>;
+		const assistant = fromAny<Record<string, unknown>, unknown>(messages[1]);
 		// No recorded field and provider doesn't force reasoning_content: prepend as text so the
 		// trace is still sent back without inventing a non-standard field.
 		expect(assistant.reasoning_content).toBeUndefined();
@@ -113,7 +114,7 @@ describe("openai-completions reasoning replay", () => {
 			reasoningCompat,
 		);
 
-		const assistant = messages[1] as unknown as Record<string, unknown>;
+		const assistant = fromAny<Record<string, unknown>, unknown>(messages[1]);
 		expect(assistant.reasoning_content).toBe("unsigned reasoning");
 		expect(assistant.content).toBe("answer");
 	});
@@ -131,7 +132,7 @@ describe("openai-completions reasoning replay", () => {
 			reasoningCompat,
 		);
 
-		const assistant = messages[1] as unknown as Record<string, unknown>;
+		const assistant = fromAny<Record<string, unknown>, unknown>(messages[1]);
 		expect(assistant.reasoning_content).toBe("step by step");
 	});
 
@@ -147,8 +148,8 @@ describe("openai-completions reasoning replay", () => {
 			reasoningCompat,
 		);
 
-		const assistant = messages[1] as unknown as Record<string, unknown>;
-		expect(assistant.reasoning_content as string).not.toContain("\ud800");
+		const assistant = fromAny<Record<string, unknown>, unknown>(messages[1]);
+		expect(fromAny<string, unknown>(assistant.reasoning_content)).not.toContain("\ud800");
 	});
 
 	it("replays signed thinking alongside a tool call", () => {
@@ -161,7 +162,7 @@ describe("openai-completions reasoning replay", () => {
 			compat,
 		);
 
-		const assistant = messages[1] as unknown as Record<string, unknown>;
+		const assistant = fromAny<Record<string, unknown>, unknown>(messages[1]);
 		expect(assistant.reasoning).toBe("deciding to call a tool");
 		expect(Array.isArray(assistant.tool_calls)).toBe(true);
 	});

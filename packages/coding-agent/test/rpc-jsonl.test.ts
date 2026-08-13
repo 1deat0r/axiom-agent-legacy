@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import { performance } from "node:perf_hooks";
 import { Readable } from "node:stream";
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, test } from "vitest";
 import { attachJsonlLineReader, serializeJsonLine } from "../src/modes/rpc/jsonl.js";
 
@@ -11,7 +12,7 @@ import { attachJsonlLineReader, serializeJsonLine } from "../src/modes/rpc/jsonl
 function readChunks(chunks: Array<string | Buffer>): string[] {
 	const lines: string[] = [];
 	const emitter = new EventEmitter();
-	attachJsonlLineReader(emitter as unknown as Readable, (line) => lines.push(line));
+	attachJsonlLineReader(fromAny<Readable, unknown>(emitter), (line) => lines.push(line));
 	for (const chunk of chunks) {
 		emitter.emit("data", chunk);
 	}
@@ -139,7 +140,7 @@ describe("RPC JSONL framing", () => {
 		const lines: string[] = [];
 		const overflows: string[] = [];
 		const emitter = new EventEmitter();
-		attachJsonlLineReader(emitter as unknown as Readable, (line) => lines.push(line), {
+		attachJsonlLineReader(fromAny<Readable, unknown>(emitter), (line) => lines.push(line), {
 			maxLineLength: 5,
 			onLineOverflow: (prefix) => overflows.push(prefix),
 		});

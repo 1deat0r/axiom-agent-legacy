@@ -1,4 +1,5 @@
 import { type AssistantMessage, type AssistantMessageEvent, EventStream, getModel } from "@earendil-works/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { Type } from "typebox";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -486,7 +487,7 @@ describe("Agent", () => {
 		}
 
 		await expect(stream.result()).resolves.toEqual([]);
-		expect(events.some((event) => (event as { type?: string }).type === "agent_end")).toBe(false);
+		expect(events.some((event) => fromAny<{ type?: string }, unknown>(event).type === "agent_end")).toBe(false);
 	});
 
 	it("should throw when prompt() called while streaming", async () => {

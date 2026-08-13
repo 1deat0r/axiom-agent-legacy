@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DefaultPackageManager } from "../src/core/package-manager.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
@@ -122,9 +123,12 @@ describe("DefaultPackageManager git update", () => {
 			settingsManager.setPackages([gitSource]);
 
 			const executedCommands: string[] = [];
-			const managerWithInternals = packageManager as unknown as {
-				runCommand: (command: string, args: string[], options?: { cwd?: string }) => Promise<void>;
-			};
+			const managerWithInternals = fromAny<
+				{
+					runCommand: (command: string, args: string[], options?: { cwd?: string }) => Promise<void>;
+				},
+				unknown
+			>(packageManager);
 			managerWithInternals.runCommand = async (command, args, options) => {
 				executedCommands.push(`${command} ${args.join(" ")}`);
 				if (command === "npm") {
@@ -189,9 +193,12 @@ describe("DefaultPackageManager git update", () => {
 			git(["checkout", detachedCommit], installedDir);
 
 			const executedCommands: string[] = [];
-			const managerWithInternals = packageManager as unknown as {
-				runCommand: (command: string, args: string[], options?: { cwd?: string }) => Promise<void>;
-			};
+			const managerWithInternals = fromAny<
+				{
+					runCommand: (command: string, args: string[], options?: { cwd?: string }) => Promise<void>;
+				},
+				unknown
+			>(packageManager);
 			managerWithInternals.runCommand = async (command, args, options) => {
 				executedCommands.push(`${command} ${args.join(" ")}`);
 				const result = spawnSync(command, args, {
@@ -327,10 +334,13 @@ describe("DefaultPackageManager git update", () => {
 			writeFileSync(extensionFile, "// stale");
 
 			const executedCommands: string[] = [];
-			const managerWithInternals = packageManager as unknown as {
-				runCommand: (command: string, args: string[], options?: { cwd?: string }) => Promise<void>;
-				runCommandCapture: (command: string, args: string[], options?: { cwd?: string }) => Promise<string>;
-			};
+			const managerWithInternals = fromAny<
+				{
+					runCommand: (command: string, args: string[], options?: { cwd?: string }) => Promise<void>;
+					runCommandCapture: (command: string, args: string[], options?: { cwd?: string }) => Promise<string>;
+				},
+				unknown
+			>(packageManager);
 			managerWithInternals.runCommand = async (command, args) => {
 				executedCommands.push(`${command} ${args.join(" ")}`);
 				if (command === "git" && args[0] === "reset") {
@@ -374,9 +384,12 @@ describe("DefaultPackageManager git update", () => {
 			writeFileSync(extensionFile, "// pinned");
 
 			const executedCommands: string[] = [];
-			const managerWithInternals = packageManager as unknown as {
-				runCommand: (command: string, args: string[], options?: { cwd?: string }) => Promise<void>;
-			};
+			const managerWithInternals = fromAny<
+				{
+					runCommand: (command: string, args: string[], options?: { cwd?: string }) => Promise<void>;
+				},
+				unknown
+			>(packageManager);
 			managerWithInternals.runCommand = async (command, args) => {
 				executedCommands.push(`${command} ${args.join(" ")}`);
 			};

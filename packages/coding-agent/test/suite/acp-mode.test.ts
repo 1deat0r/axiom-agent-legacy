@@ -1,5 +1,6 @@
 import * as acp from "@agentclientprotocol/sdk";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import type { AgentSessionRuntime } from "../../src/core/agent-session-runtime.js";
 import { AXIOM_META_NAMESPACE } from "../../src/modes/acp/acp-meta.js";
@@ -9,12 +10,12 @@ import { createHarness } from "./harness.js";
 
 /** Minimal AgentSessionRuntime host over a real faux-backed AgentSession. */
 function runtimeHostFor(session: unknown): AgentSessionRuntime {
-	return {
+	return fromAny<AgentSessionRuntime, unknown>({
 		session,
 		setRebindSession() {},
 		setBeforeSessionInvalidate() {},
 		async dispose() {},
-	} as unknown as AgentSessionRuntime;
+	});
 }
 
 /**

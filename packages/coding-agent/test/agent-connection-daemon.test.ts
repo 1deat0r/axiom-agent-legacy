@@ -1,5 +1,6 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { getModel } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import { MissingSessionCwdError } from "../src/core/session-cwd.js";
 import { SessionImportFileNotFoundError } from "../src/core/session-import-errors.js";
@@ -12,7 +13,6 @@ import type {
 	AgentConnectionSavedSessionInfo,
 	AgentConnectionState,
 } from "../src/modes/agent-connection/types.js";
-
 import {
 	DaemonCapabilityUnavailableError,
 	type DaemonClient,
@@ -553,7 +553,7 @@ class FakeDaemonClient {
 }
 
 function asDaemonClient(client: FakeDaemonClient): DaemonClient {
-	return client as unknown as DaemonClient;
+	return fromAny<DaemonClient, unknown>(client);
 }
 
 function createConnectionState(activeSessionId: string, sessionId: string): AgentConnectionState {
@@ -1453,10 +1453,10 @@ describe("DaemonAgentConnection", () => {
 		});
 		await connection.attach();
 		const messages: AgentMessage[] = [{ role: "user", content: "caught up", timestamp: 2 }];
-		const streamingMessage = {
+		const streamingMessage = fromPartial<AgentMessage>({
 			role: "assistant",
 			content: [{ type: "thinking", thinking: "Still reasoning" }],
-		} as AgentMessage;
+		});
 		const snapshot = createAttachResult("active-1", "client-1", undefined, 13, {
 			state: { ...createConnectionState("active-1", "session-current"), isStreaming: true },
 			messages,
@@ -1657,7 +1657,9 @@ describe("DaemonAgentConnection", () => {
 			chunkCount: 0,
 			lastEventSequence: 12,
 		});
-		expect((connection as unknown as { snapshotAssemblies: Map<string, unknown> }).snapshotAssemblies.size).toBe(0);
+		expect(fromAny<{ snapshotAssemblies: Map<string, unknown> }, unknown>(connection).snapshotAssemblies.size).toBe(
+			0,
+		);
 	});
 
 	it("rejects one failed snapshot without interrupting another session on the shared client", async () => {
@@ -1840,7 +1842,9 @@ describe("DaemonAgentConnection", () => {
 				state: expect.objectContaining({ sessionId: "session-next" }),
 			}),
 		]);
-		expect((connection as unknown as { snapshotAssemblies: Map<string, unknown> }).snapshotAssemblies.size).toBe(0);
+		expect(fromAny<{ snapshotAssemblies: Map<string, unknown> }, unknown>(connection).snapshotAssemblies.size).toBe(
+			0,
+		);
 	});
 
 	it.each(["replacement", "resync"] as const)(
@@ -1928,9 +1932,9 @@ describe("DaemonAgentConnection", () => {
 			await vi.waitFor(() => expect(siblingEvents).toHaveLength(1));
 			expect(siblingEvents[0]).toMatchObject({ type: "session_event", event: { type: "session_action_update" } });
 			expect(fakeClient.closeCount).toBe(0);
-			expect((connection as unknown as { snapshotAssemblies: Map<string, unknown> }).snapshotAssemblies.size).toBe(
-				0,
-			);
+			expect(
+				fromAny<{ snapshotAssemblies: Map<string, unknown> }, unknown>(connection).snapshotAssemblies.size,
+			).toBe(0);
 			await connection.dispose();
 			await sibling.dispose();
 		},

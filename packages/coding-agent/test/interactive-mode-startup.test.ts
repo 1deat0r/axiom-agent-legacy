@@ -1,4 +1,5 @@
 import { Container, setKeybindings } from "@earendil-works/pi-tui";
+import { fromPartial } from "@total-typescript/shoehorn";
 import stripAnsi from "strip-ansi";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { KeybindingsManager } from "../src/core/keybindings.js";
@@ -110,7 +111,7 @@ describe("InteractiveMode startup hints", () => {
 		const returnToAgentsView = vi.fn(async () => {});
 		const mode = Object.assign(createMode(false, false), { requestAgentsView, returnToAgentsView });
 
-		const handled = Reflect.get(InteractiveMode.prototype, "handleAgentsBack").call(mode) as boolean;
+		const handled = fromPartial<boolean>(Reflect.get(InteractiveMode.prototype, "handleAgentsBack").call(mode));
 
 		expect(handled).toBe(true);
 		expect(requestAgentsView).toHaveBeenCalledOnce();
@@ -122,7 +123,7 @@ describe("InteractiveMode startup hints", () => {
 		const returnToAgentsView = vi.fn(async () => {});
 		const mode = Object.assign(createMode(false, true), { requestAgentsView, returnToAgentsView });
 
-		const handled = Reflect.get(InteractiveMode.prototype, "handleAgentsBack").call(mode) as boolean;
+		const handled = fromPartial<boolean>(Reflect.get(InteractiveMode.prototype, "handleAgentsBack").call(mode));
 
 		expect(handled).toBe(true);
 		expect(returnToAgentsView).toHaveBeenCalledOnce();
@@ -136,7 +137,7 @@ describe("InteractiveMode startup hints", () => {
 			{ requestAgentsView },
 		);
 
-		const handled = Reflect.get(InteractiveMode.prototype, "handleAgentsBack").call(mode) as boolean;
+		const handled = fromPartial<boolean>(Reflect.get(InteractiveMode.prototype, "handleAgentsBack").call(mode));
 
 		expect(handled).toBe(false);
 		expect(requestAgentsView).not.toHaveBeenCalled();

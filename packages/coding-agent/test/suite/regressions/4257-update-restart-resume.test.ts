@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getDaemonUpdateRestartManifestPath } from "../../../src/config.js";
 import type { SessionActionRecoverySnapshot } from "../../../src/core/agent-session.js";
@@ -59,7 +60,7 @@ function createState(
 	metadata: AgentSessionRuntime["metadata"],
 	options: { clientEnv?: Record<string, string>; onDispose?: () => void } = {},
 ): ActiveSessionState {
-	const runtime = {
+	const runtime = fromAny<AgentSessionRuntime, unknown>({
 		session: harness.session,
 		metadata,
 		cwd: harness.tempDir,
@@ -68,7 +69,7 @@ function createState(
 		dispose: async () => {
 			options.onDispose?.();
 		},
-	} as unknown as AgentSessionRuntime;
+	});
 	return {
 		activeSessionId,
 		runtime,
@@ -96,24 +97,24 @@ function createDaemonInternals(
 			throw new Error("unexpected runtime creation");
 		},
 	});
-	return daemon as unknown as AgentDaemonUpdateInternals;
+	return fromAny<AgentDaemonUpdateInternals, unknown>(daemon);
 }
 
 function createWriteClient(writes: string[], options: { id?: string; attached?: string[] } = {}): DaemonSocketClient {
-	return {
+	return fromPartial<DaemonSocketClient>({
 		id: options.id ?? "client-1",
-		socket: {
+		socket: fromAny<DaemonSocketClient["socket"], unknown>({
 			destroyed: false,
 			write: vi.fn((chunk: string) => {
 				writes.push(chunk);
 				return true;
 			}),
-		} as unknown as DaemonSocketClient["socket"],
+		}),
 		attachedActiveSessionIds: new Set(options.attached ?? []),
 		detachInput: vi.fn(),
 		supportsExtensionUi: false,
 		capabilities: new Set(),
-	} as DaemonSocketClient;
+	});
 }
 
 function hasArchivedState(harness: Harness): boolean {
@@ -272,7 +273,7 @@ describe("issue #4257 update restart resume", () => {
 		const internals = createDaemonInternals(harness, { worker: true });
 		internals.mutationDrain.begin();
 		const writes: string[] = [];
-		const client = {
+		const client = fromAny<DaemonSocketClient, unknown>({
 			id: "supervisor",
 			socket: {
 				destroyed: false,
@@ -281,7 +282,7 @@ describe("issue #4257 update restart resume", () => {
 					return true;
 				},
 			},
-		} as unknown as DaemonSocketClient;
+		});
 
 		if (release === "cancel") {
 			const prepare = internals.handleWorkerCommand(client, { id: "prepare", type: "worker_prepare_update" });
@@ -519,7 +520,7 @@ describe("issue #4257 update restart resume", () => {
 		const internals = createDaemonInternals(harness);
 		const writes: string[] = [];
 		const makeClient = (id: string) =>
-			({
+			fromAny<DaemonSocketClient, unknown>({
 				id,
 				socket: {
 					destroyed: false,
@@ -528,7 +529,7 @@ describe("issue #4257 update restart resume", () => {
 						return true;
 					},
 				},
-			}) as unknown as DaemonSocketClient;
+			});
 		await run({ internals, makeClient, writes });
 	});
 
@@ -616,9 +617,14 @@ describe("issue #4257 update restart resume", () => {
 			shouldResume: true,
 			wasBashRunning: true,
 		});
-		const persistedManifest = JSON.parse(
-			readFileSync(getDaemonUpdateRestartManifestPath(`${harness.tempDir}/daemon.sock`, harness.tempDir), "utf-8"),
-		) as DaemonUpdateRestartManifest;
+		const persistedManifest = fromPartial<DaemonUpdateRestartManifest>(
+			JSON.parse(
+				readFileSync(
+					getDaemonUpdateRestartManifestPath(`${harness.tempDir}/daemon.sock`, harness.tempDir),
+					"utf-8",
+				),
+			),
+		);
 		expect(persistedManifest).toEqual(manifest);
 		writeFileSync(
 			getDaemonUpdateRestartManifestPath(`${harness.tempDir}/missing.sock`, harness.tempDir),
@@ -649,7 +655,7 @@ describe("issue #4257 update restart resume", () => {
 		});
 		const waitForIdleSpy = vi.spyOn(harness.session.agent, "waitForIdle").mockReturnValue(idlePromise);
 		const agentAbortSpy = vi.spyOn(harness.session.agent, "abort");
-		const internals = harness.session as unknown as { _goalAbortInProgress: boolean };
+		const internals = fromAny<{ _goalAbortInProgress: boolean }, unknown>(harness.session);
 
 		harness.session.abortForUpdateRestart();
 
@@ -707,7 +713,7 @@ describe("issue #4257 update restart resume", () => {
 			defaultSessionConfig: { cwd: harness.tempDir, agentDir: harness.tempDir },
 			createRuntime,
 		});
-		const internals = daemon as unknown as AgentDaemonUpdateInternals;
+		const internals = fromAny<AgentDaemonUpdateInternals, unknown>(daemon);
 		internals.sessions.set(
 			"active-1",
 			createState(harness, "active-1", { kind: "top-level", createdAt: Date.now() }),
@@ -939,7 +945,7 @@ describe("issue #4257 update restart resume", () => {
 	it("materializes busy in-memory drafts before update restart", async () => {
 		const harness = await createHarness({ persistSession: false });
 		harnesses.push(harness);
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = true;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = true;
 
 		const sessionDir = `${harness.tempDir}/sessions`;
 		const internals = createDaemonInternals(harness, { sessionDir });
@@ -976,10 +982,12 @@ describe("issue #4257 update restart resume", () => {
 		expect(target.session.getSteeringMessages()).toEqual(["steering one", "steering two"]);
 		expect(target.session.getFollowUpMessages()).toEqual(["follow-up one"]);
 		await expect(
-			target.session.restoreSessionActions({
-				formatVersion: 2,
-				actions: [],
-			} as unknown as SessionActionRecoverySnapshot),
+			target.session.restoreSessionActions(
+				fromAny<SessionActionRecoverySnapshot, unknown>({
+					formatVersion: 2,
+					actions: [],
+				}),
+			),
 		).rejects.toThrow("Unsupported session action recovery format version: 2");
 	});
 

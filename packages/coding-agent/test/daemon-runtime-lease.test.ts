@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	acquireSessionLease,
@@ -33,14 +34,15 @@ describe("daemon runtime session leases", () => {
 					throw new Error("runtime factory should not be reached");
 				},
 			});
-			const createRuntime = (
-				daemon as unknown as {
+			const createRuntime = fromAny<
+				{
 					createRuntime(
 						command: Extract<DaemonCommand, { type: "create" }>,
 						guard: () => Promise<boolean>,
 					): Promise<ActiveSessionState>;
-				}
-			).createRuntime.bind(daemon);
+				},
+				unknown
+			>(daemon).createRuntime.bind(daemon);
 
 			await expect(createRuntime({ type: "create", sessionPath }, async () => false)).rejects.toThrow();
 			const reopened = acquireSessionLease(sessionPath, root);

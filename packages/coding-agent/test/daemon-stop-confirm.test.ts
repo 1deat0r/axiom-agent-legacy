@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RunningDaemonProbe } from "../src/cli/daemon-launch.js";
 import {
@@ -15,12 +16,12 @@ const COPY: DaemonSessionLossCopy = {
 };
 
 function session(overrides: Partial<SessionSummary>): SessionSummary {
-	return {
+	return fromAny<SessionSummary, unknown>({
 		isStreaming: false,
 		isCompacting: false,
 		sessionActions: { queuedCount: 0, steering: [], followUps: [] },
 		...overrides,
-	} as unknown as SessionSummary;
+	});
 }
 
 const ttyDescriptor = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");

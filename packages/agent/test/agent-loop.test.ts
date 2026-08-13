@@ -6,6 +6,7 @@ import {
 	type Model,
 	type UserMessage,
 } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { Type } from "typebox";
 import { describe, expect, it, vi } from "vitest";
 import { agentLoop, agentLoopContinue, planToolCallSegments, runAgentLoop } from "../src/agent-loop.js";
@@ -45,7 +46,7 @@ class ThrowingResultStream extends MockAssistantStream {
 
 	override [Symbol.asyncIterator](): AsyncIterator<AssistantMessageEvent> {
 		return {
-			next: async () => ({ done: true, value: undefined as never }),
+			next: async () => ({ done: true, value: fromAny<never, unknown>(undefined) }),
 		};
 	}
 
@@ -107,7 +108,9 @@ function createUserMessage(text: string): UserMessage {
 
 // Simple identity converter for tests - just passes through standard messages
 function identityConverter(messages: AgentMessage[]): Message[] {
-	return messages.filter((m) => m.role === "user" || m.role === "assistant" || m.role === "toolResult") as Message[];
+	return fromPartial<Message[]>(
+		messages.filter((m) => m.role === "user" || m.role === "assistant" || m.role === "toolResult"),
+	);
 }
 
 describe("agentLoop with AgentMessage", () => {
@@ -557,7 +560,7 @@ describe("agentLoop with AgentMessage", () => {
 
 		const context: AgentContext = {
 			systemPrompt: "You are helpful.",
-			messages: [notification as unknown as AgentMessage], // Custom message in context
+			messages: [fromAny<AgentMessage, unknown>(notification)], // Custom message in context
 			tools: [],
 		};
 
@@ -568,9 +571,11 @@ describe("agentLoop with AgentMessage", () => {
 			model: createModel(),
 			convertToLlm: (messages) => {
 				// Filter out notifications, convert rest
-				convertedMessages = messages
-					.filter((m) => (m as { role: string }).role !== "notification")
-					.filter((m) => m.role === "user" || m.role === "assistant" || m.role === "toolResult") as Message[];
+				convertedMessages = fromPartial<Message[]>(
+					messages
+						.filter((m) => (m as { role: string }).role !== "notification")
+						.filter((m) => m.role === "user" || m.role === "assistant" || m.role === "toolResult"),
+				);
 				return convertedMessages;
 			},
 		};
@@ -674,9 +679,9 @@ describe("agentLoop with AgentMessage", () => {
 				return transformedMessages;
 			},
 			convertToLlm: (messages) => {
-				convertedMessages = messages.filter(
-					(m) => m.role === "user" || m.role === "assistant" || m.role === "toolResult",
-				) as Message[];
+				convertedMessages = fromPartial<Message[]>(
+					messages.filter((m) => m.role === "user" || m.role === "assistant" || m.role === "toolResult"),
+				);
 				return convertedMessages;
 			},
 		};
@@ -711,10 +716,10 @@ describe("agentLoop with AgentMessage", () => {
 			description: "Echo tool",
 			parameters: toolSchema,
 			async execute(_toolCallId, params) {
-				executed.push(params.value as string | number);
+				executed.push(fromPartial<string | number>(params.value));
 				return {
 					content: [{ type: "text", text: `echoed: ${String(params.value)}` }],
-					details: { value: params.value as string | number },
+					details: { value: fromPartial<string | number>(params.value) },
 				};
 			},
 		};
@@ -731,7 +736,7 @@ describe("agentLoop with AgentMessage", () => {
 			model: createModel(),
 			convertToLlm: identityConverter,
 			beforeToolCall: async ({ args }) => {
-				const mutableArgs = args as { value: string | number };
+				const mutableArgs = fromAny<{ value: string | number }, unknown>(args);
 				mutableArgs.value = 123;
 				return undefined;
 			},
@@ -775,15 +780,15 @@ describe("agentLoop with AgentMessage", () => {
 			parameters: toolSchema,
 			prepareArguments(args) {
 				if (!args || typeof args !== "object") {
-					return args as { edits: { oldText: string; newText: string }[] };
+					return fromAny<{ edits: { oldText: string; newText: string }[] }, unknown>(args);
 				}
-				const input = args as {
+				const input = fromPartial<{
 					edits?: Array<{ oldText: string; newText: string }>;
 					oldText?: string;
 					newText?: string;
-				};
+				}>(args);
 				if (typeof input.oldText !== "string" || typeof input.newText !== "string") {
-					return args as { edits: { oldText: string; newText: string }[] };
+					return fromPartial<{ edits: { oldText: string; newText: string }[] }>(args);
 				}
 				return {
 					edits: [...(input.edits ?? []), { oldText: input.oldText, newText: input.newText }],
@@ -1961,7 +1966,7 @@ describe("agentLoopContinue with AgentMessage", () => {
 
 		const context: AgentContext = {
 			systemPrompt: "You are helpful.",
-			messages: [customMessage as unknown as AgentMessage],
+			messages: [fromAny<AgentMessage, unknown>(customMessage)],
 			tools: [],
 		};
 
@@ -1969,18 +1974,20 @@ describe("agentLoopContinue with AgentMessage", () => {
 			model: createModel(),
 			convertToLlm: (messages) => {
 				// Convert custom to user message
-				return messages
-					.map((m) => {
-						if ((m as any).role === "custom") {
-							return {
-								role: "user" as const,
-								content: (m as any).text,
-								timestamp: m.timestamp,
-							};
-						}
-						return m;
-					})
-					.filter((m) => m.role === "user" || m.role === "assistant" || m.role === "toolResult") as Message[];
+				return fromPartial<Message[]>(
+					messages
+						.map((m) => {
+							if ((m as any).role === "custom") {
+								return {
+									role: "user" as const,
+									content: (m as any).text,
+									timestamp: m.timestamp,
+								};
+							}
+							return m;
+						})
+						.filter((m) => m.role === "user" || m.role === "assistant" || m.role === "toolResult"),
+				);
 			},
 		};
 

@@ -1,3 +1,4 @@
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHarness, type Harness } from "./harness.js";
 
@@ -13,7 +14,7 @@ type SessionInternals = {
 };
 
 function setStreaming(harness: Harness, streaming: boolean) {
-	(harness.session.agent.state as { isStreaming: boolean }).isStreaming = streaming;
+	fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = streaming;
 }
 
 describe("AgentSession refine skill host requests", () => {
@@ -52,7 +53,7 @@ describe("AgentSession refine skill host requests", () => {
 		harness.session.handleRefineHostRequest("refine.run", { global: true });
 		setStreaming(harness, false);
 
-		const internals = harness.session as unknown as SessionInternals;
+		const internals = fromAny<SessionInternals, unknown>(harness.session);
 		expect(internals._pendingRequestedRefine?.global).toBe(true);
 	});
 
@@ -66,7 +67,7 @@ describe("AgentSession refine skill host requests", () => {
 		harness.session.handleRefineHostRequest("refine.run");
 		setStreaming(harness, false);
 
-		const internals = harness.session as unknown as SessionInternals;
+		const internals = fromAny<SessionInternals, unknown>(harness.session);
 		expect(internals._pendingRequestedRefine?.global).toBeUndefined();
 		expect(internals._pendingRequestedRefine?.instructions).toBeUndefined();
 	});
@@ -82,7 +83,7 @@ describe("AgentSession refine skill host requests", () => {
 		harness.session.handleRefineHostRequest("refine.run", { instructions: "second" });
 		setStreaming(harness, false);
 
-		const internals = harness.session as unknown as SessionInternals;
+		const internals = fromAny<SessionInternals, unknown>(harness.session);
 		expect(internals._pendingRequestedRefine?.instructions).toBe("second");
 		expect(internals._pendingRequestedRefine?.global).toBe(true);
 	});
@@ -90,7 +91,7 @@ describe("AgentSession refine skill host requests", () => {
 	it("replaces an in-flight serialized plan instead of applying both requests", async () => {
 		const harness = await createHarness({ persistSession: true, serializedRefine: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SessionInternals;
+		const internals = fromAny<SessionInternals, unknown>(harness.session);
 		const abort = new AbortController();
 		internals._serializedPlanInFlight = new Promise(() => {});
 		internals._serializedExplicitRefineOptions = { instructions: "first", global: true };
@@ -107,7 +108,7 @@ describe("AgentSession refine skill host requests", () => {
 	it("discards a settled serialized plan when a replacement request arrives", async () => {
 		const harness = await createHarness({ persistSession: true, serializedRefine: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SessionInternals;
+		const internals = fromAny<SessionInternals, unknown>(harness.session);
 		internals._serializedPlanInFlight = Promise.resolve({ status: "plan" });
 		internals._serializedExplicitRefineOptions = { instructions: "first", global: true };
 
@@ -141,7 +142,7 @@ describe("AgentSession refine skill host requests", () => {
 
 		setStreaming(harness, true);
 		expect(() =>
-			harness.session.handleRefineHostRequest("refine.run", { instructions: 123 as unknown as string }),
+			harness.session.handleRefineHostRequest("refine.run", { instructions: fromAny<string, unknown>(123) }),
 		).toThrow("instructions must be a string");
 		setStreaming(harness, false);
 	});
@@ -153,7 +154,7 @@ describe("AgentSession refine skill host requests", () => {
 
 		setStreaming(harness, true);
 		expect(() =>
-			harness.session.handleRefineHostRequest("refine.run", { global: "yes" as unknown as boolean }),
+			harness.session.handleRefineHostRequest("refine.run", { global: fromAny<boolean, unknown>("yes") }),
 		).toThrow("global must be a boolean");
 		setStreaming(harness, false);
 	});
@@ -178,7 +179,7 @@ describe("AgentSession refine skill host requests", () => {
 		harness.session.handleRefineHostRequest("refine.run", { instructions: "test" });
 		setStreaming(harness, false);
 
-		const internals = harness.session as unknown as SessionInternals;
+		const internals = fromAny<SessionInternals, unknown>(harness.session);
 		const refineSpy = vi.spyOn(internals, "refine").mockResolvedValue({});
 		internals._consumePendingRequestedRefine();
 		expect(refineSpy).toHaveBeenCalledWith({ instructions: "test", global: undefined });
@@ -190,7 +191,7 @@ describe("AgentSession refine skill host requests", () => {
 		harnesses.push(harness);
 		await harness.session.prompt("one");
 
-		const internals = harness.session as unknown as SessionInternals;
+		const internals = fromAny<SessionInternals, unknown>(harness.session);
 		const refineSpy = vi.spyOn(internals, "refine").mockResolvedValue({});
 		expect(internals._consumePendingRequestedRefine()).toBe(false);
 		expect(refineSpy).not.toHaveBeenCalled();
@@ -206,7 +207,7 @@ describe("AgentSession refine skill host requests", () => {
 		harness.session.handleRefineHostRequest("refine.run", { instructions: "test" });
 		setStreaming(harness, false);
 
-		const internals = harness.session as unknown as SessionInternals;
+		const internals = fromAny<SessionInternals, unknown>(harness.session);
 		vi.spyOn(internals, "refine").mockRejectedValue(new Error("refine failed"));
 		const failed = new Promise<string>((resolve) => {
 			const unsubscribe = harness.session.subscribe((event) => {
@@ -225,7 +226,7 @@ describe("AgentSession refine skill host requests", () => {
 	it("continues notifying refine listeners after one throws", async () => {
 		const harness = await createHarness({ persistSession: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SessionInternals;
+		const internals = fromAny<SessionInternals, unknown>(harness.session);
 		const observed: string[] = [];
 		harness.session.subscribe(() => {
 			throw new Error("broken listener");
@@ -245,7 +246,7 @@ describe("AgentSession refine skill host requests", () => {
 		harnesses.push(harness);
 		await harness.session.prompt("one");
 
-		const internals = harness.session as unknown as SessionInternals;
+		const internals = fromAny<SessionInternals, unknown>(harness.session);
 		const handlerKeys = Object.keys(internals._createKernelHostHandlers());
 		expect(handlerKeys).toEqual(expect.arrayContaining(["refine.run", "refine.status"]));
 	});
@@ -255,7 +256,7 @@ describe("AgentSession refine skill host requests", () => {
 		harnesses.push(harness);
 		await harness.session.prompt("one");
 
-		const internals = harness.session as unknown as SessionInternals;
+		const internals = fromAny<SessionInternals, unknown>(harness.session);
 		const handlerKeys = Object.keys(internals._createKernelHostHandlers());
 		expect(handlerKeys).not.toContain("refine.run");
 		expect(handlerKeys).not.toContain("refine.status");
@@ -266,7 +267,7 @@ describe("AgentSession refine skill host requests", () => {
 		harnesses.push(harness);
 		await harness.session.prompt("one");
 
-		const internals = harness.session as unknown as SessionInternals;
+		const internals = fromAny<SessionInternals, unknown>(harness.session);
 		const handlerKeys = Object.keys(internals._createKernelHostHandlers());
 		expect(handlerKeys).not.toContain("refine.run");
 		expect(handlerKeys).not.toContain("refine.status");

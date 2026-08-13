@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import type { ExtensionAPI } from "../../src/core/extensions/types.js";
 import {
@@ -18,7 +19,7 @@ function fakePi() {
 			tools.push(tool);
 		},
 	};
-	return { pi: pi as unknown as ExtensionAPI, tools };
+	return { pi: fromAny<ExtensionAPI, unknown>(pi), tools };
 }
 
 function header(id: string, cwd: string): string {
@@ -70,9 +71,12 @@ describe("recall extension", () => {
 			seed(dir);
 			createRecallExtension(deps(dir, { projectRoot: "/home/u/projects/alpha" }))(pi);
 			const tool = tools.find((t) => t.name === "recall")!;
-			const out = (await tool.execute!("1", { action: "query", query: "recall index" })) as {
-				content: Array<{ text: string }>;
-			};
+			const out = fromAny<
+				{
+					content: Array<{ text: string }>;
+				},
+				unknown
+			>(await tool.execute!("1", { action: "query", query: "recall index" }));
 			expect(out.content[0]!.text).toContain("aaaaaaaa-aaaa".slice(0, 7));
 			expect(out.content[0]!.text).not.toContain("bbbbbbbb-bbbb".slice(0, 7));
 		} finally {
@@ -87,9 +91,12 @@ describe("recall extension", () => {
 			seed(dir);
 			createRecallExtension(deps(dir, { projectRoot: "/home/u/projects/alpha" }))(pi);
 			const tool = tools.find((t) => t.name === "recall")!;
-			const out = (await tool.execute!("1", { action: "query", query: "shipment", all: true })) as {
-				content: Array<{ text: string }>;
-			};
+			const out = fromAny<
+				{
+					content: Array<{ text: string }>;
+				},
+				unknown
+			>(await tool.execute!("1", { action: "query", query: "shipment", all: true }));
 			expect(out.content[0]!.text).toContain("[beta]");
 			expect(out.content[0]!.text).toContain("bbbbbbbb-bbbb".slice(0, 7));
 		} finally {
@@ -104,9 +111,12 @@ describe("recall extension", () => {
 			seed(dir);
 			createRecallExtension(deps(dir))(pi);
 			const tool = tools.find((t) => t.name === "recall")!;
-			const out = (await tool.execute!("1", { action: "recent", all: true })) as {
-				content: Array<{ text: string }>;
-			};
+			const out = fromAny<
+				{
+					content: Array<{ text: string }>;
+				},
+				unknown
+			>(await tool.execute!("1", { action: "recent", all: true }));
 			expect(out.content[0]!.text).toContain("recent sessions");
 			expect(out.content[0]!.text).toContain("bbbbbbbb-bbbb".slice(0, 7));
 		} finally {
@@ -122,14 +132,16 @@ describe("recall extension", () => {
 			createRecallExtension(deps(dir))(pi);
 			const tool = tools.find((t) => t.name === "recall")!;
 			expect(
-				((await tool.execute!("1", { action: "query" })) as { content: Array<{ text: string }> }).content[0]!.text,
+				fromAny<{ content: Array<{ text: string }> }, unknown>(await tool.execute!("1", { action: "query" }))
+					.content[0]!.text,
 			).toContain("requires a query");
 			expect(
-				((await tool.execute!("1", { query: "ab" })) as { content: Array<{ text: string }> }).content[0]!.text,
+				fromAny<{ content: Array<{ text: string }> }, unknown>(await tool.execute!("1", { query: "ab" }))
+					.content[0]!.text,
 			).toContain("too short");
 			expect(
-				((await tool.execute!("1", { query: "zzz-no-such" })) as { content: Array<{ text: string }> }).content[0]!
-					.text,
+				fromAny<{ content: Array<{ text: string }> }, unknown>(await tool.execute!("1", { query: "zzz-no-such" }))
+					.content[0]!.text,
 			).toContain("no past-session matches");
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
@@ -139,13 +151,15 @@ describe("recall extension", () => {
 	it("formatRecallRecent renders entries and empty state", () => {
 		expect(formatRecallRecent([])).toContain("no recent");
 		expect(
-			formatRecallResult({
-				hits: [],
-				sessionsIndexed: 0,
-				sessionsMatched: 0,
-				queryTooShort: false,
-				outOfRange: false,
-			} as SearchResult),
+			formatRecallResult(
+				fromPartial<SearchResult>({
+					hits: [],
+					sessionsIndexed: 0,
+					sessionsMatched: 0,
+					queryTooShort: false,
+					outOfRange: false,
+				}),
+			),
 		).toContain("no past-session matches");
 	});
 

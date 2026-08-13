@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { fromAny } from "@total-typescript/shoehorn";
 import { lockSync } from "proper-lockfile";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -138,7 +139,7 @@ describe("session leases", () => {
 			}
 			expect(thrown).toBeInstanceOf(Error);
 			expect(thrown).not.toBeInstanceOf(SessionAlreadyActiveError);
-			expect((thrown as Error).message).toContain("Could not coordinate session lease");
+			expect(fromAny<Error, unknown>(thrown).message).toContain("Could not coordinate session lease");
 		} finally {
 			release();
 		}

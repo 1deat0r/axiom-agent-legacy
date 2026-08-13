@@ -1,5 +1,6 @@
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
 import { Container } from "@earendil-works/pi-tui";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import stripAnsi from "strip-ansi";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { type SideQuestionEvent, startSideQuestion } from "../../../src/core/side-question.js";
@@ -225,11 +226,12 @@ describe("ENG-4509 side questions", () => {
 			summarizer: { forget: vi.fn(), seed: vi.fn() },
 			rebindCronJobsToState: vi.fn(),
 		});
-		const refreshReplacedSessionState = (
-			AgentDaemon.prototype as unknown as {
+		const refreshReplacedSessionState = fromAny<
+			{
 				refreshReplacedSessionState(this: typeof fakeThis, state: typeof sessionState): void;
-			}
-		).refreshReplacedSessionState;
+			},
+			unknown
+		>(AgentDaemon.prototype).refreshReplacedSessionState;
 
 		refreshReplacedSessionState.call(fakeThis, sessionState);
 
@@ -246,11 +248,12 @@ describe("ENG-4509 side questions", () => {
 				["question-1", { client, activeSessionId: "session-1", run: { abort: vi.fn(), done: Promise.resolve() } }],
 			]),
 		});
-		const hasActiveSideQuestionFor = (
-			AgentDaemon.prototype as unknown as {
+		const hasActiveSideQuestionFor = fromAny<
+			{
 				hasActiveSideQuestionFor(this: typeof fakeThis, candidate: typeof client, activeSessionId: string): boolean;
-			}
-		).hasActiveSideQuestionFor;
+			},
+			unknown
+		>(AgentDaemon.prototype).hasActiveSideQuestionFor;
 
 		expect(hasActiveSideQuestionFor.call(fakeThis, client, "session-1")).toBe(true);
 		expect(hasActiveSideQuestionFor.call(fakeThis, client, "session-2")).toBe(false);
@@ -356,11 +359,12 @@ describe("ENG-4509 side questions", () => {
 			ui: { requestRender: vi.fn() },
 			showWarning: vi.fn(),
 		});
-		const handleSideQuestion = (
-			InteractiveMode.prototype as unknown as {
+		const handleSideQuestion = fromAny<
+			{
 				handleSideQuestion(this: typeof fakeThis, question: string): Promise<void>;
-			}
-		).handleSideQuestion;
+			},
+			unknown
+		>(InteractiveMode.prototype).handleSideQuestion;
 
 		await handleSideQuestion.call(fakeThis, "And a follow-up?");
 
@@ -386,8 +390,8 @@ describe("ENG-4509 side questions", () => {
 			activeSideQuestionId: "turn-1",
 			showWarning,
 		});
-		(
-			InteractiveMode.prototype as unknown as { setupEditorSubmitHandler(this: typeof fakeThis): void }
+		fromAny<{ setupEditorSubmitHandler(this: typeof fakeThis): void }, unknown>(
+			InteractiveMode.prototype,
 		).setupEditorSubmitHandler.call(fakeThis);
 
 		await defaultEditor.onSubmit?.("Queued follow-up?");
@@ -417,8 +421,8 @@ describe("ENG-4509 side questions", () => {
 			handleSideQuestion,
 			agentConnection: { prompt },
 		});
-		(
-			InteractiveMode.prototype as unknown as { setupEditorSubmitHandler(this: typeof fakeThis): void }
+		fromAny<{ setupEditorSubmitHandler(this: typeof fakeThis): void }, unknown>(
+			InteractiveMode.prototype,
 		).setupEditorSubmitHandler.call(fakeThis);
 
 		await defaultEditor.onSubmit?.("/tmp/report.md can you summarize this?");
@@ -454,8 +458,8 @@ describe("ENG-4509 side questions", () => {
 				ui: { requestRender: vi.fn() },
 				agentConnection: { prompt },
 			});
-			(
-				InteractiveMode.prototype as unknown as { setupEditorSubmitHandler(this: typeof fakeThis): void }
+			fromAny<{ setupEditorSubmitHandler(this: typeof fakeThis): void }, unknown>(
+				InteractiveMode.prototype,
 			).setupEditorSubmitHandler.call(fakeThis);
 
 			await defaultEditor.onSubmit?.(text);
@@ -496,8 +500,8 @@ describe("ENG-4509 side questions", () => {
 			ui: { requestRender: vi.fn() },
 			agentConnection: { executeBash },
 		});
-		(
-			InteractiveMode.prototype as unknown as { setupEditorSubmitHandler(this: typeof fakeThis): void }
+		fromAny<{ setupEditorSubmitHandler(this: typeof fakeThis): void }, unknown>(
+			InteractiveMode.prototype,
 		).setupEditorSubmitHandler.call(fakeThis);
 
 		await defaultEditor.onSubmit?.("!ls");
@@ -514,15 +518,16 @@ describe("ENG-4509 side questions", () => {
 			seedTranscript: true,
 		});
 
-		const finishSideQuestionBash = (
-			InteractiveMode.prototype as unknown as {
+		const finishSideQuestionBash = fromAny<
+			{
 				finishSideQuestionBash(
 					this: typeof fakeThis,
 					event: { exitCode?: number; cancelled: boolean; truncated: boolean; errorMessage?: string },
 					rawOutput: string,
 				): void;
-			}
-		).finishSideQuestionBash;
+			},
+			unknown
+		>(InteractiveMode.prototype).finishSideQuestionBash;
 		finishSideQuestionBash.call(fakeThis, { exitCode: 0, cancelled: false, truncated: false }, "README.md\nsrc\n");
 
 		expect(finishBash).toHaveBeenCalled();
@@ -542,8 +547,8 @@ describe("ENG-4509 side questions", () => {
 			sideQuestionTurns: [],
 			sideQuestionBash: { runId: "side-run-1", input: "!generate-output", seedTranscript: true },
 		});
-		const finishSideQuestionBash = (
-			InteractiveMode.prototype as unknown as {
+		const finishSideQuestionBash = fromAny<
+			{
 				finishSideQuestionBash(
 					this: typeof fakeThis,
 					event: {
@@ -555,8 +560,9 @@ describe("ENG-4509 side questions", () => {
 					},
 					rawOutput: string,
 				): void;
-			}
-		).finishSideQuestionBash;
+			},
+			unknown
+		>(InteractiveMode.prototype).finishSideQuestionBash;
 		const rawOutput = Array.from({ length: 2101 }, (_, index) => `line-${index}`).join("\n");
 
 		finishSideQuestionBash.call(
@@ -583,15 +589,16 @@ describe("ENG-4509 side questions", () => {
 			sideQuestionTurns: [],
 			sideQuestionBash: { runId: "side-run-1", input: "!show-fence", seedTranscript: true },
 		});
-		const finishSideQuestionBash = (
-			InteractiveMode.prototype as unknown as {
+		const finishSideQuestionBash = fromAny<
+			{
 				finishSideQuestionBash(
 					this: typeof fakeThis,
 					event: { exitCode?: number; cancelled: boolean; truncated: boolean; errorMessage?: string },
 					rawOutput: string,
 				): void;
-			}
-		).finishSideQuestionBash;
+			},
+			unknown
+		>(InteractiveMode.prototype).finishSideQuestionBash;
 
 		finishSideQuestionBash.call(
 			fakeThis,
@@ -640,8 +647,8 @@ describe("ENG-4509 side questions", () => {
 			showWarning,
 			agentConnection: { executeBash },
 		});
-		(
-			InteractiveMode.prototype as unknown as { setupEditorSubmitHandler(this: typeof fakeThis): void }
+		fromAny<{ setupEditorSubmitHandler(this: typeof fakeThis): void }, unknown>(
+			InteractiveMode.prototype,
 		).setupEditorSubmitHandler.call(fakeThis);
 
 		await defaultEditor.onSubmit?.("!ls");
@@ -671,8 +678,8 @@ describe("ENG-4509 side questions", () => {
 			handleSideQuestion,
 			showWarning,
 		});
-		(
-			InteractiveMode.prototype as unknown as { setupEditorSubmitHandler(this: typeof fakeThis): void }
+		fromAny<{ setupEditorSubmitHandler(this: typeof fakeThis): void }, unknown>(
+			InteractiveMode.prototype,
 		).setupEditorSubmitHandler.call(fakeThis);
 
 		await defaultEditor.onSubmit?.("what are those files?");
@@ -701,8 +708,8 @@ describe("ENG-4509 side questions", () => {
 			handleSideQuestion,
 			ui: { requestRender: vi.fn() },
 		});
-		(
-			InteractiveMode.prototype as unknown as { setupEditorSubmitHandler(this: typeof fakeThis): void }
+		fromAny<{ setupEditorSubmitHandler(this: typeof fakeThis): void }, unknown>(
+			InteractiveMode.prototype,
 		).setupEditorSubmitHandler.call(fakeThis);
 
 		await defaultEditor.onSubmit?.("what is in [image #1]?");
@@ -732,11 +739,12 @@ describe("ENG-4509 side questions", () => {
 			agentConnection: { abortBash },
 			isInitialized: false,
 		});
-		const clearSideQuestion = (
-			InteractiveMode.prototype as unknown as {
+		const clearSideQuestion = fromAny<
+			{
 				clearSideQuestion(this: typeof fakeThis, options?: { abort?: boolean }): void;
-			}
-		).clearSideQuestion;
+			},
+			unknown
+		>(InteractiveMode.prototype).clearSideQuestion;
 
 		clearSideQuestion.call(fakeThis, { abort: true });
 
@@ -761,11 +769,12 @@ describe("ENG-4509 side questions", () => {
 			agentConnection: { abortBash },
 			isInitialized: false,
 		});
-		const clearSideQuestion = (
-			InteractiveMode.prototype as unknown as {
+		const clearSideQuestion = fromAny<
+			{
 				clearSideQuestion(this: typeof fakeThis, options?: { abort?: boolean }): void;
-			}
-		).clearSideQuestion;
+			},
+			unknown
+		>(InteractiveMode.prototype).clearSideQuestion;
 
 		clearSideQuestion.call(fakeThis, { abort: true });
 
@@ -810,14 +819,15 @@ describe("ENG-4509 side questions", () => {
 				pendingMessagesContainer: new Container(),
 				pendingBashComponents: [],
 			});
-			(
-				InteractiveMode.prototype as unknown as { setupEditorSubmitHandler(this: typeof fakeThis): void }
+			fromAny<{ setupEditorSubmitHandler(this: typeof fakeThis): void }, unknown>(
+				InteractiveMode.prototype,
 			).setupEditorSubmitHandler.call(fakeThis);
-			const handleEvent = (
-				InteractiveMode.prototype as unknown as {
+			const handleEvent = fromAny<
+				{
 					handleEvent(this: typeof fakeThis, event: unknown): Promise<void>;
-				}
-			).handleEvent;
+				},
+				unknown
+			>(InteractiveMode.prototype).handleEvent;
 
 			// Route real session events through the real handler, like subscribeToAgent does.
 			const bashEvents: { type: string; transient?: boolean; runId?: string }[] = [];
@@ -839,7 +849,7 @@ describe("ENG-4509 side questions", () => {
 				{ type: "bash_end", transient: true, runId },
 			]);
 			// The run mounted the main-thread bash component in the pane, not the chat.
-			const component = addBash.mock.calls.at(0)?.[0] as BashExecutionComponent;
+			const component = fromPartial<BashExecutionComponent>(addBash.mock.calls.at(0)?.[0]);
 			expect(component).toBeInstanceOf(BashExecutionComponent);
 			expect(component.getOutput()).toContain("hello from side");
 			expect(finishBash).toHaveBeenCalled();
@@ -889,8 +899,8 @@ describe("ENG-4509 side questions", () => {
 			syncWorkingLoader: vi.fn(),
 			getGoalState: () => ({ status: "none" }),
 		});
-		const renderResyncedSession = (
-			InteractiveMode.prototype as unknown as {
+		const renderResyncedSession = fromAny<
+			{
 				renderResyncedSession(
 					this: typeof fakeThis,
 					snapshot: {
@@ -898,8 +908,9 @@ describe("ENG-4509 side questions", () => {
 						messages: [];
 					},
 				): Promise<void>;
-			}
-		).renderResyncedSession;
+			},
+			unknown
+		>(InteractiveMode.prototype).renderResyncedSession;
 
 		await renderResyncedSession.call(fakeThis, {
 			state: { isCompacting: false, isBashRunning: false, isStreaming: false },
@@ -932,11 +943,12 @@ describe("ENG-4509 side questions", () => {
 			pendingMessagesContainer: new Container(),
 			pendingBashComponents: [],
 		});
-		const handleEvent = (
-			InteractiveMode.prototype as unknown as {
+		const handleEvent = fromAny<
+			{
 				handleEvent(this: typeof fakeThis, event: unknown): Promise<void>;
-			}
-		).handleEvent;
+			},
+			unknown
+		>(InteractiveMode.prototype).handleEvent;
 
 		await handleEvent.call(fakeThis, {
 			type: "bash_start",
@@ -982,11 +994,12 @@ describe("ENG-4509 side questions", () => {
 			pendingMessagesContainer: new Container(),
 			pendingBashComponents: [],
 		});
-		const handleEvent = (
-			InteractiveMode.prototype as unknown as {
+		const handleEvent = fromAny<
+			{
 				handleEvent(this: typeof fakeThis, event: unknown): Promise<void>;
-			}
-		).handleEvent;
+			},
+			unknown
+		>(InteractiveMode.prototype).handleEvent;
 
 		// Another client won the bash slot; its run must render, not be aborted.
 		await handleEvent.call(fakeThis, { type: "bash_start", command: "make build", excludeFromContext: false });
@@ -996,7 +1009,7 @@ describe("ENG-4509 side questions", () => {
 		expect(chatContainer.children.some((child) => child instanceof BashExecutionComponent)).toBe(true);
 
 		await handleEvent.call(fakeThis, { type: "bash_output", chunk: "compiling\n" });
-		expect((fakeThis.activeBashComponent as BashExecutionComponent).getOutput()).toContain("compiling");
+		expect(fromPartial<BashExecutionComponent>(fakeThis.activeBashComponent).getOutput()).toContain("compiling");
 	});
 
 	it("keeps foreign runs out of the pane and suppresses foreign transient runs", async () => {
@@ -1025,11 +1038,12 @@ describe("ENG-4509 side questions", () => {
 			pendingMessagesContainer: new Container(),
 			pendingBashComponents: [],
 		});
-		const handleEvent = (
-			InteractiveMode.prototype as unknown as {
+		const handleEvent = fromAny<
+			{
 				handleEvent(this: typeof fakeThis, event: unknown): Promise<void>;
-			}
-		).handleEvent;
+			},
+			unknown
+		>(InteractiveMode.prototype).handleEvent;
 
 		// A foreign main-chat run — even with the identical command string —
 		// renders in the chat, never in the pane.
@@ -1074,15 +1088,16 @@ describe("ENG-4509 side questions", () => {
 			sideQuestionTurns: [],
 			sideQuestionBash: { runId: "side-run-1", input: "!!pwd", seedTranscript: false },
 		});
-		const finishSideQuestionBash = (
-			InteractiveMode.prototype as unknown as {
+		const finishSideQuestionBash = fromAny<
+			{
 				finishSideQuestionBash(
 					this: typeof fakeThis,
 					event: { exitCode?: number; cancelled: boolean; truncated: boolean; errorMessage?: string },
 					rawOutput: string,
 				): void;
-			}
-		).finishSideQuestionBash;
+			},
+			unknown
+		>(InteractiveMode.prototype).finishSideQuestionBash;
 
 		finishSideQuestionBash.call(fakeThis, { exitCode: 0, cancelled: false, truncated: false }, "/repo\n");
 
@@ -1171,8 +1186,9 @@ describe("ENG-4509 side questions", () => {
 			armEscapeRepeat: vi.fn(),
 			interruptOrClearInput: vi.fn(),
 		});
-		const handleEscape = (InteractiveMode.prototype as unknown as { handleEscape(this: typeof fakeThis): void })
-			.handleEscape;
+		const handleEscape = fromAny<{ handleEscape(this: typeof fakeThis): void }, unknown>(
+			InteractiveMode.prototype,
+		).handleEscape;
 
 		handleEscape.call(fakeThis);
 
@@ -1188,11 +1204,12 @@ describe("ENG-4509 side questions", () => {
 			activeSideQuestionId: "question-5",
 			showWarning,
 		});
-		const handleSideQuestion = (
-			InteractiveMode.prototype as unknown as {
+		const handleSideQuestion = fromAny<
+			{
 				handleSideQuestion(this: typeof fakeThis, question: string): Promise<void>;
-			}
-		).handleSideQuestion;
+			},
+			unknown
+		>(InteractiveMode.prototype).handleSideQuestion;
 
 		await handleSideQuestion.call(fakeThis, "Can this overlap?");
 
@@ -1216,8 +1233,8 @@ describe("ENG-4509 side questions", () => {
 			isBashRunning: () => false,
 			isAgentStreaming: () => false,
 		});
-		const interruptOrClearInput = (
-			InteractiveMode.prototype as unknown as { interruptOrClearInput(this: typeof fakeThis): void }
+		const interruptOrClearInput = fromAny<{ interruptOrClearInput(this: typeof fakeThis): void }, unknown>(
+			InteractiveMode.prototype,
 		).interruptOrClearInput;
 
 		interruptOrClearInput.call(fakeThis);
@@ -1236,11 +1253,12 @@ describe("ENG-4509 side questions", () => {
 			showStatus: vi.fn(),
 			flushCompactionQueue: vi.fn(async () => undefined),
 		});
-		const renderTreeNavigation = (
-			InteractiveMode.prototype as unknown as {
+		const renderTreeNavigation = fromAny<
+			{
 				renderTreeNavigation(this: typeof fakeThis, result: { editorText?: string }): Promise<void>;
-			}
-		).renderTreeNavigation;
+			},
+			unknown
+		>(InteractiveMode.prototype).renderTreeNavigation;
 
 		await renderTreeNavigation.call(fakeThis, { editorText: "restored draft" });
 

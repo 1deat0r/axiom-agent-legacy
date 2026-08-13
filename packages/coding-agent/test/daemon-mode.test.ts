@@ -4,6 +4,7 @@ import { createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Api, Model } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import {
 	AGENT_FAMILY_REACH_ERROR,
@@ -65,16 +66,19 @@ describe("daemon mode helpers", () => {
 		});
 		const setSessionName = vi.fn();
 		const state = makeState("active");
-		state.runtime = {
+		state.runtime = fromAny<never, unknown>({
 			...state.runtime,
 			metadata: { kind: "top-level", createdAt: 1 },
 			session: { setSessionName },
-		} as never;
+		});
 		const assertStateSessionNameAvailable = vi.fn(async () => {});
-		const internals = daemon as unknown as {
-			assertStateSessionNameAvailable: typeof assertStateSessionNameAvailable;
-			setStateSessionName(state: ActiveSessionState, name: string): Promise<void>;
-		};
+		const internals = fromAny<
+			{
+				assertStateSessionNameAvailable: typeof assertStateSessionNameAvailable;
+				setStateSessionName(state: ActiveSessionState, name: string): Promise<void>;
+			},
+			unknown
+		>(daemon);
 		internals.assertStateSessionNameAvailable = assertStateSessionNameAvailable;
 
 		await internals.setStateSessionName(state, "  normalized  ");
@@ -91,7 +95,7 @@ describe("daemon mode helpers", () => {
 			createRuntime: vi.fn(),
 		});
 		const fork = makeState("fork");
-		fork.runtime = {
+		fork.runtime = fromAny<never, unknown>({
 			...fork.runtime,
 			metadata: {
 				kind: "top-level",
@@ -105,9 +109,9 @@ describe("daemon mode helpers", () => {
 				rlmDepth: 0,
 				sessionManager: { getHeader: () => ({ parentSession: "/tmp/fork-origin.jsonl" }) },
 			},
-		} as never;
+		});
 		const root = makeState("root");
-		root.runtime = {
+		root.runtime = fromAny<never, unknown>({
 			...root.runtime,
 			metadata: { kind: "top-level", createdAt: 1 },
 			session: {
@@ -115,14 +119,17 @@ describe("daemon mode helpers", () => {
 				sessionFile: "/tmp/root.jsonl",
 				rlmDepth: 0,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			agentFamilyEntry(state: ActiveSessionState): {
-				parentSessionId?: string;
-				parentSessionPath?: string;
-			};
-			isAgentFamilyReachable(current: ActiveSessionState, target: ActiveSessionState): boolean;
-		};
+		});
+		const internals = fromAny<
+			{
+				agentFamilyEntry(state: ActiveSessionState): {
+					parentSessionId?: string;
+					parentSessionPath?: string;
+				};
+				isAgentFamilyReachable(current: ActiveSessionState, target: ActiveSessionState): boolean;
+			},
+			unknown
+		>(daemon);
 
 		expect(internals.agentFamilyEntry(fork)).not.toHaveProperty("parentSessionId");
 		expect(internals.agentFamilyEntry(fork)).not.toHaveProperty("parentSessionPath");
@@ -192,17 +199,20 @@ describe("daemon mode helpers", () => {
 			},
 		});
 		const fromState = makeState("source");
-		const targetState = makeState("target") as ActiveSessionState & {
-			runtime: ActiveSessionState["runtime"] & {
-				session: {
-					sessionId: string;
-					sessionName: string;
-					isStreaming: boolean;
-					unfinishedActionCount: number;
-					acceptAgentMessagePrompt: ReturnType<typeof vi.fn>;
+		const targetState = fromAny<
+			ActiveSessionState & {
+				runtime: ActiveSessionState["runtime"] & {
+					session: {
+						sessionId: string;
+						sessionName: string;
+						isStreaming: boolean;
+						unfinishedActionCount: number;
+						acceptAgentMessagePrompt: ReturnType<typeof vi.fn>;
+					};
 				};
-			};
-		};
+			},
+			unknown
+		>(makeState("target"));
 		let resolvePrompt: () => void = () => {};
 		const acceptAgentMessagePrompt = vi.fn(
 			(_message: string, options?: { preflightResult?: (didSucceed: boolean) => void }) => {
@@ -212,7 +222,7 @@ describe("daemon mode helpers", () => {
 				});
 			},
 		);
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -222,23 +232,26 @@ describe("daemon mode helpers", () => {
 				sessionActions: { queuedCount: 0, steering: [], followUps: [] },
 				acceptAgentMessagePrompt,
 			},
-		} as never;
-		fromState.runtime = {
+		});
+		fromState.runtime = fromAny<never, unknown>({
 			...fromState.runtime,
 			session: {
 				sessionId: "session-source",
 				sessionName: "Source",
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState?: ActiveSessionState;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState?: ActiveSessionState;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(fromState.activeSessionId, fromState);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
@@ -266,7 +279,7 @@ describe("daemon mode helpers", () => {
 		});
 		const state = makeState("local-active");
 		let hasRunningChildren = true;
-		state.runtime = {
+		state.runtime = fromAny<never, unknown>({
 			...state.runtime,
 			cwd: "/tmp",
 			metadata: { kind: "top-level", createdAt: 1 },
@@ -277,28 +290,31 @@ describe("daemon mode helpers", () => {
 				unfinishedActionCount: 0,
 				hasRunningRlmChildren: () => hasRunningChildren,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			cronStore: {
-				getHeartbeat(activeSessionId: string): AgentCronJob | undefined;
-				listRlmHeartbeats(activeSessionId: string): AgentCronJob[];
-			};
-			createAgentMessageAgentSummary(state: ActiveSessionState): { status?: string };
-		};
+		});
+		const internals = fromAny<
+			{
+				cronStore: {
+					getHeartbeat(activeSessionId: string): AgentCronJob | undefined;
+					listRlmHeartbeats(activeSessionId: string): AgentCronJob[];
+				};
+				createAgentMessageAgentSummary(state: ActiveSessionState): { status?: string };
+			},
+			unknown
+		>(daemon);
 		const getHeartbeat = vi.spyOn(internals.cronStore, "getHeartbeat").mockReturnValue(undefined);
 		const listRlmHeartbeats = vi.spyOn(internals.cronStore, "listRlmHeartbeats").mockReturnValue([]);
 
 		expect(internals.createAgentMessageAgentSummary(state).status).toBe("running");
 		hasRunningChildren = false;
-		state.runtime = {
+		state.runtime = fromPartial<ActiveSessionState["runtime"]>({
 			...state.runtime,
 			metadata: { kind: "subagent", createdAt: 1 },
-		} as ActiveSessionState["runtime"];
+		});
 		expect(internals.createAgentMessageAgentSummary(state).status).toBe("idle");
-		getHeartbeat.mockReturnValue({ status: "active" } as AgentCronJob);
+		getHeartbeat.mockReturnValue(fromPartial<AgentCronJob>({ status: "active" }));
 		expect(internals.createAgentMessageAgentSummary(state).status).toBe("running");
 		getHeartbeat.mockReturnValue(undefined);
-		listRlmHeartbeats.mockReturnValue([{ status: "active" } as AgentCronJob]);
+		listRlmHeartbeats.mockReturnValue([fromPartial<AgentCronJob>({ status: "active" })]);
 		expect(internals.createAgentMessageAgentSummary(state).status).toBe("running");
 	});
 
@@ -309,7 +325,7 @@ describe("daemon mode helpers", () => {
 		});
 		const first = makeState("first");
 		const second = makeState("second");
-		first.runtime = {
+		first.runtime = fromAny<never, unknown>({
 			...first.runtime,
 			session: {
 				sessionId: "first-session",
@@ -318,8 +334,8 @@ describe("daemon mode helpers", () => {
 				sessionManager: { getHeader: vi.fn(() => ({ parentSession: "../parent.jsonl" })) },
 				setSessionName: vi.fn(),
 			},
-		} as never;
-		second.runtime = {
+		});
+		second.runtime = fromAny<never, unknown>({
 			...second.runtime,
 			session: {
 				sessionId: "second-session",
@@ -328,15 +344,18 @@ describe("daemon mode helpers", () => {
 				sessionManager: { getHeader: vi.fn(() => ({ parentSession: "../../parent.jsonl" })) },
 				setSessionName: vi.fn(),
 			},
-		} as never;
+		});
 		let releaseValidation!: () => void;
 		const validationGate = new Promise<void>((resolve) => {
 			releaseValidation = resolve;
 		});
-		const internals = daemon as unknown as {
-			assertStateSessionNameAvailable: ReturnType<typeof vi.fn>;
-			setStateSessionName(state: ActiveSessionState, name: string): Promise<void>;
-		};
+		const internals = fromAny<
+			{
+				assertStateSessionNameAvailable: ReturnType<typeof vi.fn>;
+				setStateSessionName(state: ActiveSessionState, name: string): Promise<void>;
+			},
+			unknown
+		>(daemon);
 		internals.assertStateSessionNameAvailable = vi.fn(async () => validationGate);
 
 		const firstRename = internals.setStateSessionName(first, "shared");
@@ -356,7 +375,7 @@ describe("daemon mode helpers", () => {
 		});
 		const first = makeState("first", "parent-a");
 		const second = makeState("second", "parent-b");
-		first.runtime = {
+		first.runtime = fromAny<never, unknown>({
 			...first.runtime,
 			metadata: { ...first.runtime.metadata, parentSessionId: "parent-session-a" },
 			session: {
@@ -365,8 +384,8 @@ describe("daemon mode helpers", () => {
 				sessionManager: { getHeader: vi.fn(() => undefined) },
 				setSessionName: vi.fn(),
 			},
-		} as never;
-		second.runtime = {
+		});
+		second.runtime = fromAny<never, unknown>({
 			...second.runtime,
 			metadata: { ...second.runtime.metadata, parentSessionId: "parent-session-b" },
 			session: {
@@ -375,15 +394,18 @@ describe("daemon mode helpers", () => {
 				sessionManager: { getHeader: vi.fn(() => undefined) },
 				setSessionName: vi.fn(),
 			},
-		} as never;
+		});
 		let releaseValidation!: () => void;
 		const validationGate = new Promise<void>((resolve) => {
 			releaseValidation = resolve;
 		});
-		const internals = daemon as unknown as {
-			assertStateSessionNameAvailable: ReturnType<typeof vi.fn>;
-			setStateSessionName(state: ActiveSessionState, name: string): Promise<void>;
-		};
+		const internals = fromAny<
+			{
+				assertStateSessionNameAvailable: ReturnType<typeof vi.fn>;
+				setStateSessionName(state: ActiveSessionState, name: string): Promise<void>;
+			},
+			unknown
+		>(daemon);
 		internals.assertStateSessionNameAvailable = vi.fn(async () => validationGate);
 
 		const firstRename = internals.setStateSessionName(first, "worker");
@@ -405,7 +427,7 @@ describe("daemon mode helpers", () => {
 			mkdirSync(childDir);
 			writeFileSync(parentPath, "");
 			const state = makeState("switched-child");
-			state.runtime = {
+			state.runtime = fromAny<never, unknown>({
 				...state.runtime,
 				metadata: { kind: "top-level", createdAt: 1 },
 				session: {
@@ -414,15 +436,18 @@ describe("daemon mode helpers", () => {
 					rlmDepth: 1,
 					sessionManager: { getHeader: () => ({ parentSession: "../parent.jsonl" }) },
 				},
-			} as never;
+			});
 			const daemon = new AgentDaemon(join(tempDir, "daemon.sock"), {
 				defaultSessionConfig: { agentDir: tempDir, cwd: tempDir, sessionDir: tempDir },
 				createRuntime: vi.fn(),
 			});
-			const internals = daemon as unknown as {
-				createAgentFamilyCatalog: ReturnType<typeof vi.fn>;
-				assertStateSessionNameAvailable(state: ActiveSessionState, name: string): Promise<void>;
-			};
+			const internals = fromAny<
+				{
+					createAgentFamilyCatalog: ReturnType<typeof vi.fn>;
+					assertStateSessionNameAvailable(state: ActiveSessionState, name: string): Promise<void>;
+				},
+				unknown
+			>(daemon);
 			internals.createAgentFamilyCatalog = vi.fn(async () => [
 				{
 					id: "sibling",
@@ -447,7 +472,7 @@ describe("daemon mode helpers", () => {
 			createRuntime: vi.fn(),
 		});
 		const state = makeState("local-active");
-		state.runtime = {
+		state.runtime = fromAny<never, unknown>({
 			...state.runtime,
 			cwd: "/tmp",
 			metadata: { kind: "top-level", createdAt: 1 },
@@ -459,12 +484,15 @@ describe("daemon mode helpers", () => {
 				unfinishedActionCount: 0,
 				hasRunningRlmChildren: () => false,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			remoteAgentPeers: Map<string, Record<string, unknown>>;
-			createAgentFamilyCatalog(): Promise<Array<{ id: string; name?: string }>>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				remoteAgentPeers: Map<string, Record<string, unknown>>;
+				createAgentFamilyCatalog(): Promise<Array<{ id: string; name?: string }>>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(state.activeSessionId, state);
 		internals.remoteAgentPeers.set("stale-active", {
 			activeSessionId: "stale-active",
@@ -499,7 +527,7 @@ describe("daemon mode helpers", () => {
 				createRuntime: vi.fn(),
 			});
 			const parent = makeState("parent");
-			parent.runtime = {
+			parent.runtime = fromAny<never, unknown>({
 				...parent.runtime,
 				cwd: tempDir,
 				metadata: { kind: "top-level", createdAt: 1 },
@@ -514,7 +542,7 @@ describe("daemon mode helpers", () => {
 					unfinishedActionCount: 0,
 					hasRunningRlmChildren: () => false,
 				},
-			} as never;
+			});
 			const child = {
 				activeSessionId: "child-active",
 				sessionId: "session-child",
@@ -527,11 +555,14 @@ describe("daemon mode helpers", () => {
 				rlmDepth: 1,
 				status: "idle",
 			};
-			const internals = daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				remoteAgentPeers: Map<string, typeof child>;
-				createAgentFamilyRoster(state: ActiveSessionState): Promise<{ entries: Array<{ id: string }> }>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					remoteAgentPeers: Map<string, typeof child>;
+					createAgentFamilyRoster(state: ActiveSessionState): Promise<{ entries: Array<{ id: string }> }>;
+				},
+				unknown
+			>(daemon);
 			internals.sessions.set(parent.activeSessionId, parent);
 			internals.remoteAgentPeers.set(child.activeSessionId, child);
 			const listAll = vi.spyOn(SessionManager, "listAll").mockResolvedValue([]);
@@ -568,7 +599,7 @@ describe("daemon mode helpers", () => {
 			},
 		});
 		const parentState = makeState("parent");
-		parentState.runtime = {
+		parentState.runtime = fromAny<never, unknown>({
 			...parentState.runtime,
 			cwd: "/tmp",
 			metadata: { kind: "top-level", createdAt: 1 },
@@ -578,26 +609,29 @@ describe("daemon mode helpers", () => {
 				isStreaming: false,
 				sessionActions: { queuedCount: 0, steering: [], followUps: [] },
 			},
-		} as never;
+		});
 		const defaultSubagentName = createDefaultRlmSubagentSessionName("retained worker", "child-1");
-		const subagentState = makeState("child", "parent") as ActiveSessionState & {
-			runtime: ActiveSessionState["runtime"] & {
-				session: {
-					sessionId: string;
-					sessionName: string;
-					isStreaming: boolean;
-					unfinishedActionCount: number;
-					acceptAgentMessagePrompt: ReturnType<typeof vi.fn>;
+		const subagentState = fromAny<
+			ActiveSessionState & {
+				runtime: ActiveSessionState["runtime"] & {
+					session: {
+						sessionId: string;
+						sessionName: string;
+						isStreaming: boolean;
+						unfinishedActionCount: number;
+						acceptAgentMessagePrompt: ReturnType<typeof vi.fn>;
+					};
 				};
-			};
-		};
+			},
+			unknown
+		>(makeState("child", "parent"));
 		const acceptAgentMessagePrompt = vi.fn(
 			(message: string, options?: { preflightResult?: (didSucceed: boolean) => void }) => {
 				options?.preflightResult?.(true);
 				return Promise.resolve(message);
 			},
 		);
-		subagentState.runtime = {
+		subagentState.runtime = fromAny<never, unknown>({
 			...subagentState.runtime,
 			cwd: "/tmp",
 			metadata: {
@@ -611,13 +645,16 @@ describe("daemon mode helpers", () => {
 				sessionActions: { queuedCount: 0, steering: [], followUps: [] },
 				acceptAgentMessagePrompt,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			createAgentMessageController(
-				getCurrentState: () => ActiveSessionState | undefined,
-			): AgentSessionMessageController;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				createAgentMessageController(
+					getCurrentState: () => ActiveSessionState | undefined,
+				): AgentSessionMessageController;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(parentState.activeSessionId, parentState);
 		// A successfully completed RLM child remains idle in this daemon registry.
 		internals.sessions.set(subagentState.activeSessionId, subagentState);
@@ -671,7 +708,7 @@ describe("daemon mode helpers", () => {
 		const closeSession = vi.fn(async (state: ActiveSessionState) => {
 			internals.sessions.delete(state.activeSessionId);
 		});
-		internals = daemon as unknown as typeof internals;
+		internals = fromAny<typeof internals, unknown>(daemon);
 		internals.sessions.set(parentState.activeSessionId, parentState);
 		internals.sessions.set(childState.activeSessionId, childState);
 		internals.closeSession = closeSession;
@@ -682,7 +719,7 @@ describe("daemon mode helpers", () => {
 			.createSubagentRuntimeHost(parentState)
 			.releaseRlmSubagentRuntime?.(
 				{ session: childState.runtime.session },
-				{ id: "child-1" } as CreateRlmSubagentRuntimeOptions,
+				fromPartial<CreateRlmSubagentRuntimeOptions>({ id: "child-1" }),
 				"error",
 			);
 
@@ -693,7 +730,7 @@ describe("daemon mode helpers", () => {
 			.createSubagentRuntimeHost(parentState)
 			.releaseRlmSubagentRuntime?.(
 				{ session: childState.runtime.session },
-				{ id: "child-1" } as CreateRlmSubagentRuntimeOptions,
+				fromPartial<CreateRlmSubagentRuntimeOptions>({ id: "child-1" }),
 				"cancelled",
 			);
 		expect(recordDeletion).toHaveBeenCalledWith(parentState, "child-1");
@@ -711,7 +748,7 @@ describe("daemon mode helpers", () => {
 				.createSubagentRuntimeHost(parentState)
 				.releaseRlmSubagentRuntime?.(
 					{ session: childState.runtime.session },
-					{ id: "child-1" } as CreateRlmSubagentRuntimeOptions,
+					fromPartial<CreateRlmSubagentRuntimeOptions>({ id: "child-1" }),
 					"cancelled",
 				),
 		).rejects.toThrow("registry write failed");
@@ -731,37 +768,46 @@ describe("daemon mode helpers", () => {
 			const childSessionDir = join(parentManager.getSessionArtifactDir()!, "child-1");
 			const createRuntime = vi.fn(async (options: Parameters<CreateAgentSessionRuntimeFactory>[0]) => ({
 				session: makeRuntimeSession(options.sessionManager),
-				extensionsResult: { extensions: [], errors: [], runtime: {} } as unknown as Awaited<
-					ReturnType<CreateAgentSessionRuntimeFactory>
-				>["extensionsResult"],
-				services: { cwd: options.cwd, agentDir: options.agentDir } as Awaited<
-					ReturnType<CreateAgentSessionRuntimeFactory>
-				>["services"],
+				extensionsResult: fromAny<
+					Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["extensionsResult"],
+					unknown
+				>({
+					extensions: [],
+					errors: [],
+					runtime: {},
+				}),
+				services: fromPartial<Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["services"]>({
+					cwd: options.cwd,
+					agentDir: options.agentDir,
+				}),
 				diagnostics: [],
 			}));
 			const daemon = new AgentDaemon(join(tempDir, "daemon.sock"), {
 				defaultSessionConfig: { agentDir: tempDir, cwd: tempDir, sessionDir },
 				createRuntime,
 			});
-			const internals = daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createRlmSubagentRuntime(
-					parentState: ActiveSessionState,
-					options: CreateRlmSubagentRuntimeOptions,
-				): Promise<ActiveSessionState["runtime"]>;
-				createSubagentRuntimeHost(parentState: ActiveSessionState): SubagentRuntimeHost;
-				listPassiveRlmSubagents(): Promise<Array<{ entry: { childId: string } }>>;
-				findPassiveRlmSubagent(target: string): Promise<{ entry: { childId: string } } | undefined>;
-				createAgentMessageController(
-					getCurrentState: () => ActiveSessionState | undefined,
-				): AgentSessionMessageController;
-				buildSessionListWithPassiveRlmSubagents(
-					active: ActiveSessionState[],
-					saved: Awaited<ReturnType<typeof SessionManager.listAll>>,
-					jobs: AgentCronJob[],
-				): Promise<Array<{ sessionFile?: string; rlmChildId?: string }>>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createRlmSubagentRuntime(
+						parentState: ActiveSessionState,
+						options: CreateRlmSubagentRuntimeOptions,
+					): Promise<ActiveSessionState["runtime"]>;
+					createSubagentRuntimeHost(parentState: ActiveSessionState): SubagentRuntimeHost;
+					listPassiveRlmSubagents(): Promise<Array<{ entry: { childId: string } }>>;
+					findPassiveRlmSubagent(target: string): Promise<{ entry: { childId: string } } | undefined>;
+					createAgentMessageController(
+						getCurrentState: () => ActiveSessionState | undefined,
+					): AgentSessionMessageController;
+					buildSessionListWithPassiveRlmSubagents(
+						active: ActiveSessionState[],
+						saved: Awaited<ReturnType<typeof SessionManager.listAll>>,
+						jobs: AgentCronJob[],
+					): Promise<Array<{ sessionFile?: string; rlmChildId?: string }>>;
+				},
+				unknown
+			>(daemon);
 			const parentState = await internals.createRuntime({ type: "create", sessionPath: parentSessionFile });
 			Object.assign(parentState.runtime.session, {
 				isSessionActive: false,
@@ -779,7 +825,7 @@ describe("daemon mode helpers", () => {
 				prompt: "complete and persist",
 				sessionName: "real-worker",
 				sessionDir: childSessionDir,
-				model: { provider: "test", id: "model" } as Model<Api>,
+				model: fromPartial<Model<Api>>({ provider: "test", id: "model" }),
 				thinkingLevel: "off",
 				serviceTier: null,
 				scopedModels: [],
@@ -797,8 +843,8 @@ describe("daemon mode helpers", () => {
 			if (!childState?.runtime.session.sessionFile) throw new Error("Missing child state");
 			const host = internals.createSubagentRuntimeHost(parentState);
 			expect(host.completeRlmSubagentRuntime?.("child-1", childRuntime.session)).toBe(true);
-			await (
-				daemon as unknown as { closeSession(state: ActiveSessionState, reason: "shutdown"): Promise<void> }
+			await fromAny<{ closeSession(state: ActiveSessionState, reason: "shutdown"): Promise<void> }, unknown>(
+				daemon,
 			).closeSession(childState, "shutdown");
 
 			expect((await internals.listPassiveRlmSubagents()).map(({ entry }) => entry.childId)).toContain("child-1");
@@ -825,16 +871,19 @@ describe("daemon mode helpers", () => {
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
 			const registryPath = join(fixture.parentArtifactDir, "rlm-subagents.jsonl");
-			const entry = JSON.parse(readFileSync(registryPath, "utf8")) as Record<string, unknown>;
+			const entry = fromPartial<Record<string, unknown>>(JSON.parse(readFileSync(registryPath, "utf8")));
 			entry.status = "running";
 			writeFileSync(registryPath, `${JSON.stringify(entry)}\n`);
-			const internals = fixture.daemon as unknown as {
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				listPassiveRlmSubagents(): Promise<Array<{ entry: { childId: string } }>>;
-				createAgentMessageController(
-					getCurrentState: () => ActiveSessionState | undefined,
-				): AgentSessionMessageController;
-			};
+			const internals = fromAny<
+				{
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					listPassiveRlmSubagents(): Promise<Array<{ entry: { childId: string } }>>;
+					createAgentMessageController(
+						getCurrentState: () => ActiveSessionState | undefined,
+					): AgentSessionMessageController;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 
 			expect((await internals.listPassiveRlmSubagents()).map(({ entry }) => entry.childId)).toContain(
@@ -853,25 +902,34 @@ describe("daemon mode helpers", () => {
 		try {
 			const createRuntime = vi.fn(async (options: Parameters<CreateAgentSessionRuntimeFactory>[0]) => ({
 				session: makeRuntimeSession(options.sessionManager),
-				extensionsResult: { extensions: [], errors: [], runtime: {} } as unknown as Awaited<
-					ReturnType<CreateAgentSessionRuntimeFactory>
-				>["extensionsResult"],
-				services: { cwd: options.cwd, agentDir: options.agentDir } as Awaited<
-					ReturnType<CreateAgentSessionRuntimeFactory>
-				>["services"],
+				extensionsResult: fromAny<
+					Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["extensionsResult"],
+					unknown
+				>({
+					extensions: [],
+					errors: [],
+					runtime: {},
+				}),
+				services: fromPartial<Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["services"]>({
+					cwd: options.cwd,
+					agentDir: options.agentDir,
+				}),
 				diagnostics: [],
 			}));
 			const daemon = new AgentDaemon(join(tempDir, "daemon.sock"), {
 				defaultSessionConfig: { agentDir: tempDir, cwd: tempDir, sessionDir: join(tempDir, "sessions") },
 				createRuntime,
 			});
-			const internals = daemon as unknown as {
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createRlmSubagentRuntime(
-					parentState: ActiveSessionState,
-					options: CreateRlmSubagentRuntimeOptions,
-				): Promise<ActiveSessionState["runtime"]>;
-			};
+			const internals = fromAny<
+				{
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createRlmSubagentRuntime(
+						parentState: ActiveSessionState,
+						options: CreateRlmSubagentRuntimeOptions,
+					): Promise<ActiveSessionState["runtime"]>;
+				},
+				unknown
+			>(daemon);
 			const parentState = await internals.createRuntime({ type: "create", noSession: true });
 			const child = await internals.createRlmSubagentRuntime(parentState, {
 				parentSession: parentState.runtime.session,
@@ -879,7 +937,7 @@ describe("daemon mode helpers", () => {
 				prompt: "persist depth",
 				sessionName: "depth-child",
 				sessionDir: join(tempDir, "child"),
-				model: {} as Model<Api>,
+				model: fromPartial<Model<Api>>({}),
 				thinkingLevel: "off",
 				serviceTier: null,
 				scopedModels: [],
@@ -943,12 +1001,18 @@ describe("daemon mode helpers", () => {
 				}
 				return {
 					session,
-					extensionsResult: { extensions: [], errors: [], runtime: {} } as unknown as Awaited<
-						ReturnType<CreateAgentSessionRuntimeFactory>
-					>["extensionsResult"],
-					services: { cwd: options.cwd, agentDir: options.agentDir } as Awaited<
-						ReturnType<CreateAgentSessionRuntimeFactory>
-					>["services"],
+					extensionsResult: fromAny<
+						Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["extensionsResult"],
+						unknown
+					>({
+						extensions: [],
+						errors: [],
+						runtime: {},
+					}),
+					services: fromPartial<Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["services"]>({
+						cwd: options.cwd,
+						agentDir: options.agentDir,
+					}),
 					diagnostics: [],
 				};
 			});
@@ -956,16 +1020,19 @@ describe("daemon mode helpers", () => {
 				defaultSessionConfig: { agentDir: tempDir, cwd: tempDir, sessionDir },
 				createRuntime,
 			});
-			const internals = daemon as unknown as {
-				cronStore: AgentCronJobStore;
-				cronScheduler: { runDue(now: Date): Promise<number> };
-				sessions: Map<string, ActiveSessionState>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createRlmSubagentRuntime(
-					parentState: ActiveSessionState,
-					options: CreateRlmSubagentRuntimeOptions,
-				): Promise<ActiveSessionState["runtime"]>;
-			};
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					cronScheduler: { runDue(now: Date): Promise<number> };
+					sessions: Map<string, ActiveSessionState>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createRlmSubagentRuntime(
+						parentState: ActiveSessionState,
+						options: CreateRlmSubagentRuntimeOptions,
+					): Promise<ActiveSessionState["runtime"]>;
+				},
+				unknown
+			>(daemon);
 			const parentState = await internals.createRuntime({ type: "create", sessionPath: parentSessionFile });
 			const childRuntimePromise = internals.createRlmSubagentRuntime(parentState, {
 				parentSession: parentState.runtime.session,
@@ -973,7 +1040,7 @@ describe("daemon mode helpers", () => {
 				prompt: "initialize a heartbeat",
 				sessionName: "heartbeat-child",
 				sessionDir: childSessionDir,
-				model: {} as Model<Api>,
+				model: fromPartial<Model<Api>>({}),
 				thinkingLevel: "off",
 				serviceTier: null,
 				scopedModels: [],
@@ -1037,45 +1104,51 @@ describe("daemon mode helpers", () => {
 			},
 		});
 		const parentState = makeState("parent");
-		parentState.runtime = {
+		parentState.runtime = fromPartial<ActiveSessionState["runtime"]>({
 			...parentState.runtime,
 			session: {
 				sessionManager: { getSessionArtifactDir: () => undefined },
 			},
-		} as ActiveSessionState["runtime"];
+		});
 		const childState = makeState("child", parentState.activeSessionId);
 		const foreignChildState = makeState("foreign-child", "other-parent");
-		const childSession = {
+		const childSession = fromAny<ActiveSessionState["runtime"]["session"], unknown>({
 			disposeAsync: vi.fn(async () => {}),
-		} as unknown as ActiveSessionState["runtime"]["session"];
-		const foreignSession = {
+		});
+		const foreignSession = fromAny<ActiveSessionState["runtime"]["session"], unknown>({
 			disposeAsync: vi.fn(async () => {}),
-		} as unknown as ActiveSessionState["runtime"]["session"];
-		childState.runtime = {
+		});
+		childState.runtime = fromPartial<ActiveSessionState["runtime"]>({
 			...childState.runtime,
 			metadata: { ...childState.runtime.metadata, rlmChildId: "child-1" },
 			session: childSession,
-		} as ActiveSessionState["runtime"];
-		foreignChildState.runtime = {
+		});
+		foreignChildState.runtime = fromPartial<ActiveSessionState["runtime"]>({
 			...foreignChildState.runtime,
 			metadata: { ...foreignChildState.runtime.metadata, rlmChildId: "child-1" },
 			session: foreignSession,
-		} as ActiveSessionState["runtime"];
+		});
 		const closeSession = vi.fn(async () => {});
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			closeSession: typeof closeSession;
-			createSubagentRuntimeHost(parent: ActiveSessionState): {
-				deleteRlmSubagentRuntime(childId: string, session: ActiveSessionState["runtime"]["session"]): Promise<void>;
-			};
-		};
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				closeSession: typeof closeSession;
+				createSubagentRuntimeHost(parent: ActiveSessionState): {
+					deleteRlmSubagentRuntime(
+						childId: string,
+						session: ActiveSessionState["runtime"]["session"],
+					): Promise<void>;
+				};
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(childState.activeSessionId, childState);
 		internals.sessions.set(foreignChildState.activeSessionId, foreignChildState);
 		internals.closeSession = closeSession;
 
-		const staleParentReference = {
+		const staleParentReference = fromAny<ActiveSessionState["runtime"]["session"], unknown>({
 			disposeAsync: vi.fn(async () => {}),
-		} as unknown as ActiveSessionState["runtime"]["session"];
+		});
 		const host = internals.createSubagentRuntimeHost(parentState);
 		await host.deleteRlmSubagentRuntime("child-1", staleParentReference);
 
@@ -1085,9 +1158,9 @@ describe("daemon mode helpers", () => {
 		expect(childSession.disposeAsync).not.toHaveBeenCalled();
 		expect(staleParentReference.disposeAsync).toHaveBeenCalledOnce();
 
-		const missingSession = {
+		const missingSession = fromAny<ActiveSessionState["runtime"]["session"], unknown>({
 			disposeAsync: vi.fn(async () => {}),
-		} as unknown as ActiveSessionState["runtime"]["session"];
+		});
 		await host.deleteRlmSubagentRuntime("missing-child", missingSession);
 		expect(missingSession.disposeAsync).toHaveBeenCalledOnce();
 	});
@@ -1107,16 +1180,19 @@ describe("daemon mode helpers", () => {
 				childDisposeStarted: markDisposeStarted,
 				childDisposeGate: disposeGate,
 			});
-			const internals = fixture.daemon as unknown as {
-				cronStore: AgentCronJobStore;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createSubagentRuntimeHost(parent: ActiveSessionState): SubagentRuntimeHost;
-				passivateIdleChildren(threshold: number, now: number, limit: number): Promise<number>;
-			};
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createSubagentRuntimeHost(parent: ActiveSessionState): SubagentRuntimeHost;
+					passivateIdleChildren(threshold: number, now: number, limit: number): Promise<number>;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			const childState = await internals.createRuntime({ type: "create", sessionPath: fixture.childSessionFile });
-			(
-				parentState.runtime.session as unknown as { releaseRlmChildSession: ReturnType<typeof vi.fn> }
+			fromAny<{ releaseRlmChildSession: ReturnType<typeof vi.fn> }, unknown>(
+				parentState.runtime.session,
 			).releaseRlmChildSession = vi.fn(() => vi.fn());
 			const passivation = internals.passivateIdleChildren(90, Date.parse("2036-08-01T12:00:00Z"), 1);
 			await disposeStarted;
@@ -1160,27 +1236,30 @@ describe("daemon mode helpers", () => {
 				},
 			});
 			const parentState = makeState("parent");
-			parentState.runtime = {
+			parentState.runtime = fromPartial<ActiveSessionState["runtime"]>({
 				...parentState.runtime,
 				session: makeRuntimeSession(parentManager),
-			} as ActiveSessionState["runtime"];
+			});
 			const childState = makeState("child", parentState.activeSessionId);
-			childState.runtime = {
+			childState.runtime = fromAny<ActiveSessionState["runtime"], unknown>({
 				...childState.runtime,
 				metadata: { ...childState.runtime.metadata, rlmChildId: "child-1" },
 				session: { disposeAsync: vi.fn(async () => {}) },
-			} as unknown as ActiveSessionState["runtime"];
+			});
 			const closeSession = vi.fn(async () => {});
-			const internals = daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				closeSession: typeof closeSession;
-				createSubagentRuntimeHost(parent: ActiveSessionState): {
-					deleteRlmSubagentRuntime(
-						childId: string,
-						session: ActiveSessionState["runtime"]["session"],
-					): Promise<void>;
-				};
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					closeSession: typeof closeSession;
+					createSubagentRuntimeHost(parent: ActiveSessionState): {
+						deleteRlmSubagentRuntime(
+							childId: string,
+							session: ActiveSessionState["runtime"]["session"],
+						): Promise<void>;
+					};
+				},
+				unknown
+			>(daemon);
 			internals.sessions.set(childState.activeSessionId, childState);
 			internals.closeSession = closeSession;
 
@@ -1211,7 +1290,7 @@ describe("daemon mode helpers", () => {
 			[parentState, "session-parent"],
 			[childState, "session-child"],
 		] as const) {
-			state.runtime = {
+			state.runtime = fromAny<ActiveSessionState["runtime"], unknown>({
 				...state.runtime,
 				cwd: "/tmp",
 				session: {
@@ -1221,19 +1300,22 @@ describe("daemon mode helpers", () => {
 					isStreaming: false,
 					sessionActions: { queuedCount: 0, steering: [], followUps: [] },
 				},
-			} as unknown as ActiveSessionState["runtime"];
+			});
 		}
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			closingSessions: Map<string, { promise: Promise<void>; reason: "shutdown" }>;
-			createAgentMessageController(
-				getCurrentState: () => ActiveSessionState | undefined,
-			): AgentSessionMessageController;
-			getBoundSessionState(id: string): ActiveSessionState;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			agentMessageTargetLocks: Map<string, Promise<void>>;
-			promptWithAgentMessagePreparingGuard(state: ActiveSessionState, message: string): Promise<boolean>;
-		};
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				closingSessions: Map<string, { promise: Promise<void>; reason: "shutdown" }>;
+				createAgentMessageController(
+					getCurrentState: () => ActiveSessionState | undefined,
+				): AgentSessionMessageController;
+				getBoundSessionState(id: string): ActiveSessionState;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				agentMessageTargetLocks: Map<string, Promise<void>>;
+				promptWithAgentMessagePreparingGuard(state: ActiveSessionState, message: string): Promise<boolean>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(parentState.activeSessionId, parentState);
 		internals.sessions.set(childState.activeSessionId, childState);
 		internals.closingSessions.set(childState.activeSessionId, { promise: Promise.resolve(), reason: "shutdown" });
@@ -1281,7 +1363,7 @@ describe("daemon mode helpers", () => {
 		const dispose = vi.fn(async () => {
 			throw new Error("dispose failed");
 		});
-		state.runtime = {
+		state.runtime = fromAny<ActiveSessionState["runtime"], unknown>({
 			...state.runtime,
 			dispose,
 			session: {
@@ -1289,20 +1371,23 @@ describe("daemon mode helpers", () => {
 				sessionFile: undefined,
 				abort: vi.fn(() => new Promise<void>(() => {})),
 			},
-		} as unknown as ActiveSessionState["runtime"];
+		});
 		state.extensionUiRequests = new Map();
 		state.unsubscribe = vi.fn();
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			closingSessions: Map<string, { promise: Promise<void>; reason: "shutdown" }>;
-			closeSession(state: ActiveSessionState, reason: "killed", waitForAbort?: boolean): Promise<void>;
-			closeChildSessions: ReturnType<typeof vi.fn>;
-			isEmptyDraftContent: ReturnType<typeof vi.fn>;
-			abortBashForClose: ReturnType<typeof vi.fn>;
-			recordWorkerRecoveryState: ReturnType<typeof vi.fn>;
-			broadcastToSession: ReturnType<typeof vi.fn>;
-			cancelScheduledJobsForSession: ReturnType<typeof vi.fn>;
-		};
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				closingSessions: Map<string, { promise: Promise<void>; reason: "shutdown" }>;
+				closeSession(state: ActiveSessionState, reason: "killed", waitForAbort?: boolean): Promise<void>;
+				closeChildSessions: ReturnType<typeof vi.fn>;
+				isEmptyDraftContent: ReturnType<typeof vi.fn>;
+				abortBashForClose: ReturnType<typeof vi.fn>;
+				recordWorkerRecoveryState: ReturnType<typeof vi.fn>;
+				broadcastToSession: ReturnType<typeof vi.fn>;
+				cancelScheduledJobsForSession: ReturnType<typeof vi.fn>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(state.activeSessionId, state);
 		internals.closeChildSessions = vi.fn(async () => undefined);
 		internals.isEmptyDraftContent = vi.fn(() => true);
@@ -1327,7 +1412,7 @@ describe("daemon mode helpers", () => {
 			worker: { authenticationToken: "worker-token" },
 		});
 		const source = makeState("source");
-		source.runtime = {
+		source.runtime = fromAny<never, unknown>({
 			...source.runtime,
 			cwd: "/tmp",
 			session: {
@@ -1336,7 +1421,7 @@ describe("daemon mode helpers", () => {
 				isStreaming: false,
 				sessionActions: { queuedCount: 0, steering: [], followUps: [] },
 			},
-		} as never;
+		});
 		const remoteSelector = "remote is closing";
 		const receipt = {
 			id: "agentmsg-remote",
@@ -1348,20 +1433,23 @@ describe("daemon mode helpers", () => {
 			deliveryMode: "auto",
 		};
 		const sendRemoteAgentSessionMessage = vi.fn().mockResolvedValue(receipt);
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			remoteAgentPeers: Map<string, Record<string, unknown>>;
-			createAgentMessageListResult(
-				current: ActiveSessionState,
-			): Promise<{ agents: Array<{ activeSessionId: string }> }>;
-			sendRemoteAgentSessionMessage: typeof sendRemoteAgentSessionMessage;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState: ActiveSessionState;
-				origin: "agent";
-			}): Promise<unknown>;
-		};
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				remoteAgentPeers: Map<string, Record<string, unknown>>;
+				createAgentMessageListResult(
+					current: ActiveSessionState,
+				): Promise<{ agents: Array<{ activeSessionId: string }> }>;
+				sendRemoteAgentSessionMessage: typeof sendRemoteAgentSessionMessage;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState: ActiveSessionState;
+					origin: "agent";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(source.activeSessionId, source);
 		internals.remoteAgentPeers.set(remoteSelector, {
 			activeSessionId: remoteSelector,
@@ -1397,7 +1485,7 @@ describe("daemon mode helpers", () => {
 			worker: { authenticationToken: "worker-token" },
 		});
 		const source = makeState("source");
-		source.runtime = {
+		source.runtime = fromAny<never, unknown>({
 			...source.runtime,
 			cwd: "/tmp",
 			session: {
@@ -1406,20 +1494,23 @@ describe("daemon mode helpers", () => {
 				isStreaming: false,
 				sessionActions: { queuedCount: 0, steering: [], followUps: [] },
 			},
-		} as never;
+		});
 		const sendRemoteAgentSessionMessage = vi
 			.fn()
 			.mockRejectedValue(new Error("Unknown active session: deleted-child"));
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			sendRemoteAgentSessionMessage: typeof sendRemoteAgentSessionMessage;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState: ActiveSessionState;
-				origin: "agent";
-			}): Promise<unknown>;
-		};
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				sendRemoteAgentSessionMessage: typeof sendRemoteAgentSessionMessage;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState: ActiveSessionState;
+					origin: "agent";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(source.activeSessionId, source);
 		internals.sendRemoteAgentSessionMessage = sendRemoteAgentSessionMessage;
 
@@ -1444,16 +1535,19 @@ describe("daemon mode helpers", () => {
 		});
 		const source = makeState("source");
 		const sendRemoteAgentSessionMessage = vi.fn();
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			sendRemoteAgentSessionMessage: typeof sendRemoteAgentSessionMessage;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState: ActiveSessionState;
-				origin: "agent";
-			}): Promise<unknown>;
-		};
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				sendRemoteAgentSessionMessage: typeof sendRemoteAgentSessionMessage;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState: ActiveSessionState;
+					origin: "agent";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(source.activeSessionId, source);
 		internals.sendRemoteAgentSessionMessage = sendRemoteAgentSessionMessage;
 
@@ -1498,11 +1592,11 @@ describe("daemon mode helpers", () => {
 				buffer += chunk.toString();
 				const newline = buffer.indexOf("\n");
 				if (newline === -1) return;
-				const wire = JSON.parse(buffer.slice(0, newline)) as {
+				const wire = fromPartial<{
 					id: string;
 					command?: { type: string };
 					type: string;
-				};
+				}>(JSON.parse(buffer.slice(0, newline)));
 				const command = wire.command ?? wire;
 				socket.write(
 					`${JSON.stringify({
@@ -1526,15 +1620,16 @@ describe("daemon mode helpers", () => {
 				},
 				worker: { authenticationToken: "worker-token" },
 			});
-			const sendRemoteAgentSessionMessage = (
-				daemon as unknown as {
+			const sendRemoteAgentSessionMessage = fromAny<
+				{
 					sendRemoteAgentSessionMessage(
 						fromState: ActiveSessionState,
 						targetSelector: string,
 						message: string,
 					): Promise<unknown>;
-				}
-			).sendRemoteAgentSessionMessage.bind(daemon);
+				},
+				unknown
+			>(daemon).sendRemoteAgentSessionMessage.bind(daemon);
 
 			await expect(sendRemoteAgentSessionMessage(makeState("source"), "remote", "continue")).rejects.toThrow(
 				"Target session has too many pending messages",
@@ -1575,8 +1670,8 @@ describe("daemon mode helpers", () => {
 				buffered += chunk.toString("utf8");
 				const newline = buffered.indexOf("\n");
 				if (newline < 0 || receivedCommand) return;
-				const wire = JSON.parse(buffered.slice(0, newline)) as Record<string, unknown>;
-				receivedCommand = (wire.command as Record<string, unknown> | undefined) ?? wire;
+				const wire = fromPartial<Record<string, unknown>>(JSON.parse(buffered.slice(0, newline)));
+				receivedCommand = fromAny<Record<string, unknown> | undefined, unknown>(wire.command) ?? wire;
 				void responseGate.then(() => {
 					socket.write(
 						`${JSON.stringify({
@@ -1604,11 +1699,12 @@ describe("daemon mode helpers", () => {
 			const setSessionName = vi.fn((_name: string) => undefined);
 			const state = makeState("active");
 			Object.assign(state.runtime, { session: { setSessionName } });
-			const controller = (
-				daemon as unknown as {
+			const controller = fromAny<
+				{
 					createAgentMessageController(getCurrentState: () => ActiveSessionState): AgentSessionMessageController;
-				}
-			).createAgentMessageController(() => state);
+				},
+				unknown
+			>(daemon).createAgentMessageController(() => state);
 
 			const rename = controller.setSessionName?.("shared-root");
 			// Workers and supervisors ship in one process tree, so no capability gate is needed; the
@@ -1651,7 +1747,7 @@ describe("daemon mode helpers", () => {
 				buffered += chunk.toString("utf8");
 				const newline = buffered.indexOf("\n");
 				if (newline < 0 || requestCount > 0) return;
-				const command = JSON.parse(buffered.slice(0, newline)) as { id?: string };
+				const command = fromPartial<{ id?: string }>(JSON.parse(buffered.slice(0, newline)));
 				requestCount++;
 				socket.write(
 					`${JSON.stringify(failure(command.id, "send_message", new Error('Ambiguous session selector "duplicate"')))}\n`,
@@ -1670,13 +1766,16 @@ describe("daemon mode helpers", () => {
 				createRuntime: vi.fn(),
 			});
 			const source = makeState("source");
-			const internals = daemon as unknown as {
-				sendRemoteAgentSessionMessage(
-					fromState: ActiveSessionState,
-					targetSelector: string,
-					message: string,
-				): Promise<unknown>;
-			};
+			const internals = fromAny<
+				{
+					sendRemoteAgentSessionMessage(
+						fromState: ActiveSessionState,
+						targetSelector: string,
+						message: string,
+					): Promise<unknown>;
+				},
+				unknown
+			>(daemon);
 
 			await expect(internals.sendRemoteAgentSessionMessage(source, "duplicate", "hello")).rejects.toThrow(
 				'Ambiguous session selector "duplicate"',
@@ -1705,7 +1804,7 @@ describe("daemon mode helpers", () => {
 				return Promise.resolve();
 			},
 		);
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -1715,20 +1814,23 @@ describe("daemon mode helpers", () => {
 				sessionActions: { queuedCount: 0, steering: [], followUps: [] },
 				acceptAgentMessagePrompt,
 			},
-		} as never;
-		fromState.runtime = {
+		});
+		fromState.runtime = fromAny<never, unknown>({
 			...fromState.runtime,
 			session: { sessionId: "session-source", sessionName: "Source" },
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState?: ActiveSessionState;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState?: ActiveSessionState;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(fromState.activeSessionId, fromState);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
@@ -1755,7 +1857,7 @@ describe("daemon mode helpers", () => {
 		});
 		const targetState = makeState("target");
 		const queueAgentMessagePrompt = vi.fn(async () => true);
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -1768,11 +1870,14 @@ describe("daemon mode helpers", () => {
 				unfinishedActionCount: 0,
 				queueAgentMessagePrompt,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
 		const response = await internals.handleCommand(makeClient("legacy-client", targetState.activeSessionId), {
@@ -1800,12 +1905,12 @@ describe("daemon mode helpers", () => {
 		const fromState = makeState("source");
 		const targetA = makeState("target-a");
 		const targetB = makeState("target-b");
-		fromState.runtime = {
+		fromState.runtime = fromAny<never, unknown>({
 			...fromState.runtime,
 			session: { sessionId: "session-source", sessionName: "Source" },
-		} as never;
+		});
 		for (const targetState of [targetA, targetB]) {
-			targetState.runtime = {
+			targetState.runtime = fromAny<never, unknown>({
 				...targetState.runtime,
 				cwd: "/tmp",
 				session: {
@@ -1818,18 +1923,21 @@ describe("daemon mode helpers", () => {
 					clearQueue: vi.fn(() => ({ cleared: 0 })),
 					clearQueuedUserMessagesMatching: vi.fn(() => ({ steering: [], followUp: [] })),
 				},
-			} as never;
+			});
 		}
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState?: ActiveSessionState;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState?: ActiveSessionState;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(fromState.activeSessionId, fromState);
 		internals.sessions.set(targetA.activeSessionId, targetA);
 		internals.sessions.set(targetB.activeSessionId, targetB);
@@ -1890,7 +1998,7 @@ describe("daemon mode helpers", () => {
 			followUp: [],
 		}));
 		const clearQueue = vi.fn(() => ({ steering: ["user prompt"], followUp: ["heartbeat"] }));
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -1901,11 +2009,14 @@ describe("daemon mode helpers", () => {
 				clearQueuedUserMessagesMatching,
 				clearQueue,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
 		await internals.handleCommand(makeClient("client-1", targetState.activeSessionId), {
@@ -1936,7 +2047,7 @@ describe("daemon mode helpers", () => {
 			[firstState, firstClear],
 			[secondState, secondClear],
 		] as const) {
-			state.runtime = {
+			state.runtime = fromAny<never, unknown>({
 				...state.runtime,
 				cwd: "/tmp",
 				session: {
@@ -1946,13 +2057,16 @@ describe("daemon mode helpers", () => {
 					unfinishedActionCount: 1,
 					clearQueuedUserMessagesMatching,
 				},
-			} as never;
+			});
 		}
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			agentMessageRateLimiter: { clear: () => void };
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-		};
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				agentMessageRateLimiter: { clear: () => void };
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.agentMessageRateLimiter.clear = vi.fn();
 		internals.sessions.set(firstState.activeSessionId, firstState);
 		internals.sessions.set(secondState.activeSessionId, secondState);
@@ -1988,7 +2102,7 @@ describe("daemon mode helpers", () => {
 			[blockedState, blockedClear],
 			[readyState, readyClear],
 		] as const) {
-			state.runtime = {
+			state.runtime = fromAny<never, unknown>({
 				...state.runtime,
 				cwd: "/tmp",
 				session: {
@@ -1998,12 +2112,15 @@ describe("daemon mode helpers", () => {
 					unfinishedActionCount: 1,
 					clearQueuedUserMessagesMatching,
 				},
-			} as never;
+			});
 		}
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-		};
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(blockedState.activeSessionId, blockedState);
 		internals.sessions.set(readyState.activeSessionId, readyState);
 
@@ -2029,11 +2146,11 @@ describe("daemon mode helpers", () => {
 		});
 		const fromState = makeState("source");
 		const targetState = makeState("target");
-		fromState.runtime = {
+		fromState.runtime = fromAny<never, unknown>({
 			...fromState.runtime,
 			session: { sessionId: "session-source", sessionName: "Source" },
-		} as never;
-		targetState.runtime = {
+		});
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -2045,16 +2162,19 @@ describe("daemon mode helpers", () => {
 					throw new Error("missing model");
 				}),
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState?: ActiveSessionState;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState?: ActiveSessionState;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(fromState.activeSessionId, fromState);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
@@ -2087,10 +2207,10 @@ describe("daemon mode helpers", () => {
 		});
 		const fromState = makeState("source");
 		const targetState = makeState("target");
-		fromState.runtime = {
+		fromState.runtime = fromAny<never, unknown>({
 			...fromState.runtime,
 			session: { sessionId: "session-source", sessionName: "Source" },
-		} as never;
+		});
 		let rejectQueuedMessage: (error: Error) => void = () => {};
 		const queueAgentMessagePrompt = vi.fn(
 			(_message: string, _streamingBehavior: "steer" | "followUp") =>
@@ -2098,7 +2218,7 @@ describe("daemon mode helpers", () => {
 					rejectQueuedMessage = reject;
 				}),
 		);
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -2111,17 +2231,20 @@ describe("daemon mode helpers", () => {
 				queueAgentMessagePrompt,
 				prompt: vi.fn(async () => {}),
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState?: ActiveSessionState;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState?: ActiveSessionState;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(fromState.activeSessionId, fromState);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
@@ -2167,7 +2290,7 @@ describe("daemon mode helpers", () => {
 			pending += 1;
 			return true;
 		});
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -2179,24 +2302,27 @@ describe("daemon mode helpers", () => {
 				},
 				queueAgentMessagePrompt,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState?: ActiveSessionState;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState?: ActiveSessionState;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 		// Distinct senders so the per-sender rate limit stays out of the way.
 		const senders = Array.from({ length: 12 }, (_, i) => {
 			const fromState = makeState(`source-${i}`);
-			fromState.runtime = {
+			fromState.runtime = fromAny<never, unknown>({
 				...fromState.runtime,
 				session: { sessionId: `session-source-${i}`, sessionName: `Source ${i}` },
-			} as never;
+			});
 			internals.sessions.set(fromState.activeSessionId, fromState);
 			return fromState;
 		});
@@ -2233,15 +2359,15 @@ describe("daemon mode helpers", () => {
 		});
 		const fromState = makeState("source");
 		const targetState = makeState("target");
-		fromState.runtime = {
+		fromState.runtime = fromAny<never, unknown>({
 			...fromState.runtime,
 			session: { sessionId: "session-source", sessionName: "Source" },
-		} as never;
+		});
 		const queueAgentMessagePrompt = vi.fn(async (_message: string, _streamingBehavior: "steer" | "followUp") => true);
 		// A real streaming session only resolves this once its turn progresses;
 		// the send must not depend on it.
 		const waitForAgentMessagePromptDelivery = vi.fn(() => new Promise<void>(() => {}));
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -2252,16 +2378,19 @@ describe("daemon mode helpers", () => {
 				queueAgentMessagePrompt,
 				waitForAgentMessagePromptDelivery,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState?: ActiveSessionState;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState?: ActiveSessionState;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(fromState.activeSessionId, fromState);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
@@ -2289,7 +2418,7 @@ describe("daemon mode helpers", () => {
 		});
 		const makeBusyState = (name: string) => {
 			const state = makeState(name);
-			state.runtime = {
+			state.runtime = fromAny<never, unknown>({
 				...state.runtime,
 				cwd: "/tmp",
 				session: {
@@ -2301,20 +2430,23 @@ describe("daemon mode helpers", () => {
 					// Neither turn ends while both sessions block inside their own send.
 					waitForAgentMessagePromptDelivery: vi.fn(() => new Promise<void>(() => {})),
 				},
-			} as never;
+			});
 			return state;
 		};
 		const stateA = makeBusyState("alpha");
 		const stateB = makeBusyState("beta");
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState?: ActiveSessionState;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState?: ActiveSessionState;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(stateA.activeSessionId, stateA);
 		internals.sessions.set(stateB.activeSessionId, stateB);
 
@@ -2346,12 +2478,12 @@ describe("daemon mode helpers", () => {
 		});
 		const fromState = makeState("source");
 		const targetState = makeState("target");
-		fromState.runtime = {
+		fromState.runtime = fromAny<never, unknown>({
 			...fromState.runtime,
 			session: { sessionId: "session-source", sessionName: "Source" },
-		} as never;
+		});
 		const acceptAgentMessagePrompt = vi.fn(async () => {});
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -2363,16 +2495,19 @@ describe("daemon mode helpers", () => {
 				acceptAgentMessagePrompt,
 				queueAgentMessagePrompt: vi.fn(async () => true),
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState?: ActiveSessionState;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState?: ActiveSessionState;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(fromState.activeSessionId, fromState);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
@@ -2395,7 +2530,7 @@ describe("daemon mode helpers", () => {
 			},
 		});
 		const targetState = makeState("target");
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -2405,13 +2540,16 @@ describe("daemon mode helpers", () => {
 				unfinishedActionCount: 3,
 				hasAcceptedPromptInFlight: true,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			createAgentMessageListResult(current: ActiveSessionState): Promise<{
-				agents: Array<{ unfinishedActionCount: number }>;
-			}>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				createAgentMessageListResult(current: ActiveSessionState): Promise<{
+					agents: Array<{ unfinishedActionCount: number }>;
+				}>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
 		expect((await internals.createAgentMessageListResult(targetState)).agents[0]?.unfinishedActionCount).toBe(3);
@@ -2425,7 +2563,7 @@ describe("daemon mode helpers", () => {
 			},
 		});
 		const targetState = makeState("target");
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			diagnostics: [],
@@ -2449,18 +2587,23 @@ describe("daemon mode helpers", () => {
 				state: { pendingToolCalls: new Set(), streamingMessage: undefined },
 				hasRunningRlmChildren: () => false,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			createAgentObserveListResult(current: ActiveSessionState): Promise<{ current: { status: string } }>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				createAgentObserveListResult(current: ActiveSessionState): Promise<{ current: { status: string } }>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
 		expect((await internals.createAgentObserveListResult(targetState)).current.status).toBe("busy");
 
-		(targetState.runtime.session as { isCompacting: boolean; unfinishedActionCount: number }).isCompacting = true;
-		(targetState.runtime.session as { isCompacting: boolean; unfinishedActionCount: number }).unfinishedActionCount =
-			0;
+		fromPartial<{ isCompacting: boolean; unfinishedActionCount: number }>(targetState.runtime.session).isCompacting =
+			true;
+		fromPartial<{ isCompacting: boolean; unfinishedActionCount: number }>(
+			targetState.runtime.session,
+		).unfinishedActionCount = 0;
 
 		expect((await internals.createAgentObserveListResult(targetState)).current.status).toBe("compacting");
 	});
@@ -2478,12 +2621,12 @@ describe("daemon mode helpers", () => {
 			});
 			const parent = makeState("parent");
 			const child = makeState("child", "parent");
-			parent.runtime = {
+			parent.runtime = fromAny<never, unknown>({
 				...parent.runtime,
 				metadata: { ...parent.runtime.metadata, kind: "top-level" },
 				session: { sessionId: "session-parent", sessionFile: join(realDir, "parent.jsonl") },
-			} as never;
-			child.runtime = {
+			});
+			child.runtime = fromAny<never, unknown>({
 				...child.runtime,
 				metadata: {
 					...child.runtime.metadata,
@@ -2491,10 +2634,13 @@ describe("daemon mode helpers", () => {
 					parentSessionFile: join(aliasDir, "parent.jsonl"),
 				},
 				session: { sessionId: "session-child", sessionFile: join(realDir, "child.jsonl") },
-			} as never;
-			const internals = daemon as unknown as {
-				assertAgentFamilyReachable(current: ActiveSessionState, target: ActiveSessionState): void;
-			};
+			});
+			const internals = fromAny<
+				{
+					assertAgentFamilyReachable(current: ActiveSessionState, target: ActiveSessionState): void;
+				},
+				unknown
+			>(daemon);
 
 			expect(() => internals.assertAgentFamilyReachable(parent, child)).not.toThrow();
 		} finally {
@@ -2512,7 +2658,7 @@ describe("daemon mode helpers", () => {
 			const parent = makeState("parent");
 			const child = makeState("reopened-child");
 			const otherRoot = makeState("other-root");
-			parent.runtime = {
+			parent.runtime = fromAny<never, unknown>({
 				...parent.runtime,
 				metadata: { kind: "top-level", createdAt: 1 },
 				session: {
@@ -2520,8 +2666,8 @@ describe("daemon mode helpers", () => {
 					sessionFile: join(tempDir, "parent.jsonl"),
 					sessionManager: { getHeader: () => ({ parentSession: undefined }) },
 				},
-			} as never;
-			child.runtime = {
+			});
+			child.runtime = fromAny<never, unknown>({
 				...child.runtime,
 				metadata: { kind: "top-level", createdAt: 1 },
 				session: {
@@ -2530,8 +2676,8 @@ describe("daemon mode helpers", () => {
 					rlmDepth: 1,
 					sessionManager: { getHeader: () => ({ parentSession: "../parent.jsonl" }) },
 				},
-			} as never;
-			otherRoot.runtime = {
+			});
+			otherRoot.runtime = fromAny<never, unknown>({
 				...otherRoot.runtime,
 				metadata: { kind: "top-level", createdAt: 1 },
 				session: {
@@ -2539,10 +2685,13 @@ describe("daemon mode helpers", () => {
 					sessionFile: join(tempDir, "other.jsonl"),
 					sessionManager: { getHeader: () => ({ parentSession: undefined }) },
 				},
-			} as never;
-			const internals = daemon as unknown as {
-				assertAgentFamilyReachable(current: ActiveSessionState, target: ActiveSessionState): void;
-			};
+			});
+			const internals = fromAny<
+				{
+					assertAgentFamilyReachable(current: ActiveSessionState, target: ActiveSessionState): void;
+				},
+				unknown
+			>(daemon);
 
 			expect(() => internals.assertAgentFamilyReachable(child, parent)).not.toThrow();
 			expect(() => internals.assertAgentFamilyReachable(child, otherRoot)).toThrow(AGENT_FAMILY_REACH_ERROR);
@@ -2559,17 +2708,17 @@ describe("daemon mode helpers", () => {
 		const originalParent = makeState("original-parent");
 		const persistedParent = makeState("persisted-parent");
 		const child = makeState("child");
-		originalParent.runtime = {
+		originalParent.runtime = fromAny<never, unknown>({
 			...originalParent.runtime,
 			metadata: { kind: "top-level", createdAt: 1 },
 			session: { sessionId: "session-original", sessionFile: "/tmp/original-parent.jsonl" },
-		} as never;
-		persistedParent.runtime = {
+		});
+		persistedParent.runtime = fromAny<never, unknown>({
 			...persistedParent.runtime,
 			metadata: { kind: "top-level", createdAt: 1 },
 			session: { sessionId: "session-persisted", sessionFile: "/tmp/persisted-parent.jsonl" },
-		} as never;
-		child.runtime = {
+		});
+		child.runtime = fromAny<never, unknown>({
 			...child.runtime,
 			metadata: {
 				kind: "subagent",
@@ -2583,10 +2732,13 @@ describe("daemon mode helpers", () => {
 				rlmDepth: 1,
 				sessionManager: { getHeader: () => ({ parentSession: "/tmp/persisted-parent.jsonl" }) },
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			assertAgentFamilyReachable(current: ActiveSessionState, target: ActiveSessionState): void;
-		};
+		});
+		const internals = fromAny<
+			{
+				assertAgentFamilyReachable(current: ActiveSessionState, target: ActiveSessionState): void;
+			},
+			unknown
+		>(daemon);
 
 		expect(() => internals.assertAgentFamilyReachable(child, persistedParent)).not.toThrow();
 		expect(() => internals.assertAgentFamilyReachable(child, originalParent)).toThrow(AGENT_FAMILY_REACH_ERROR);
@@ -2599,7 +2751,7 @@ describe("daemon mode helpers", () => {
 		});
 		const parent = makeState("parent");
 		const child = makeState("reopened-child");
-		parent.runtime = {
+		parent.runtime = fromAny<never, unknown>({
 			...parent.runtime,
 			metadata: { kind: "top-level", createdAt: 1 },
 			session: {
@@ -2607,8 +2759,8 @@ describe("daemon mode helpers", () => {
 				sessionFile: "/tmp/parent.jsonl",
 				sessionManager: { getHeader: () => ({ parentSession: undefined }) },
 			},
-		} as never;
-		child.runtime = {
+		});
+		child.runtime = fromAny<never, unknown>({
 			...child.runtime,
 			metadata: { kind: "top-level", createdAt: 1 },
 			session: {
@@ -2617,10 +2769,13 @@ describe("daemon mode helpers", () => {
 				rlmDepth: 1,
 				sessionManager: { getHeader: () => ({ parentSession: "../parent.jsonl" }) },
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			agentMessageRelationship(from: ActiveSessionState, target: ActiveSessionState): string | undefined;
-		};
+		});
+		const internals = fromAny<
+			{
+				agentMessageRelationship(from: ActiveSessionState, target: ActiveSessionState): string | undefined;
+			},
+			unknown
+		>(daemon);
 
 		expect(internals.agentMessageRelationship(child, parent)).toBe("child");
 		expect(internals.agentMessageRelationship(parent, child)).toBe("parent");
@@ -2643,7 +2798,7 @@ describe("daemon mode helpers", () => {
 		const sessionIds = new Map(states.map((state) => [state.activeSessionId, `session-${state.activeSessionId}`]));
 		for (const state of states) {
 			const parentActiveSessionId = state.runtime.metadata.parentActiveSessionId;
-			state.runtime = {
+			state.runtime = fromAny<never, unknown>({
 				...state.runtime,
 				cwd: "/tmp",
 				diagnostics: [],
@@ -2685,13 +2840,16 @@ describe("daemon mode helpers", () => {
 					hasRunningRlmChildren: () => false,
 					getSessionActionSnapshot: () => ({ queuedCount: 0, steering: [], followUps: [] }),
 				},
-			} as never;
+			});
 		}
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			createAgentMessageController(getCurrentState: () => ActiveSessionState): AgentSessionMessageController;
-			createAgentObserveController(getCurrentState: () => ActiveSessionState): AgentObserveController;
-		};
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				createAgentMessageController(getCurrentState: () => ActiveSessionState): AgentSessionMessageController;
+				createAgentObserveController(getCurrentState: () => ActiveSessionState): AgentObserveController;
+			},
+			unknown
+		>(daemon);
 		for (const state of states) internals.sessions.set(state.activeSessionId, state);
 		const child = states[1]!;
 		const messaging = internals.createAgentMessageController(() => child);
@@ -2723,13 +2881,16 @@ describe("daemon mode helpers", () => {
 		const familyHelper = makeAgentFamilyState("family-helper", "helper", observer.state);
 		const otherRoot = makeAgentFamilyState("other-root", "other-root");
 		const unrelatedHelper = makeAgentFamilyState("unrelated-helper", "helper", otherRoot.state);
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			createAgentMessageController(
-				getCurrentState: () => ActiveSessionState | undefined,
-			): AgentSessionMessageController;
-			createAgentObserveController(getCurrentState: () => ActiveSessionState | undefined): AgentObserveController;
-		};
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				createAgentMessageController(
+					getCurrentState: () => ActiveSessionState | undefined,
+				): AgentSessionMessageController;
+				createAgentObserveController(getCurrentState: () => ActiveSessionState | undefined): AgentObserveController;
+			},
+			unknown
+		>(daemon);
 		for (const fixture of [observer, familyHelper, otherRoot, unrelatedHelper]) {
 			internals.sessions.set(fixture.state.activeSessionId, fixture.state);
 		}
@@ -2758,13 +2919,16 @@ describe("daemon mode helpers", () => {
 		const parent = makeAgentFamilyState("parent", "parent");
 		const observer = makeAgentFamilyState("observer", "observer", parent.state);
 		const sibling = makeAgentFamilyState("sibling", parent.state.runtime.session.sessionId, parent.state);
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			createAgentMessageController(
-				getCurrentState: () => ActiveSessionState | undefined,
-			): AgentSessionMessageController;
-			createAgentObserveController(getCurrentState: () => ActiveSessionState | undefined): AgentObserveController;
-		};
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				createAgentMessageController(
+					getCurrentState: () => ActiveSessionState | undefined,
+				): AgentSessionMessageController;
+				createAgentObserveController(getCurrentState: () => ActiveSessionState | undefined): AgentObserveController;
+			},
+			unknown
+		>(daemon);
 		for (const fixture of [parent, observer, sibling]) {
 			internals.sessions.set(fixture.state.activeSessionId, fixture.state);
 		}
@@ -2790,13 +2954,16 @@ describe("daemon mode helpers", () => {
 		const parent = makeAgentFamilyState("parent", "helper");
 		const observer = makeAgentFamilyState("observer", "observer", parent.state);
 		const sibling = makeAgentFamilyState("sibling", "helper", parent.state);
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			createAgentMessageController(
-				getCurrentState: () => ActiveSessionState | undefined,
-			): AgentSessionMessageController;
-			createAgentObserveController(getCurrentState: () => ActiveSessionState | undefined): AgentObserveController;
-		};
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				createAgentMessageController(
+					getCurrentState: () => ActiveSessionState | undefined,
+				): AgentSessionMessageController;
+				createAgentObserveController(getCurrentState: () => ActiveSessionState | undefined): AgentObserveController;
+			},
+			unknown
+		>(daemon);
 		for (const fixture of [parent, observer, sibling]) {
 			internals.sessions.set(fixture.state.activeSessionId, fixture.state);
 		}
@@ -2823,10 +2990,10 @@ describe("daemon mode helpers", () => {
 		});
 		const fromState = makeState("source");
 		const targetState = makeState("target");
-		fromState.runtime = {
+		fromState.runtime = fromAny<never, unknown>({
 			...fromState.runtime,
 			session: { sessionId: "session-source", sessionName: "Source" },
-		} as never;
+		});
 		const promptResolves: Array<() => void> = [];
 		const prompt = vi.fn(
 			(_message: string, _options?: { streamingBehavior?: "steer" | "followUp" }) =>
@@ -2835,7 +3002,7 @@ describe("daemon mode helpers", () => {
 				}),
 		);
 		const followUp = vi.fn(async () => true);
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -2846,16 +3013,19 @@ describe("daemon mode helpers", () => {
 				prompt,
 				followUp,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState?: ActiveSessionState;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState?: ActiveSessionState;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(fromState.activeSessionId, fromState);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
@@ -2896,14 +3066,14 @@ describe("daemon mode helpers", () => {
 		});
 		const fromState = makeState("source");
 		const targetState = makeState("target");
-		fromState.runtime = {
+		fromState.runtime = fromAny<never, unknown>({
 			...fromState.runtime,
 			session: { sessionId: "session-source", sessionName: "Source" },
-		} as never;
+		});
 		const prompt = vi.fn(async (_message: string, _options?: { streamingBehavior?: "steer" | "followUp" }) => {});
 		const followUp = vi.fn(async () => true);
 		const queueAgentMessagePrompt = vi.fn(async (_message: string, _streamingBehavior: "steer" | "followUp") => true);
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -2916,16 +3086,19 @@ describe("daemon mode helpers", () => {
 				followUp,
 				queueAgentMessagePrompt,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState?: ActiveSessionState;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState?: ActiveSessionState;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(fromState.activeSessionId, fromState);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
@@ -2953,14 +3126,14 @@ describe("daemon mode helpers", () => {
 		});
 		const fromState = makeState("source");
 		const targetState = makeState("target");
-		fromState.runtime = {
+		fromState.runtime = fromAny<never, unknown>({
 			...fromState.runtime,
 			session: { sessionId: "session-source", sessionName: "Source" },
-		} as never;
+		});
 		const prompt = vi.fn(async (_message: string, _options?: { streamingBehavior?: "steer" | "followUp" }) => {});
 		const followUp = vi.fn(async () => true);
 		const queueAgentMessagePrompt = vi.fn(async (_message: string, _streamingBehavior: "steer" | "followUp") => true);
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -2972,16 +3145,19 @@ describe("daemon mode helpers", () => {
 				followUp,
 				queueAgentMessagePrompt,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState?: ActiveSessionState;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState?: ActiveSessionState;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(fromState.activeSessionId, fromState);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
@@ -3009,13 +3185,13 @@ describe("daemon mode helpers", () => {
 		});
 		const fromState = makeState("source");
 		const targetState = makeState("target");
-		fromState.runtime = {
+		fromState.runtime = fromAny<never, unknown>({
 			...fromState.runtime,
 			session: { sessionId: "session-source", sessionName: "Source" },
-		} as never;
+		});
 		const prompt = vi.fn(async (_message: string, _options?: { streamingBehavior?: "steer" | "followUp" }) => {});
 		const queueAgentMessagePrompt = vi.fn(async (_message: string, _streamingBehavior: "steer" | "followUp") => true);
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -3027,16 +3203,19 @@ describe("daemon mode helpers", () => {
 				prompt,
 				queueAgentMessagePrompt,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState?: ActiveSessionState;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState?: ActiveSessionState;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(fromState.activeSessionId, fromState);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
@@ -3063,13 +3242,13 @@ describe("daemon mode helpers", () => {
 		});
 		const fromState = makeState("source");
 		const targetState = makeState("target");
-		fromState.runtime = {
+		fromState.runtime = fromAny<never, unknown>({
 			...fromState.runtime,
 			session: { sessionId: "session-source", sessionName: "Source" },
-		} as never;
+		});
 		const acceptAgentMessagePrompt = vi.fn(async () => {});
 		const queueAgentMessagePrompt = vi.fn(async (_message: string, _streamingBehavior: "steer" | "followUp") => true);
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -3081,16 +3260,19 @@ describe("daemon mode helpers", () => {
 				acceptAgentMessagePrompt,
 				queueAgentMessagePrompt,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState?: ActiveSessionState;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState?: ActiveSessionState;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(fromState.activeSessionId, fromState);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
@@ -3117,10 +3299,10 @@ describe("daemon mode helpers", () => {
 		});
 		const fromState = makeState("source");
 		const targetState = makeState("target");
-		fromState.runtime = {
+		fromState.runtime = fromAny<never, unknown>({
 			...fromState.runtime,
 			session: { sessionId: "session-source", sessionName: "Source" },
-		} as never;
+		});
 		let resolveQueuedDelivery: () => void = () => {};
 		const waitForAgentMessagePromptDelivery = vi.fn(
 			() =>
@@ -3129,7 +3311,7 @@ describe("daemon mode helpers", () => {
 				}),
 		);
 		const queueAgentMessagePrompt = vi.fn(async () => true);
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -3140,16 +3322,19 @@ describe("daemon mode helpers", () => {
 				queueAgentMessagePrompt,
 				waitForAgentMessagePromptDelivery,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState?: ActiveSessionState;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState?: ActiveSessionState;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(fromState.activeSessionId, fromState);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
@@ -3176,10 +3361,10 @@ describe("daemon mode helpers", () => {
 		});
 		const fromState = makeState("source");
 		const targetState = makeState("target");
-		fromState.runtime = {
+		fromState.runtime = fromAny<never, unknown>({
 			...fromState.runtime,
 			session: { sessionId: "session-source", sessionName: "Source" },
-		} as never;
+		});
 		const promptResolves: Array<() => void> = [];
 		const prompt = vi.fn(
 			(_message: string, _options?: { streamingBehavior?: "steer" | "followUp" }) =>
@@ -3189,7 +3374,7 @@ describe("daemon mode helpers", () => {
 		);
 		const followUp = vi.fn(async () => true);
 		const queueAgentMessagePrompt = vi.fn(async (_message: string, _streamingBehavior: "steer" | "followUp") => true);
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -3201,16 +3386,19 @@ describe("daemon mode helpers", () => {
 				followUp,
 				queueAgentMessagePrompt,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState?: ActiveSessionState;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState?: ActiveSessionState;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(fromState.activeSessionId, fromState);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
@@ -3230,7 +3418,7 @@ describe("daemon mode helpers", () => {
 		await Promise.resolve();
 
 		expect(prompt).toHaveBeenCalledTimes(1);
-		(targetState.runtime.session as { isStreaming: boolean }).isStreaming = true;
+		fromPartial<{ isStreaming: boolean }>(targetState.runtime.session).isStreaming = true;
 		promptResolves[0]?.();
 		await expect(first).resolves.toMatchObject({ message: "first" });
 		await Promise.resolve();
@@ -3252,12 +3440,12 @@ describe("daemon mode helpers", () => {
 		});
 		const fromState = makeState("source");
 		const targetState = makeState("target");
-		fromState.runtime = {
+		fromState.runtime = fromAny<never, unknown>({
 			...fromState.runtime,
 			session: { sessionId: "session-source", sessionName: "Source" },
-		} as never;
+		});
 		const queueAgentMessagePrompt = vi.fn(async () => false);
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -3267,16 +3455,19 @@ describe("daemon mode helpers", () => {
 				unfinishedActionCount: 1,
 				queueAgentMessagePrompt,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState?: ActiveSessionState;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState?: ActiveSessionState;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(fromState.activeSessionId, fromState);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
@@ -3300,17 +3491,17 @@ describe("daemon mode helpers", () => {
 		});
 		const fromState = makeState("source");
 		const targetState = makeState("target");
-		fromState.runtime = {
+		fromState.runtime = fromAny<never, unknown>({
 			...fromState.runtime,
 			session: { sessionId: "session-source", sessionName: "Source" },
-		} as never;
+		});
 		const acceptAgentMessagePrompt = vi.fn(
 			(_message: string, options?: { preflightResult?: (didSucceed: boolean) => void }) => {
 				options?.preflightResult?.(false);
 				return Promise.resolve();
 			},
 		);
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -3320,16 +3511,19 @@ describe("daemon mode helpers", () => {
 				unfinishedActionCount: 0,
 				acceptAgentMessagePrompt,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState?: ActiveSessionState;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState?: ActiveSessionState;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(fromState.activeSessionId, fromState);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
@@ -3361,7 +3555,7 @@ describe("daemon mode helpers", () => {
 		});
 		const acceptAgentMessagePrompt = vi.fn(async () => {});
 		const queueAgentMessagePrompt = vi.fn(async (_message: string, _streamingBehavior: "steer" | "followUp") => true);
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -3373,19 +3567,22 @@ describe("daemon mode helpers", () => {
 				acceptAgentMessagePrompt,
 				queueAgentMessagePrompt,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown> | undefined;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown> | undefined;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 		const promptClient = makeClient("client-1", targetState.activeSessionId);
-		(promptClient.socket as unknown as { write: ReturnType<typeof vi.fn> }).write = vi.fn();
+		fromAny<{ write: ReturnType<typeof vi.fn> }, unknown>(promptClient.socket).write = vi.fn();
 
 		internals.handleCommand(promptClient, {
 			id: "command-1",
@@ -3430,7 +3627,7 @@ describe("daemon mode helpers", () => {
 		const prompt = vi.fn(async (_message: string, options?: { preflightResult?: (didSucceed: boolean) => void }) => {
 			options?.preflightResult?.(true);
 		});
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -3441,16 +3638,19 @@ describe("daemon mode helpers", () => {
 				prompt,
 				acceptAgentMessagePrompt,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown> | undefined;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown> | undefined;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
 		const send = internals.sendAgentSessionMessage({
@@ -3463,7 +3663,7 @@ describe("daemon mode helpers", () => {
 		expect(acceptAgentMessagePrompt).toHaveBeenCalledOnce();
 
 		const promptClient = makeClient("client-1", targetState.activeSessionId);
-		(promptClient.socket as unknown as { write: ReturnType<typeof vi.fn> }).write = vi.fn();
+		fromAny<{ write: ReturnType<typeof vi.fn> }, unknown>(promptClient.socket).write = vi.fn();
 		internals.handleCommand(promptClient, {
 			id: "command-1",
 			type: "prompt",
@@ -3501,7 +3701,7 @@ describe("daemon mode helpers", () => {
 		const promptUntilAccepted = vi.fn(async () => {});
 		const acceptAgentMessagePrompt = vi.fn(async () => {});
 		const queueAgentMessagePrompt = vi.fn(async (_message: string, _streamingBehavior: "steer" | "followUp") => true);
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -3515,16 +3715,19 @@ describe("daemon mode helpers", () => {
 				acceptAgentMessagePrompt,
 				queueAgentMessagePrompt,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			runCronJob(job: AgentCronJob): Promise<"skipped" | undefined>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				runCronJob(job: AgentCronJob): Promise<"skipped" | undefined>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
 		const cronRun = internals.runCronJob(
@@ -3564,7 +3767,7 @@ describe("daemon mode helpers", () => {
 		);
 		const acceptAgentMessagePrompt = vi.fn(async () => {});
 		const queueAgentMessagePrompt = vi.fn(async (_message: string, _streamingBehavior: "steer" | "followUp") => true);
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -3576,19 +3779,22 @@ describe("daemon mode helpers", () => {
 				acceptAgentMessagePrompt,
 				queueAgentMessagePrompt,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown> | undefined;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown> | undefined;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 		const promptClient = makeClient("client-1", targetState.activeSessionId);
-		(promptClient.socket as unknown as { write: ReturnType<typeof vi.fn> }).write = vi.fn();
+		fromAny<{ write: ReturnType<typeof vi.fn> }, unknown>(promptClient.socket).write = vi.fn();
 
 		internals.handleCommand(promptClient, {
 			id: "command-1",
@@ -3632,10 +3838,10 @@ describe("daemon mode helpers", () => {
 		});
 		const fromState = makeState("source");
 		const targetState = makeState("target");
-		fromState.runtime = {
+		fromState.runtime = fromAny<never, unknown>({
 			...fromState.runtime,
 			session: { sessionId: "session-source", sessionName: "Source" },
-		} as never;
+		});
 		let resolveFirstPrompt: () => void = () => {};
 		const acceptAgentMessagePrompt = vi.fn(
 			() =>
@@ -3644,7 +3850,7 @@ describe("daemon mode helpers", () => {
 				}),
 		);
 		const followUp = vi.fn(async () => true);
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -3655,16 +3861,19 @@ describe("daemon mode helpers", () => {
 				acceptAgentMessagePrompt,
 				followUp,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState?: ActiveSessionState;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState?: ActiveSessionState;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(fromState.activeSessionId, fromState);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
@@ -3682,7 +3891,7 @@ describe("daemon mode helpers", () => {
 		});
 		await Promise.resolve();
 		await Promise.resolve();
-		(targetState.runtime.session as { unfinishedActionCount: number }).unfinishedActionCount = 20;
+		fromPartial<{ unfinishedActionCount: number }>(targetState.runtime.session).unfinishedActionCount = 20;
 
 		resolveFirstPrompt();
 		await expect(first).resolves.toMatchObject({ message: "first" });
@@ -3698,7 +3907,7 @@ describe("daemon mode helpers", () => {
 			},
 		});
 		const targetState = makeState("target");
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -3708,11 +3917,14 @@ describe("daemon mode helpers", () => {
 				unfinishedActionCount: 0,
 				prompt: vi.fn(async () => {}),
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
 		for (let i = 0; i < 3; i++) {
@@ -3753,7 +3965,7 @@ describe("daemon mode helpers", () => {
 			},
 		);
 		const clearQueuedUserMessagesMatching = vi.fn(() => ({ steering: [], followUp: [] }));
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -3764,16 +3976,19 @@ describe("daemon mode helpers", () => {
 				acceptAgentMessagePrompt,
 				clearQueuedUserMessagesMatching,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
 		const send = internals.sendAgentSessionMessage({
@@ -3814,7 +4029,7 @@ describe("daemon mode helpers", () => {
 				}),
 		);
 		const acceptAgentMessagePrompt = vi.fn(async () => {});
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -3825,16 +4040,19 @@ describe("daemon mode helpers", () => {
 				acceptAgentMessagePrompt,
 				clearQueuedUserMessagesMatching,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
 		const pause = internals.handleCommand(makeClient("client-1", targetState.activeSessionId), {
@@ -3874,7 +4092,7 @@ describe("daemon mode helpers", () => {
 				}),
 		);
 		const acceptAgentMessagePrompt = vi.fn(async () => {});
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			cwd: "/tmp",
 			session: {
@@ -3885,16 +4103,19 @@ describe("daemon mode helpers", () => {
 				acceptAgentMessagePrompt,
 				clearQueuedUserMessagesMatching,
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
 		const clear = internals.handleCommand(makeClient("client-1", targetState.activeSessionId), {
@@ -3911,7 +4132,7 @@ describe("daemon mode helpers", () => {
 			origin: "agent",
 		});
 		await Promise.resolve();
-		(targetState.runtime.session as { sessionId: string }).sessionId = "session-replacement";
+		fromPartial<{ sessionId: string }>(targetState.runtime.session).sessionId = "session-replacement";
 		resolveBlockedClear();
 		await clear;
 
@@ -3937,7 +4158,7 @@ describe("daemon mode helpers", () => {
 		);
 		const acceptAgentMessagePrompt = vi.fn(async () => {});
 		const dispose = vi.fn(async () => {});
-		targetState.runtime = {
+		targetState.runtime = fromAny<never, unknown>({
 			...targetState.runtime,
 			dispose,
 			cwd: "/tmp",
@@ -3954,16 +4175,19 @@ describe("daemon mode helpers", () => {
 				dispose: vi.fn(),
 				sessionManager: { appendSessionState: vi.fn(), hasUserContent: () => true },
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(targetState.activeSessionId, targetState);
 
 		const clear = internals.handleCommand(makeClient("client-1", targetState.activeSessionId), {
@@ -4003,7 +4227,7 @@ describe("daemon mode helpers", () => {
 			},
 		});
 		const state = makeState("self");
-		state.runtime = {
+		state.runtime = fromAny<never, unknown>({
 			...state.runtime,
 			cwd: "/tmp",
 			session: {
@@ -4013,16 +4237,19 @@ describe("daemon mode helpers", () => {
 				unfinishedActionCount: 0,
 				prompt: vi.fn(async () => {}),
 			},
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			sendAgentSessionMessage(options: {
-				targetSelector: string;
-				message: string;
-				fromState?: ActiveSessionState;
-				origin: "agent" | "cli";
-			}): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				sendAgentSessionMessage(options: {
+					targetSelector: string;
+					message: string;
+					fromState?: ActiveSessionState;
+					origin: "agent" | "cli";
+				}): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(state.activeSessionId, state);
 
 		await expect(
@@ -4078,18 +4305,21 @@ describe("daemon mode helpers", () => {
 		state.eventGeneration = "generation-1";
 		const write = vi.fn((_data: unknown) => false);
 		const client = makeClient("client-1", state.activeSessionId);
-		client.socket = { destroyed: false, write } as unknown as Socket;
+		client.socket = fromAny<Socket, unknown>({ destroyed: false, write });
 		client.snapshotActiveSessionIds = new Set([state.activeSessionId]);
 		client.snapshotStreaming = true;
 		client.backpressured = true;
 		client.catchupActiveSessionIds = new Set([state.activeSessionId]);
 		state.clients.add(client);
-		const internals = daemon as unknown as {
-			broadcastToSession(
-				state: ActiveSessionState,
-				message: { type: "session_closed"; activeSessionId: string; reason: "killed" },
-			): void;
-		};
+		const internals = fromAny<
+			{
+				broadcastToSession(
+					state: ActiveSessionState,
+					message: { type: "session_closed"; activeSessionId: string; reason: "killed" },
+				): void;
+			},
+			unknown
+		>(daemon);
 
 		internals.broadcastToSession(state, {
 			type: "session_closed",
@@ -4116,34 +4346,37 @@ describe("daemon mode helpers", () => {
 			writes.push(String(data));
 			return writes.length === 1;
 		});
-		const socket = Object.assign(new EventEmitter(), { destroyed: false, write }) as unknown as Socket;
-		const internals = daemon as unknown as {
-			clients: Set<DaemonSocketClient>;
-			sessions: Map<string, ActiveSessionState>;
-			handleConnection(socket: Socket): void;
-			createAttachResult(client: DaemonSocketClient, state: ActiveSessionState): DaemonAttachResult;
-			broadcastToSession(
-				state: ActiveSessionState,
-				message: {
-					type: "extension_error";
-					activeSessionId: string;
-					extensionPath: string;
-					event: string;
-					error: string;
-				},
-			): void;
-		};
+		const socket = fromAny<Socket, unknown>(Object.assign(new EventEmitter(), { destroyed: false, write }));
+		const internals = fromAny<
+			{
+				clients: Set<DaemonSocketClient>;
+				sessions: Map<string, ActiveSessionState>;
+				handleConnection(socket: Socket): void;
+				createAttachResult(client: DaemonSocketClient, state: ActiveSessionState): DaemonAttachResult;
+				broadcastToSession(
+					state: ActiveSessionState,
+					message: {
+						type: "extension_error";
+						activeSessionId: string;
+						extensionPath: string;
+						event: string;
+						error: string;
+					},
+				): void;
+			},
+			unknown
+		>(daemon);
 		internals.handleConnection(socket);
 		const client = [...internals.clients][0]!;
 		client.attachedActiveSessionIds.add(state.activeSessionId);
 		state.clients.add(client);
 		internals.sessions.set(state.activeSessionId, state);
 		internals.createAttachResult = () =>
-			({
+			fromAny<DaemonAttachResult, unknown>({
 				activeSessionId: state.activeSessionId,
 				snapshot: { lastEventSequence: state.lastEventSequence },
 				lastEventSequence: state.lastEventSequence,
-			}) as unknown as DaemonAttachResult;
+			});
 
 		internals.broadcastToSession(state, {
 			type: "extension_error",
@@ -4198,14 +4431,14 @@ describe("daemon mode helpers", () => {
 		secondState.eventGeneration = "generation-2";
 		const write = vi.fn((_data: unknown) => true);
 		const client = makeClient("client-1", firstState.activeSessionId);
-		client.socket = { destroyed: false, write } as unknown as Socket;
+		client.socket = fromAny<Socket, unknown>({ destroyed: false, write });
 		firstState.clients.add(client);
 		secondState.clients.add(client);
 		const createAttachResult = vi.fn(async (_client: DaemonSocketClient, state: ActiveSessionState) => {
 			if (createAttachResult.mock.calls.length === 1) {
 				throw new Error("snapshot creation failed");
 			}
-			return {
+			return fromAny<DaemonAttachResult, unknown>({
 				activeSessionId: state.activeSessionId,
 				snapshot: {
 					activeSessionId: state.activeSessionId,
@@ -4214,18 +4447,21 @@ describe("daemon mode helpers", () => {
 					lastEventSequence: state.lastEventSequence,
 				},
 				lastEventSequence: state.lastEventSequence,
-			} as unknown as DaemonAttachResult;
+			});
 		});
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			createAttachResult: typeof createAttachResult;
-			queueClientCatchup(
-				client: DaemonSocketClient,
-				activeSessionId: string,
-				purpose?: "replacement" | "resync",
-			): void;
-			catchUpBackpressuredClient(client: DaemonSocketClient): Promise<void>;
-		};
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				createAttachResult: typeof createAttachResult;
+				queueClientCatchup(
+					client: DaemonSocketClient,
+					activeSessionId: string,
+					purpose?: "replacement" | "resync",
+				): void;
+				catchUpBackpressuredClient(client: DaemonSocketClient): Promise<void>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(firstState.activeSessionId, firstState);
 		internals.sessions.set(secondState.activeSessionId, secondState);
 		internals.createAttachResult = createAttachResult;
@@ -4249,7 +4485,7 @@ describe("daemon mode helpers", () => {
 
 		expect(client.catchupActiveSessionIds).toEqual(new Set());
 		expect(client.catchupPurposes).toEqual(new Map());
-		const messages = write.mock.calls.map(([data]) => JSON.parse(String(data)) as { type: string });
+		const messages = write.mock.calls.map(([data]) => fromPartial<{ type: string }>(JSON.parse(String(data))));
 		expect(messages.map((message) => message.type)).toEqual(["session_replaced", "session_resynced"]);
 	});
 
@@ -4263,23 +4499,28 @@ describe("daemon mode helpers", () => {
 		const state = makeState("active");
 		state.extensionUiRequests = new Map();
 		const socketState = { destroyed: false };
-		const socket = Object.assign(new EventEmitter(), {
-			get destroyed() {
-				return socketState.destroyed;
-			},
-			write: vi.fn((_data: unknown) => true),
-		}) as unknown as Socket;
+		const socket = fromAny<Socket, unknown>(
+			Object.assign(new EventEmitter(), {
+				get destroyed() {
+					return socketState.destroyed;
+				},
+				write: vi.fn((_data: unknown) => true),
+			}),
+		);
 		const createAttachResult = vi.fn(async () => {
 			throw new Error("snapshot creation failed");
 		});
-		const internals = daemon as unknown as {
-			clients: Set<DaemonSocketClient>;
-			sessions: Map<string, ActiveSessionState>;
-			handleConnection(socket: Socket): void;
-			createAttachResult: typeof createAttachResult;
-			queueClientCatchup(client: DaemonSocketClient, activeSessionId: string): void;
-			catchUpBackpressuredClient(client: DaemonSocketClient): Promise<void>;
-		};
+		const internals = fromAny<
+			{
+				clients: Set<DaemonSocketClient>;
+				sessions: Map<string, ActiveSessionState>;
+				handleConnection(socket: Socket): void;
+				createAttachResult: typeof createAttachResult;
+				queueClientCatchup(client: DaemonSocketClient, activeSessionId: string): void;
+				catchUpBackpressuredClient(client: DaemonSocketClient): Promise<void>;
+			},
+			unknown
+		>(daemon);
 		internals.handleConnection(socket);
 		const client = [...internals.clients][0]!;
 		client.attachedActiveSessionIds.add(state.activeSessionId);
@@ -4310,16 +4551,19 @@ describe("daemon mode helpers", () => {
 		const snapshotGate = new Promise<void>((resolve) => {
 			releaseSnapshot = resolve;
 		});
-		const result = {
+		const result = fromAny<DaemonAttachResult, unknown>({
 			activeSessionId: state.activeSessionId,
 			snapshot: { summary: {}, state: {}, messages: [] },
 			lastEventSequence: 0,
-		} as unknown as DaemonAttachResult;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			createAttachResult: ReturnType<typeof vi.fn>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				createAttachResult: ReturnType<typeof vi.fn>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(state.activeSessionId, state);
 		internals.createAttachResult = vi.fn(async () => {
 			await snapshotGate;
@@ -4348,11 +4592,14 @@ describe("daemon mode helpers", () => {
 		const snapshotGate = new Promise<void>((resolve) => {
 			releaseSnapshot = resolve;
 		});
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			createAttachResult: ReturnType<typeof vi.fn>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-		};
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				createAttachResult: ReturnType<typeof vi.fn>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(state.activeSessionId, state);
 		internals.createAttachResult = vi.fn(async () => {
 			await snapshotGate;
@@ -4378,23 +4625,26 @@ describe("daemon mode helpers", () => {
 		const state = makeState("active");
 		const write = vi.fn(() => true);
 		const client = makeClient("client-1", state.activeSessionId);
-		client.socket = { destroyed: false, write } as unknown as Socket;
+		client.socket = fromAny<Socket, unknown>({ destroyed: false, write });
 		client.catchupActiveSessionIds = new Set([state.activeSessionId]);
 		state.clients.add(client);
 		let releaseSnapshot!: () => void;
 		const snapshotGate = new Promise<void>((resolve) => {
 			releaseSnapshot = resolve;
 		});
-		const result = {
+		const result = fromAny<DaemonAttachResult, unknown>({
 			activeSessionId: state.activeSessionId,
 			snapshot: { summary: {}, state: {}, messages: [], lastEventSequence: 0 },
 			lastEventSequence: 0,
-		} as unknown as DaemonAttachResult;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			createAttachResult: ReturnType<typeof vi.fn>;
-			drainBackpressuredClientCatchups(client: DaemonSocketClient): Promise<void>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				createAttachResult: ReturnType<typeof vi.fn>;
+				drainBackpressuredClientCatchups(client: DaemonSocketClient): Promise<void>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(state.activeSessionId, state);
 		internals.createAttachResult = vi.fn(async () => {
 			await snapshotGate;
@@ -4423,18 +4673,21 @@ describe("daemon mode helpers", () => {
 			state.eventGeneration = "generation-1";
 			const client = makeClient("client-1", state.activeSessionId);
 			client.transport = "private-framed";
-			const result = {
+			const result = fromAny<DaemonAttachResult, unknown>({
 				activeSessionId: state.activeSessionId,
 				snapshot: { summary: {}, state: {}, messages: [] },
 				lastEventSequence: 0,
-			} as unknown as DaemonAttachResult;
+			});
 			const streamWorkerSnapshot = vi.fn(async () => undefined);
-			const internals = daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createAttachResult: () => DaemonAttachResult;
-				streamWorkerSnapshot: typeof streamWorkerSnapshot;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createAttachResult: () => DaemonAttachResult;
+					streamWorkerSnapshot: typeof streamWorkerSnapshot;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				},
+				unknown
+			>(daemon);
 			internals.sessions.set(state.activeSessionId, state);
 			internals.createAttachResult = () => result;
 			internals.streamWorkerSnapshot = streamWorkerSnapshot;
@@ -4485,11 +4738,11 @@ describe("daemon mode helpers", () => {
 			state.eventGeneration = "generation-1";
 			const write = vi.fn((_data: unknown) => true);
 			const client = makeClient("client-1", state.activeSessionId);
-			client.socket = { destroyed: false, write } as unknown as Socket;
+			client.socket = fromAny<Socket, unknown>({ destroyed: false, write });
 			client.transport = "private-framed";
 			setDaemonClientSessionCapabilities(client, state.activeSessionId, new Set(["chunked_snapshot"]));
 			state.clients.add(client);
-			const result = {
+			const result = fromAny<DaemonAttachResult, unknown>({
 				activeSessionId: state.activeSessionId,
 				snapshot: {
 					summary: {},
@@ -4497,12 +4750,15 @@ describe("daemon mode helpers", () => {
 					messages: [{ role: "user", content: "x".repeat(4 * 1024 * 1024 + 1), timestamp: 0 }],
 				},
 				lastEventSequence: 0,
-			} as unknown as DaemonAttachResult;
-			const internals = daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createAttachResult: () => Promise<DaemonAttachResult>;
-				broadcastToSession(state: ActiveSessionState, message: unknown): void;
-			};
+			});
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createAttachResult: () => Promise<DaemonAttachResult>;
+					broadcastToSession(state: ActiveSessionState, message: unknown): void;
+				},
+				unknown
+			>(daemon);
 			internals.sessions.set(state.activeSessionId, state);
 			internals.createAttachResult = async () => result;
 
@@ -4536,7 +4792,7 @@ describe("daemon mode helpers", () => {
 			state.eventGeneration = "generation-1";
 			state.extensionUiRequests = new Map();
 			state.unsubscribe = vi.fn();
-			state.runtime = {
+			state.runtime = fromAny<ActiveSessionState["runtime"], unknown>({
 				...state.runtime,
 				dispose: vi.fn(async () => {}),
 				session: {
@@ -4546,10 +4802,10 @@ describe("daemon mode helpers", () => {
 					abort: vi.fn(async () => {}),
 					sessionManager: { appendSessionState: vi.fn() },
 				},
-			} as unknown as ActiveSessionState["runtime"];
+			});
 			const write = vi.fn((_data: unknown) => true);
 			const client = makeClient("client-1", state.activeSessionId);
-			client.socket = { destroyed: false, write } as unknown as Socket;
+			client.socket = fromAny<Socket, unknown>({ destroyed: false, write });
 			client.transport = "private-framed";
 			setDaemonClientSessionCapabilities(client, state.activeSessionId, new Set(["chunked_snapshot"]));
 			state.clients.add(client);
@@ -4560,18 +4816,21 @@ describe("daemon mode helpers", () => {
 				rejectAttach = reject;
 			});
 			const streamWorkerSnapshot = vi.fn(async () => {});
-			const internals = daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createAttachResult: ReturnType<typeof vi.fn>;
-				streamWorkerSnapshot: typeof streamWorkerSnapshot;
-				closeSession(state: ActiveSessionState, reason: "killed"): Promise<void>;
-				closeChildSessions: ReturnType<typeof vi.fn>;
-				isEmptyDraftContent: ReturnType<typeof vi.fn>;
-				abortBashForClose: ReturnType<typeof vi.fn>;
-				recordWorkerRecoveryState: ReturnType<typeof vi.fn>;
-				cancelScheduledJobsForSession: ReturnType<typeof vi.fn>;
-				broadcastToSession(state: ActiveSessionState, message: unknown): void;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createAttachResult: ReturnType<typeof vi.fn>;
+					streamWorkerSnapshot: typeof streamWorkerSnapshot;
+					closeSession(state: ActiveSessionState, reason: "killed"): Promise<void>;
+					closeChildSessions: ReturnType<typeof vi.fn>;
+					isEmptyDraftContent: ReturnType<typeof vi.fn>;
+					abortBashForClose: ReturnType<typeof vi.fn>;
+					recordWorkerRecoveryState: ReturnType<typeof vi.fn>;
+					cancelScheduledJobsForSession: ReturnType<typeof vi.fn>;
+					broadcastToSession(state: ActiveSessionState, message: unknown): void;
+				},
+				unknown
+			>(daemon);
 			internals.sessions.set(state.activeSessionId, state);
 			internals.createAttachResult = vi.fn(() => pendingAttach);
 			internals.streamWorkerSnapshot = streamWorkerSnapshot;
@@ -4594,11 +4853,13 @@ describe("daemon mode helpers", () => {
 			expect(snapshotSignal?.aborted).toBe(true);
 
 			if (outcome === "resolved") {
-				resolveAttach({
-					activeSessionId: state.activeSessionId,
-					snapshot: { summary: {}, state: {}, messages: [] },
-					lastEventSequence: 0,
-				} as unknown as DaemonAttachResult);
+				resolveAttach(
+					fromAny<DaemonAttachResult, unknown>({
+						activeSessionId: state.activeSessionId,
+						snapshot: { summary: {}, state: {}, messages: [] },
+						lastEventSequence: 0,
+					}),
+				);
 			} else {
 				rejectAttach(new Error("snapshot preparation failed after close"));
 			}
@@ -4633,30 +4894,38 @@ describe("daemon mode helpers", () => {
 		const catchUpBackpressuredClient = vi.fn(async (target: DaemonSocketClient) => {
 			target.catchupActiveSessionIds?.clear();
 		});
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			createAttachResult: ReturnType<typeof vi.fn>;
-			catchUpBackpressuredClient: typeof catchUpBackpressuredClient;
-			broadcastToSession(state: ActiveSessionState, message: DaemonOutbound): void;
-		};
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				createAttachResult: ReturnType<typeof vi.fn>;
+				catchUpBackpressuredClient: typeof catchUpBackpressuredClient;
+				broadcastToSession(state: ActiveSessionState, message: DaemonOutbound): void;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(state.activeSessionId, state);
 		internals.sessions.set(otherState.activeSessionId, otherState);
 		internals.createAttachResult = vi.fn(() => pendingAttach);
 		internals.catchUpBackpressuredClient = catchUpBackpressuredClient;
 
-		internals.broadcastToSession(state, {
-			type: "session_replaced",
-			activeSessionId: state.activeSessionId,
-			state: {},
-			messages: [],
-		} as unknown as DaemonOutbound);
+		internals.broadcastToSession(
+			state,
+			fromAny<DaemonOutbound, unknown>({
+				type: "session_replaced",
+				activeSessionId: state.activeSessionId,
+				state: {},
+				messages: [],
+			}),
+		);
 		client.catchupActiveSessionIds = new Set([otherState.activeSessionId]);
 		internals.sessions.delete(state.activeSessionId);
-		resolveAttach({
-			activeSessionId: state.activeSessionId,
-			snapshot: { summary: {}, state: {}, messages: [] },
-			lastEventSequence: 0,
-		} as unknown as DaemonAttachResult);
+		resolveAttach(
+			fromAny<DaemonAttachResult, unknown>({
+				activeSessionId: state.activeSessionId,
+				snapshot: { summary: {}, state: {}, messages: [] },
+				lastEventSequence: 0,
+			}),
+		);
 
 		await vi.waitFor(() => expect(catchUpBackpressuredClient).toHaveBeenCalledWith(client));
 		expect(client.snapshotStreaming).toBe(false);
@@ -4680,12 +4949,18 @@ describe("daemon mode helpers", () => {
 				await createBarrier;
 				return {
 					session: makeRuntimeSession(options.sessionManager),
-					extensionsResult: { extensions: [], errors: [], runtime: {} } as unknown as Awaited<
-						ReturnType<CreateAgentSessionRuntimeFactory>
-					>["extensionsResult"],
-					services: { cwd: options.cwd, agentDir: options.agentDir } as Awaited<
-						ReturnType<CreateAgentSessionRuntimeFactory>
-					>["services"],
+					extensionsResult: fromAny<
+						Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["extensionsResult"],
+						unknown
+					>({
+						extensions: [],
+						errors: [],
+						runtime: {},
+					}),
+					services: fromPartial<Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["services"]>({
+						cwd: options.cwd,
+						agentDir: options.agentDir,
+					}),
 					diagnostics: [],
 				};
 			});
@@ -4693,11 +4968,12 @@ describe("daemon mode helpers", () => {
 				defaultSessionConfig: { agentDir: tempDir, cwd: tempDir, sessionDir: tempDir },
 				createRuntime,
 			});
-			const create = (
-				daemon as unknown as {
+			const create = fromAny<
+				{
 					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				}
-			).createRuntime.bind(daemon);
+				},
+				unknown
+			>(daemon).createRuntime.bind(daemon);
 
 			const first = create(commandFor(sessionPath));
 			const second = create(commandFor(sessionPath));
@@ -4723,12 +4999,18 @@ describe("daemon mode helpers", () => {
 			const createRuntime = vi.fn(async (options: Parameters<CreateAgentSessionRuntimeFactory>[0]) => {
 				return {
 					session: makeRuntimeSession(options.sessionManager),
-					extensionsResult: { extensions: [], errors: [], runtime: {} } as unknown as Awaited<
-						ReturnType<CreateAgentSessionRuntimeFactory>
-					>["extensionsResult"],
-					services: { cwd: options.cwd, agentDir: options.agentDir } as Awaited<
-						ReturnType<CreateAgentSessionRuntimeFactory>
-					>["services"],
+					extensionsResult: fromAny<
+						Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["extensionsResult"],
+						unknown
+					>({
+						extensions: [],
+						errors: [],
+						runtime: {},
+					}),
+					services: fromPartial<Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["services"]>({
+						cwd: options.cwd,
+						agentDir: options.agentDir,
+					}),
 					diagnostics: [],
 				};
 			});
@@ -4736,11 +5018,12 @@ describe("daemon mode helpers", () => {
 				defaultSessionConfig: { agentDir: tempDir, cwd: tempDir, sessionDir: tempDir },
 				createRuntime,
 			});
-			const create = (
-				daemon as unknown as {
+			const create = fromAny<
+				{
 					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				}
-			).createRuntime.bind(daemon);
+				},
+				unknown
+			>(daemon).createRuntime.bind(daemon);
 
 			// Created env-less (e.g. by a cron job), then opened by an env-carrying
 			// client: the session adopts the client's allowlisted identity.
@@ -4780,12 +5063,18 @@ describe("daemon mode helpers", () => {
 				});
 				return {
 					session,
-					extensionsResult: { extensions: [], errors: [], runtime: {} } as unknown as Awaited<
-						ReturnType<CreateAgentSessionRuntimeFactory>
-					>["extensionsResult"],
-					services: { cwd: options.cwd, agentDir: options.agentDir } as Awaited<
-						ReturnType<CreateAgentSessionRuntimeFactory>
-					>["services"],
+					extensionsResult: fromAny<
+						Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["extensionsResult"],
+						unknown
+					>({
+						extensions: [],
+						errors: [],
+						runtime: {},
+					}),
+					services: fromPartial<Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["services"]>({
+						cwd: options.cwd,
+						agentDir: options.agentDir,
+					}),
 					diagnostics: [],
 				};
 			});
@@ -4793,11 +5082,12 @@ describe("daemon mode helpers", () => {
 				defaultSessionConfig: { agentDir: tempDir, cwd: tempDir, sessionDir: tempDir },
 				createRuntime,
 			});
-			const create = (
-				daemon as unknown as {
+			const create = fromAny<
+				{
 					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				}
-			).createRuntime.bind(daemon);
+				},
+				unknown
+			>(daemon).createRuntime.bind(daemon);
 
 			await create({ type: "create", sessionPath: join(tempDir, "session-1.jsonl") });
 			await create({ type: "create", sessionPath: join(tempDir, "session-2.jsonl") });
@@ -4851,22 +5141,31 @@ describe("daemon mode helpers", () => {
 
 			const createRuntime = vi.fn(async (options: Parameters<CreateAgentSessionRuntimeFactory>[0]) => ({
 				session: makeRuntimeSession(options.sessionManager),
-				extensionsResult: { extensions: [], errors: [], runtime: {} } as unknown as Awaited<
-					ReturnType<CreateAgentSessionRuntimeFactory>
-				>["extensionsResult"],
-				services: { cwd: options.cwd, agentDir: options.agentDir } as Awaited<
-					ReturnType<CreateAgentSessionRuntimeFactory>
-				>["services"],
+				extensionsResult: fromAny<
+					Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["extensionsResult"],
+					unknown
+				>({
+					extensions: [],
+					errors: [],
+					runtime: {},
+				}),
+				services: fromPartial<Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["services"]>({
+					cwd: options.cwd,
+					agentDir: options.agentDir,
+				}),
 				diagnostics: [],
 			}));
 			const daemon = new AgentDaemon(join(tempDir, "daemon.sock"), {
 				defaultSessionConfig: { agentDir: tempDir, cwd: tempDir, sessionDir },
 				createRuntime,
 			});
-			const internals = daemon as unknown as {
-				cronStore: AgentCronJobStore;
-				getOrCreateCronJobSession(job: AgentCronJob, requirePersistedJob: boolean): Promise<ActiveSessionState>;
-			};
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					getOrCreateCronJobSession(job: AgentCronJob, requirePersistedJob: boolean): Promise<ActiveSessionState>;
+				},
+				unknown
+			>(daemon);
 			const heartbeat = internals.cronStore.createRlmHeartbeat({
 				activeSessionId: "stale-child-active-id",
 				sessionId: childManager.getSessionId(),
@@ -4901,20 +5200,23 @@ describe("daemon mode helpers", () => {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
 			const parentManager = SessionManager.open(fixture.parentSessionFile);
 			parentManager.appendSessionState({ status: "active" });
-			const internals = fixture.daemon as unknown as {
-				cronStore: AgentCronJobStore;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				getOrCreateCronJobSession(
-					job: AgentCronJob,
-					requirePersistedJob: boolean,
-				): Promise<ActiveSessionState | undefined>;
-			};
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					getOrCreateCronJobSession(
+						job: AgentCronJob,
+						requirePersistedJob: boolean,
+					): Promise<ActiveSessionState | undefined>;
+				},
+				unknown
+			>(fixture.daemon);
 			const topLevelState = await internals.createRuntime({
 				type: "create",
 				sessionPath: fixture.childSessionFile,
 			});
 			expect(topLevelState.runtime.metadata.kind).toBe("top-level");
-			const topLevelAbort = topLevelState.runtime.session.abort as ReturnType<typeof vi.fn>;
+			const topLevelAbort = fromAny<ReturnType<typeof vi.fn>, unknown>(topLevelState.runtime.session.abort);
 			const heartbeat = internals.cronStore.createRlmHeartbeat({
 				activeSessionId: "stale-child-active-id",
 				sessionId: topLevelState.runtime.session.sessionId,
@@ -4965,28 +5267,37 @@ describe("daemon mode helpers", () => {
 			}
 			const createRuntime = vi.fn(async (options: Parameters<CreateAgentSessionRuntimeFactory>[0]) => ({
 				session: makeRuntimeSession(options.sessionManager),
-				extensionsResult: { extensions: [], errors: [], runtime: {} } as unknown as Awaited<
-					ReturnType<CreateAgentSessionRuntimeFactory>
-				>["extensionsResult"],
-				services: { cwd: options.cwd, agentDir: options.agentDir } as Awaited<
-					ReturnType<CreateAgentSessionRuntimeFactory>
-				>["services"],
+				extensionsResult: fromAny<
+					Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["extensionsResult"],
+					unknown
+				>({
+					extensions: [],
+					errors: [],
+					runtime: {},
+				}),
+				services: fromPartial<Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["services"]>({
+					cwd: options.cwd,
+					agentDir: options.agentDir,
+				}),
 				diagnostics: [],
 			}));
 			const daemon = new AgentDaemon(join(tempDir, "daemon.sock"), {
 				defaultSessionConfig: { agentDir: tempDir, cwd: tempDir, sessionDir },
 				createRuntime,
 			});
-			const internals = daemon as unknown as {
-				cronStore: AgentCronJobStore;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				getOrCreateCronJobSession(
-					job: AgentCronJob,
-					requirePersistedJob: boolean,
-				): Promise<ActiveSessionState | undefined>;
-			};
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					getOrCreateCronJobSession(
+						job: AgentCronJob,
+						requirePersistedJob: boolean,
+					): Promise<ActiveSessionState | undefined>;
+				},
+				unknown
+			>(daemon);
 			const topLevelState = await internals.createRuntime({ type: "create", sessionPath: sessionFile });
-			const abort = topLevelState.runtime.session.abort as ReturnType<typeof vi.fn>;
+			const abort = fromAny<ReturnType<typeof vi.fn>, unknown>(topLevelState.runtime.session.abort);
 			const heartbeat = internals.cronStore.createRlmHeartbeat({
 				activeSessionId: topLevelState.activeSessionId,
 				sessionId: sessionManager.getSessionId(),
@@ -5033,13 +5344,16 @@ describe("daemon mode helpers", () => {
 				childBindingStarted: markBindingStarted,
 				childBindingGate: bindingGate,
 			});
-			const internals = fixture.daemon as unknown as {
-				cronStore: AgentCronJobStore;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				getOrHydrateBoundSessionState(id: string): Promise<ActiveSessionState>;
-				listPassiveRlmSubagents(): Promise<unknown[]>;
-				restoreRlmHeartbeatSession(job: AgentCronJob): Promise<ActiveSessionState | undefined>;
-			};
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					getOrHydrateBoundSessionState(id: string): Promise<ActiveSessionState>;
+					listPassiveRlmSubagents(): Promise<unknown[]>;
+					restoreRlmHeartbeatSession(job: AgentCronJob): Promise<ActiveSessionState | undefined>;
+				},
+				unknown
+			>(fixture.daemon);
 			await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			const childInfo = await readSessionInfo(fixture.childSessionFile);
 			if (!childInfo) throw new Error("Missing child session info");
@@ -5112,13 +5426,16 @@ describe("daemon mode helpers", () => {
 				defaultSessionConfig: { agentDir: tempDir, cwd: tempDir, sessionDir },
 				createRuntime,
 			});
-			const internals = daemon as unknown as {
-				cronStore: AgentCronJobStore;
-				getOrCreateCronJobSession(
-					job: AgentCronJob,
-					requirePersistedJob: boolean,
-				): Promise<ActiveSessionState | undefined>;
-			};
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					getOrCreateCronJobSession(
+						job: AgentCronJob,
+						requirePersistedJob: boolean,
+					): Promise<ActiveSessionState | undefined>;
+				},
+				unknown
+			>(daemon);
 			const heartbeat = internals.cronStore.createRlmHeartbeat({
 				activeSessionId: "stale-child-active-id",
 				sessionId: childManager.getSessionId(),
@@ -5148,26 +5465,31 @@ describe("daemon mode helpers", () => {
 			// Their persisted registry rows remain the compatibility source after restart.
 			for (const sessionFile of [fixture.childSessionFile, fixture.grandchildSessionFile]) {
 				const lines = readFileSync(sessionFile, "utf8").split("\n");
-				const header = JSON.parse(lines[0] ?? "{}") as Record<string, unknown>;
+				const header = fromPartial<Record<string, unknown>>(JSON.parse(lines[0] ?? "{}"));
 				delete header.rlmDepth;
 				lines[0] = JSON.stringify(header);
 				writeFileSync(sessionFile, lines.join("\n"));
 			}
 			const parentRegistry = join(fixture.parentArtifactDir, "rlm-subagents.jsonl");
-			const failedEntry = JSON.parse(readFileSync(parentRegistry, "utf8").trim()) as Record<string, unknown>;
+			const failedEntry = fromPartial<Record<string, unknown>>(
+				JSON.parse(readFileSync(parentRegistry, "utf8").trim()),
+			);
 			// Failed children retain their last "running" registry row after the runtime is released.
 			writeFileSync(parentRegistry, `${JSON.stringify({ ...failedEntry, status: "running" })}\n`);
-			const internals = fixture.daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createAgentMessageController(
-					getCurrentState: () => ActiveSessionState | undefined,
-				): AgentSessionMessageController;
-				buildRlmChildSnapshotsWithPassiveRlmSubagents(
-					state: ActiveSessionState,
-				): Promise<NonNullable<DaemonAttachResult["snapshot"]["children"]>>;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createAgentMessageController(
+						getCurrentState: () => ActiveSessionState | undefined,
+					): AgentSessionMessageController;
+					buildRlmChildSnapshotsWithPassiveRlmSubagents(
+						state: ActiveSessionState,
+					): Promise<NonNullable<DaemonAttachResult["snapshot"]["children"]>>;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				},
+				unknown
+			>(fixture.daemon);
 
 			const parentState = await internals.createRuntime({
 				type: "create",
@@ -5212,11 +5534,12 @@ describe("daemon mode helpers", () => {
 					rlmChildRegistryStatus: "completed",
 				}),
 			);
-			const observeController = (
-				fixture.daemon as unknown as {
+			const observeController = fromAny<
+				{
 					createAgentObserveController(getCurrentState: () => ActiveSessionState): AgentObserveController;
-				}
-			).createAgentObserveController(() => parentState);
+				},
+				unknown
+			>(fixture.daemon).createAgentObserveController(() => parentState);
 			const observedAgents = await observeController.listAgents();
 			expect(observedAgents.agents).toContainEqual(
 				expect.objectContaining({
@@ -5245,10 +5568,12 @@ describe("daemon mode helpers", () => {
 					parentSessionPath: fixture.parentSessionFile,
 				}),
 			).rejects.toThrow("an agent of that name already exists at depth 1 under this parent");
-			const listResponse = (await internals.handleCommand(makeClient("client-1", parentState.activeSessionId), {
-				type: "list",
-				all: true,
-			})) as { data: { sessions: Array<Record<string, unknown>> } };
+			const listResponse = fromAny<{ data: { sessions: Array<Record<string, unknown>> } }, unknown>(
+				await internals.handleCommand(makeClient("client-1", parentState.activeSessionId), {
+					type: "list",
+					all: true,
+				}),
+			);
 			const passiveRow = listResponse.data.sessions.find(
 				(session) => session.sessionFile === fixture.childSessionFile,
 			);
@@ -5273,10 +5598,9 @@ describe("daemon mode helpers", () => {
 				rlmDepth: 2,
 			});
 
-			const activeOnlyResponse = (await internals.handleCommand(
-				makeClient("client-2", parentState.activeSessionId),
-				{ type: "list" },
-			)) as { data: { sessions: Array<Record<string, unknown>> } };
+			const activeOnlyResponse = fromAny<{ data: { sessions: Array<Record<string, unknown>> } }, unknown>(
+				await internals.handleCommand(makeClient("client-2", parentState.activeSessionId), { type: "list" }),
+			);
 			expect(activeOnlyResponse.data.sessions).toEqual(
 				expect.arrayContaining([
 					expect.objectContaining({ sessionFile: fixture.childSessionFile, rlmChildId: fixture.childId }),
@@ -5301,14 +5625,17 @@ describe("daemon mode helpers", () => {
 			parentManager.flushNow();
 			const parentInfo = await readSessionInfo(fixture.parentSessionFile);
 			if (!parentInfo) throw new Error("Missing parent session info");
-			const internals = fixture.daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				buildSessionListWithPassiveRlmSubagents(
-					activeSessions: ActiveSessionState[],
-					savedSessions: SessionInfo[],
-					scheduledJobs: AgentCronJob[],
-				): Promise<SessionSummary[]>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					buildSessionListWithPassiveRlmSubagents(
+						activeSessions: ActiveSessionState[],
+						savedSessions: SessionInfo[],
+						scheduledJobs: AgentCronJob[],
+					): Promise<SessionSummary[]>;
+				},
+				unknown
+			>(fixture.daemon);
 
 			expect(internals.sessions.size).toBe(0);
 			const sessions = await internals.buildSessionListWithPassiveRlmSubagents([], [parentInfo], []);
@@ -5344,24 +5671,27 @@ describe("daemon mode helpers", () => {
 			parentManager.appendMessage({ role: "user", content: "parent task", timestamp: 0 });
 			parentManager.flushNow();
 			const lines = readFileSync(fixture.childSessionFile, "utf8").split("\n");
-			const header = JSON.parse(lines[0] ?? "{}") as Record<string, unknown>;
+			const header = fromPartial<Record<string, unknown>>(JSON.parse(lines[0] ?? "{}"));
 			delete header.rlmDepth;
 			lines[0] = JSON.stringify(header);
 			writeFileSync(fixture.childSessionFile, lines.join("\n"));
 			const registryFile = join(fixture.parentArtifactDir, "rlm-subagents.jsonl");
-			const registryEntry = JSON.parse(readFileSync(registryFile, "utf8")) as Record<string, unknown>;
+			const registryEntry = fromPartial<Record<string, unknown>>(JSON.parse(readFileSync(registryFile, "utf8")));
 			registryEntry.rlmDepth = 5;
 			registryEntry.rlmMaxDepth = 8;
 			writeFileSync(registryFile, `${JSON.stringify(registryEntry)}\n`);
 			const parentInfo = await readSessionInfo(fixture.parentSessionFile);
 			if (!parentInfo) throw new Error("Missing parent session info");
-			const internals = fixture.daemon as unknown as {
-				buildSessionListWithPassiveRlmSubagents(
-					activeSessions: ActiveSessionState[],
-					savedSessions: SessionInfo[],
-					scheduledJobs: AgentCronJob[],
-				): Promise<SessionSummary[]>;
-			};
+			const internals = fromAny<
+				{
+					buildSessionListWithPassiveRlmSubagents(
+						activeSessions: ActiveSessionState[],
+						savedSessions: SessionInfo[],
+						scheduledJobs: AgentCronJob[],
+					): Promise<SessionSummary[]>;
+				},
+				unknown
+			>(fixture.daemon);
 
 			const sessions = await internals.buildSessionListWithPassiveRlmSubagents([], [parentInfo], []);
 			expect(sessions.find((session) => session.sessionFile === fixture.childSessionFile)?.rlmDepth).toBe(5);
@@ -5402,14 +5732,19 @@ describe("daemon mode helpers", () => {
 `,
 			);
 
-			const internals = fixture.daemon as unknown as {
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			};
+			const internals = fromAny<
+				{
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
-			const response = (await internals.handleCommand(makeClient("client-1", parentState.activeSessionId), {
-				type: "list",
-			})) as { data: { sessions: Array<{ rlmChildId?: string }> } };
+			const response = fromAny<{ data: { sessions: Array<{ rlmChildId?: string }> } }, unknown>(
+				await internals.handleCommand(makeClient("client-1", parentState.activeSessionId), {
+					type: "list",
+				}),
+			);
 
 			expect(response.data.sessions.map((session) => session.rlmChildId).filter(Boolean)).toEqual([
 				fixture.childId,
@@ -5425,15 +5760,18 @@ describe("daemon mode helpers", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-snapshot-replacement-"));
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createSessionSnapshot(state: ActiveSessionState): Promise<DaemonAttachResult["snapshot"]>;
-				createConnectionState: ReturnType<typeof vi.fn>;
-				buildRlmChildSnapshotsWithPassiveRlmSubagents: ReturnType<typeof vi.fn>;
-			};
+			const internals = fromAny<
+				{
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createSessionSnapshot(state: ActiveSessionState): Promise<DaemonAttachResult["snapshot"]>;
+					createConnectionState: ReturnType<typeof vi.fn>;
+					buildRlmChildSnapshotsWithPassiveRlmSubagents: ReturnType<typeof vi.fn>;
+				},
+				unknown
+			>(fixture.daemon);
 			const state = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			const originalSession = state.runtime.session;
-			const replacementSession = Object.create(originalSession) as typeof originalSession;
+			const replacementSession = fromPartial<typeof originalSession>(Object.create(originalSession));
 			Object.defineProperty(replacementSession, "messages", {
 				value: [{ role: "user", content: "new transcript", timestamp: 1 }],
 			});
@@ -5442,8 +5780,8 @@ describe("daemon mode helpers", () => {
 			internals.buildRlmChildSnapshotsWithPassiveRlmSubagents = vi.fn(async () => {
 				calls++;
 				if (calls === 1)
-					(state.runtime as unknown as { _session: typeof originalSession })._session =
-						replacementSession as typeof originalSession;
+					fromAny<{ _session: typeof originalSession }, unknown>(state.runtime)._session =
+						fromPartial<typeof originalSession>(replacementSession);
 				return [{ id: calls === 1 ? "old-child" : "new-child", status: "done", sessionDir: tempDir }];
 			});
 
@@ -5461,25 +5799,28 @@ describe("daemon mode helpers", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-snapshot-stabilization-bound-"));
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createSessionSnapshot(state: ActiveSessionState): Promise<DaemonAttachResult["snapshot"]>;
-				createConnectionState: ReturnType<typeof vi.fn>;
-				buildRlmChildSnapshotsWithPassiveRlmSubagents: ReturnType<typeof vi.fn>;
-			};
+			const internals = fromAny<
+				{
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createSessionSnapshot(state: ActiveSessionState): Promise<DaemonAttachResult["snapshot"]>;
+					createConnectionState: ReturnType<typeof vi.fn>;
+					buildRlmChildSnapshotsWithPassiveRlmSubagents: ReturnType<typeof vi.fn>;
+				},
+				unknown
+			>(fixture.daemon);
 			const state = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			internals.createConnectionState = vi.fn(() => ({}));
 			let calls = 0;
 			internals.buildRlmChildSnapshotsWithPassiveRlmSubagents = vi.fn(async () => {
 				calls++;
-				const replacementSession = Object.create(state.runtime.session) as typeof state.runtime.session;
+				const replacementSession = fromPartial<typeof state.runtime.session>(Object.create(state.runtime.session));
 				Object.defineProperties(replacementSession, {
 					messages: {
 						value: [{ role: "user", content: `transcript ${calls}`, timestamp: calls }],
 					},
 					sessionId: { value: `session-${calls}` },
 				});
-				(state.runtime as unknown as { _session: typeof replacementSession })._session = replacementSession;
+				fromAny<{ _session: typeof replacementSession }, unknown>(state.runtime)._session = replacementSession;
 				return [{ id: `child-${calls}`, status: "done", sessionDir: tempDir }];
 			});
 
@@ -5498,12 +5839,15 @@ describe("daemon mode helpers", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-passive-name-preflight-"));
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				assertFamilySessionNameAvailable: ReturnType<typeof vi.fn>;
-				hydratePassiveRlmSubagent: ReturnType<typeof vi.fn>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					assertFamilySessionNameAvailable: ReturnType<typeof vi.fn>;
+					hydratePassiveRlmSubagent: ReturnType<typeof vi.fn>;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({
 				type: "create",
 				sessionPath: fixture.parentSessionFile,
@@ -5540,13 +5884,16 @@ describe("daemon mode helpers", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-lazy-rlm-message-"));
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createAgentMessageController(
-					getCurrentState: () => ActiveSessionState | undefined,
-				): AgentSessionMessageController;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createAgentMessageController(
+						getCurrentState: () => ActiveSessionState | undefined,
+					): AgentSessionMessageController;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({
 				type: "create",
 				sessionPath: fixture.parentSessionFile,
@@ -5578,16 +5925,19 @@ describe("daemon mode helpers", () => {
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
 			const lines = readFileSync(fixture.childSessionFile, "utf8").split("\n");
-			const header = JSON.parse(lines[0] ?? "{}") as Record<string, unknown>;
+			const header = fromPartial<Record<string, unknown>>(JSON.parse(lines[0] ?? "{}"));
 			delete header.rlmDepth;
 			lines[0] = JSON.stringify(header);
 			writeFileSync(fixture.childSessionFile, lines.join("\n"));
-			const internals = fixture.daemon as unknown as {
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createAgentMessageController(
-					getCurrentState: () => ActiveSessionState | undefined,
-				): AgentSessionMessageController;
-			};
+			const internals = fromAny<
+				{
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createAgentMessageController(
+						getCurrentState: () => ActiveSessionState | undefined,
+					): AgentSessionMessageController;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 
 			await internals
@@ -5628,12 +5978,15 @@ describe("daemon mode helpers", () => {
 					updatedAt: "2026-01-01T00:00:01.000Z",
 				})}\n`,
 			);
-			const internals = fixture.daemon as unknown as {
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createAgentMessageController(
-					getCurrentState: () => ActiveSessionState | undefined,
-				): AgentSessionMessageController;
-			};
+			const internals = fromAny<
+				{
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createAgentMessageController(
+						getCurrentState: () => ActiveSessionState | undefined,
+					): AgentSessionMessageController;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({
 				type: "create",
 				sessionPath: fixture.parentSessionFile,
@@ -5658,13 +6011,16 @@ describe("daemon mode helpers", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-idempotent-rlm-hydration-"));
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createAgentMessageController(
-					getCurrentState: () => ActiveSessionState | undefined,
-				): AgentSessionMessageController;
-				recordRlmSubagentRegistryEntry: ReturnType<typeof vi.fn>;
-			};
+			const internals = fromAny<
+				{
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createAgentMessageController(
+						getCurrentState: () => ActiveSessionState | undefined,
+					): AgentSessionMessageController;
+					recordRlmSubagentRegistryEntry: ReturnType<typeof vi.fn>;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			const registryPath = join(fixture.parentArtifactDir, "rlm-subagents.jsonl");
 			const before = readFileSync(registryPath, "utf8");
@@ -5688,22 +6044,27 @@ describe("daemon mode helpers", () => {
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
 			const childLines = readFileSync(fixture.childSessionFile, "utf8").split("\n");
-			const childHeader = JSON.parse(childLines[0] ?? "{}") as Record<string, unknown>;
+			const childHeader = fromPartial<Record<string, unknown>>(JSON.parse(childLines[0] ?? "{}"));
 			delete childHeader.rlmDepth;
 			childLines[0] = JSON.stringify(childHeader);
 			writeFileSync(fixture.childSessionFile, childLines.join("\n"));
 
 			const registryPath = join(fixture.parentArtifactDir, "rlm-subagents.jsonl");
-			const registryEntry = JSON.parse(readFileSync(registryPath, "utf8").trim()) as Record<string, unknown>;
+			const registryEntry = fromPartial<Record<string, unknown>>(
+				JSON.parse(readFileSync(registryPath, "utf8").trim()),
+			);
 			delete registryEntry.rlmDepth;
 			writeFileSync(registryPath, `${JSON.stringify(registryEntry)}\n`);
 
-			const internals = fixture.daemon as unknown as {
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createAgentMessageController(
-					getCurrentState: () => ActiveSessionState | undefined,
-				): AgentSessionMessageController;
-			};
+			const internals = fromAny<
+				{
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createAgentMessageController(
+						getCurrentState: () => ActiveSessionState | undefined,
+					): AgentSessionMessageController;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({
 				type: "create",
 				sessionPath: fixture.parentSessionFile,
@@ -5724,22 +6085,27 @@ describe("daemon mode helpers", () => {
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
 			const childLines = readFileSync(fixture.childSessionFile, "utf8").split("\n");
-			const childHeader = JSON.parse(childLines[0] ?? "{}") as Record<string, unknown>;
+			const childHeader = fromPartial<Record<string, unknown>>(JSON.parse(childLines[0] ?? "{}"));
 			childHeader.rlmDepth = 2;
 			childLines[0] = JSON.stringify(childHeader);
 			writeFileSync(fixture.childSessionFile, childLines.join("\n"));
 
 			const registryPath = join(fixture.parentArtifactDir, "rlm-subagents.jsonl");
-			const registryEntry = JSON.parse(readFileSync(registryPath, "utf8").trim()) as Record<string, unknown>;
+			const registryEntry = fromPartial<Record<string, unknown>>(
+				JSON.parse(readFileSync(registryPath, "utf8").trim()),
+			);
 			delete registryEntry.rlmDepth;
 			writeFileSync(registryPath, `${JSON.stringify(registryEntry)}\n`);
 
-			const internals = fixture.daemon as unknown as {
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createAgentMessageController(
-					getCurrentState: () => ActiveSessionState | undefined,
-				): AgentSessionMessageController;
-			};
+			const internals = fromAny<
+				{
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createAgentMessageController(
+						getCurrentState: () => ActiveSessionState | undefined,
+					): AgentSessionMessageController;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({
 				type: "create",
 				sessionPath: fixture.parentSessionFile,
@@ -5761,14 +6127,19 @@ describe("daemon mode helpers", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-lazy-nested-message-"));
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createAgentMessageController(
-					getCurrentState: () => ActiveSessionState | undefined,
-				): AgentSessionMessageController;
-				createAgentObserveController(getCurrentState: () => ActiveSessionState | undefined): AgentObserveController;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createAgentMessageController(
+						getCurrentState: () => ActiveSessionState | undefined,
+					): AgentSessionMessageController;
+					createAgentObserveController(
+						getCurrentState: () => ActiveSessionState | undefined,
+					): AgentObserveController;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({
 				type: "create",
 				sessionPath: fixture.parentSessionFile,
@@ -5798,10 +6169,15 @@ describe("daemon mode helpers", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-lazy-rlm-observe-"));
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createAgentObserveController(getCurrentState: () => ActiveSessionState | undefined): AgentObserveController;
-			};
+			const internals = fromAny<
+				{
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createAgentObserveController(
+						getCurrentState: () => ActiveSessionState | undefined,
+					): AgentObserveController;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({
 				type: "create",
 				sessionPath: fixture.parentSessionFile,
@@ -5835,12 +6211,15 @@ describe("daemon mode helpers", () => {
 		let openAsyncSpy: ReturnType<typeof vi.spyOn> | undefined;
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				reservingSessionOpens: Map<string, Promise<void>>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				findPassiveRlmSubagent(target: string): Promise<unknown>;
-				hydratePassiveRlmSubagent(passive: unknown): Promise<ActiveSessionState>;
-			};
+			const internals = fromAny<
+				{
+					reservingSessionOpens: Map<string, Promise<void>>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					findPassiveRlmSubagent(target: string): Promise<unknown>;
+					hydratePassiveRlmSubagent(passive: unknown): Promise<ActiveSessionState>;
+				},
+				unknown
+			>(fixture.daemon);
 			await internals.createRuntime({
 				type: "create",
 				sessionPath: fixture.parentSessionFile,
@@ -5879,7 +6258,7 @@ describe("daemon mode helpers", () => {
 			// subagent rehydration; either way the lazy path must join the explicit
 			// open's lease instead of failing with a lease conflict, and exactly one
 			// resident state may own the session file afterwards.
-			const internalsAfter = fixture.daemon as unknown as { sessions: Map<string, ActiveSessionState> };
+			const internalsAfter = fromAny<{ sessions: Map<string, ActiveSessionState> }, unknown>(fixture.daemon);
 			const owners = [...internalsAfter.sessions.values()].filter(
 				(state) => state.runtime.session.sessionFile === fixture.childSessionFile,
 			);
@@ -5905,9 +6284,12 @@ describe("daemon mode helpers", () => {
 				envAtRuntimeCreation.push(process.env.HERDR_PANE_ID);
 				return createRuntime(runtimeOptions);
 			});
-			const internals = fixture.daemon as unknown as {
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-			};
+			const internals = fromAny<
+				{
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			expect(parentState.clientEnv).toBeUndefined();
 
@@ -5931,9 +6313,12 @@ describe("daemon mode helpers", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-failed-passive-env-"));
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-			};
+			const internals = fromAny<
+				{
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			const createRuntime = fixture.createRuntime.getMockImplementation();
 			if (!createRuntime) throw new Error("Missing fixture runtime factory");
@@ -5991,11 +6376,14 @@ describe("daemon mode helpers", () => {
 				childBindingStarted: markBindingStarted,
 				childBindingGate: bindingGate,
 			});
-			const internals = fixture.daemon as unknown as {
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				getOrHydrateBoundSessionState(id: string): Promise<ActiveSessionState>;
-				listPassiveRlmSubagents(): Promise<unknown[]>;
-			};
+			const internals = fromAny<
+				{
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					getOrHydrateBoundSessionState(id: string): Promise<ActiveSessionState>;
+					listPassiveRlmSubagents(): Promise<unknown[]>;
+				},
+				unknown
+			>(fixture.daemon);
 			await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			const childInfo = await readSessionInfo(fixture.childSessionFile);
 			if (!childInfo) throw new Error("Missing child session info");
@@ -6035,11 +6423,14 @@ describe("daemon mode helpers", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-ambiguous-passive-selector-"));
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				getOrHydrateBoundSessionState(id: string): Promise<ActiveSessionState>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					getOrHydrateBoundSessionState(id: string): Promise<ActiveSessionState>;
+				},
+				unknown
+			>(fixture.daemon);
 			await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			for (const id of ["live-one", "live-two"]) {
 				const state = makeState(id);
@@ -6074,21 +6465,27 @@ describe("daemon mode helpers", () => {
 				childRuntimeStarted: markHydrationStarted,
 				childRuntimeGate: hydrationGate,
 			});
-			const internals = fixture.daemon as unknown as {
-				cronStore: AgentCronJobStore;
-				sessions: Map<string, ActiveSessionState>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				getRunnableCronJob(id: string): AgentCronJob | undefined;
-				runCronJob(job: AgentCronJob): Promise<"skipped" | undefined>;
-				passivateIdleChildren(threshold: number, now: number, limit: number): Promise<number>;
-			};
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					sessions: Map<string, ActiveSessionState>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					getRunnableCronJob(id: string): AgentCronJob | undefined;
+					runCronJob(job: AgentCronJob): Promise<"skipped" | undefined>;
+					passivateIdleChildren(threshold: number, now: number, limit: number): Promise<number>;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({
 				type: "create",
 				sessionPath: fixture.parentSessionFile,
 			});
-			const parentSession = parentState.runtime.session as unknown as {
-				releaseRlmChildSession: ReturnType<typeof vi.fn>;
-			};
+			const parentSession = fromAny<
+				{
+					releaseRlmChildSession: ReturnType<typeof vi.fn>;
+				},
+				unknown
+			>(parentState.runtime.session);
 			parentSession.releaseRlmChildSession = vi.fn(() => vi.fn());
 			const childInfo = await readSessionInfo(fixture.childSessionFile);
 			if (!childInfo) throw new Error("Missing child session info");
@@ -6151,25 +6548,31 @@ describe("daemon mode helpers", () => {
 				childRuntimeStarted: markHydrationStarted,
 				childRuntimeGate: hydrationGate,
 			});
-			const internals = fixture.daemon as unknown as {
-				cronStore: AgentCronJobStore;
-				sessions: Map<string, ActiveSessionState>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createAgentMessageController(
-					getCurrentState: () => ActiveSessionState | undefined,
-				): AgentSessionMessageController;
-				getRunnableCronJob(id: string): AgentCronJob | undefined;
-				runCronJob(job: AgentCronJob): Promise<"skipped" | undefined>;
-				hydratePassiveRlmSubagent(passive: unknown): Promise<ActiveSessionState>;
-			};
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					sessions: Map<string, ActiveSessionState>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createAgentMessageController(
+						getCurrentState: () => ActiveSessionState | undefined,
+					): AgentSessionMessageController;
+					getRunnableCronJob(id: string): AgentCronJob | undefined;
+					runCronJob(job: AgentCronJob): Promise<"skipped" | undefined>;
+					hydratePassiveRlmSubagent(passive: unknown): Promise<ActiveSessionState>;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({
 				type: "create",
 				sessionPath: fixture.parentSessionFile,
 			});
-			const parentSession = parentState.runtime.session as unknown as {
-				releaseRlmChildSession: ReturnType<typeof vi.fn>;
-				registerRlmChildSession: ReturnType<typeof vi.fn>;
-			};
+			const parentSession = fromAny<
+				{
+					releaseRlmChildSession: ReturnType<typeof vi.fn>;
+					registerRlmChildSession: ReturnType<typeof vi.fn>;
+				},
+				unknown
+			>(parentState.runtime.session);
 			parentSession.releaseRlmChildSession = vi.fn(() => vi.fn());
 			const childInfo = await readSessionInfo(fixture.childSessionFile);
 			if (!childInfo) throw new Error("Missing child session info");
@@ -6227,15 +6630,20 @@ describe("daemon mode helpers", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-wrong-kind-open-"));
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				openingSessions: Map<string, Promise<ActiveSessionState>>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				findPassiveRlmSubagent(id: string): Promise<unknown>;
-				hydratePassiveRlmSubagent(passive: unknown): Promise<ActiveSessionState>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					openingSessions: Map<string, Promise<ActiveSessionState>>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					findPassiveRlmSubagent(id: string): Promise<unknown>;
+					hydratePassiveRlmSubagent(passive: unknown): Promise<ActiveSessionState>;
+				},
+				unknown
+			>(fixture.daemon);
 			await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
-			const passive = (await internals.findPassiveRlmSubagent(fixture.childId)) as { info: { id: string } };
+			const passive = fromAny<{ info: { id: string } }, unknown>(
+				await internals.findPassiveRlmSubagent(fixture.childId),
+			);
 			const wrongState = makeState("wrong-kind");
 			Object.assign(wrongState, { extensionUiRequests: new Map(), eventGeneration: "wrong", lastEventSequence: 0 });
 			Object.assign(wrongState.runtime, {
@@ -6260,11 +6668,14 @@ describe("daemon mode helpers", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-update-hydration-"));
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				updateRestart: unknown;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				getOrHydrateBoundSessionState(id: string): Promise<ActiveSessionState>;
-			};
+			const internals = fromAny<
+				{
+					updateRestart: unknown;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					getOrHydrateBoundSessionState(id: string): Promise<ActiveSessionState>;
+				},
+				unknown
+			>(fixture.daemon);
 			await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			internals.updateRestart = { phase: "prepared" };
 
@@ -6292,13 +6703,16 @@ describe("daemon mode helpers", () => {
 				childRuntimeStarted: markHydrationStarted,
 				childRuntimeGate: hydrationGate,
 			});
-			const internals = fixture.daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createAgentMessageController(
-					getCurrentState: () => ActiveSessionState | undefined,
-				): AgentSessionMessageController;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createAgentMessageController(
+						getCurrentState: () => ActiveSessionState | undefined,
+					): AgentSessionMessageController;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({
 				type: "create",
 				sessionPath: fixture.parentSessionFile,
@@ -6341,12 +6755,15 @@ describe("daemon mode helpers", () => {
 				grandchildRuntimeStarted: markHydrationStarted,
 				grandchildRuntimeGate: hydrationGate,
 			});
-			const internals = fixture.daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				getOrHydrateBoundSessionState(id: string): Promise<ActiveSessionState>;
-				passivateIdleChildren(threshold: number, now: number, limit: number): Promise<number>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					getOrHydrateBoundSessionState(id: string): Promise<ActiveSessionState>;
+					passivateIdleChildren(threshold: number, now: number, limit: number): Promise<number>;
+				},
+				unknown
+			>(fixture.daemon);
 			const rootState = await internals.createRuntime({
 				type: "create",
 				sessionPath: fixture.parentSessionFile,
@@ -6355,9 +6772,12 @@ describe("daemon mode helpers", () => {
 				type: "create",
 				sessionPath: fixture.childSessionFile,
 			});
-			const rootSession = rootState.runtime.session as unknown as {
-				releaseRlmChildSession: ReturnType<typeof vi.fn>;
-			};
+			const rootSession = fromAny<
+				{
+					releaseRlmChildSession: ReturnType<typeof vi.fn>;
+				},
+				unknown
+			>(rootState.runtime.session);
 			rootSession.releaseRlmChildSession = vi.fn(() => vi.fn());
 
 			const hydration = internals.getOrHydrateBoundSessionState(fixture.grandchildId);
@@ -6374,7 +6794,7 @@ describe("daemon mode helpers", () => {
 				rlmChildId: fixture.grandchildId,
 			});
 			expect(
-				(parentState.runtime.session as unknown as { registerRlmChildSession: ReturnType<typeof vi.fn> })
+				fromAny<{ registerRlmChildSession: ReturnType<typeof vi.fn> }, unknown>(parentState.runtime.session)
 					.registerRlmChildSession,
 			).toHaveBeenCalledWith(fixture.grandchildId, grandchildState.runtime.session);
 		} finally {
@@ -6387,18 +6807,21 @@ describe("daemon mode helpers", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-parent-change-open-race-"));
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				openingSessions: Map<string, Promise<ActiveSessionState>>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				findPassiveRlmSubagent(id: string): Promise<unknown>;
-				hydratePassiveRlmSubagent(passive: unknown): Promise<ActiveSessionState>;
-				rehydrateCompletedRlmSubagent(
-					parent: ActiveSessionState,
-					entry: { childId: string; sessionFile: string },
-				): Promise<ActiveSessionState>;
-				waitForPassivation(sessionFile: string): Promise<void>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					openingSessions: Map<string, Promise<ActiveSessionState>>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					findPassiveRlmSubagent(id: string): Promise<unknown>;
+					hydratePassiveRlmSubagent(passive: unknown): Promise<ActiveSessionState>;
+					rehydrateCompletedRlmSubagent(
+						parent: ActiveSessionState,
+						entry: { childId: string; sessionFile: string },
+					): Promise<ActiveSessionState>;
+					waitForPassivation(sessionFile: string): Promise<void>;
+				},
+				unknown
+			>(fixture.daemon);
 			const rootState = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			const passive = await internals.findPassiveRlmSubagent(fixture.grandchildId);
 			if (!passive) throw new Error("Missing passive grandchild");
@@ -6444,24 +6867,27 @@ describe("daemon mode helpers", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-chain-parent-passivation-race-"));
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				findPassiveRlmSubagent(id: string): Promise<
-					| {
-							rootParentState: ActiveSessionState;
-							entry: { childId: string; sessionFile: string };
-							chain: Array<{ childId: string; sessionFile: string }>;
-					  }
-					| undefined
-				>;
-				hydratePassiveRlmSubagent(passive: unknown): Promise<ActiveSessionState>;
-				waitForPassivation(sessionFile: string): Promise<void>;
-				rehydrateCompletedRlmSubagent(
-					parent: ActiveSessionState,
-					entry: { childId: string; sessionFile: string },
-				): Promise<ActiveSessionState>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					findPassiveRlmSubagent(id: string): Promise<
+						| {
+								rootParentState: ActiveSessionState;
+								entry: { childId: string; sessionFile: string };
+								chain: Array<{ childId: string; sessionFile: string }>;
+						  }
+						| undefined
+					>;
+					hydratePassiveRlmSubagent(passive: unknown): Promise<ActiveSessionState>;
+					waitForPassivation(sessionFile: string): Promise<void>;
+					rehydrateCompletedRlmSubagent(
+						parent: ActiveSessionState,
+						entry: { childId: string; sessionFile: string },
+					): Promise<ActiveSessionState>;
+				},
+				unknown
+			>(fixture.daemon);
 			const rootState = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			const passive = await internals.findPassiveRlmSubagent(fixture.grandchildId);
 			if (!passive) throw new Error("Missing passive grandchild");
@@ -6527,19 +6953,25 @@ describe("daemon mode helpers", () => {
 		});
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				closingSessions: Map<string, { promise: Promise<void>; reason: "shutdown"; killedEffects?: Promise<void> }>;
-				passivatingSessions: Map<string, Promise<void>>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				findPassiveRlmSubagent(id: string): Promise<unknown>;
-				hydratePassiveRlmSubagent(passive: unknown): Promise<ActiveSessionState>;
-				rehydrateCompletedRlmSubagent(
-					parent: ActiveSessionState,
-					entry: { childId: string; sessionFile: string },
-				): Promise<ActiveSessionState>;
-				waitForBoundSession(state: ActiveSessionState): Promise<ActiveSessionState>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					closingSessions: Map<
+						string,
+						{ promise: Promise<void>; reason: "shutdown"; killedEffects?: Promise<void> }
+					>;
+					passivatingSessions: Map<string, Promise<void>>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					findPassiveRlmSubagent(id: string): Promise<unknown>;
+					hydratePassiveRlmSubagent(passive: unknown): Promise<ActiveSessionState>;
+					rehydrateCompletedRlmSubagent(
+						parent: ActiveSessionState,
+						entry: { childId: string; sessionFile: string },
+					): Promise<ActiveSessionState>;
+					waitForBoundSession(state: ActiveSessionState): Promise<ActiveSessionState>;
+				},
+				unknown
+			>(fixture.daemon);
 			const rootState = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			const passive = await internals.findPassiveRlmSubagent(fixture.childId);
 			if (!passive) throw new Error("Missing passive child");
@@ -6596,16 +7028,19 @@ describe("daemon mode helpers", () => {
 				childDisposeStarted: markParentDisposeStarted,
 				childDisposeGate: parentDisposeGate,
 			});
-			const internals = fixture.daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				getOrHydrateBoundSessionState(id: string): Promise<ActiveSessionState>;
-				passivateIdleChildren(threshold: number, now: number, limit: number): Promise<number>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					getOrHydrateBoundSessionState(id: string): Promise<ActiveSessionState>;
+					passivateIdleChildren(threshold: number, now: number, limit: number): Promise<number>;
+				},
+				unknown
+			>(fixture.daemon);
 			const rootState = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			const parentState = await internals.createRuntime({ type: "create", sessionPath: fixture.childSessionFile });
-			(
-				rootState.runtime.session as unknown as { releaseRlmChildSession: ReturnType<typeof vi.fn> }
+			fromAny<{ releaseRlmChildSession: ReturnType<typeof vi.fn> }, unknown>(
+				rootState.runtime.session,
 			).releaseRlmChildSession = vi.fn(() => vi.fn());
 
 			const passivation = internals.passivateIdleChildren(90, Date.parse("2036-08-01T12:00:00Z"), 1);
@@ -6640,19 +7075,22 @@ describe("daemon mode helpers", () => {
 		});
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createAttachResult: ReturnType<typeof vi.fn>;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-				passivateIdleChildren(threshold: number, now: number, limit: number): Promise<number>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createAttachResult: ReturnType<typeof vi.fn>;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+					passivateIdleChildren(threshold: number, now: number, limit: number): Promise<number>;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			const childState = await internals.createRuntime({ type: "create", sessionPath: fixture.childSessionFile });
 			const client = makeClient("attach-client", childState.activeSessionId);
 			client.attachedActiveSessionIds.clear();
-			(
-				parentState.runtime.session as unknown as { releaseRlmChildSession: ReturnType<typeof vi.fn> }
+			fromAny<{ releaseRlmChildSession: ReturnType<typeof vi.fn> }, unknown>(
+				parentState.runtime.session,
 			).releaseRlmChildSession = vi.fn(() => true);
 			internals.createAttachResult = vi.fn(async () => {
 				await snapshotGate;
@@ -6683,18 +7121,24 @@ describe("daemon mode helpers", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-passivation-stream-race-"));
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				listPassiveRlmSubagents: ReturnType<typeof vi.fn>;
-				passivateIdleChildren(threshold: number, now: number, limit: number): Promise<number>;
-			};
+			const internals = fromAny<
+				{
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					listPassiveRlmSubagents: ReturnType<typeof vi.fn>;
+					passivateIdleChildren(threshold: number, now: number, limit: number): Promise<number>;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			const childState = await internals.createRuntime({ type: "create", sessionPath: fixture.childSessionFile });
-			const childSession = childState.runtime.session as unknown as {
-				isStreaming: boolean;
-				isSessionActive: boolean;
-				abort: ReturnType<typeof vi.fn>;
-			};
+			const childSession = fromAny<
+				{
+					isStreaming: boolean;
+					isSessionActive: boolean;
+					abort: ReturnType<typeof vi.fn>;
+				},
+				unknown
+			>(childState.runtime.session);
 			let passiveListCalls = 0;
 			internals.listPassiveRlmSubagents = vi.fn(async () => {
 				passiveListCalls++;
@@ -6726,20 +7170,26 @@ describe("daemon mode helpers", () => {
 		});
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createAgentMessageController(
-					getCurrentState: () => ActiveSessionState | undefined,
-				): AgentSessionMessageController;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				passivateIdleChildren(threshold: number, now: number, limit: number): Promise<number>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createAgentMessageController(
+						getCurrentState: () => ActiveSessionState | undefined,
+					): AgentSessionMessageController;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					passivateIdleChildren(threshold: number, now: number, limit: number): Promise<number>;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			const childState = await internals.createRuntime({ type: "create", sessionPath: fixture.childSessionFile });
-			const parentSession = parentState.runtime.session as unknown as {
-				releaseRlmChildSession: ReturnType<typeof vi.fn>;
-				registerRlmChildSession: ReturnType<typeof vi.fn>;
-			};
+			const parentSession = fromAny<
+				{
+					releaseRlmChildSession: ReturnType<typeof vi.fn>;
+					registerRlmChildSession: ReturnType<typeof vi.fn>;
+				},
+				unknown
+			>(parentState.runtime.session);
 			let parentOwnsChild = true;
 			let forwarderActive = true;
 			const parentUpdates: string[] = [];
@@ -6767,7 +7217,7 @@ describe("daemon mode helpers", () => {
 					throw new Error("unsubscribe failed");
 				})
 				.mockImplementation(() => undefined);
-			const childSession = childState.runtime.session as unknown as { abort: ReturnType<typeof vi.fn> };
+			const childSession = fromAny<{ abort: ReturnType<typeof vi.fn> }, unknown>(childState.runtime.session);
 			childSession.abort = vi.fn(async () => {
 				markAbortStarted();
 				await abortGate;
@@ -6819,13 +7269,16 @@ describe("daemon mode helpers", () => {
 		const nonLeaf = makeState("non-leaf", "root");
 		const nested = makeState("nested", "non-leaf");
 		const states = [root, oldestLeaf, nextLeaf, queuedLeaf, nonLeaf, nested];
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			listPassiveRlmSubagents: ReturnType<typeof vi.fn>;
-			sessionPassivationSnapshot: ReturnType<typeof vi.fn>;
-			passivateSession: ReturnType<typeof vi.fn>;
-			passivateIdleChildren(threshold: number, now: number, limit: number): Promise<number>;
-		};
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				listPassiveRlmSubagents: ReturnType<typeof vi.fn>;
+				sessionPassivationSnapshot: ReturnType<typeof vi.fn>;
+				passivateSession: ReturnType<typeof vi.fn>;
+				passivateIdleChildren(threshold: number, now: number, limit: number): Promise<number>;
+			},
+			unknown
+		>(daemon);
 		for (const state of states) internals.sessions.set(state.activeSessionId, state);
 		const order = new Map([
 			[oldestLeaf, 1],
@@ -6860,20 +7313,26 @@ describe("daemon mode helpers", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-passivate-child-"));
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createAgentMessageController(
-					getCurrentState: () => ActiveSessionState | undefined,
-				): AgentSessionMessageController;
-				passivateIdleChildren(threshold: number | "off", now: number, limit: number): Promise<number>;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createAgentMessageController(
+						getCurrentState: () => ActiveSessionState | undefined,
+					): AgentSessionMessageController;
+					passivateIdleChildren(threshold: number | "off", now: number, limit: number): Promise<number>;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			const firstChild = await internals.createRuntime({ type: "create", sessionPath: fixture.childSessionFile });
-			const parentSession = parentState.runtime.session as unknown as {
-				releaseRlmChildSession: ReturnType<typeof vi.fn>;
-			};
+			const parentSession = fromAny<
+				{
+					releaseRlmChildSession: ReturnType<typeof vi.fn>;
+				},
+				unknown
+			>(parentState.runtime.session);
 			parentSession.releaseRlmChildSession = vi.fn(() => vi.fn());
 
 			expect(await internals.passivateIdleChildren(90, Date.parse("2036-08-01T12:00:00Z"), 2)).toBe(1);
@@ -6881,25 +7340,31 @@ describe("daemon mode helpers", () => {
 			expect(parentSession.releaseRlmChildSession).toHaveBeenCalledWith(fixture.childId, firstChild.runtime.session);
 			expect(fixture.runtimeSessions[1]?.disposeAsync).toHaveBeenCalledOnce();
 
-			const listed = (await internals.handleCommand(makeClient("list-client", parentState.activeSessionId), {
-				type: "list",
-			})) as { data: { sessions: Array<Record<string, unknown>> } };
+			const listed = fromAny<{ data: { sessions: Array<Record<string, unknown>> } }, unknown>(
+				await internals.handleCommand(makeClient("list-client", parentState.activeSessionId), {
+					type: "list",
+				}),
+			);
 			const passiveRow = listed.data.sessions.find((row) => row.sessionFile === fixture.childSessionFile);
 			expect(passiveRow).toMatchObject({ rlmChildId: fixture.childId, sessionName: "renamed-worker" });
 			expect(passiveRow?.activeSessionId).toBeUndefined();
 
-			const attachedState = await (
-				fixture.daemon as unknown as {
+			const attachedState = await fromAny<
+				{
 					getOrHydrateBoundSessionState(id: string): Promise<ActiveSessionState>;
-				}
-			).getOrHydrateBoundSessionState(String(passiveRow?.sessionId));
+				},
+				unknown
+			>(fixture.daemon).getOrHydrateBoundSessionState(String(passiveRow?.sessionId));
 			expect(attachedState.runtime.metadata).toMatchObject({ rlmChildId: fixture.childId });
 
 			// Detach so the same runtime can passivate again and prove a2a wake/delivery.
 			attachedState?.clients.clear();
-			const parentSessionAgain = parentState.runtime.session as unknown as {
-				releaseRlmChildSession: ReturnType<typeof vi.fn>;
-			};
+			const parentSessionAgain = fromAny<
+				{
+					releaseRlmChildSession: ReturnType<typeof vi.fn>;
+				},
+				unknown
+			>(parentState.runtime.session);
 			parentSessionAgain.releaseRlmChildSession = vi.fn(() => vi.fn());
 			expect(await internals.passivateIdleChildren(90, Date.parse("2036-08-01T12:00:00Z"), 2)).toBe(1);
 			await expect(
@@ -6934,18 +7399,21 @@ describe("daemon mode helpers", () => {
 				childAdmissionStarted: markAdmissionStarted,
 				childAdmissionGate: admissionGate,
 			});
-			const internals = fixture.daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createAgentMessageController(
-					getCurrentState: () => ActiveSessionState | undefined,
-				): AgentSessionMessageController;
-				passivateIdleChildren(threshold: number, now: number, limit: number): Promise<number>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createAgentMessageController(
+						getCurrentState: () => ActiveSessionState | undefined,
+					): AgentSessionMessageController;
+					passivateIdleChildren(threshold: number, now: number, limit: number): Promise<number>;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			const childState = await internals.createRuntime({ type: "create", sessionPath: fixture.childSessionFile });
-			(
-				parentState.runtime.session as unknown as { releaseRlmChildSession: ReturnType<typeof vi.fn> }
+			fromAny<{ releaseRlmChildSession: ReturnType<typeof vi.fn> }, unknown>(
+				parentState.runtime.session,
 			).releaseRlmChildSession = vi.fn(() => vi.fn());
 
 			const delivery = internals
@@ -6978,18 +7446,21 @@ describe("daemon mode helpers", () => {
 				childDisposeStarted: markDisposeStarted,
 				childDisposeGate: disposeGate,
 			});
-			const internals = fixture.daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createAgentMessageController(
-					getCurrentState: () => ActiveSessionState | undefined,
-				): AgentSessionMessageController;
-				passivateIdleChildren(threshold: number, now: number, limit: number): Promise<number>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createAgentMessageController(
+						getCurrentState: () => ActiveSessionState | undefined,
+					): AgentSessionMessageController;
+					passivateIdleChildren(threshold: number, now: number, limit: number): Promise<number>;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			const childState = await internals.createRuntime({ type: "create", sessionPath: fixture.childSessionFile });
-			(
-				parentState.runtime.session as unknown as { releaseRlmChildSession: ReturnType<typeof vi.fn> }
+			fromAny<{ releaseRlmChildSession: ReturnType<typeof vi.fn> }, unknown>(
+				parentState.runtime.session,
 			).releaseRlmChildSession = vi.fn(() => vi.fn());
 
 			const passivation = internals.passivateIdleChildren(90, Date.parse("2036-08-01T12:00:00Z"), 1);
@@ -7028,9 +7499,12 @@ describe("daemon mode helpers", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-lazy-rlm-open-"));
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-			};
+			const internals = fromAny<
+				{
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+				},
+				unknown
+			>(fixture.daemon);
 			await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 
 			const childState = await internals.createRuntime({
@@ -7053,30 +7527,38 @@ describe("daemon mode helpers", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-lazy-rlm-attach-"));
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({
 				type: "create",
 				sessionPath: fixture.parentSessionFile,
 			});
 			const client = makeClient("client-1", parentState.activeSessionId);
 			client.socket.write = vi.fn(() => true);
-			const listResponse = (await internals.handleCommand(client, { type: "list" })) as {
-				data: { sessions: SessionSummary[] };
-			};
+			const listResponse = fromAny<
+				{
+					data: { sessions: SessionSummary[] };
+				},
+				unknown
+			>(await internals.handleCommand(client, { type: "list" }));
 			const passiveRow = listResponse.data.sessions.find(
 				(session) => session.sessionFile === fixture.childSessionFile,
 			);
 			if (!passiveRow) throw new Error("Missing passive child row");
 			expect(passiveRow.activeSessionId).toBeUndefined();
 
-			const attachResponse = (await internals.handleCommand(client, {
-				type: "attach",
-				activeSessionId: passiveRow.id,
-			})) as { data: DaemonAttachResult };
+			const attachResponse = fromAny<{ data: DaemonAttachResult }, unknown>(
+				await internals.handleCommand(client, {
+					type: "attach",
+					activeSessionId: passiveRow.id,
+				}),
+			);
 
 			expect(attachResponse.data.activeSessionId).toBe(passiveRow.id);
 			expect(internals.sessions.get(passiveRow.id)?.activeSessionId).toBe(passiveRow.id);
@@ -7090,24 +7572,32 @@ describe("daemon mode helpers", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-rlm-cancel-"));
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			};
+			const internals = fromAny<
+				{
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
-			const parentSession = parentState.runtime.session as unknown as {
-				cancelRlmChildRun: ReturnType<typeof vi.fn>;
-				deleteRlmSubagent: ReturnType<typeof vi.fn>;
-			};
+			const parentSession = fromAny<
+				{
+					cancelRlmChildRun: ReturnType<typeof vi.fn>;
+					deleteRlmSubagent: ReturnType<typeof vi.fn>;
+				},
+				unknown
+			>(parentState.runtime.session);
 			parentSession.cancelRlmChildRun = vi.fn(() => false);
 			parentSession.deleteRlmSubagent = vi.fn();
 
 			for (const childId of [fixture.childId, "unknown-child"]) {
-				const result = (await internals.handleCommand(makeClient("client-1", parentState.activeSessionId), {
-					type: "cancel_rlm_child",
-					activeSessionId: parentState.activeSessionId,
-					childId,
-				})) as { data: { cancelled: boolean } };
+				const result = fromAny<{ data: { cancelled: boolean } }, unknown>(
+					await internals.handleCommand(makeClient("client-1", parentState.activeSessionId), {
+						type: "cancel_rlm_child",
+						activeSessionId: parentState.activeSessionId,
+						childId,
+					}),
+				);
 				expect(result.data.cancelled).toBe(false);
 			}
 			expect(parentSession.deleteRlmSubagent).not.toHaveBeenCalled();
@@ -7120,26 +7610,33 @@ describe("daemon mode helpers", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-hydrated-rlm-delete-"));
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			const childState = await internals.createRuntime({ type: "create", sessionPath: fixture.childSessionFile });
 			let isStreaming = true;
 			Object.defineProperty(childState.runtime.session, "isStreaming", { get: () => isStreaming });
 			Object.defineProperty(childState.runtime.session, "unfinishedActionCount", { get: () => 0 });
-			const parentSession = parentState.runtime.session as unknown as {
-				deleteInactiveRlmSubagent: ReturnType<typeof vi.fn>;
-			};
+			const parentSession = fromAny<
+				{
+					deleteInactiveRlmSubagent: ReturnType<typeof vi.fn>;
+				},
+				unknown
+			>(parentState.runtime.session);
 			const deleteSpy = vi.fn(async (childId: string, isExternallyRunning: () => boolean) => {
 				if (isExternallyRunning()) return "running" as const;
-				await (
-					fixture.daemon as unknown as {
+				await fromAny<
+					{
 						createSubagentRuntimeHost(parent: ActiveSessionState): SubagentRuntimeHost;
-					}
-				)
+					},
+					unknown
+				>(fixture.daemon)
 					.createSubagentRuntimeHost(parentState)
 					.deleteRlmSubagentRuntime(childId, childState.runtime.session);
 				return "deleted" as const;
@@ -7147,21 +7644,25 @@ describe("daemon mode helpers", () => {
 			parentSession.deleteInactiveRlmSubagent = deleteSpy;
 			const client = makeClient("client-1", parentState.activeSessionId);
 
-			const busy = (await internals.handleCommand(client, {
-				type: "delete_rlm_subagent",
-				activeSessionId: parentState.activeSessionId,
-				childId: fixture.childId,
-			})) as { data: { deleted: boolean; reason?: string } };
+			const busy = fromAny<{ data: { deleted: boolean; reason?: string } }, unknown>(
+				await internals.handleCommand(client, {
+					type: "delete_rlm_subagent",
+					activeSessionId: parentState.activeSessionId,
+					childId: fixture.childId,
+				}),
+			);
 			expect(busy.data).toEqual({ deleted: false, reason: "running" });
 			expect(deleteSpy).not.toHaveBeenCalled();
 			expect(internals.sessions.get(childState.activeSessionId)).toBe(childState);
 
 			isStreaming = false;
-			const idle = (await internals.handleCommand(client, {
-				type: "delete_rlm_subagent",
-				activeSessionId: parentState.activeSessionId,
-				childId: fixture.childId,
-			})) as { data: { deleted: boolean } };
+			const idle = fromAny<{ data: { deleted: boolean } }, unknown>(
+				await internals.handleCommand(client, {
+					type: "delete_rlm_subagent",
+					activeSessionId: parentState.activeSessionId,
+					childId: fixture.childId,
+				}),
+			);
 			expect(idle.data).toEqual({ deleted: true });
 			expect(internals.sessions.has(childState.activeSessionId)).toBe(false);
 		} finally {
@@ -7173,35 +7674,43 @@ describe("daemon mode helpers", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-nested-rlm-delete-"));
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				},
+				unknown
+			>(fixture.daemon);
 			const rootState = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			const nestedState = await internals.createRuntime({ type: "create", sessionPath: fixture.childSessionFile });
 			const nestedSession = nestedState.runtime.session;
-			nestedState.runtime = {
+			nestedState.runtime = fromPartial<ActiveSessionState["runtime"]>({
 				...nestedState.runtime,
 				metadata: {
 					...nestedState.runtime.metadata,
 					parentActiveSessionId: "intermediate-active",
 				},
 				session: nestedSession,
-			} as ActiveSessionState["runtime"];
+			});
 			Object.defineProperty(nestedState.runtime.session, "isStreaming", { get: () => true });
 			Object.defineProperty(nestedState.runtime.session, "unfinishedActionCount", { get: () => 0 });
-			const rootSession = rootState.runtime.session as unknown as {
-				deleteInactiveRlmSubagent: ReturnType<typeof vi.fn>;
-			};
+			const rootSession = fromAny<
+				{
+					deleteInactiveRlmSubagent: ReturnType<typeof vi.fn>;
+				},
+				unknown
+			>(rootState.runtime.session);
 			const deleteSpy = vi.fn(async () => "deleted" as const);
 			rootSession.deleteInactiveRlmSubagent = deleteSpy;
 
-			const result = (await internals.handleCommand(makeClient("client-1", rootState.activeSessionId), {
-				type: "delete_rlm_subagent",
-				activeSessionId: rootState.activeSessionId,
-				childId: fixture.childId,
-			})) as { data: { deleted: boolean; reason?: string } };
+			const result = fromAny<{ data: { deleted: boolean; reason?: string } }, unknown>(
+				await internals.handleCommand(makeClient("client-1", rootState.activeSessionId), {
+					type: "delete_rlm_subagent",
+					activeSessionId: rootState.activeSessionId,
+					childId: fixture.childId,
+				}),
+			);
 
 			expect(result.data).toEqual({ deleted: false, reason: "running" });
 			expect(deleteSpy).not.toHaveBeenCalled();
@@ -7215,46 +7724,57 @@ describe("daemon mode helpers", () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-lazy-rlm-delete-"));
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			};
+			const internals = fromAny<
+				{
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
-			const parentSession = parentState.runtime.session as unknown as {
-				deleteInactiveRlmSubagent: (childId: string) => Promise<"deleted" | "not_found">;
-			};
+			const parentSession = fromAny<
+				{
+					deleteInactiveRlmSubagent: (childId: string) => Promise<"deleted" | "not_found">;
+				},
+				unknown
+			>(parentState.runtime.session);
 			parentSession.deleteInactiveRlmSubagent = async (childId) => {
 				if (childId !== fixture.childId) return "not_found";
-				await (
-					fixture.daemon as unknown as {
+				await fromAny<
+					{
 						createSubagentRuntimeHost(parent: ActiveSessionState): SubagentRuntimeHost;
-					}
-				)
+					},
+					unknown
+				>(fixture.daemon)
 					.createSubagentRuntimeHost(parentState)
 					.deleteRlmSubagentRuntime(childId);
 				return "deleted";
 			};
 			const client = makeClient("client-1", parentState.activeSessionId);
 
-			const unknown = (await internals.handleCommand(client, {
-				type: "delete_rlm_subagent",
-				activeSessionId: parentState.activeSessionId,
-				childId: "unknown-child",
-			})) as { data: { deleted: boolean } };
+			const unknown = fromAny<{ data: { deleted: boolean } }, unknown>(
+				await internals.handleCommand(client, {
+					type: "delete_rlm_subagent",
+					activeSessionId: parentState.activeSessionId,
+					childId: "unknown-child",
+				}),
+			);
 			expect(unknown.data).toEqual({ deleted: false });
 
-			const result = (await internals.handleCommand(client, {
-				type: "delete_rlm_subagent",
-				activeSessionId: parentState.activeSessionId,
-				childId: fixture.childId,
-			})) as { data: { deleted: boolean } };
+			const result = fromAny<{ data: { deleted: boolean } }, unknown>(
+				await internals.handleCommand(client, {
+					type: "delete_rlm_subagent",
+					activeSessionId: parentState.activeSessionId,
+					childId: fixture.childId,
+				}),
+			);
 			expect(result.data).toEqual({ deleted: true });
 			expect(fixture.createRuntime).toHaveBeenCalledOnce();
 			expect(existsSync(fixture.childSessionFile)).toBe(true);
 			const persisted = readFileSync(join(fixture.parentArtifactDir, "rlm-subagents.jsonl"), "utf8")
 				.trim()
 				.split(/\r?\n/)
-				.map((line) => JSON.parse(line) as { childId: string; status: string });
+				.map((line) => fromPartial<{ childId: string; status: string }>(JSON.parse(line)));
 			expect(persisted.at(-1)).toMatchObject({ childId: fixture.childId, status: "deleted" });
 		} finally {
 			rmSync(tempDir, { recursive: true, force: true });
@@ -7271,12 +7791,18 @@ describe("daemon mode helpers", () => {
 				});
 				return {
 					session,
-					extensionsResult: { extensions: [], errors: [], runtime: {} } as unknown as Awaited<
-						ReturnType<CreateAgentSessionRuntimeFactory>
-					>["extensionsResult"],
-					services: { cwd: options.cwd, agentDir: options.agentDir } as Awaited<
-						ReturnType<CreateAgentSessionRuntimeFactory>
-					>["services"],
+					extensionsResult: fromAny<
+						Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["extensionsResult"],
+						unknown
+					>({
+						extensions: [],
+						errors: [],
+						runtime: {},
+					}),
+					services: fromPartial<Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["services"]>({
+						cwd: options.cwd,
+						agentDir: options.agentDir,
+					}),
 					diagnostics: [],
 				};
 			});
@@ -7284,15 +7810,18 @@ describe("daemon mode helpers", () => {
 				defaultSessionConfig: { agentDir: tempDir, cwd: tempDir, sessionDir: tempDir },
 				createRuntime,
 			});
-			const internals = daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				bindingSessions: Set<string>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createRlmSubagentRuntime(
-					parentState: ActiveSessionState,
-					options: CreateRlmSubagentRuntimeOptions,
-				): Promise<unknown>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					bindingSessions: Set<string>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createRlmSubagentRuntime(
+						parentState: ActiveSessionState,
+						options: CreateRlmSubagentRuntimeOptions,
+					): Promise<unknown>;
+				},
+				unknown
+			>(daemon);
 			const parentState = await internals.createRuntime({
 				type: "create",
 				sessionPath: join(tempDir, "parent.jsonl"),
@@ -7305,7 +7834,7 @@ describe("daemon mode helpers", () => {
 				prompt: "spawn a nested worker",
 				sessionName: childSessionName,
 				sessionDir: join(tempDir, "child"),
-				model: {} as Model<Api>,
+				model: fromPartial<Model<Api>>({}),
 				thinkingLevel: "off",
 				serviceTier: null,
 				scopedModels: [],
@@ -7336,7 +7865,7 @@ describe("daemon mode helpers", () => {
 			expect(sessionNamesDuringBind[1]).toBeUndefined();
 
 			const grandchildState = makeState("grandchild", childActiveSessionId);
-			grandchildState.runtime = {
+			grandchildState.runtime = fromAny<never, unknown>({
 				...grandchildState.runtime,
 				cwd: tempDir,
 				metadata: { ...grandchildState.runtime.metadata, rlmChildId: "grandchild-1" },
@@ -7346,7 +7875,7 @@ describe("daemon mode helpers", () => {
 					isStreaming: false,
 					sessionActions: { queuedCount: 0, steering: [], followUps: [] },
 				},
-			} as never;
+			});
 			internals.sessions.set(grandchildState.activeSessionId, grandchildState);
 			expect((await childController?.listAgents())?.agents).toContainEqual(
 				expect.objectContaining({
@@ -7365,7 +7894,7 @@ describe("daemon mode helpers", () => {
 					prompt: "delete during daemon startup",
 					sessionName: "cancelled-worker",
 					sessionDir: join(tempDir, "cancelled-child"),
-					model: {} as Model<Api>,
+					model: fromPartial<Model<Api>>({}),
 					thinkingLevel: "off",
 					serviceTier: null,
 					scopedModels: [],
@@ -7390,17 +7919,20 @@ describe("daemon mode helpers", () => {
 		try {
 			const createRuntime = vi.fn(async (options: Parameters<CreateAgentSessionRuntimeFactory>[0]) => ({
 				session: makeRuntimeSession(options.sessionManager),
-				extensionsResult: { extensions: [], errors: [], runtime: {} } as never,
-				services: { cwd: options.cwd, agentDir: options.agentDir } as never,
+				extensionsResult: fromAny<never, unknown>({ extensions: [], errors: [], runtime: {} }),
+				services: fromAny<never, unknown>({ cwd: options.cwd, agentDir: options.agentDir }),
 				diagnostics: [],
 			}));
 			const daemon = new AgentDaemon(join(tempDir, "daemon.sock"), {
 				defaultSessionConfig: { agentDir: tempDir, cwd: tempDir, sessionDir: tempDir },
 				createRuntime,
 			});
-			const internals = daemon as unknown as {
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-			};
+			const internals = fromAny<
+				{
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+				},
+				unknown
+			>(daemon);
 			await internals.createRuntime({ type: "create", sessionPath: join(tempDir, "first.jsonl"), name: "taken" });
 			await expect(
 				internals.createRuntime({ type: "create", sessionPath: join(tempDir, "second.jsonl"), name: "taken" }),
@@ -7429,12 +7961,18 @@ describe("daemon mode helpers", () => {
 				}
 				return {
 					session,
-					extensionsResult: { extensions: [], errors: [], runtime: {} } as unknown as Awaited<
-						ReturnType<CreateAgentSessionRuntimeFactory>
-					>["extensionsResult"],
-					services: { cwd: options.cwd, agentDir: options.agentDir } as Awaited<
-						ReturnType<CreateAgentSessionRuntimeFactory>
-					>["services"],
+					extensionsResult: fromAny<
+						Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["extensionsResult"],
+						unknown
+					>({
+						extensions: [],
+						errors: [],
+						runtime: {},
+					}),
+					services: fromPartial<Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["services"]>({
+						cwd: options.cwd,
+						agentDir: options.agentDir,
+					}),
 					diagnostics: [],
 				};
 			});
@@ -7442,14 +7980,17 @@ describe("daemon mode helpers", () => {
 				defaultSessionConfig: { agentDir: tempDir, cwd: tempDir, sessionDir: tempDir },
 				createRuntime,
 			});
-			const internals = daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				createRlmSubagentRuntime(
-					parentState: ActiveSessionState,
-					options: CreateRlmSubagentRuntimeOptions,
-				): Promise<unknown>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					createRlmSubagentRuntime(
+						parentState: ActiveSessionState,
+						options: CreateRlmSubagentRuntimeOptions,
+					): Promise<unknown>;
+				},
+				unknown
+			>(daemon);
 			const parentState = await internals.createRuntime({
 				type: "create",
 				sessionPath: join(tempDir, "parent.jsonl"),
@@ -7461,7 +8002,7 @@ describe("daemon mode helpers", () => {
 					prompt: "fail while naming",
 					sessionName: "requested-name",
 					sessionDir: join(tempDir, "child"),
-					model: {} as Model<Api>,
+					model: fromPartial<Model<Api>>({}),
 					thinkingLevel: "off",
 					serviceTier: null,
 					scopedModels: [],
@@ -7498,12 +8039,18 @@ describe("daemon mode helpers", () => {
 				});
 				return {
 					session,
-					extensionsResult: { extensions: [], errors: [], runtime: {} } as unknown as Awaited<
-						ReturnType<CreateAgentSessionRuntimeFactory>
-					>["extensionsResult"],
-					services: { cwd: options.cwd, agentDir: options.agentDir } as Awaited<
-						ReturnType<CreateAgentSessionRuntimeFactory>
-					>["services"],
+					extensionsResult: fromAny<
+						Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["extensionsResult"],
+						unknown
+					>({
+						extensions: [],
+						errors: [],
+						runtime: {},
+					}),
+					services: fromPartial<Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["services"]>({
+						cwd: options.cwd,
+						agentDir: options.agentDir,
+					}),
 					diagnostics: [],
 				};
 			});
@@ -7511,22 +8058,25 @@ describe("daemon mode helpers", () => {
 				defaultSessionConfig: { agentDir: tempDir, cwd: tempDir, sessionDir: tempDir },
 				createRuntime,
 			});
-			const internals = daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown> | undefined;
-				createAgentMessageListResult(current: ActiveSessionState): Promise<{
-					agents: Array<{ activeSessionId: string }>;
-				}>;
-				sendAgentSessionMessage(options: {
-					targetSelector: string;
-					message: string;
-					fromState?: ActiveSessionState;
-					origin: "agent" | "cli";
-				}): Promise<unknown>;
-			};
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown> | undefined;
+					createAgentMessageListResult(current: ActiveSessionState): Promise<{
+						agents: Array<{ activeSessionId: string }>;
+					}>;
+					sendAgentSessionMessage(options: {
+						targetSelector: string;
+						message: string;
+						fromState?: ActiveSessionState;
+						origin: "agent" | "cli";
+					}): Promise<unknown>;
+				},
+				unknown
+			>(daemon);
 			const fromState = makeState("source");
-			fromState.runtime = {
+			fromState.runtime = fromAny<never, unknown>({
 				...fromState.runtime,
 				cwd: tempDir,
 				session: {
@@ -7535,7 +8085,7 @@ describe("daemon mode helpers", () => {
 					isStreaming: false,
 					unfinishedActionCount: 0,
 				},
-			} as never;
+			});
 			internals.sessions.set(fromState.activeSessionId, fromState);
 
 			const created = internals.createRuntime({ type: "create", sessionPath: join(tempDir, "session.jsonl") });
@@ -7546,16 +8096,16 @@ describe("daemon mode helpers", () => {
 			expect(bindingId).toBeTruthy();
 
 			const message = internals.sendAgentSessionMessage({
-				targetSelector: bindingId as string,
+				targetSelector: fromAny<string, unknown>(bindingId),
 				message: "wait for binding",
 				fromState,
 				origin: "agent",
 			});
 			const attach = Promise.resolve(
-				internals.handleCommand(makeClient("client-1", bindingId as string), {
+				internals.handleCommand(makeClient("client-1", fromAny<string, unknown>(bindingId)), {
 					id: "command-1",
 					type: "attach",
-					activeSessionId: bindingId as string,
+					activeSessionId: fromAny<string, unknown>(bindingId),
 				}),
 			);
 			let messageSettled = false;
@@ -7608,10 +8158,13 @@ describe("daemon mode helpers", () => {
 					throw new Error("unexpected runtime creation");
 				},
 			});
-			const internals = daemon as unknown as {
-				cronStore: AgentCronJobStore;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			};
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				},
+				unknown
+			>(daemon);
 			const heartbeat = internals.cronStore.createHeartbeat({
 				activeSessionId: "active-1",
 				sessionId: "session-1",
@@ -7623,10 +8176,12 @@ describe("daemon mode helpers", () => {
 			});
 			internals.cronStore.pauseHeartbeat("active-1", new Date("2026-01-01T12:01:00.000Z"));
 
-			const response = (await internals.handleCommand(makeClient("client-1", "active-1"), {
-				id: "command-1",
-				type: "cron_list",
-			})) as { data: { jobs: AgentCronJob[] } };
+			const response = fromAny<{ data: { jobs: AgentCronJob[] } }, unknown>(
+				await internals.handleCommand(makeClient("client-1", "active-1"), {
+					id: "command-1",
+					type: "cron_list",
+				}),
+			);
 
 			expect(response.data.jobs).toEqual([expect.objectContaining({ id: heartbeat.id, status: "paused" })]);
 		} finally {
@@ -7651,9 +8206,9 @@ describe("daemon mode helpers", () => {
 			const abort = vi.fn(async () => {});
 			const dispose = vi.fn(async () => {});
 			const appendSessionState = vi.fn();
-			const state = makeState("active-1") as ActiveSessionState;
+			const state = fromPartial<ActiveSessionState>(makeState("active-1"));
 			state.extensionUiRequests = new Map();
-			state.runtime = {
+			state.runtime = fromAny<never, unknown>({
 				metadata: { kind: "top-level", createdAt: 1 },
 				cwd: tempDir,
 				dispose,
@@ -7668,12 +8223,15 @@ describe("daemon mode helpers", () => {
 					abort,
 					removeQueuedFollowUp,
 				},
-			} as never;
-			const internals = daemon as unknown as {
-				cronStore: AgentCronJobStore;
-				sessions: Map<string, ActiveSessionState>;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			};
+			});
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					sessions: Map<string, ActiveSessionState>;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				},
+				unknown
+			>(daemon);
 			internals.sessions.set(state.activeSessionId, state);
 			const cron = internals.cronStore.create({
 				activeSessionId: state.activeSessionId,
@@ -7746,7 +8304,7 @@ describe("daemon mode helpers", () => {
 			const appendSessionState = vi.fn();
 			const state = makeState("active-1");
 			state.extensionUiRequests = new Map();
-			state.runtime = {
+			state.runtime = fromAny<never, unknown>({
 				metadata: { kind: "subagent", createdAt: 1 },
 				cwd: tempDir,
 				dispose: vi.fn(async () => {
@@ -7761,18 +8319,21 @@ describe("daemon mode helpers", () => {
 					sessionManager: { appendSessionState, hasUserContent: () => true },
 					abort: vi.fn(async () => {}),
 				},
-			} as never;
-			const internals = daemon as unknown as {
-				cronStore: AgentCronJobStore;
-				sessions: Map<string, ActiveSessionState>;
-				closeSession(
-					state: ActiveSessionState,
-					reason: "shutdown",
-					waitForAbort: boolean,
-					cascadeChildren: boolean,
-				): Promise<void>;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			};
+			});
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					sessions: Map<string, ActiveSessionState>;
+					closeSession(
+						state: ActiveSessionState,
+						reason: "shutdown",
+						waitForAbort: boolean,
+						cascadeChildren: boolean,
+					): Promise<void>;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				},
+				unknown
+			>(daemon);
 			internals.sessions.set(state.activeSessionId, state);
 			const cron = internals.cronStore.create({
 				activeSessionId: state.activeSessionId,
@@ -7818,7 +8379,7 @@ describe("daemon mode helpers", () => {
 			});
 			const appendSessionState = vi.fn();
 			const state = makeState("active-1");
-			state.runtime = {
+			state.runtime = fromAny<never, unknown>({
 				...state.runtime,
 				cwd: tempDir,
 				session: {
@@ -7826,17 +8387,20 @@ describe("daemon mode helpers", () => {
 					sessionFile: join(tempDir, "session.jsonl"),
 					sessionManager: { appendSessionState },
 				},
-			} as never;
+			});
 			const existingClose = {
 				promise: failedClose,
 				reason: "shutdown" as const,
 				descendants: new Set<ActiveSessionState>(),
 			};
-			const internals = daemon as unknown as {
-				cronStore: AgentCronJobStore;
-				closingSessions: Map<string, typeof existingClose>;
-				closeSession(state: ActiveSessionState, reason: "killed"): Promise<void>;
-			};
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					closingSessions: Map<string, typeof existingClose>;
+					closeSession(state: ActiveSessionState, reason: "killed"): Promise<void>;
+				},
+				unknown
+			>(daemon);
 			internals.closingSessions.set(state.activeSessionId, existingClose);
 			const cron = internals.cronStore.create({
 				activeSessionId: state.activeSessionId,
@@ -7878,7 +8442,7 @@ describe("daemon mode helpers", () => {
 				[parent, "session-parent", parentArchive],
 				[child, "session-child", childArchive],
 			] as const) {
-				state.runtime = {
+				state.runtime = fromAny<never, unknown>({
 					...state.runtime,
 					cwd: tempDir,
 					session: {
@@ -7886,18 +8450,21 @@ describe("daemon mode helpers", () => {
 						sessionFile: join(tempDir, `${sessionId}.jsonl`),
 						sessionManager: { appendSessionState },
 					},
-				} as never;
+				});
 			}
 			const existingClose = {
 				promise: Promise.resolve(),
-				reason: "shutdown" as "shutdown" | "killed",
+				reason: fromPartial<"shutdown" | "killed">("shutdown"),
 				descendants: new Set([child]),
 			};
-			const internals = daemon as unknown as {
-				cronStore: AgentCronJobStore;
-				closingSessions: Map<string, typeof existingClose>;
-				closeSession(state: ActiveSessionState, reason: "killed"): Promise<void>;
-			};
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					closingSessions: Map<string, typeof existingClose>;
+					closeSession(state: ActiveSessionState, reason: "killed"): Promise<void>;
+				},
+				unknown
+			>(daemon);
 			internals.closingSessions.set(parent.activeSessionId, existingClose);
 			const jobs = [parent, child].map((state) =>
 				internals.cronStore.create({
@@ -7940,12 +8507,15 @@ describe("daemon mode helpers", () => {
 		});
 		try {
 			const fixture = makePersistedRlmDaemonFixture(tempDir);
-			const internals = fixture.daemon as unknown as {
-				cronStore: AgentCronJobStore;
-				createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
-				closeSession(state: ActiveSessionState, reason: "shutdown"): Promise<void>;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			};
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					createRuntime(command: Extract<DaemonCommand, { type: "create" }>): Promise<ActiveSessionState>;
+					closeSession(state: ActiveSessionState, reason: "shutdown"): Promise<void>;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				},
+				unknown
+			>(fixture.daemon);
 			const parentState = await internals.createRuntime({ type: "create", sessionPath: fixture.parentSessionFile });
 			const childState = await internals.createRuntime({ type: "create", sessionPath: fixture.childSessionFile });
 			parentState.runtime.dispose = vi.fn(async () => {
@@ -8001,7 +8571,7 @@ describe("daemon mode helpers", () => {
 			const appendSessionState = vi.fn();
 			const state = makeState("active-1");
 			state.extensionUiRequests = new Map();
-			state.runtime = {
+			state.runtime = fromAny<never, unknown>({
 				metadata: { kind: "subagent", createdAt: 1 },
 				cwd: tempDir,
 				dispose: vi.fn(async () => {
@@ -8015,13 +8585,16 @@ describe("daemon mode helpers", () => {
 					isBashRunning: false,
 					sessionManager: { appendSessionState, hasUserContent: () => true },
 				},
-			} as never;
-			const internals = daemon as unknown as {
-				cronStore: AgentCronJobStore;
-				sessions: Map<string, ActiveSessionState>;
-				closeSession(state: ActiveSessionState, reason: "completed"): Promise<void>;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			};
+			});
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					sessions: Map<string, ActiveSessionState>;
+					closeSession(state: ActiveSessionState, reason: "completed"): Promise<void>;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				},
+				unknown
+			>(daemon);
 			internals.sessions.set(state.activeSessionId, state);
 			const cron = internals.cronStore.create({
 				activeSessionId: state.activeSessionId,
@@ -8063,10 +8636,13 @@ describe("daemon mode helpers", () => {
 					throw new Error("unexpected runtime creation");
 				},
 			});
-			const internals = daemon as unknown as {
-				cronStore: AgentCronJobStore;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			};
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				},
+				unknown
+			>(daemon);
 			const sessionFile = join(tempDir, "saved-session.jsonl");
 			const otherSessionFile = join(tempDir, "other-session.jsonl");
 			const cron = internals.cronStore.create({
@@ -8131,40 +8707,50 @@ describe("daemon mode helpers", () => {
 					throw new Error("unexpected runtime creation");
 				},
 			});
-			const internals = daemon as unknown as {
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			};
+			const internals = fromAny<
+				{
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				},
+				unknown
+			>(daemon);
 			const writes: string[] = [];
 			const client = {
 				...makeClient("client-1", "detached"),
-				socket: {
+				socket: fromAny<Socket, unknown>({
 					destroyed: false,
 					write: (line: string) => {
 						writes.push(line);
 						return true;
 					},
-				} as unknown as Socket,
+				}),
 			};
 
-			const response = (await internals.handleCommand(client, {
-				id: "list-1",
-				type: "list_saved_sessions",
-				cwd: tempDir,
-				sessionDir,
-				scope: "current",
-			})) as {
-				data: {
-					sessions: Array<{
-						id: string;
-						agentStatus?: {
-							summary: string;
-							taskState?: "needs_input" | "completed";
-							basedOnMessageCount: number;
-						};
-					}>;
-				};
-			};
-			const updates = writes.map((line) => JSON.parse(line) as { type: string; activeSessionId?: string });
+			const response = fromAny<
+				{
+					data: {
+						sessions: Array<{
+							id: string;
+							agentStatus?: {
+								summary: string;
+								taskState?: "needs_input" | "completed";
+								basedOnMessageCount: number;
+							};
+						}>;
+					};
+				},
+				unknown
+			>(
+				await internals.handleCommand(client, {
+					id: "list-1",
+					type: "list_saved_sessions",
+					cwd: tempDir,
+					sessionDir,
+					scope: "current",
+				}),
+			);
+			const updates = writes.map((line) =>
+				fromPartial<{ type: string; activeSessionId?: string }>(JSON.parse(line)),
+			);
 
 			expect(response.data.sessions).toEqual([
 				expect.objectContaining({
@@ -8211,11 +8797,14 @@ describe("daemon mode helpers", () => {
 				},
 			});
 			const deleteSavedSessionFile = vi.fn(async () => ({ ok: false, error: "delete failed" }) as const);
-			const internals = daemon as unknown as {
-				cronStore: AgentCronJobStore;
-				deleteSavedSessionFile: typeof deleteSavedSessionFile;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			};
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					deleteSavedSessionFile: typeof deleteSavedSessionFile;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				},
+				unknown
+			>(daemon);
 			internals.deleteSavedSessionFile = deleteSavedSessionFile;
 			const sessionFile = join(tempDir, "saved-session.jsonl");
 			const cron = internals.cronStore.create({
@@ -8271,18 +8860,24 @@ describe("daemon mode helpers", () => {
 			appliedEdits: [],
 			harnessStatePath: "/tmp/harness_state.json",
 		}));
-		const state = makeState("active-1") as ActiveSessionState & {
-			runtime: ActiveSessionState["runtime"] & {
-				session: {
-					refine: typeof refine;
+		const state = fromAny<
+			ActiveSessionState & {
+				runtime: ActiveSessionState["runtime"] & {
+					session: {
+						refine: typeof refine;
+					};
 				};
-			};
-		};
-		state.runtime.session = { refine } as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-		};
+			},
+			unknown
+		>(makeState("active-1"));
+		state.runtime.session = fromAny<never, unknown>({ refine });
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(state.activeSessionId, state);
 
 		await internals.handleCommand(makeClient("client-1", state.activeSessionId), {
@@ -8307,12 +8902,15 @@ describe("daemon mode helpers", () => {
 			},
 		});
 		const mutateQueuedMessage = vi.fn(() => "applied" as const);
-		const state = makeState("active-1") as ActiveSessionState;
-		(state.runtime as { session: unknown }).session = { mutateQueuedMessage };
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-		};
+		const state = fromPartial<ActiveSessionState>(makeState("active-1"));
+		fromPartial<{ session: unknown }>(state.runtime).session = { mutateQueuedMessage };
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(state.activeSessionId, state);
 		const client = makeClient("client-1", state.activeSessionId);
 		const mutation = { type: "replace", text: "edited", lane: "followUp" } as const;
@@ -8342,12 +8940,15 @@ describe("daemon mode helpers", () => {
 			source: "chat" as const,
 			globalSaved: true,
 		}));
-		const state = makeState("active-1") as ActiveSessionState;
-		(state.runtime as { session: unknown }).session = { getRlmMaxDepthStatus, setRlmMaxDepth };
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-		};
+		const state = fromPartial<ActiveSessionState>(makeState("active-1"));
+		fromPartial<{ session: unknown }>(state.runtime).session = { getRlmMaxDepthStatus, setRlmMaxDepth };
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(state.activeSessionId, state);
 		const client = makeClient("client-1", state.activeSessionId);
 
@@ -8528,21 +9129,27 @@ describe("daemon mode helpers", () => {
 				options?.preflightResult?.(true);
 			},
 		);
-		const state = makeState("active-1") as ActiveSessionState & {
-			runtime: ActiveSessionState["runtime"] & {
-				session: typeof sessionState & {
-					prompt: typeof prompt;
-					promptHeartbeat: typeof promptHeartbeat;
+		const state = fromAny<
+			ActiveSessionState & {
+				runtime: ActiveSessionState["runtime"] & {
+					session: typeof sessionState & {
+						prompt: typeof prompt;
+						promptHeartbeat: typeof promptHeartbeat;
+					};
 				};
-			};
-		};
-		state.runtime.session = Object.assign(sessionState, { prompt, promptHeartbeat }) as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			agentMessagePreparingTargets: Map<string, number>;
-			promptWithAgentMessagePreparingGuard(state: ActiveSessionState, message: string): Promise<void>;
-			runCronJob(job: AgentCronJob): Promise<"skipped" | undefined>;
-		};
+			},
+			unknown
+		>(makeState("active-1"));
+		state.runtime.session = fromAny<never, unknown>(Object.assign(sessionState, { prompt, promptHeartbeat }));
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				agentMessagePreparingTargets: Map<string, number>;
+				promptWithAgentMessagePreparingGuard(state: ActiveSessionState, message: string): Promise<void>;
+				runCronJob(job: AgentCronJob): Promise<"skipped" | undefined>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(state.activeSessionId, state);
 
 		const promptPromise = internals.promptWithAgentMessagePreparingGuard(state, "long-running prompt");
@@ -8573,17 +9180,26 @@ describe("daemon mode helpers", () => {
 			});
 			const steer = vi.fn(async () => {});
 			const followUp = vi.fn(async () => true);
-			const state = makeState("active-1") as ActiveSessionState & {
-				runtime: ActiveSessionState["runtime"] & {
-					session: { isStreaming: boolean; steer: typeof steer; followUp: typeof followUp };
-				};
-			};
-			state.runtime = { ...state.runtime, session: { isStreaming: false, steer, followUp } } as never;
-			const internals = daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				recordWorkerRecoveryState: ReturnType<typeof vi.fn>;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			};
+			const state = fromAny<
+				ActiveSessionState & {
+					runtime: ActiveSessionState["runtime"] & {
+						session: { isStreaming: boolean; steer: typeof steer; followUp: typeof followUp };
+					};
+				},
+				unknown
+			>(makeState("active-1"));
+			state.runtime = fromAny<never, unknown>({
+				...state.runtime,
+				session: { isStreaming: false, steer, followUp },
+			});
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					recordWorkerRecoveryState: ReturnType<typeof vi.fn>;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				},
+				unknown
+			>(daemon);
 			internals.sessions.set(state.activeSessionId, state);
 			internals.recordWorkerRecoveryState = vi.fn();
 
@@ -8622,11 +9238,14 @@ describe("daemon mode helpers", () => {
 		});
 		const client = makeClient("unauthenticated", "active-1");
 		const end = vi.fn();
-		client.socket = { destroyed: false, write: vi.fn(() => true), end } as unknown as Socket;
-		const internals = daemon as unknown as {
-			promptAdmissions: Map<string, unknown>;
-			handleLine(client: DaemonSocketClient, line: string): Promise<void>;
-		};
+		client.socket = fromAny<Socket, unknown>({ destroyed: false, write: vi.fn(() => true), end });
+		const internals = fromAny<
+			{
+				promptAdmissions: Map<string, unknown>;
+				handleLine(client: DaemonSocketClient, line: string): Promise<void>;
+			},
+			unknown
+		>(daemon);
 
 		await internals.handleLine(
 			client,
@@ -8650,12 +9269,15 @@ describe("daemon mode helpers", () => {
 			},
 		});
 		const client = makeClient("client", "active-1");
-		client.socket = { destroyed: false, write: vi.fn(() => true), end: vi.fn() } as unknown as Socket;
-		const internals = daemon as unknown as {
-			promptAdmissions: Map<string, unknown>;
-			updateRestart: { phase: "fencing" };
-			handleLine(client: DaemonSocketClient, line: string): Promise<void>;
-		};
+		client.socket = fromAny<Socket, unknown>({ destroyed: false, write: vi.fn(() => true), end: vi.fn() });
+		const internals = fromAny<
+			{
+				promptAdmissions: Map<string, unknown>;
+				updateRestart: { phase: "fencing" };
+				handleLine(client: DaemonSocketClient, line: string): Promise<void>;
+			},
+			unknown
+		>(daemon);
 		internals.updateRestart = { phase: "fencing" };
 
 		await internals.handleLine(
@@ -8685,7 +9307,7 @@ describe("daemon mode helpers", () => {
 			const client = makeClient("authenticated", "active-1");
 			client.authenticated = true;
 			const end = vi.fn();
-			client.socket = { destroyed: false, write: vi.fn(() => true), end } as unknown as Socket;
+			client.socket = fromAny<Socket, unknown>({ destroyed: false, write: vi.fn(() => true), end });
 			const claim = {
 				supervisorGeneration: "generation",
 				supervisorPid: process.pid,
@@ -8697,13 +9319,16 @@ describe("daemon mode helpers", () => {
 				resolveClaim = resolve;
 				rejectClaim = reject;
 			});
-			const internals = daemon as unknown as {
-				promptAdmissions: Map<string, { controller?: AbortController }>;
-				supervisorClaims: Map<DaemonSocketClient, { claim: typeof claim; ownerFingerprint: string }>;
-				assertSupervisorClaimCurrent: ReturnType<typeof vi.fn>;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-				handleLine(client: DaemonSocketClient, line: string): Promise<void>;
-			};
+			const internals = fromAny<
+				{
+					promptAdmissions: Map<string, { controller?: AbortController }>;
+					supervisorClaims: Map<DaemonSocketClient, { claim: typeof claim; ownerFingerprint: string }>;
+					assertSupervisorClaimCurrent: ReturnType<typeof vi.fn>;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+					handleLine(client: DaemonSocketClient, line: string): Promise<void>;
+				},
+				unknown
+			>(daemon);
 			const originalBinding = { claim, ownerFingerprint: "owner" };
 			internals.supervisorClaims.set(client, originalBinding);
 			internals.assertSupervisorClaimCurrent = vi.fn(() => claimCheck);
@@ -8765,19 +9390,25 @@ describe("daemon mode helpers", () => {
 				});
 			},
 		);
-		const state = makeState("active-1") as ActiveSessionState & {
-			runtime: ActiveSessionState["runtime"] & { session: { promptUntilAccepted: typeof promptUntilAccepted } };
-		};
-		state.runtime = { ...state.runtime, session: { promptUntilAccepted } } as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			promptAdmissions: Map<string, unknown>;
-			parseCommandAndRegisterPromptAdmission(client: DaemonSocketClient, line: string): unknown;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown> | undefined;
-		};
+		const state = fromAny<
+			ActiveSessionState & {
+				runtime: ActiveSessionState["runtime"] & { session: { promptUntilAccepted: typeof promptUntilAccepted } };
+			},
+			unknown
+		>(makeState("active-1"));
+		state.runtime = fromAny<never, unknown>({ ...state.runtime, session: { promptUntilAccepted } });
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				promptAdmissions: Map<string, unknown>;
+				parseCommandAndRegisterPromptAdmission(client: DaemonSocketClient, line: string): unknown;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown> | undefined;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(state.activeSessionId, state);
 		const client = makeClient("client-1", state.activeSessionId);
-		client.socket = { destroyed: false, write: vi.fn(() => true) } as unknown as Socket;
+		client.socket = fromAny<Socket, unknown>({ destroyed: false, write: vi.fn(() => true) });
 
 		internals.parseCommandAndRegisterPromptAdmission(
 			client,
@@ -8844,19 +9475,22 @@ describe("daemon mode helpers", () => {
 			},
 		});
 		const promptUntilAccepted = vi.fn(async () => {});
-		const state = makeState("active-lock") as ActiveSessionState;
-		state.runtime = { ...state.runtime, session: { promptUntilAccepted } } as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			agentMessageTargetLocks: Map<string, Promise<void>>;
-			promptAdmissions: Map<string, unknown>;
-			parseCommandAndRegisterPromptAdmission(client: DaemonSocketClient, line: string): unknown;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown> | undefined;
-		};
+		const state = fromPartial<ActiveSessionState>(makeState("active-lock"));
+		state.runtime = fromAny<never, unknown>({ ...state.runtime, session: { promptUntilAccepted } });
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				agentMessageTargetLocks: Map<string, Promise<void>>;
+				promptAdmissions: Map<string, unknown>;
+				parseCommandAndRegisterPromptAdmission(client: DaemonSocketClient, line: string): unknown;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown> | undefined;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(state.activeSessionId, state);
 		internals.agentMessageTargetLocks.set(state.activeSessionId, new Promise(() => {}));
 		const client = makeClient("client-lock", state.activeSessionId);
-		client.socket = { destroyed: false, write: vi.fn(() => true) } as unknown as Socket;
+		client.socket = fromAny<Socket, unknown>({ destroyed: false, write: vi.fn(() => true) });
 		internals.parseCommandAndRegisterPromptAdmission(
 			client,
 			JSON.stringify({
@@ -8890,11 +9524,14 @@ describe("daemon mode helpers", () => {
 				throw new Error("unexpected runtime creation");
 			},
 		});
-		const internals = daemon as unknown as {
-			promptAdmissions: Map<string, { status: string; controller?: AbortController }>;
-			parseCommandAndRegisterPromptAdmission(client: DaemonSocketClient, line: string): unknown;
-			abortWaitingPromptAdmissionsForSession(activeSessionId: string): void;
-		};
+		const internals = fromAny<
+			{
+				promptAdmissions: Map<string, { status: string; controller?: AbortController }>;
+				parseCommandAndRegisterPromptAdmission(client: DaemonSocketClient, line: string): unknown;
+				abortWaitingPromptAdmissionsForSession(activeSessionId: string): void;
+			},
+			unknown
+		>(daemon);
 		const client = makeClient("client-closing", "closing-session");
 		internals.parseCommandAndRegisterPromptAdmission(
 			client,
@@ -8919,18 +9556,24 @@ describe("daemon mode helpers", () => {
 			},
 		});
 		const promptUntilAccepted = vi.fn(async () => {});
-		const state = makeState("active-1") as ActiveSessionState & {
-			runtime: ActiveSessionState["runtime"] & { session: { promptUntilAccepted: typeof promptUntilAccepted } };
-		};
-		state.runtime = { ...state.runtime, session: { promptUntilAccepted } } as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown> | undefined;
-		};
+		const state = fromAny<
+			ActiveSessionState & {
+				runtime: ActiveSessionState["runtime"] & { session: { promptUntilAccepted: typeof promptUntilAccepted } };
+			},
+			unknown
+		>(makeState("active-1"));
+		state.runtime = fromAny<never, unknown>({ ...state.runtime, session: { promptUntilAccepted } });
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown> | undefined;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(state.activeSessionId, state);
 		const client = makeClient("legacy-client", state.activeSessionId);
 		const write = vi.fn((_data: unknown) => true);
-		client.socket = { destroyed: false, write } as unknown as Socket;
+		client.socket = fromAny<Socket, unknown>({ destroyed: false, write });
 
 		internals.handleCommand(client, {
 			id: "command-1",
@@ -8957,16 +9600,25 @@ describe("daemon mode helpers", () => {
 		});
 		const resumeQueuedWork = vi.fn(() => true);
 		const continueAgent = vi.fn(async () => {});
-		const state = makeState("active-1") as ActiveSessionState & {
-			runtime: ActiveSessionState["runtime"] & {
-				session: { resumeQueuedWork: typeof resumeQueuedWork; agent: { continue: typeof continueAgent } };
-			};
-		};
-		state.runtime = { ...state.runtime, session: { resumeQueuedWork, agent: { continue: continueAgent } } } as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-		};
+		const state = fromAny<
+			ActiveSessionState & {
+				runtime: ActiveSessionState["runtime"] & {
+					session: { resumeQueuedWork: typeof resumeQueuedWork; agent: { continue: typeof continueAgent } };
+				};
+			},
+			unknown
+		>(makeState("active-1"));
+		state.runtime = fromAny<never, unknown>({
+			...state.runtime,
+			session: { resumeQueuedWork, agent: { continue: continueAgent } },
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(state.activeSessionId, state);
 
 		await expect(
@@ -8991,21 +9643,32 @@ describe("daemon mode helpers", () => {
 		const followUp = vi.fn(async () => true);
 		const restoreSteeringMessage = vi.fn(async () => {});
 		const restoreFollowUpMessage = vi.fn(async () => true);
-		const state = makeState("active-1") as ActiveSessionState & {
-			runtime: ActiveSessionState["runtime"] & {
-				session: {
-					steer: typeof steer;
-					followUp: typeof followUp;
-					restoreSteeringMessage: typeof restoreSteeringMessage;
-					restoreFollowUpMessage: typeof restoreFollowUpMessage;
+		const state = fromAny<
+			ActiveSessionState & {
+				runtime: ActiveSessionState["runtime"] & {
+					session: {
+						steer: typeof steer;
+						followUp: typeof followUp;
+						restoreSteeringMessage: typeof restoreSteeringMessage;
+						restoreFollowUpMessage: typeof restoreFollowUpMessage;
+					};
 				};
-			};
-		};
-		state.runtime.session = { steer, followUp, restoreSteeringMessage, restoreFollowUpMessage } as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-		};
+			},
+			unknown
+		>(makeState("active-1"));
+		state.runtime.session = fromAny<never, unknown>({
+			steer,
+			followUp,
+			restoreSteeringMessage,
+			restoreFollowUpMessage,
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(state.activeSessionId, state);
 		const client = makeClient("client-1", state.activeSessionId);
 		const base = { type, activeSessionId: state.activeSessionId } as const;
@@ -9084,27 +9747,32 @@ describe("daemon mode helpers", () => {
 				},
 			});
 			const sessionFile = join(tempDir, "session.jsonl");
-			const state = makeState("active-1") as ActiveSessionState & {
-				runtime: ActiveSessionState["runtime"] & {
-					session: ActiveSessionState["runtime"]["session"] & {
-						sessionFile: string;
-						sessionId: string;
+			const state = fromPartial<
+				ActiveSessionState & {
+					runtime: ActiveSessionState["runtime"] & {
+						session: ActiveSessionState["runtime"]["session"] & {
+							sessionFile: string;
+							sessionId: string;
+						};
 					};
-				};
-			};
-			state.runtime = {
+				}
+			>(makeState("active-1"));
+			state.runtime = fromAny<never, unknown>({
 				...state.runtime,
 				cwd: tempDir,
 				session: {
 					sessionFile,
 					sessionId: "session-1",
 				},
-			} as never;
-			const internals = daemon as unknown as {
-				cronStore: AgentCronJobStore;
-				sessions: Map<string, ActiveSessionState>;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			};
+			});
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					sessions: Map<string, ActiveSessionState>;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				},
+				unknown
+			>(daemon);
 			internals.sessions.set(state.activeSessionId, state);
 
 			await expect(
@@ -9114,7 +9782,7 @@ describe("daemon mode helpers", () => {
 					activeSessionId: state.activeSessionId,
 					schedule: "every 5m",
 					prompt: "check the run",
-					deliveryMode: "followup" as never,
+					deliveryMode: fromAny<never, unknown>("followup"),
 				}),
 			).rejects.toThrow('Heartbeat delivery mode must be "steer" or "follow_up"');
 			expect(internals.cronStore.getHeartbeat(state.activeSessionId)).toBeUndefined();
@@ -9132,16 +9800,19 @@ describe("daemon mode helpers", () => {
 					throw new Error("unexpected runtime creation");
 				},
 			});
-			const state = makeState("active-1") as ActiveSessionState & {
-				runtime: ActiveSessionState["runtime"] & {
-					session: ActiveSessionState["runtime"]["session"] & {
-						removeQueuedFollowUp: ReturnType<typeof vi.fn>;
-						sessionFile: string;
-						sessionId: string;
+			const state = fromAny<
+				ActiveSessionState & {
+					runtime: ActiveSessionState["runtime"] & {
+						session: ActiveSessionState["runtime"]["session"] & {
+							removeQueuedFollowUp: ReturnType<typeof vi.fn>;
+							sessionFile: string;
+							sessionId: string;
+						};
 					};
-				};
-			};
-			state.runtime = {
+				},
+				unknown
+			>(makeState("active-1"));
+			state.runtime = fromAny<never, unknown>({
 				...state.runtime,
 				cwd: tempDir,
 				session: {
@@ -9149,16 +9820,19 @@ describe("daemon mode helpers", () => {
 					sessionFile: join(tempDir, "session.jsonl"),
 					sessionId: "session-1",
 				},
-			} as never;
-			const internals = daemon as unknown as {
-				sessions: Map<string, ActiveSessionState>;
-				handleCommand(
-					client: DaemonSocketClient,
-					command: DaemonCommand,
-				): Promise<{
-					data: { heartbeat: AgentCronJob };
-				}>;
-			};
+			});
+			const internals = fromAny<
+				{
+					sessions: Map<string, ActiveSessionState>;
+					handleCommand(
+						client: DaemonSocketClient,
+						command: DaemonCommand,
+					): Promise<{
+						data: { heartbeat: AgentCronJob };
+					}>;
+				},
+				unknown
+			>(daemon);
 			internals.sessions.set(state.activeSessionId, state);
 			const client = makeClient("client-1", state.activeSessionId);
 
@@ -9197,21 +9871,27 @@ describe("daemon mode helpers", () => {
 				},
 			});
 			const removeQueuedFollowUp = vi.fn(() => true);
-			const state = makeState("active-1") as ActiveSessionState & {
-				runtime: ActiveSessionState["runtime"] & {
-					session: ActiveSessionState["runtime"]["session"] & {
-						removeQueuedFollowUp: typeof removeQueuedFollowUp;
+			const state = fromAny<
+				ActiveSessionState & {
+					runtime: ActiveSessionState["runtime"] & {
+						session: ActiveSessionState["runtime"]["session"] & {
+							removeQueuedFollowUp: typeof removeQueuedFollowUp;
+						};
 					};
-				};
-			};
-			state.runtime.session = { removeQueuedFollowUp } as never;
-			const internals = daemon as unknown as {
-				cronStore: AgentCronJobStore;
-				updateRlmHeartbeatForState(
-					state: ActiveSessionState,
-					input: { id: string; deliveryMode: "steer" | "follow_up" },
-				): AgentCronJob | undefined;
-			};
+				},
+				unknown
+			>(makeState("active-1"));
+			state.runtime.session = fromAny<never, unknown>({ removeQueuedFollowUp });
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					updateRlmHeartbeatForState(
+						state: ActiveSessionState,
+						input: { id: string; deliveryMode: "steer" | "follow_up" },
+					): AgentCronJob | undefined;
+				},
+				unknown
+			>(daemon);
 			const rlmHeartbeat = internals.cronStore.createRlmHeartbeat({
 				activeSessionId: state.activeSessionId,
 				sessionId: "session-1",
@@ -9245,19 +9925,25 @@ describe("daemon mode helpers", () => {
 				},
 			});
 			const removeQueuedFollowUp = vi.fn(() => true);
-			const state = makeState("active-1") as ActiveSessionState & {
-				runtime: ActiveSessionState["runtime"] & {
-					session: ActiveSessionState["runtime"]["session"] & {
-						removeQueuedFollowUp: typeof removeQueuedFollowUp;
+			const state = fromAny<
+				ActiveSessionState & {
+					runtime: ActiveSessionState["runtime"] & {
+						session: ActiveSessionState["runtime"]["session"] & {
+							removeQueuedFollowUp: typeof removeQueuedFollowUp;
+						};
 					};
-				};
-			};
-			state.runtime.session = { removeQueuedFollowUp } as never;
-			const internals = daemon as unknown as {
-				cronStore: AgentCronJobStore;
-				sessions: Map<string, ActiveSessionState>;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			};
+				},
+				unknown
+			>(makeState("active-1"));
+			state.runtime.session = fromAny<never, unknown>({ removeQueuedFollowUp });
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					sessions: Map<string, ActiveSessionState>;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				},
+				unknown
+			>(daemon);
 			internals.sessions.set(state.activeSessionId, state);
 			const heartbeat = internals.cronStore.createHeartbeat({
 				activeSessionId: state.activeSessionId,
@@ -9291,10 +9977,13 @@ describe("daemon mode helpers", () => {
 					throw new Error("unexpected runtime creation");
 				},
 			});
-			const internals = daemon as unknown as {
-				cronStore: AgentCronJobStore;
-				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			};
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+				},
+				unknown
+			>(daemon);
 			const heartbeat = internals.cronStore.createHeartbeat({
 				activeSessionId: "unloaded-session",
 				sessionId: "session-1",
@@ -9341,30 +10030,35 @@ describe("daemon mode helpers", () => {
 			maxTokens: 4096,
 		};
 		const setModel = vi.fn(async () => {});
-		const state = makeState("active-1") as ActiveSessionState & {
-			runtime: ActiveSessionState["runtime"] & {
-				session: {
-					modelRegistry: {
-						refreshAvailableModels(): Promise<unknown[]>;
+		const state = fromPartial<
+			ActiveSessionState & {
+				runtime: ActiveSessionState["runtime"] & {
+					session: {
+						modelRegistry: {
+							refreshAvailableModels(): Promise<unknown[]>;
+						};
+						isStreaming: boolean;
+						isCompacting: boolean;
+						setModel(model: unknown, options?: { waitForExtensions?: boolean }): Promise<void>;
 					};
-					isStreaming: boolean;
-					isCompacting: boolean;
-					setModel(model: unknown, options?: { waitForExtensions?: boolean }): Promise<void>;
 				};
-			};
-		};
-		state.runtime.session = {
+			}
+		>(makeState("active-1"));
+		state.runtime.session = fromAny<never, unknown>({
 			modelRegistry: {
 				refreshAvailableModels: vi.fn(async () => [model]),
 			},
 			isStreaming: true,
 			isCompacting: false,
 			setModel,
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(state.activeSessionId, state);
 
 		await internals.handleCommand(makeClient("client-1", state.activeSessionId), {
@@ -9398,30 +10092,35 @@ describe("daemon mode helpers", () => {
 			maxTokens: 4096,
 		};
 		const setModel = vi.fn(async () => {});
-		const state = makeState("active-1") as ActiveSessionState & {
-			runtime: ActiveSessionState["runtime"] & {
-				session: {
-					modelRegistry: {
-						refreshAvailableModels(): Promise<unknown[]>;
+		const state = fromPartial<
+			ActiveSessionState & {
+				runtime: ActiveSessionState["runtime"] & {
+					session: {
+						modelRegistry: {
+							refreshAvailableModels(): Promise<unknown[]>;
+						};
+						isStreaming: boolean;
+						isCompacting: boolean;
+						setModel(model: unknown, options?: { waitForExtensions?: boolean }): Promise<void>;
 					};
-					isStreaming: boolean;
-					isCompacting: boolean;
-					setModel(model: unknown, options?: { waitForExtensions?: boolean }): Promise<void>;
 				};
-			};
-		};
-		state.runtime.session = {
+			}
+		>(makeState("active-1"));
+		state.runtime.session = fromAny<never, unknown>({
 			modelRegistry: {
 				refreshAvailableModels: vi.fn(async () => [model]),
 			},
 			isStreaming: false,
 			isCompacting: false,
 			setModel,
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(state.activeSessionId, state);
 
 		await internals.handleCommand(makeClient("client-1", state.activeSessionId), {
@@ -9456,27 +10155,32 @@ describe("daemon mode helpers", () => {
 		};
 		const cycleResult = { model, thinkingLevel: "off" as const, isScoped: false };
 		const cycleModel = vi.fn(async () => cycleResult);
-		const state = makeState("active-1") as ActiveSessionState & {
-			runtime: ActiveSessionState["runtime"] & {
-				session: {
-					isStreaming: boolean;
-					isCompacting: boolean;
-					cycleModel(
-						direction?: "forward" | "backward",
-						options?: { waitForExtensions?: boolean },
-					): Promise<typeof cycleResult | undefined>;
+		const state = fromPartial<
+			ActiveSessionState & {
+				runtime: ActiveSessionState["runtime"] & {
+					session: {
+						isStreaming: boolean;
+						isCompacting: boolean;
+						cycleModel(
+							direction?: "forward" | "backward",
+							options?: { waitForExtensions?: boolean },
+						): Promise<typeof cycleResult | undefined>;
+					};
 				};
-			};
-		};
-		state.runtime.session = {
+			}
+		>(makeState("active-1"));
+		state.runtime.session = fromAny<never, unknown>({
 			isStreaming: true,
 			isCompacting: false,
 			cycleModel,
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(state.activeSessionId, state);
 
 		await internals.handleCommand(makeClient("client-1", state.activeSessionId), {
@@ -9510,27 +10214,32 @@ describe("daemon mode helpers", () => {
 		};
 		const cycleResult = { model, thinkingLevel: "off" as const, isScoped: false };
 		const cycleModel = vi.fn(async () => cycleResult);
-		const state = makeState("active-1") as ActiveSessionState & {
-			runtime: ActiveSessionState["runtime"] & {
-				session: {
-					isStreaming: boolean;
-					isCompacting: boolean;
-					cycleModel(
-						direction?: "forward" | "backward",
-						options?: { waitForExtensions?: boolean },
-					): Promise<typeof cycleResult | undefined>;
+		const state = fromPartial<
+			ActiveSessionState & {
+				runtime: ActiveSessionState["runtime"] & {
+					session: {
+						isStreaming: boolean;
+						isCompacting: boolean;
+						cycleModel(
+							direction?: "forward" | "backward",
+							options?: { waitForExtensions?: boolean },
+						): Promise<typeof cycleResult | undefined>;
+					};
 				};
-			};
-		};
-		state.runtime.session = {
+			}
+		>(makeState("active-1"));
+		state.runtime.session = fromAny<never, unknown>({
 			isStreaming: false,
 			isCompacting: false,
 			cycleModel,
-		} as never;
-		const internals = daemon as unknown as {
-			sessions: Map<string, ActiveSessionState>;
-			handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-		};
+		});
+		const internals = fromAny<
+			{
+				sessions: Map<string, ActiveSessionState>;
+				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
+			},
+			unknown
+		>(daemon);
 		internals.sessions.set(state.activeSessionId, state);
 
 		await internals.handleCommand(makeClient("client-1", state.activeSessionId), {
@@ -9552,11 +10261,12 @@ describe("daemon mode helpers", () => {
 				throw new Error("unexpected runtime creation");
 			},
 		});
-		const handleCommand = (
-			daemon as unknown as {
+		const handleCommand = fromAny<
+			{
 				handleCommand(client: DaemonSocketClient, command: DaemonCommand): Promise<unknown>;
-			}
-		).handleCommand.bind(daemon);
+			},
+			unknown
+		>(daemon).handleCommand.bind(daemon);
 
 		await expect(
 			handleCommand(makeClient("client-1", "missing"), {
@@ -9602,10 +10312,13 @@ function makeCronAdmissionFixture(
 	);
 	const followUp = vi.fn(async () => true);
 	const removeQueuedFollowUp = vi.fn(() => true);
-	const state = makeState(activeSessionId) as ActiveSessionState & {
-		runtime: ActiveSessionState["runtime"] & { session: Record<string, unknown> };
-	};
-	state.runtime = {
+	const state = fromAny<
+		ActiveSessionState & {
+			runtime: ActiveSessionState["runtime"] & { session: Record<string, unknown> };
+		},
+		unknown
+	>(makeState(activeSessionId));
+	state.runtime = fromAny<never, unknown>({
 		...state.runtime,
 		session: {
 			isStreaming: false,
@@ -9620,12 +10333,15 @@ function makeCronAdmissionFixture(
 			followUp,
 			removeQueuedFollowUp,
 		},
-	} as never;
-	const internals = daemon as unknown as {
-		sessions: Map<string, ActiveSessionState>;
-		agentMessageAcceptingTargets: Set<string>;
-		runCronJob(job: AgentCronJob): Promise<"skipped" | undefined>;
-	};
+	});
+	const internals = fromAny<
+		{
+			sessions: Map<string, ActiveSessionState>;
+			agentMessageAcceptingTargets: Set<string>;
+			runCronJob(job: AgentCronJob): Promise<"skipped" | undefined>;
+		},
+		unknown
+	>(daemon);
 	internals.sessions.set(activeSessionId, state);
 	if (options.acceptingAgentMessage) {
 		internals.agentMessageAcceptingTargets.add(activeSessionId);
@@ -9802,12 +10518,15 @@ function makePersistedRlmDaemonFixture(
 		});
 		return {
 			session: runtimeSession,
-			extensionsResult: { extensions: [], errors: [], runtime: {} } as unknown as Awaited<
-				ReturnType<CreateAgentSessionRuntimeFactory>
-			>["extensionsResult"],
-			services: { cwd: runtimeOptions.cwd, agentDir: runtimeOptions.agentDir } as Awaited<
-				ReturnType<CreateAgentSessionRuntimeFactory>
-			>["services"],
+			extensionsResult: fromAny<Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["extensionsResult"], unknown>({
+				extensions: [],
+				errors: [],
+				runtime: {},
+			}),
+			services: fromPartial<Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["services"]>({
+				cwd: runtimeOptions.cwd,
+				agentDir: runtimeOptions.agentDir,
+			}),
 			diagnostics: [],
 		};
 	});
@@ -9834,7 +10553,7 @@ function makePersistedRlmDaemonFixture(
 function makeRuntimeSession(
 	sessionManager: Parameters<CreateAgentSessionRuntimeFactory>[0]["sessionManager"],
 ): Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["session"] {
-	return {
+	return fromAny<Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["session"], unknown>({
 		sessionManager,
 		messages: [],
 		extensionRunner: {
@@ -9861,7 +10580,7 @@ function makeRuntimeSession(
 		dispose: vi.fn(),
 		disposeAsync: vi.fn(async () => {}),
 		abort: vi.fn(async () => {}),
-	} as unknown as Awaited<ReturnType<CreateAgentSessionRuntimeFactory>>["session"];
+	});
 }
 
 function makeAgentFamilyState(
@@ -9877,7 +10596,7 @@ function makeAgentFamilyState(
 		},
 	);
 	const parentSessionId = parent?.runtime.session.sessionId;
-	state.runtime = {
+	state.runtime = fromAny<never, unknown>({
 		...state.runtime,
 		cwd: "/tmp",
 		diagnostics: [],
@@ -9908,12 +10627,12 @@ function makeAgentFamilyState(
 			getSessionActionSnapshot: () => ({ queuedCount: 0, steering: [], followUps: [] }),
 			acceptAgentMessagePrompt,
 		},
-	} as never;
+	});
 	return { state, acceptAgentMessagePrompt };
 }
 
 function makeState(activeSessionId: string, parentActiveSessionId?: string): ActiveSessionState {
-	return {
+	return fromAny<ActiveSessionState, unknown>({
 		activeSessionId,
 		clients: new Set(),
 		pendingAttaches: 0,
@@ -9925,13 +10644,13 @@ function makeState(activeSessionId: string, parentActiveSessionId?: string): Act
 				parentActiveSessionId,
 			},
 		},
-	} as unknown as ActiveSessionState;
+	});
 }
 
 function makeClient(id: string, activeSessionId: string, supportsExtensionUi = false): DaemonSocketClient {
 	return {
 		id,
-		socket: { destroyed: false } as Socket,
+		socket: fromPartial<Socket>({ destroyed: false }),
 		attachedActiveSessionIds: new Set([activeSessionId]),
 		detachInput: vi.fn(),
 		supportsExtensionUi,

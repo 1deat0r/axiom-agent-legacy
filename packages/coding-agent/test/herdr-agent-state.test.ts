@@ -2,6 +2,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it } from "vitest";
 import {
 	createHerdrAgentStateExtension,
@@ -18,7 +19,7 @@ interface RecordedRequest {
 function createMockPi() {
 	const handlers = new Map<string, Array<(...args: unknown[]) => unknown>>();
 	const busHandlers = new Map<string, Array<(...args: unknown[]) => unknown>>();
-	const pi = {
+	const pi = fromAny<ExtensionAPI, unknown>({
 		on(event: string, handler: (...args: unknown[]) => unknown) {
 			const list = handlers.get(event) ?? [];
 			list.push(handler);
@@ -38,7 +39,7 @@ function createMockPi() {
 				};
 			},
 		},
-	} as unknown as ExtensionAPI;
+	});
 	return { pi, handlers, busHandlers };
 }
 
@@ -507,7 +508,7 @@ describe("herdrAgentStateExtension", () => {
 		second.handlers.get("session_start")?.[0]?.({ type: "session_start", reason: "new" }, ctx);
 		await waitForRequests(2);
 
-		const seqs = requests.map((r) => r.params.seq as number);
+		const seqs = requests.map((r) => fromAny<number, unknown>(r.params.seq));
 		expect(seqs[1]).toBeGreaterThan(seqs[0]);
 	});
 });

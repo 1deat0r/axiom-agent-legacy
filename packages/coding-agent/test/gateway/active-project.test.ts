@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import {
 	FileActiveProjectStore,
@@ -70,10 +71,10 @@ describe("FileActiveProjectStore", () => {
 			expect(s.generation("alpha")).toBe(0);
 			s.set("+1", "alpha");
 			expect(s.get("+1")).toBe("alpha");
-			const raw = JSON.parse(await readFile(join(dir, "active-projects.json"), "utf8")) as {
+			const raw = fromPartial<{
 				channels: Record<string, string>;
 				generations: Record<string, number>;
-			};
+			}>(JSON.parse(await readFile(join(dir, "active-projects.json"), "utf8")));
 			expect(raw.channels["+1"]).toBe("alpha");
 		} finally {
 			await rm(dir, { recursive: true, force: true });

@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import { getModel } from "../src/models.js";
 import { streamSimple } from "../src/stream.js";
@@ -29,7 +30,7 @@ async function capturePayload(
 		...options,
 		apiKey: "fake-key",
 		onPayload: (payload) => {
-			capturedPayload = payload as AnthropicThinkingPayload;
+			capturedPayload = fromAny<AnthropicThinkingPayload, unknown>(payload);
 			return payload;
 		},
 	});

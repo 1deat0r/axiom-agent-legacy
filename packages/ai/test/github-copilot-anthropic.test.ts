@@ -1,11 +1,17 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import { getModel } from "../src/models.js";
 import type { Context } from "../src/types.js";
 
-const mockState = vi.hoisted(() => ({
-	constructorOpts: undefined as Record<string, unknown> | undefined,
-	createParams: undefined as Record<string, unknown> | undefined,
-}));
+const mockState = vi.hoisted(
+	(): {
+		constructorOpts: Record<string, unknown> | undefined;
+		createParams: Record<string, unknown> | undefined;
+	} => ({
+		constructorOpts: undefined,
+		createParams: undefined,
+	}),
+);
 
 vi.mock("@anthropic-ai/sdk", () => {
 	function createSseResponse(): Response {
@@ -69,7 +75,7 @@ describe("Copilot Claude via Anthropic Messages", () => {
 		// Auth: apiKey null, authToken for Bearer
 		expect(opts.apiKey).toBeNull();
 		expect(opts.authToken).toBe("tid_copilot_session_test_token");
-		const headers = opts.defaultHeaders as Record<string, string>;
+		const headers = fromAny<Record<string, string>, unknown>(opts.defaultHeaders);
 
 		// Copilot static headers from model.headers
 		expect(headers["User-Agent"]).toContain("GitHubCopilotChat");
@@ -102,7 +108,7 @@ describe("Copilot Claude via Anthropic Messages", () => {
 			if (event.type === "error") break;
 		}
 
-		const headers = mockState.constructorOpts!.defaultHeaders as Record<string, string>;
+		const headers = fromAny<Record<string, string>, unknown>(mockState.constructorOpts!.defaultHeaders);
 		expect(headers["anthropic-beta"]).toContain("interleaved-thinking-2025-05-14");
 	});
 });

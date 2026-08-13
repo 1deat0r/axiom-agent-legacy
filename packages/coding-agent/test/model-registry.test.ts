@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { AnthropicMessagesCompat, Api, Context, Model, OpenAICompletionsCompat } from "@earendil-works/pi-ai";
 import { getApiProvider } from "@earendil-works/pi-ai";
 import { getOAuthProvider, registerOAuthProvider } from "@earendil-works/pi-ai/oauth";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.js";
 import { clearApiKeyCache, ModelRegistry, type ProviderConfigInput } from "../src/core/model-registry.js";
@@ -36,7 +37,7 @@ describe("ModelRegistry", () => {
 		return {
 			baseUrl,
 			apiKey: "TEST_KEY",
-			api: api as Api,
+			api: fromPartial<Api>(api),
 			models: models.map((m) => ({
 				id: m.id,
 				name: m.name ?? m.id,
@@ -356,7 +357,7 @@ describe("ModelRegistry", () => {
 			});
 
 			const registry = ModelRegistry.create(authStorage, modelsJsonPath);
-			const compat = registry.find("demo", "demo-model")?.compat as OpenAICompletionsCompat | undefined;
+			const compat = fromPartial<OpenAICompletionsCompat | undefined>(registry.find("demo", "demo-model")?.compat);
 
 			expect(compat?.supportsUsageInStreaming).toBe(false);
 			expect(compat?.maxTokensField).toBe("max_tokens");
@@ -390,7 +391,7 @@ describe("ModelRegistry", () => {
 			});
 
 			const registry = ModelRegistry.create(authStorage, modelsJsonPath);
-			const compat = registry.find("demo", "demo-model")?.compat as OpenAICompletionsCompat | undefined;
+			const compat = fromPartial<OpenAICompletionsCompat | undefined>(registry.find("demo", "demo-model")?.compat);
 
 			expect(compat?.supportsUsageInStreaming).toBe(true);
 			expect(compat?.maxTokensField).toBe("max_completion_tokens");
@@ -411,7 +412,7 @@ describe("ModelRegistry", () => {
 
 			expect(models.length).toBeGreaterThan(0);
 			for (const model of models) {
-				const compat = model.compat as OpenAICompletionsCompat | undefined;
+				const compat = fromPartial<OpenAICompletionsCompat | undefined>(model.compat);
 				expect(compat?.supportsUsageInStreaming).toBe(false);
 				expect(compat?.supportsStrictMode).toBe(false);
 			}
@@ -446,7 +447,7 @@ describe("ModelRegistry", () => {
 
 			const registry = ModelRegistry.create(authStorage, modelsJsonPath);
 			const model = registry.find("demo", "demo-model");
-			const compat = model?.compat as OpenAICompletionsCompat | undefined;
+			const compat = fromPartial<OpenAICompletionsCompat | undefined>(model?.compat);
 
 			expect(registry.getError()).toBeUndefined();
 			expect(model?.thinkingLevelMap).toEqual({ minimal: null, high: "max" });
@@ -477,7 +478,7 @@ describe("ModelRegistry", () => {
 			});
 
 			const registry = ModelRegistry.create(authStorage, modelsJsonPath);
-			const compat = registry.find("demo", "demo-model")?.compat as AnthropicMessagesCompat | undefined;
+			const compat = fromPartial<AnthropicMessagesCompat | undefined>(registry.find("demo", "demo-model")?.compat);
 
 			expect(registry.getError()).toBeUndefined();
 			expect(compat?.supportsEagerToolInputStreaming).toBe(false);
@@ -506,7 +507,7 @@ describe("ModelRegistry", () => {
 			});
 
 			const registry = ModelRegistry.create(authStorage, modelsJsonPath);
-			const compat = registry.find("demo", "demo-model")?.compat as AnthropicMessagesCompat | undefined;
+			const compat = fromPartial<AnthropicMessagesCompat | undefined>(registry.find("demo", "demo-model")?.compat);
 
 			expect(registry.getError()).toBeUndefined();
 			expect(compat?.supportsLongCacheRetention).toBe(false);
@@ -659,7 +660,7 @@ describe("ModelRegistry", () => {
 			const models = getModelsForProvider(registry, "openrouter");
 
 			const sonnet = models.find((m) => m.id === "anthropic/claude-sonnet-4");
-			const compat = sonnet?.compat as OpenAICompletionsCompat | undefined;
+			const compat = fromPartial<OpenAICompletionsCompat | undefined>(sonnet?.compat);
 			expect(compat?.openRouterRouting).toEqual({ only: ["amazon-bedrock"] });
 		});
 
@@ -681,7 +682,7 @@ describe("ModelRegistry", () => {
 			const sonnet = models.find((m) => m.id === "anthropic/claude-sonnet-4");
 
 			// Should have both the new routing AND preserve other compat settings
-			const compat = sonnet?.compat as OpenAICompletionsCompat | undefined;
+			const compat = fromPartial<OpenAICompletionsCompat | undefined>(sonnet?.compat);
 			expect(compat?.openRouterRouting).toEqual({ order: ["anthropic", "together"] });
 		});
 
@@ -705,8 +706,8 @@ describe("ModelRegistry", () => {
 			const sonnet = models.find((m) => m.id === "anthropic/claude-sonnet-4");
 			const opus = models.find((m) => m.id === "anthropic/claude-opus-4");
 
-			const sonnetCompat = sonnet?.compat as OpenAICompletionsCompat | undefined;
-			const opusCompat = opus?.compat as OpenAICompletionsCompat | undefined;
+			const sonnetCompat = fromPartial<OpenAICompletionsCompat | undefined>(sonnet?.compat);
+			const opusCompat = fromPartial<OpenAICompletionsCompat | undefined>(opus?.compat);
 			expect(sonnetCompat?.openRouterRouting).toEqual({ only: ["amazon-bedrock"] });
 			expect(opusCompat?.openRouterRouting).toEqual({ only: ["anthropic"] });
 		});

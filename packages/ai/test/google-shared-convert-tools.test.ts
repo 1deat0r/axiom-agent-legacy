@@ -1,3 +1,4 @@
+import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import { convertTools } from "../src/providers/google-shared.js";
 import type { Tool } from "../src/types.js";
@@ -6,7 +7,7 @@ function makeTool(parameters: Record<string, unknown>): Tool {
 	return {
 		name: "test_tool",
 		description: "A test tool",
-		parameters: parameters as Tool["parameters"],
+		parameters: fromPartial<Tool["parameters"]>(parameters),
 	};
 }
 

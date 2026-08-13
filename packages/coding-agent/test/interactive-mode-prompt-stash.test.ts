@@ -1,4 +1,5 @@
 import type { ImageContent } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it, type Mock, vi } from "vitest";
 import { KeybindingsManager } from "../src/core/keybindings.js";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.js";
@@ -113,7 +114,7 @@ type PromptStashMethods = {
 	setupEditorSubmitHandler: (this: SubmitHarness) => void;
 };
 
-const interactiveModeMethods = InteractiveMode.prototype as unknown as PromptStashMethods;
+const interactiveModeMethods = fromAny<PromptStashMethods, unknown>(InteractiveMode.prototype);
 
 function createEditor(
 	options: { text?: string; expandedText?: string; history?: string[]; pasteSnapshot?: FakePasteSnapshot } = {},
@@ -222,7 +223,7 @@ function createSharedPromptStashHarness(
 		pastedImages?: readonly (readonly [number, ImageContent])[];
 	} = {},
 ): SharedPromptStashHarness {
-	const harness = {
+	const harness = fromPartial<SharedPromptStashHarness>({
 		promptStashStore: store,
 		promptStashSessionId: sessionId,
 		promptStashState: store.forSession(sessionId),
@@ -232,7 +233,7 @@ function createSharedPromptStashHarness(
 		clearShortcutGuide: vi.fn(),
 		pastedImages: new Map(options.pastedImages),
 		nextImageMarkerId: 1,
-	} as SharedPromptStashHarness;
+	});
 	Object.setPrototypeOf(harness, InteractiveMode.prototype);
 	return harness;
 }
@@ -619,7 +620,7 @@ describe("InteractiveMode prompt stash", () => {
 				throw new Error("admission failed");
 			}),
 		});
-		(mode as SubmitHarness & { latestEditorPromptStash: PromptStash }).latestEditorPromptStash = {
+		fromPartial<SubmitHarness & { latestEditorPromptStash: PromptStash }>(mode).latestEditorPromptStash = {
 			text: "draft [paste #1]",
 			expandedText: "draft expanded paste",
 			pasteSnapshot,

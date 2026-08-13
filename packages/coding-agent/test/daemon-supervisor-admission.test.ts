@@ -1,5 +1,6 @@
 import type { Socket } from "node:net";
 import { PassThrough } from "node:stream";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import type { DaemonSocketClient } from "../src/modes/daemon/active-session-state.js";
 import {
@@ -31,7 +32,7 @@ interface SupervisorHarness {
 }
 
 function client(id: string): DaemonSocketClient {
-	return { id, attachedActiveSessionIds: new Set(), capabilities: new Set() } as DaemonSocketClient;
+	return fromPartial<DaemonSocketClient>({ id, attachedActiveSessionIds: new Set(), capabilities: new Set() });
 }
 
 function commandLine(command: DaemonCommand & { id: string }, clientId?: string): string {
@@ -67,29 +68,31 @@ function createHarness(
 		updateRestartPhase?: "draining" | "fencing" | "prepared";
 	} = {},
 ): SupervisorHarness {
-	return Object.assign(Object.create(DaemonSupervisor.prototype), {
-		ready: options.ready ?? Promise.resolve(),
-		ownership: {
-			assertCurrent: options.assertCurrent ?? vi.fn(async () => undefined),
-			record: { token: "test-owner", processStartId: "test-process", socketPath: "/tmp/test.sock" },
-		},
-		workers: new Map(),
-		clients: new Set(),
-		protocolClientIds: new WeakMap(),
-		promptAdmissions: new Map(),
-		mutationDrain: new MutationDrainLatch(),
-		commandJournal: options.commandJournal ?? {
-			lookup: vi.fn(() => undefined),
-			begin: vi.fn(() => ({ status: "new" })),
-			recordResult: vi.fn(),
-			acknowledge: vi.fn(),
-		},
-		updateRestartPhase: options.updateRestartPhase,
-		findWorkerForClient: options.findWorker,
-		forwardToWorker: options.forwardToWorker,
-		write: vi.fn(),
-		log: vi.fn(),
-	}) as SupervisorHarness;
+	return fromPartial<SupervisorHarness>(
+		Object.assign(Object.create(DaemonSupervisor.prototype), {
+			ready: options.ready ?? Promise.resolve(),
+			ownership: {
+				assertCurrent: options.assertCurrent ?? vi.fn(async () => undefined),
+				record: { token: "test-owner", processStartId: "test-process", socketPath: "/tmp/test.sock" },
+			},
+			workers: new Map(),
+			clients: new Set(),
+			protocolClientIds: new WeakMap(),
+			promptAdmissions: new Map(),
+			mutationDrain: new MutationDrainLatch(),
+			commandJournal: options.commandJournal ?? {
+				lookup: vi.fn(() => undefined),
+				begin: vi.fn(() => ({ status: "new" })),
+				recordResult: vi.fn(),
+				acknowledge: vi.fn(),
+			},
+			updateRestartPhase: options.updateRestartPhase,
+			findWorkerForClient: options.findWorker,
+			forwardToWorker: options.forwardToWorker,
+			write: vi.fn(),
+			log: vi.fn(),
+		}),
+	);
 }
 
 describe("daemon supervisor prompt admission ownership", () => {
@@ -133,7 +136,7 @@ describe("daemon supervisor prompt admission ownership", () => {
 
 	it("cleans up restart-fenced prompt admissions so the same id can retry", async () => {
 		const supervisor = createHarness();
-		(supervisor as unknown as { updateRestartPhase: "fencing" }).updateRestartPhase = "fencing";
+		fromAny<{ updateRestartPhase: "fencing" }, unknown>(supervisor).updateRestartPhase = "fencing";
 		const owner = client("connection-owner");
 		const prompt = {
 			id: "prompt-1",
@@ -209,7 +212,7 @@ describe("daemon supervisor prompt admission ownership", () => {
 		const second = supervisor.handleLine(owner, JSON.stringify(command));
 		await waitFor(() => commandJournal.begin.mock.calls.length === 2);
 		expect(
-			(supervisor as unknown as { forwardToWorker: ReturnType<typeof vi.fn> }).forwardToWorker,
+			fromAny<{ forwardToWorker: ReturnType<typeof vi.fn> }, unknown>(supervisor).forwardToWorker,
 		).toHaveBeenCalledOnce();
 		forward.resolve({ type: "response", command: "prompt", success: true });
 		await Promise.all([first, second]);
@@ -289,7 +292,7 @@ describe("daemon supervisor prompt admission ownership", () => {
 		cancelOwnership.resolve();
 		await pendingCancel;
 
-		expect((supervisor as unknown as { write: ReturnType<typeof vi.fn> }).write).toHaveBeenLastCalledWith(
+		expect(fromAny<{ write: ReturnType<typeof vi.fn> }, unknown>(supervisor).write).toHaveBeenLastCalledWith(
 			owner,
 			expect.objectContaining({ success: true, data: { status: "owned" } }),
 		);
@@ -342,7 +345,7 @@ describe("daemon supervisor prompt admission ownership", () => {
 			expect.objectContaining({ type: "cancel_prompt_admission" }),
 		);
 		expect(admission.status).toBe("cancelled");
-		expect((supervisor as unknown as { write: ReturnType<typeof vi.fn> }).write).toHaveBeenLastCalledWith(
+		expect(fromAny<{ write: ReturnType<typeof vi.fn> }, unknown>(supervisor).write).toHaveBeenLastCalledWith(
 			owner,
 			expect.objectContaining({ success: true, data: { status: "cancelled" } }),
 		);
@@ -479,7 +482,7 @@ describe("daemon supervisor prompt admission ownership", () => {
 				});
 			}),
 		});
-		const socket = new PassThrough() as unknown as Socket;
+		const socket = fromAny<Socket, unknown>(new PassThrough());
 		Object.assign(socket, { destroyed: false });
 		supervisor.handleConnection(socket);
 		const owner = [...supervisor.clients][0]!;
@@ -547,7 +550,7 @@ describe("daemon supervisor prompt admission ownership", () => {
 				});
 			}),
 		});
-		const socket = new PassThrough() as unknown as Socket;
+		const socket = fromAny<Socket, unknown>(new PassThrough());
 		Object.assign(socket, { destroyed: false });
 		supervisor.handleConnection(socket);
 		const owner = [...supervisor.clients][0]!;

@@ -3,6 +3,7 @@ import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { PassThrough } from "node:stream";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DefaultPackageManager, type ProgressEvent, type ResolvedResource } from "../src/core/package-manager.js";
 import { SettingsManager } from "../src/core/settings-manager.js";
@@ -569,7 +570,7 @@ Content`,
 			const runCommandSpy = vi
 				.spyOn(packageManager as any, "runCommand")
 				.mockImplementation(async (...callArgs: unknown[]) => {
-					const [command, args] = callArgs as [string, string[]];
+					const [command, args] = fromAny<[string, string[]], unknown>(callArgs);
 					if (command === "git" && args[0] === "clone") {
 						mkdirSync(targetDir, { recursive: true });
 						writeFileSync(join(targetDir, "package.json"), JSON.stringify({ name: "repo", version: "1.0.0" }));
@@ -596,7 +597,7 @@ Content`,
 			const runCommandSpy = vi
 				.spyOn(packageManager as any, "runCommand")
 				.mockImplementation(async (...callArgs: unknown[]) => {
-					const [command, args] = callArgs as [string, string[]];
+					const [command, args] = fromAny<[string, string[]], unknown>(callArgs);
 					if (command === "git" && args[0] === "clone") {
 						mkdirSync(targetDir, { recursive: true });
 						writeFileSync(join(targetDir, "package.json"), JSON.stringify({ name: "repo", version: "1.0.0" }));
@@ -616,7 +617,7 @@ Content`,
 			settingsManager.setProjectPackages([source]);
 
 			vi.spyOn(packageManager as any, "runCommandCapture").mockImplementation(async (...callArgs: unknown[]) => {
-				const [_command, args] = callArgs as [string, string[]];
+				const [_command, args] = fromAny<[string, string[]], unknown>(callArgs);
 				if (args[0] === "rev-parse" && args[1] === "--abbrev-ref" && args[2] === "@{upstream}") {
 					return "origin/main";
 				}
@@ -652,7 +653,7 @@ Content`,
 			settingsManager.setProjectPackages([source]);
 
 			vi.spyOn(packageManager as any, "runCommandCapture").mockImplementation(async (...callArgs: unknown[]) => {
-				const [_command, args] = callArgs as [string, string[]];
+				const [_command, args] = fromAny<[string, string[]], unknown>(callArgs);
 				if (args[0] === "rev-parse" && args[1] === "--abbrev-ref" && args[2] === "@{upstream}") {
 					return "origin/main";
 				}
@@ -690,7 +691,7 @@ Content`,
 			const runCommandSyncSpy = vi
 				.spyOn(packageManager as any, "runCommandSync")
 				.mockImplementation((...callArgs: unknown[]) => {
-					const [command, args] = callArgs as [string, string[]];
+					const [command, args] = fromAny<[string, string[]], unknown>(callArgs);
 					if (command !== "mise") {
 						throw new Error(`unexpected command ${command}`);
 					}
@@ -1689,7 +1690,7 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 			const runCommandCaptureSpy = vi
 				.spyOn(packageManager as any, "runCommandCapture")
 				.mockImplementation(async (...callArgs: unknown[]) => {
-					const [_command, args] = callArgs as [string, string[]];
+					const [_command, args] = fromAny<[string, string[]], unknown>(callArgs);
 					if (args[0] !== "view") {
 						throw new Error(`Unexpected runCommandCapture args: ${args.join(" ")}`);
 					}
@@ -1712,7 +1713,7 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 			const runCommandSpy = vi
 				.spyOn(packageManager as any, "runCommand")
 				.mockImplementation(async (...callArgs: unknown[]) => {
-					const [command, args] = callArgs as [string, string[]];
+					const [command, args] = fromAny<[string, string[]], unknown>(callArgs);
 					if (command !== "npm") {
 						throw new Error(`Unexpected runCommand call: ${command} ${args.join(" ")}`);
 					}
@@ -1790,7 +1791,9 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 			process.env.PI_OFFLINE = "1";
 			const gitSource = "git:github.com/example/repo";
 			const parsedGitSource = (packageManager as any).parseSource(gitSource);
-			const installedPath = (packageManager as any).getGitInstallPath(parsedGitSource, "temporary") as string;
+			const installedPath = fromPartial<string>(
+				(packageManager as any).getGitInstallPath(parsedGitSource, "temporary"),
+			);
 
 			mkdirSync(join(installedPath, "extensions"), { recursive: true });
 			writeFileSync(join(installedPath, "extensions", "index.ts"), "export default function() {};");
@@ -1863,7 +1866,9 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 			mkdirSync(installedNpmPath, { recursive: true });
 			writeFileSync(join(installedNpmPath, "package.json"), JSON.stringify({ name: "example", version: "1.0.0" }));
 			const parsedGitSource = (packageManager as any).parseSource("git:github.com/example/repo@v1");
-			const installedGitPath = (packageManager as any).getGitInstallPath(parsedGitSource, "project") as string;
+			const installedGitPath = fromPartial<string>(
+				(packageManager as any).getGitInstallPath(parsedGitSource, "project"),
+			);
 			mkdirSync(installedGitPath, { recursive: true });
 
 			settingsManager.setProjectPackages(["npm:example@1.0.0", "git:github.com/example/repo@v1"]);
@@ -1912,18 +1917,21 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 		});
 
 		it("should wait for close before resolving captured stdout", async () => {
-			const managerWithInternals = packageManager as unknown as {
-				spawnCaptureCommand(
-					command: string,
-					args: string[],
-					options?: { cwd?: string; env?: Record<string, string> },
-				): MockSpawnedProcess;
-				runCommandCapture(
-					command: string,
-					args: string[],
-					options?: { cwd?: string; timeoutMs?: number; env?: Record<string, string> },
-				): Promise<string>;
-			};
+			const managerWithInternals = fromAny<
+				{
+					spawnCaptureCommand(
+						command: string,
+						args: string[],
+						options?: { cwd?: string; env?: Record<string, string> },
+					): MockSpawnedProcess;
+					runCommandCapture(
+						command: string,
+						args: string[],
+						options?: { cwd?: string; timeoutMs?: number; env?: Record<string, string> },
+					): Promise<string>;
+				},
+				unknown
+			>(packageManager);
 			const child = new MockSpawnedProcess();
 			vi.spyOn(managerWithInternals, "spawnCaptureCommand").mockReturnValue(child);
 

@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AGENT_MESSAGE_DISPLAY_MIME, KernelManager, type KernelSentAgentMessage } from "../src/core/kernel/index.js";
 
@@ -20,9 +21,12 @@ describe("KernelManager abort handling", () => {
 		const manager = new KernelManager({ cwd: process.cwd() });
 		let startCount = 0;
 		Object.assign(
-			manager as unknown as {
-				doStart: () => Promise<void>;
-			},
+			fromAny<
+				{
+					doStart: () => Promise<void>;
+				},
+				unknown
+			>(manager),
 			{
 				doStart: async () => {
 					startCount++;
@@ -42,9 +46,12 @@ describe("KernelManager abort handling", () => {
 		let releaseStart: () => void = () => {};
 		let startCount = 0;
 		Object.assign(
-			manager as unknown as {
-				doStart: () => Promise<void>;
-			},
+			fromAny<
+				{
+					doStart: () => Promise<void>;
+				},
+				unknown
+			>(manager),
 			{
 				doStart: async () => {
 					startCount++;
@@ -73,25 +80,28 @@ describe("KernelManager abort handling", () => {
 		const controlSend = vi.fn(async (_frames: Buffer[]) => {});
 		const kernelKill = vi.fn((_signal?: NodeJS.Signals | number) => true);
 		Object.assign(
-			manager as unknown as {
-				state: "running";
-				connection: {
-					ip: "127.0.0.1";
-					transport: "tcp";
-					shell_port: number;
-					iopub_port: number;
-					stdin_port: number;
-					control_port: number;
-					hb_port: number;
-					signature_scheme: "hmac-sha256";
-					key: string;
-					kernel_name: string;
-				};
-				shell: { send: (frames: Buffer[]) => Promise<void>; close: () => void };
-				control: { send: (frames: Buffer[]) => Promise<void>; close: () => void };
-				kernel: { kill: (signal?: NodeJS.Signals | number) => boolean };
-				start: () => Promise<void>;
-			},
+			fromAny<
+				{
+					state: "running";
+					connection: {
+						ip: "127.0.0.1";
+						transport: "tcp";
+						shell_port: number;
+						iopub_port: number;
+						stdin_port: number;
+						control_port: number;
+						hb_port: number;
+						signature_scheme: "hmac-sha256";
+						key: string;
+						kernel_name: string;
+					};
+					shell: { send: (frames: Buffer[]) => Promise<void>; close: () => void };
+					control: { send: (frames: Buffer[]) => Promise<void>; close: () => void };
+					kernel: { kill: (signal?: NodeJS.Signals | number) => boolean };
+					start: () => Promise<void>;
+				},
+				unknown
+			>(manager),
 			{
 				state: "running",
 				connection: {
@@ -129,15 +139,18 @@ describe("KernelManager abort handling", () => {
 		expect(controlSend).toHaveBeenCalled();
 		expect(kernelKill).not.toHaveBeenCalled();
 
-		const internals = manager as unknown as {
-			activeExecution?: { requestMsgId: string };
-			handleExecutionMessage: (incoming: {
-				header: { msg_type: string };
-				parent_header: Record<string, unknown>;
-				metadata: Record<string, unknown>;
-				content: Record<string, unknown>;
-			}) => void;
-		};
+		const internals = fromAny<
+			{
+				activeExecution?: { requestMsgId: string };
+				handleExecutionMessage: (incoming: {
+					header: { msg_type: string };
+					parent_header: Record<string, unknown>;
+					metadata: Record<string, unknown>;
+					content: Record<string, unknown>;
+				}) => void;
+			},
+			unknown
+		>(manager);
 		const activeExecution = internals.activeExecution;
 		expect(activeExecution).toBeDefined();
 		if (!activeExecution) {
@@ -202,24 +215,27 @@ describe("KernelManager abort handling", () => {
 		const shellSend = vi.fn((_frames: Buffer[]) => new Promise<void>(() => {}));
 		const controlSend = vi.fn(async (_frames: Buffer[]) => {});
 		Object.assign(
-			manager as unknown as {
-				state: "running";
-				connection: {
-					ip: "127.0.0.1";
-					transport: "tcp";
-					shell_port: number;
-					iopub_port: number;
-					stdin_port: number;
-					control_port: number;
-					hb_port: number;
-					signature_scheme: "hmac-sha256";
-					key: string;
-					kernel_name: string;
-				};
-				shell: { send: (frames: Buffer[]) => Promise<void>; close: () => void };
-				control: { send: (frames: Buffer[]) => Promise<void>; close: () => void };
-				start: () => Promise<void>;
-			},
+			fromAny<
+				{
+					state: "running";
+					connection: {
+						ip: "127.0.0.1";
+						transport: "tcp";
+						shell_port: number;
+						iopub_port: number;
+						stdin_port: number;
+						control_port: number;
+						hb_port: number;
+						signature_scheme: "hmac-sha256";
+						key: string;
+						kernel_name: string;
+					};
+					shell: { send: (frames: Buffer[]) => Promise<void>; close: () => void };
+					control: { send: (frames: Buffer[]) => Promise<void>; close: () => void };
+					start: () => Promise<void>;
+				},
+				unknown
+			>(manager),
 			{
 				state: "running",
 				connection: {
@@ -256,24 +272,27 @@ describe("KernelManager abort handling", () => {
 		const shellSend = vi.fn(async (_frames: Buffer[]) => {});
 		const controlSend = vi.fn(async (_frames: Buffer[]) => {});
 		Object.assign(
-			manager as unknown as {
-				state: "running";
-				connection: {
-					ip: "127.0.0.1";
-					transport: "tcp";
-					shell_port: number;
-					iopub_port: number;
-					stdin_port: number;
-					control_port: number;
-					hb_port: number;
-					signature_scheme: "hmac-sha256";
-					key: string;
-					kernel_name: string;
-				};
-				shell: { send: (frames: Buffer[]) => Promise<void>; close: () => void };
-				control: { send: (frames: Buffer[]) => Promise<void>; close: () => void };
-				start: () => Promise<void>;
-			},
+			fromAny<
+				{
+					state: "running";
+					connection: {
+						ip: "127.0.0.1";
+						transport: "tcp";
+						shell_port: number;
+						iopub_port: number;
+						stdin_port: number;
+						control_port: number;
+						hb_port: number;
+						signature_scheme: "hmac-sha256";
+						key: string;
+						kernel_name: string;
+					};
+					shell: { send: (frames: Buffer[]) => Promise<void>; close: () => void };
+					control: { send: (frames: Buffer[]) => Promise<void>; close: () => void };
+					start: () => Promise<void>;
+				},
+				unknown
+			>(manager),
 			{
 				state: "running",
 				connection: {

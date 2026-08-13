@@ -1,4 +1,5 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, test } from "vitest";
 import type { AgentStatus } from "../src/core/session-manager.js";
 import {
@@ -8,12 +9,12 @@ import {
 } from "../src/modes/daemon/daemon-session-summarizer.js";
 
 function userMessage(text: string): AgentMessage {
-	return { role: "user", content: [{ type: "text", text }], timestamp: 0 } as unknown as AgentMessage;
+	return fromAny<AgentMessage, unknown>({ role: "user", content: [{ type: "text", text }], timestamp: 0 });
 }
 
 function assistantMessage(text: string, tools: string[] = []): AgentMessage {
 	const content = [{ type: "text", text }, ...tools.map((name) => ({ type: "tool_use", name, id: name, input: {} }))];
-	return { role: "assistant", content, timestamp: 0 } as unknown as AgentMessage;
+	return fromAny<AgentMessage, unknown>({ role: "assistant", content, timestamp: 0 });
 }
 
 describe("daemon session summarizer", () => {

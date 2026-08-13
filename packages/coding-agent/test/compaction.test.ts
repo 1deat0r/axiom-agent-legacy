@@ -1,6 +1,7 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
 import { getModel } from "@earendil-works/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -302,7 +303,7 @@ describe("findCutPoint", () => {
 
 		// Should cut at a valid cut point (user or assistant message)
 		expect(entries[result.firstKeptEntryIndex].type).toBe("message");
-		const role = (entries[result.firstKeptEntryIndex] as SessionMessageEntry).message.role;
+		const role = fromAny<SessionMessageEntry, unknown>(entries[result.firstKeptEntryIndex]).message.role;
 		expect(role === "user" || role === "assistant").toBe(true);
 	});
 
@@ -339,7 +340,7 @@ describe("findCutPoint", () => {
 		const result = findCutPoint(entries, 0, entries.length, 3000);
 
 		// If cut at assistant message (not user), should indicate split turn
-		const cutEntry = entries[result.firstKeptEntryIndex] as SessionMessageEntry;
+		const cutEntry = fromAny<SessionMessageEntry, unknown>(entries[result.firstKeptEntryIndex]);
 		if (cutEntry.message.role === "assistant") {
 			expect(result.isSplitTurn).toBe(true);
 			expect(result.turnStartIndex).toBe(2); // Turn 2 starts at index 2
@@ -535,7 +536,7 @@ describe("Large session fixture", () => {
 
 		// Cut point should be at a message entry (user or assistant)
 		expect(entries[result.firstKeptEntryIndex].type).toBe("message");
-		const role = (entries[result.firstKeptEntryIndex] as SessionMessageEntry).message.role;
+		const role = fromAny<SessionMessageEntry, unknown>(entries[result.firstKeptEntryIndex]).message.role;
 		expect(role === "user" || role === "assistant").toBe(true);
 	});
 

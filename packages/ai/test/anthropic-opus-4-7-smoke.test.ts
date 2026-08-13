@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import { getModel } from "../src/models.js";
 import { streamSimple } from "../src/stream.js";
@@ -30,7 +31,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)("Anthropic Opus 4.7 smoke", () =
 			reasoning: "high",
 			maxTokens: 1024,
 			onPayload: (payload) => {
-				capturedPayload = payload as AnthropicThinkingPayload;
+				capturedPayload = fromAny<AnthropicThinkingPayload, unknown>(payload);
 				return payload;
 			},
 		});

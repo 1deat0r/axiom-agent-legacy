@@ -14,6 +14,7 @@ import {
 	type ImageContent,
 	type TextContent,
 } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { Type } from "typebox";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentSession } from "../src/core/agent-session.js";
@@ -68,8 +69,8 @@ describe("AgentSession concurrent prompt guard", () => {
 	});
 
 	afterEach(async () => {
-		delete (globalThis as typeof globalThis & { testExtensionApi?: unknown }).testExtensionApi;
-		delete (globalThis as typeof globalThis & { testCommandRuns?: unknown }).testCommandRuns;
+		delete fromPartial<typeof globalThis & { testExtensionApi?: unknown }>(globalThis).testExtensionApi;
+		delete fromPartial<typeof globalThis & { testCommandRuns?: unknown }>(globalThis).testCommandRuns;
 		if (session) {
 			session.dispose();
 		}
@@ -158,9 +159,12 @@ describe("AgentSession concurrent prompt guard", () => {
 			releaseDrain = resolve;
 		});
 		let drainStarted = false;
-		const internals = session as unknown as {
-			_drainPendingRefinementForDisposal: () => Promise<void>;
-		};
+		const internals = fromAny<
+			{
+				_drainPendingRefinementForDisposal: () => Promise<void>;
+			},
+			unknown
+		>(session);
 		vi.spyOn(internals, "_drainPendingRefinementForDisposal").mockImplementation(async () => {
 			drainStarted = true;
 			await drainGate;
@@ -306,7 +310,7 @@ describe("AgentSession concurrent prompt guard", () => {
 
 		const extensionsResult = await createTestExtensionsResult([
 			(pi) => {
-				(globalThis as typeof globalThis & { testExtensionApi?: unknown }).testExtensionApi = pi;
+				fromPartial<typeof globalThis & { testExtensionApi?: unknown }>(globalThis).testExtensionApi = pi;
 			},
 			(pi) => {
 				pi.on("input", async (event) => {
@@ -333,13 +337,13 @@ describe("AgentSession concurrent prompt guard", () => {
 		await new Promise((resolve) => setTimeout(resolve, 10));
 		expect(session.isStreaming).toBe(true);
 
-		const pi = (
-			globalThis as typeof globalThis & {
+		const pi = fromPartial<
+			typeof globalThis & {
 				testExtensionApi?: {
 					sendUserMessage: (content: string, options?: { deliverAs?: "steer" | "followUp" }) => void;
 				};
 			}
-		).testExtensionApi;
+		>(globalThis).testExtensionApi;
 		expect(pi).toBeDefined();
 
 		pi!.sendUserMessage("Steer from extension", { deliverAs: "steer" });
@@ -542,7 +546,7 @@ describe("AgentSession concurrent prompt guard", () => {
 			execute: async (_toolCallId: string, params: unknown) => {
 				const q =
 					typeof params === "object" && params !== null && "q" in params
-						? String((params as { q: unknown }).q)
+						? String(fromPartial<{ q: unknown }>(params).q)
 						: "";
 				return {
 					content: [{ type: "text" as const, text: `result:${q}` }],
@@ -630,26 +634,29 @@ describe("AgentSession concurrent prompt guard", () => {
 		});
 
 		const snapshots: string[][] = [];
-		const sessionWithRunner = session as unknown as {
-			_extensionRunner?: {
-				hasHandlers: (eventType: string) => boolean;
-				emit: (event: { type: string; message?: { role?: string } }) => Promise<void>;
-				emitMessageEnd: (event: { type: string; message?: { role?: string } }) => Promise<undefined>;
-				emitToolCall: (event: { type: string; toolCallId: string }) => Promise<undefined>;
-				emitInput: (
-					text: string,
-					images: unknown,
-					source: "interactive" | "rpc" | "extension",
-				) => Promise<{ action: "continue" }>;
-				emitBeforeAgentStart: (
-					prompt: string,
-					images: unknown,
-					systemPrompt: string,
-					systemPromptOptions: BuildSystemPromptOptions,
-				) => Promise<undefined>;
-				invalidate: (message?: string) => void;
-			};
-		};
+		const sessionWithRunner = fromAny<
+			{
+				_extensionRunner?: {
+					hasHandlers: (eventType: string) => boolean;
+					emit: (event: { type: string; message?: { role?: string } }) => Promise<void>;
+					emitMessageEnd: (event: { type: string; message?: { role?: string } }) => Promise<undefined>;
+					emitToolCall: (event: { type: string; toolCallId: string }) => Promise<undefined>;
+					emitInput: (
+						text: string,
+						images: unknown,
+						source: "interactive" | "rpc" | "extension",
+					) => Promise<{ action: "continue" }>;
+					emitBeforeAgentStart: (
+						prompt: string,
+						images: unknown,
+						systemPrompt: string,
+						systemPromptOptions: BuildSystemPromptOptions,
+					) => Promise<undefined>;
+					invalidate: (message?: string) => void;
+				};
+			},
+			unknown
+		>(session);
 		sessionWithRunner._extensionRunner = {
 			hasHandlers: (eventType) => eventType === "tool_call",
 			emit: async () => {},
@@ -687,7 +694,7 @@ describe("AgentSession concurrent prompt guard", () => {
 			execute: async (_toolCallId: string, params: unknown) => {
 				const q =
 					typeof params === "object" && params !== null && "q" in params
-						? String((params as { q: unknown }).q)
+						? String(fromPartial<{ q: unknown }>(params).q)
 						: "";
 				return {
 					content: [{ type: "text" as const, text: `result:${q}` }],
@@ -775,25 +782,28 @@ describe("AgentSession concurrent prompt guard", () => {
 			baseToolsOverride: { dummy: tool },
 		});
 
-		const sessionWithRunner = session as unknown as {
-			_extensionRunner?: {
-				hasHandlers: (eventType: string) => boolean;
-				emit: (event: { type: string; message?: { role?: string } }) => Promise<void>;
-				emitMessageEnd: (event: { type: string; message?: { role?: string } }) => Promise<undefined>;
-				emitInput: (
-					text: string,
-					images: unknown,
-					source: "interactive" | "rpc" | "extension",
-				) => Promise<{ action: "continue" }>;
-				emitBeforeAgentStart: (
-					prompt: string,
-					images: unknown,
-					systemPrompt: string,
-					systemPromptOptions: BuildSystemPromptOptions,
-				) => Promise<undefined>;
-				invalidate: (message?: string) => void;
-			};
-		};
+		const sessionWithRunner = fromAny<
+			{
+				_extensionRunner?: {
+					hasHandlers: (eventType: string) => boolean;
+					emit: (event: { type: string; message?: { role?: string } }) => Promise<void>;
+					emitMessageEnd: (event: { type: string; message?: { role?: string } }) => Promise<undefined>;
+					emitInput: (
+						text: string,
+						images: unknown,
+						source: "interactive" | "rpc" | "extension",
+					) => Promise<{ action: "continue" }>;
+					emitBeforeAgentStart: (
+						prompt: string,
+						images: unknown,
+						systemPrompt: string,
+						systemPromptOptions: BuildSystemPromptOptions,
+					) => Promise<undefined>;
+					invalidate: (message?: string) => void;
+				};
+			},
+			unknown
+		>(session);
 		sessionWithRunner._extensionRunner = {
 			hasHandlers: () => false,
 			emit: async () => {},

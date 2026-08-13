@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it } from "vitest";
 import {
 	ensureInteractiveDaemonRunning,
@@ -63,11 +64,11 @@ async function startFakeDaemon(options: FakeDaemonOptions = {}): Promise<FakeDae
 				if (!line.trim()) {
 					continue;
 				}
-				const wire = JSON.parse(line) as {
+				const wire = fromPartial<{
 					type: string;
 					id: string;
 					command?: { type: string; id: string };
-				};
+				}>(JSON.parse(line));
 				const command = wire.type === "command" && wire.command ? wire.command : wire;
 				options.onCommand?.(command);
 				if (command.type === "list") {

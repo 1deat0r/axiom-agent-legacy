@@ -1,3 +1,4 @@
+import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import { dispatchCommand } from "../../src/gateway/commands/index.js";
 import { InMemoryRestartNoticeStore } from "../../src/gateway/restart-notice.js";
@@ -20,17 +21,17 @@ function ctx(
 	extra: Partial<GatewayCommandContext> & { api?: GatewayUpdateApi },
 ): GatewayCommandContext & { delivered: string[] } {
 	const delivered: string[] = [];
-	return {
+	return fromPartial<GatewayCommandContext & { delivered: string[] }>({
 		profile: "default",
 		axiomHomeDir: "/tmp",
 		projectHome: "/tmp",
 		...(extra.api ? { update: extra.api } : {}),
-		deliver: async (text) => {
+		deliver: async (text: string) => {
 			delivered.push(text);
 		},
 		...extra,
 		delivered,
-	} as GatewayCommandContext & { delivered: string[] };
+	});
 }
 
 describe("/update command", () => {

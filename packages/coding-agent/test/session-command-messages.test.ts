@@ -1,4 +1,5 @@
 import type { TUI } from "@earendil-works/pi-tui";
+import { fromAny } from "@total-typescript/shoehorn";
 import stripAnsi from "strip-ansi";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import {
@@ -22,7 +23,7 @@ import { SlashCommandResultMessageComponent } from "../src/modes/interactive/com
 import { initTheme } from "../src/modes/interactive/theme/theme.js";
 
 const componentOptions = {
-	ui: { requestRender: vi.fn() } as unknown as TUI,
+	ui: fromAny<TUI, unknown>({ requestRender: vi.fn() }),
 	cwd: "/tmp",
 	toolOptions: {},
 	getToolDefinition: () => undefined,

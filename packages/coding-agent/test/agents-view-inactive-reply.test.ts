@@ -1,4 +1,5 @@
 import { setKeybindings } from "@earendil-works/pi-tui";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import stripAnsi from "strip-ansi";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { KeybindingsManager } from "../src/core/keybindings.js";
@@ -28,7 +29,9 @@ function summary(overrides: Partial<SessionSummary>): SessionSummary {
 }
 
 function invoke(method: string, self: object, ...args: unknown[]): unknown {
-	const member = Reflect.get(AgentsViewMode.prototype, method) as ((...a: unknown[]) => unknown) | undefined;
+	const member = fromPartial<((...a: unknown[]) => unknown) | undefined>(
+		Reflect.get(AgentsViewMode.prototype, method),
+	);
 	if (typeof member !== "function") {
 		throw new Error(`AgentsViewMode.${method} no longer exists; update this test harness`);
 	}
@@ -155,7 +158,7 @@ describe("agents view reply on inactive sessions", () => {
 			sendPrompt,
 		};
 
-		const reply = invoke("sendReply", self, target, "wake up") as Promise<boolean>;
+		const reply = fromAny<Promise<boolean>, unknown>(invoke("sendReply", self, target, "wake up"));
 		await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
 		self.replyTarget = undefined;
 		finishResume?.({
@@ -492,19 +495,19 @@ describe("agents view reply on inactive sessions", () => {
 			editor: editorWithText(""),
 		};
 
-		const idleHints = stripAnsi(invoke("renderReplyComposerHints", self) as string);
+		const idleHints = stripAnsi(fromAny<string, unknown>(invoke("renderReplyComposerHints", self)));
 		expect(idleHints).toContain("steer");
 		expect(idleHints).toContain("cancel");
 		expect(idleHints).not.toContain("queue");
 
 		self.editor = editorWithText("some reply");
-		const typedHints = stripAnsi(invoke("renderReplyComposerHints", self) as string);
+		const typedHints = stripAnsi(fromAny<string, unknown>(invoke("renderReplyComposerHints", self)));
 		expect(typedHints).toContain("queue");
 
 		const saved = summary({ sessionFile: "/tmp/sessions/saved-1.jsonl" });
 		self.replyTarget = { key: "saved-1", summary: saved };
 		self.findSummaryByActiveSessionId = () => undefined;
-		const savedHints = stripAnsi(invoke("renderReplyComposerHints", self) as string);
+		const savedHints = stripAnsi(fromAny<string, unknown>(invoke("renderReplyComposerHints", self)));
 		expect(savedHints).toContain("resume & send");
 	});
 });

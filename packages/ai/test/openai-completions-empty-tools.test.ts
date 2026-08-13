@@ -1,3 +1,4 @@
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getModel } from "../src/models.js";
 import { streamSimple } from "../src/stream.js";
@@ -8,9 +9,9 @@ import type { Model } from "../src/types.js";
 // `"[] is too short - 'tools'"` (HTTP 400) when `--no-tools` produces an empty array.
 // Regression for https://github.com/earendil-works/pi-mono/issues/<issue-number>
 
-const mockState = vi.hoisted(() => ({
-	lastParams: undefined as unknown,
-	lastClientOptions: undefined as unknown,
+const mockState = vi.hoisted((): { lastParams: unknown; lastClientOptions: unknown } => ({
+	lastParams: undefined,
+	lastClientOptions: undefined,
 }));
 
 vi.mock("openai", () => {
@@ -36,12 +37,14 @@ vi.mock("openai", () => {
 							};
 						},
 					};
-					const promise = Promise.resolve(stream) as Promise<typeof stream> & {
-						withResponse: () => Promise<{
-							data: typeof stream;
-							response: { status: number; headers: Headers };
-						}>;
-					};
+					const promise = fromPartial<
+						Promise<typeof stream> & {
+							withResponse: () => Promise<{
+								data: typeof stream;
+								response: { status: number; headers: Headers };
+							}>;
+						}
+					>(Promise.resolve(stream));
 					promise.withResponse = async () => ({
 						data: stream,
 						response: { status: 200, headers: new Headers() },
@@ -74,8 +77,8 @@ describe("openai-completions empty tools handling", () => {
 			{ apiKey: "test" },
 		).result();
 
-		const params = mockState.lastParams as { tools?: unknown };
-		expect("tools" in (params as object)).toBe(false);
+		const params = fromAny<{ tools?: unknown }, unknown>(mockState.lastParams);
+		expect("tools" in fromPartial<object>(params)).toBe(false);
 	});
 
 	it("omits tools field when context.tools is undefined", async () => {
@@ -90,8 +93,8 @@ describe("openai-completions empty tools handling", () => {
 			{ apiKey: "test" },
 		).result();
 
-		const params = mockState.lastParams as { tools?: unknown };
-		expect("tools" in (params as object)).toBe(false);
+		const params = fromAny<{ tools?: unknown }, unknown>(mockState.lastParams);
+		expect("tools" in fromPartial<object>(params)).toBe(false);
 	});
 
 	it("uses conservative OpenAI-compatible fields for Cloudflare AI Gateway /compat models", async () => {
@@ -108,23 +111,29 @@ describe("openai-completions empty tools handling", () => {
 			{ apiKey: "test", reasoning: "high" },
 		).result();
 
-		const params = mockState.lastParams as {
-			messages: Array<{ role: string }>;
-			max_tokens?: number;
-			max_completion_tokens?: number;
-			reasoning_effort?: string;
-			store?: boolean;
-		};
+		const params = fromAny<
+			{
+				messages: Array<{ role: string }>;
+				max_tokens?: number;
+				max_completion_tokens?: number;
+				reasoning_effort?: string;
+				store?: boolean;
+			},
+			unknown
+		>(mockState.lastParams);
 		expect(params.messages[0].role).toBe("system");
 		expect(params.max_tokens).toBeDefined();
 		expect(params.max_completion_tokens).toBeUndefined();
 		expect(params.reasoning_effort).toBeUndefined();
 		expect(params.store).toBeUndefined();
 
-		const clientOptions = mockState.lastClientOptions as {
-			baseURL?: string;
-			defaultHeaders?: Record<string, unknown>;
-		};
+		const clientOptions = fromAny<
+			{
+				baseURL?: string;
+				defaultHeaders?: Record<string, unknown>;
+			},
+			unknown
+		>(mockState.lastClientOptions);
 		expect(clientOptions.baseURL).toBe("https://gateway.ai.cloudflare.com/v1/account-id/gateway-id/compat");
 		expect(clientOptions.defaultHeaders?.Authorization).toBeNull();
 		expect(clientOptions.defaultHeaders?.["cf-aig-authorization"]).toBe("Bearer test");
@@ -156,7 +165,7 @@ describe("openai-completions empty tools handling", () => {
 			{ apiKey: "test", reasoning: "medium" },
 		).result();
 
-		const params = mockState.lastParams as { reasoning_effort?: string; enable_thinking?: boolean };
+		const params = fromAny<{ reasoning_effort?: string; enable_thinking?: boolean }, unknown>(mockState.lastParams);
 		expect(params.reasoning_effort).toBe("medium");
 		expect(params.enable_thinking).toBeUndefined();
 	});
@@ -174,7 +183,7 @@ describe("openai-completions empty tools handling", () => {
 			{ apiKey: "cf-token", headers: { Authorization: "Bearer upstream-token" } },
 		).result();
 
-		const clientOptions = mockState.lastClientOptions as { defaultHeaders?: Record<string, unknown> };
+		const clientOptions = fromAny<{ defaultHeaders?: Record<string, unknown> }, unknown>(mockState.lastClientOptions);
 		expect(clientOptions.defaultHeaders?.Authorization).toBe("Bearer upstream-token");
 		expect(clientOptions.defaultHeaders?.["cf-aig-authorization"]).toBe("Bearer cf-token");
 	});
@@ -192,7 +201,7 @@ describe("openai-completions empty tools handling", () => {
 			{ apiKey: "test", sessionId: "session-1" },
 		).result();
 
-		const clientOptions = mockState.lastClientOptions as { defaultHeaders?: Record<string, string> };
+		const clientOptions = fromAny<{ defaultHeaders?: Record<string, string> }, unknown>(mockState.lastClientOptions);
 		expect(clientOptions.defaultHeaders?.session_id).toBe("session-1");
 		expect(clientOptions.defaultHeaders?.["x-client-request-id"]).toBe("session-1");
 		expect(clientOptions.defaultHeaders?.["x-session-affinity"]).toBe("session-1");
@@ -245,7 +254,7 @@ describe("openai-completions empty tools handling", () => {
 			{ apiKey: "test" },
 		).result();
 
-		const params = mockState.lastParams as { tools?: unknown[] };
+		const params = fromAny<{ tools?: unknown[] }, unknown>(mockState.lastParams);
 		expect(Array.isArray(params.tools)).toBe(true);
 		expect(params.tools).toEqual([]);
 	});

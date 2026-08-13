@@ -1,4 +1,5 @@
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import { SessionManager } from "../../../src/core/session-manager.js";
 import { startSideQuestion } from "../../../src/core/side-question.js";
@@ -33,24 +34,26 @@ describe("ENG-4620 fast mode child agents", () => {
 			}),
 		);
 		const write = vi.fn();
-		const supervisor = Object.assign(Object.create(DaemonSupervisor.prototype), {
-			ready: Promise.resolve(),
-			ownership: { assertCurrent: vi.fn(async () => undefined) },
-			workers: new Map(),
-			clients: new Set(),
-			protocolClientIds: new WeakMap(),
-			mutationDrain: new MutationDrainLatch(),
-			commandJournal: {
-				lookup: vi.fn(() => undefined),
-				begin: vi.fn(() => ({ status: "new" })),
-				recordResult: vi.fn(),
-				acknowledge: vi.fn(),
-			},
-			handleCommand,
-			write,
-			log: vi.fn(),
-		}) as SupervisorHarness;
-		const client = { id: "client-1" } as DaemonSocketClient;
+		const supervisor = fromPartial<SupervisorHarness>(
+			Object.assign(Object.create(DaemonSupervisor.prototype), {
+				ready: Promise.resolve(),
+				ownership: { assertCurrent: vi.fn(async () => undefined) },
+				workers: new Map(),
+				clients: new Set(),
+				protocolClientIds: new WeakMap(),
+				mutationDrain: new MutationDrainLatch(),
+				commandJournal: {
+					lookup: vi.fn(() => undefined),
+					begin: vi.fn(() => ({ status: "new" })),
+					recordResult: vi.fn(),
+					acknowledge: vi.fn(),
+				},
+				handleCommand,
+				write,
+				log: vi.fn(),
+			}),
+		);
+		const client = fromPartial<DaemonSocketClient>({ id: "client-1" });
 		const command = {
 			id: "tier-1",
 			type: "set_service_tier",

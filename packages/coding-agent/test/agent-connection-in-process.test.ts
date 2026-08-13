@@ -1,5 +1,6 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { getModel } from "@earendil-works/pi-ai";
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import type { AgentSessionEvent, AgentSessionEventListener, PromptOptions } from "../src/core/agent-session.js";
 import type { AgentSessionRuntime } from "../src/core/agent-session-runtime.js";
@@ -55,7 +56,7 @@ class FakeRuntime {
 }
 
 function asRuntime(runtime: FakeRuntime): AgentSessionRuntime {
-	return runtime as unknown as AgentSessionRuntime;
+	return fromAny<AgentSessionRuntime, unknown>(runtime);
 }
 
 function userMessage(text: string, timestamp: number): AgentMessage {
@@ -76,7 +77,7 @@ function createFakeSession(id: string, messages: AgentMessage[]): FakeSessionCon
 		model: null,
 	});
 	const model = getModel("openai", "gpt-5.1");
-	const session = {
+	const session = fromAny<RuntimeSession, unknown>({
 		sessionManager: {
 			getCwd: () => `/tmp/${id}`,
 			getSessionDir: () => "/tmp/axiom-sessions",
@@ -127,7 +128,7 @@ function createFakeSession(id: string, messages: AgentMessage[]): FakeSessionCon
 				listeners.delete(listener);
 			};
 		},
-	} as unknown as RuntimeSession;
+	});
 
 	return {
 		session,

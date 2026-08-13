@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { registerOAuthProvider } from "@earendil-works/pi-ai/oauth";
+import { fromPartial } from "@total-typescript/shoehorn";
 import lockfile from "proper-lockfile";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.js";
@@ -549,7 +550,7 @@ describe("AuthStorage", () => {
 
 			authStorage.setPrimeInferenceApiKey("new-prime-key");
 
-			const config = JSON.parse(readFileSync(primeConfigPath, "utf-8")) as Record<string, unknown>;
+			const config = fromPartial<Record<string, unknown>>(JSON.parse(readFileSync(primeConfigPath, "utf-8")));
 			expect(config.api_key).toBe("new-prime-key");
 			expect(statSync(primeConfigPath).mode & 0o777).toBe(0o600);
 			expect(authStorage.has("prime-inference")).toBe(false);
@@ -576,7 +577,7 @@ describe("AuthStorage", () => {
 
 			authStorage.setPrimeInferenceApiKey("new-prime-key");
 
-			const config = JSON.parse(readFileSync(primeConfigPath, "utf-8")) as Record<string, unknown>;
+			const config = fromPartial<Record<string, unknown>>(JSON.parse(readFileSync(primeConfigPath, "utf-8")));
 			expect(config.api_key).toBe("new-prime-key");
 			expect(config.team_id).toBeUndefined();
 			expect(config.team_name).toBeUndefined();
@@ -608,7 +609,7 @@ describe("AuthStorage", () => {
 
 			authStorage.setPrimeInferenceApiKey("prime-cli-key");
 
-			const config = JSON.parse(readFileSync(primeConfigPath, "utf-8")) as Record<string, unknown>;
+			const config = fromPartial<Record<string, unknown>>(JSON.parse(readFileSync(primeConfigPath, "utf-8")));
 			expect(config.api_key).toBe("prime-cli-key");
 			expect(config.team_id).toBe("team-1");
 			expect(config.team_name).toBe("Research");
@@ -634,7 +635,7 @@ describe("AuthStorage", () => {
 
 			authStorage.setPrimeInferenceApiKey("prime-cli-key");
 
-			const config = JSON.parse(readFileSync(primeConfigPath, "utf-8")) as Record<string, unknown>;
+			const config = fromPartial<Record<string, unknown>>(JSON.parse(readFileSync(primeConfigPath, "utf-8")));
 			expect(config.api_key).toBe("prime-cli-key");
 			expect(config.team_id).toBe("team-1");
 			expect(config.team_name).toBe("Research");
@@ -668,7 +669,7 @@ describe("AuthStorage", () => {
 
 			authStorage.setPrimeInferenceApiKey("prime-cli-key");
 
-			const config = JSON.parse(readFileSync(primeConfigPath, "utf-8")) as Record<string, unknown>;
+			const config = fromPartial<Record<string, unknown>>(JSON.parse(readFileSync(primeConfigPath, "utf-8")));
 			expect(config.api_key).toBe("prime-cli-key");
 			expect(config.team_id).toBeUndefined();
 			expect(config.team_name).toBeUndefined();
@@ -693,7 +694,7 @@ describe("AuthStorage", () => {
 
 			authStorage.setPrimeInferenceApiKey("new-prime-key");
 
-			const agentAuth = JSON.parse(readFileSync(authJsonPath, "utf-8")) as Record<string, unknown>;
+			const agentAuth = fromPartial<Record<string, unknown>>(JSON.parse(readFileSync(authJsonPath, "utf-8")));
 			expect(agentAuth["prime-inference"]).toBeUndefined();
 			expect(authStorage.has("prime-inference")).toBe(false);
 		});
@@ -757,7 +758,7 @@ describe("AuthStorage", () => {
 
 			authStorage.logout("prime-inference");
 
-			const config = JSON.parse(readFileSync(primeConfigPath, "utf-8")) as Record<string, unknown>;
+			const config = fromPartial<Record<string, unknown>>(JSON.parse(readFileSync(primeConfigPath, "utf-8")));
 			expect(config.api_key).toBeUndefined();
 			expect(config.team_id).toBeUndefined();
 			expect(config.team_name).toBeUndefined();
@@ -777,7 +778,7 @@ describe("AuthStorage", () => {
 
 			authStorage.setPrimeInferenceTeamSelection({ teamId: "team-1", name: "Research", role: "admin" });
 
-			const config = JSON.parse(readFileSync(primeConfigPath, "utf-8")) as Record<string, unknown>;
+			const config = fromPartial<Record<string, unknown>>(JSON.parse(readFileSync(primeConfigPath, "utf-8")));
 			expect(config.team_id).toBe("team-1");
 			expect(config.team_name).toBe("Research");
 			expect(config.team_role).toBe("admin");
@@ -1001,7 +1002,7 @@ describe("AuthStorage", () => {
 
 			authStorage.set("anthropic", { type: "api_key", key: "new-anthropic" });
 
-			const updated = JSON.parse(readFileSync(authJsonPath, "utf-8")) as Record<string, { key: string }>;
+			const updated = fromPartial<Record<string, { key: string }>>(JSON.parse(readFileSync(authJsonPath, "utf-8")));
 			expect(updated.anthropic.key).toBe("new-anthropic");
 			expect(updated.openai.key).toBe("openai-key");
 			expect(updated.google.key).toBe("google-key");
@@ -1024,7 +1025,7 @@ describe("AuthStorage", () => {
 
 			authStorage.remove("anthropic");
 
-			const updated = JSON.parse(readFileSync(authJsonPath, "utf-8")) as Record<string, { key: string }>;
+			const updated = fromPartial<Record<string, { key: string }>>(JSON.parse(readFileSync(authJsonPath, "utf-8")));
 			expect(updated.anthropic).toBeUndefined();
 			expect(updated.openai.key).toBe("openai-key");
 			expect(updated.google.key).toBe("google-key");

@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Component, OverlayHandle, TUI } from "@earendil-works/pi-tui";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import stripAnsi from "strip-ansi";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.js";
@@ -31,14 +32,14 @@ function createOverlayHandle(): OverlayHandle {
 }
 
 function createFakeTui(overlays: Component[] = []): TUI {
-	return {
+	return fromAny<TUI, unknown>({
 		terminal: { columns: 80, rows: 24 },
 		requestRender: vi.fn(),
 		showOverlay: vi.fn((component: Component) => {
 			overlays.push(component);
 			return createOverlayHandle();
 		}),
-	} as unknown as TUI;
+	});
 }
 
 function createHost(authStorage: AuthStorage): {
@@ -50,13 +51,13 @@ function createHost(authStorage: AuthStorage): {
 	const statusMessages: string[] = [];
 	const errorMessages: string[] = [];
 	const overlays: Component[] = [];
-	const modelRegistry = {
+	const modelRegistry = fromAny<ModelRegistry, unknown>({
 		authStorage,
 		refresh: vi.fn(),
 		getAll: () => [],
 		getProviderDisplayName: (providerId: string) => providerId,
 		getProviderAuthStatus: (providerId: string) => authStorage.getAuthStatus(providerId),
-	} as unknown as ModelRegistry;
+	});
 
 	return {
 		host: {
@@ -148,7 +149,7 @@ describe("ProviderAuthFlows", () => {
 		expect(fetchMock).toHaveBeenCalledOnce();
 		expect(statusMessages.join("\n")).toContain("Using team from PRIME_TEAM_ID.");
 
-		const config = JSON.parse(readFileSync(primeConfigPath, "utf-8")) as Record<string, unknown>;
+		const config = fromPartial<Record<string, unknown>>(JSON.parse(readFileSync(primeConfigPath, "utf-8")));
 		expect(config.api_key).toBe("prime-cli-key");
 		expect(config.team_id).toBe("cli-team");
 		expect(config.team_name).toBe("CLI Research");
@@ -181,10 +182,9 @@ describe("ProviderAuthFlows", () => {
 			source: "stored",
 		});
 
-		const authData = JSON.parse(readFileSync(authJsonPath, "utf-8")) as Record<
-			string,
-			{ type?: string; key?: string }
-		>;
+		const authData = fromPartial<Record<string, { type?: string; key?: string }>>(
+			JSON.parse(readFileSync(authJsonPath, "utf-8")),
+		);
 		expect(authData[PRIME_INFERENCE_PROVIDER_ID]).toEqual({
 			type: "api_key",
 			key: "prime-cli-key",

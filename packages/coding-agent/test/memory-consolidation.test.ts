@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type * as PiAi from "@earendil-works/pi-ai";
 import type { Model } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	appendAuditEvent,
@@ -74,10 +75,10 @@ const assistantText = (text: string) => ({
 });
 
 const session = (): AgentMessage[] =>
-	[
+	fromAny<AgentMessage[], unknown>([
 		user("what is the sandbox known-fail policy?"),
 		assistantText("the EXDEV suites are documented sandbox known-fails"),
-	] as unknown as AgentMessage[];
+	]);
 
 const durableFact = (): MemoryFact => ({
 	title: "Sandbox known-fails",
@@ -334,8 +335,8 @@ describe("planMemoryConsolidation (model pass)", () => {
 			"key",
 		);
 		expect(proposal.facts).toHaveLength(1);
-		const call = completeSimpleMock.mock.calls[0] as unknown[];
-		const context = call[1] as { systemPrompt: string; messages: { content: { text: string }[] }[] };
+		const call = fromPartial<unknown[]>(completeSimpleMock.mock.calls[0]);
+		const context = fromAny<{ systemPrompt: string; messages: { content: { text: string }[] }[] }, unknown>(call[1]);
 		const promptText = context.messages.map((m) => m.content.map((c) => c.text).join("")).join("\n");
 		expect(promptText).toContain("the session text");
 		expect(promptText).toContain("[m1] Existing: already known");

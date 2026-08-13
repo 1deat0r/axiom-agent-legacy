@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DaemonSocketClient } from "../../../src/modes/daemon/active-session-state.js";
 import { AgentDaemon } from "../../../src/modes/daemon/daemon-mode.js";
@@ -81,7 +82,7 @@ function streamedResult(snapshotId: string, messageCount: number, lastEventSeque
 		snapshot: {
 			activeSessionId,
 			summary: summary(messageCount),
-			state: { activeSessionId, sessionId: "session-4677" } as DaemonAttachResult["snapshot"]["state"],
+			state: fromPartial<DaemonAttachResult["snapshot"]["state"]>({ activeSessionId, sessionId: "session-4677" }),
 			messages: [],
 			lastEventSequence,
 		},
@@ -116,7 +117,7 @@ function socketClient(id: string): DaemonSocketClient {
 	const socket = new PassThrough();
 	return {
 		id,
-		socket: socket as unknown as Socket,
+		socket: fromAny<Socket, unknown>(socket),
 		attachedActiveSessionIds: new Set([activeSessionId]),
 		catchupActiveSessionIds: new Set(),
 		detachInput: () => {},
@@ -169,19 +170,22 @@ describe("ENG-4677 snapshot catch-up replacement", () => {
 		const client = socketClient("incomplete-reader");
 		const written: DaemonOutbound[] = [];
 		const writeSnapshotBuffer = vi.fn((_client: DaemonSocketClient, buffer: Uint8Array) => {
-			written.push(JSON.parse(Buffer.from(buffer).toString("utf8")) as DaemonOutbound);
+			written.push(fromPartial<DaemonOutbound>(JSON.parse(Buffer.from(buffer).toString("utf8"))));
 			return Promise.resolve(true);
 		});
-		const internals = supervisor as unknown as {
-			writeSnapshotBuffer: typeof writeSnapshotBuffer;
-			handleWorkerFrame(worker: WorkerHarness, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
-			streamSnapshot(
-				client: DaemonSocketClient,
-				worker: WorkerHarness,
-				result: DaemonAttachResult,
-				transcript: SnapshotTranscriptCache,
-			): Promise<void>;
-		};
+		const internals = fromAny<
+			{
+				writeSnapshotBuffer: typeof writeSnapshotBuffer;
+				handleWorkerFrame(worker: WorkerHarness, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
+				streamSnapshot(
+					client: DaemonSocketClient,
+					worker: WorkerHarness,
+					result: DaemonAttachResult,
+					transcript: SnapshotTranscriptCache,
+				): Promise<void>;
+			},
+			unknown
+		>(supervisor);
 		internals.writeSnapshotBuffer = writeSnapshotBuffer;
 
 		const firstResult = streamedResult(firstSnapshotId, 1, 1);
@@ -293,18 +297,21 @@ describe("ENG-4677 snapshot catch-up replacement", () => {
 			),
 		};
 		const client = socketClient("stale-attach");
-		const internals = supervisor as unknown as {
-			workers: Map<string, WorkerHarness>;
-			attachClient(
-				client: DaemonSocketClient,
-				command: { type: "attach"; activeSessionId: string; capabilities: ["chunked_snapshot"] },
-			): Promise<{
-				result: DaemonAttachResult;
-				transcript?: SnapshotTranscriptCache;
-				releaseTranscript?: () => void;
-			}>;
-			handleWorkerFrame(worker: WorkerHarness, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
-		};
+		const internals = fromAny<
+			{
+				workers: Map<string, WorkerHarness>;
+				attachClient(
+					client: DaemonSocketClient,
+					command: { type: "attach"; activeSessionId: string; capabilities: ["chunked_snapshot"] },
+				): Promise<{
+					result: DaemonAttachResult;
+					transcript?: SnapshotTranscriptCache;
+					releaseTranscript?: () => void;
+				}>;
+				handleWorkerFrame(worker: WorkerHarness, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
+			},
+			unknown
+		>(supervisor);
 		internals.workers.set(worker.descriptor.workerId, worker);
 		const attaching = internals.attachClient(client, {
 			type: "attach",
@@ -382,9 +389,12 @@ describe("ENG-4677 snapshot catch-up replacement", () => {
 		const waiter = firstTranscript.waitForChunk(1);
 		void waiter.catch(() => undefined);
 		const worker = workerHarness(firstResult, firstTranscript);
-		const internals = supervisor as unknown as {
-			handleWorkerFrame(worker: WorkerHarness, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
-		};
+		const internals = fromAny<
+			{
+				handleWorkerFrame(worker: WorkerHarness, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
+			},
+			unknown
+		>(supervisor);
 		const replacementResult = streamedResult(replacementSnapshotId, 1, 2);
 		const { messages: _messages, ...snapshot } = replacementResult.snapshot;
 
@@ -425,14 +435,17 @@ describe("ENG-4677 snapshot catch-up replacement", () => {
 		worker.snapshotCache.clear();
 		worker.transcriptCaches.clear();
 		const client = socketClient("validation-waiter");
-		const internals = supervisor as unknown as {
-			workers: Map<string, WorkerHarness>;
-			attachClient(
-				client: DaemonSocketClient,
-				command: { type: "attach"; activeSessionId: string; capabilities: ["chunked_snapshot"] },
-			): Promise<{ result: DaemonAttachResult; releaseTranscript?: () => void }>;
-			handleWorkerFrame(worker: WorkerHarness, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
-		};
+		const internals = fromAny<
+			{
+				workers: Map<string, WorkerHarness>;
+				attachClient(
+					client: DaemonSocketClient,
+					command: { type: "attach"; activeSessionId: string; capabilities: ["chunked_snapshot"] },
+				): Promise<{ result: DaemonAttachResult; releaseTranscript?: () => void }>;
+				handleWorkerFrame(worker: WorkerHarness, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
+			},
+			unknown
+		>(supervisor);
 		internals.workers.set(worker.descriptor.workerId, worker);
 		const { messages: _firstMessages, ...firstSnapshot } = firstResult.snapshot;
 		const firstBegin = {
@@ -532,10 +545,13 @@ describe("ENG-4677 snapshot catch-up replacement", () => {
 		const drainClientCatchups = vi.fn(async (target: DaemonSocketClient) => {
 			target.catchupActiveSessionIds?.clear();
 		});
-		const internals = supervisor as unknown as {
-			drainClientCatchups: typeof drainClientCatchups;
-			catchUpClient(client: DaemonSocketClient): Promise<void>;
-		};
+		const internals = fromAny<
+			{
+				drainClientCatchups: typeof drainClientCatchups;
+				catchUpClient(client: DaemonSocketClient): Promise<void>;
+			},
+			unknown
+		>(supervisor);
 		internals.drainClientCatchups = drainClientCatchups;
 
 		await internals.catchUpClient(client);
@@ -562,10 +578,13 @@ describe("ENG-4677 snapshot catch-up replacement", () => {
 		const drainBackpressuredClientCatchups = vi.fn(async (target: DaemonSocketClient) => {
 			target.catchupActiveSessionIds?.clear();
 		});
-		const internals = daemon as unknown as {
-			drainBackpressuredClientCatchups: typeof drainBackpressuredClientCatchups;
-			catchUpBackpressuredClient(client: DaemonSocketClient): Promise<void>;
-		};
+		const internals = fromAny<
+			{
+				drainBackpressuredClientCatchups: typeof drainBackpressuredClientCatchups;
+				catchUpBackpressuredClient(client: DaemonSocketClient): Promise<void>;
+			},
+			unknown
+		>(daemon);
 		internals.drainBackpressuredClientCatchups = drainBackpressuredClientCatchups;
 
 		await internals.catchUpBackpressuredClient(client);
@@ -610,7 +629,7 @@ describe("ENG-4677 snapshot catch-up replacement", () => {
 			firstChunkStarted = resolve;
 		});
 		const writeSnapshotBuffer = vi.fn((_client: DaemonSocketClient, buffer: Uint8Array) => {
-			const message = JSON.parse(Buffer.from(buffer).toString("utf8")) as DaemonOutbound;
+			const message = fromPartial<DaemonOutbound>(JSON.parse(Buffer.from(buffer).toString("utf8")));
 			written.push(message);
 			if (
 				message.type === "session_snapshot_chunk" &&
@@ -622,22 +641,25 @@ describe("ENG-4677 snapshot catch-up replacement", () => {
 			}
 			return Promise.resolve(true);
 		});
-		const internals = supervisor as unknown as {
-			clients: Set<DaemonSocketClient>;
-			workers: Map<string, WorkerHarness>;
-			writeSnapshotBuffer: typeof writeSnapshotBuffer;
-			syncWorkerExtensionUi: ReturnType<typeof vi.fn>;
-			streamSnapshot(
-				client: DaemonSocketClient,
-				worker: WorkerHarness,
-				result: DaemonAttachResult,
-				transcript: SnapshotTranscriptCache,
-				purpose: "attach" | "replacement" | "resync",
-			): Promise<void>;
-			handleWorkerFrame(worker: WorkerHarness, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
-			queueCatchup(client: DaemonSocketClient, activeSessionId: string, purpose: "replacement" | "resync"): void;
-			catchUpClient(client: DaemonSocketClient): Promise<void>;
-		};
+		const internals = fromAny<
+			{
+				clients: Set<DaemonSocketClient>;
+				workers: Map<string, WorkerHarness>;
+				writeSnapshotBuffer: typeof writeSnapshotBuffer;
+				syncWorkerExtensionUi: ReturnType<typeof vi.fn>;
+				streamSnapshot(
+					client: DaemonSocketClient,
+					worker: WorkerHarness,
+					result: DaemonAttachResult,
+					transcript: SnapshotTranscriptCache,
+					purpose: "attach" | "replacement" | "resync",
+				): Promise<void>;
+				handleWorkerFrame(worker: WorkerHarness, frame: PrivateFrame<DaemonWorkerFrameHeader>): void;
+				queueCatchup(client: DaemonSocketClient, activeSessionId: string, purpose: "replacement" | "resync"): void;
+				catchUpClient(client: DaemonSocketClient): Promise<void>;
+			},
+			unknown
+		>(supervisor);
 		internals.writeSnapshotBuffer = writeSnapshotBuffer;
 		internals.syncWorkerExtensionUi = vi.fn(async () => {});
 
@@ -730,11 +752,14 @@ describe("ENG-4677 snapshot catch-up replacement", () => {
 				await firstDrainBlocked;
 			}
 		});
-		const internals = supervisor as unknown as {
-			drainClientCatchups: typeof drainClientCatchups;
-			queueCatchup(client: DaemonSocketClient, activeSessionId: string, purpose?: "replacement" | "resync"): void;
-			catchUpClient(client: DaemonSocketClient): Promise<void>;
-		};
+		const internals = fromAny<
+			{
+				drainClientCatchups: typeof drainClientCatchups;
+				queueCatchup(client: DaemonSocketClient, activeSessionId: string, purpose?: "replacement" | "resync"): void;
+				catchUpClient(client: DaemonSocketClient): Promise<void>;
+			},
+			unknown
+		>(supervisor);
 		internals.drainClientCatchups = drainClientCatchups;
 		internals.queueCatchup(client, activeSessionId);
 
@@ -775,15 +800,18 @@ describe("ENG-4677 snapshot catch-up replacement", () => {
 				await firstDrainBlocked;
 			}
 		});
-		const internals = daemon as unknown as {
-			drainBackpressuredClientCatchups: typeof drainBackpressuredClientCatchups;
-			queueClientCatchup(
-				client: DaemonSocketClient,
-				activeSessionId: string,
-				purpose?: "replacement" | "resync",
-			): void;
-			catchUpBackpressuredClient(client: DaemonSocketClient): Promise<void>;
-		};
+		const internals = fromAny<
+			{
+				drainBackpressuredClientCatchups: typeof drainBackpressuredClientCatchups;
+				queueClientCatchup(
+					client: DaemonSocketClient,
+					activeSessionId: string,
+					purpose?: "replacement" | "resync",
+				): void;
+				catchUpBackpressuredClient(client: DaemonSocketClient): Promise<void>;
+			},
+			unknown
+		>(daemon);
 		internals.drainBackpressuredClientCatchups = drainBackpressuredClientCatchups;
 		internals.queueClientCatchup(client, activeSessionId);
 

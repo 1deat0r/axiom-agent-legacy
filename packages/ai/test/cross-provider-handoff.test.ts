@@ -22,6 +22,7 @@
  * Fixtures are generated fresh on each run.
  */
 
+import { fromPartial } from "@total-typescript/shoehorn";
 import { writeFileSync } from "fs";
 import { Type } from "typebox";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -203,7 +204,7 @@ async function generateContext(
 	pair: ProviderModelPair,
 	apiKey: string,
 ): Promise<{ messages: Message[]; api: Api } | null> {
-	const baseModel = (getModel as (p: string, m: string) => Model<Api> | undefined)(pair.provider, pair.model);
+	const baseModel = fromPartial<(p: string, m: string) => Model<Api> | undefined>(getModel)(pair.provider, pair.model);
 	if (!baseModel) {
 		console.log(`  Model not found: ${pair.provider}/${pair.model}`);
 		return null;
@@ -416,7 +417,7 @@ describe.skipIf(!hasAnyApiKey())("Cross-Provider Handoff", () => {
 					},
 				];
 
-				const baseModel = (getModel as (p: string, m: string) => Model<Api> | undefined)(
+				const baseModel = fromPartial<(p: string, m: string) => Model<Api> | undefined>(getModel)(
 					targetPair.provider,
 					targetPair.model,
 				);

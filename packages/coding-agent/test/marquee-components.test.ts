@@ -1,5 +1,6 @@
 import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
 import { type Component, setKeybindings, TUI, visibleWidth } from "@earendil-works/pi-tui";
+import { fromAny } from "@total-typescript/shoehorn";
 import stripAnsi from "strip-ansi";
 import { beforeAll, describe, expect, test } from "vitest";
 import { VirtualTerminal } from "../../tui/test/virtual-terminal.js";
@@ -22,9 +23,9 @@ class HostComponent implements Component {
 }
 
 function createFakeTui(): TUI {
-	return {
+	return fromAny<TUI, unknown>({
 		requestRender: () => {},
-	} as unknown as TUI;
+	});
 }
 
 const EMPTY_USAGE: Usage = {

@@ -1,3 +1,4 @@
+import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import { MODELS } from "../src/models.generated.js";
 import { complete } from "../src/stream.js";
@@ -13,7 +14,7 @@ describe.skipIf(!process.env.OPENCODE_API_KEY)("OpenCode Models Smoke Test", () 
 		const providerModels = Object.values(MODELS[key]);
 		providerModels.forEach((model) => {
 			it(`${label}: ${model.id}`, async () => {
-				const response = await complete(model as Model<any>, {
+				const response = await complete(fromPartial<Model<any>>(model), {
 					messages: [{ role: "user", content: "Say hello.", timestamp: Date.now() }],
 				});
 

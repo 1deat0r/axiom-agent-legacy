@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-	daemonCommands: [] as string[][],
+const mocks = vi.hoisted((): { daemonCommands: string[][] } => ({
+	daemonCommands: [],
 }));
 
 vi.mock("../../../src/cli/daemon-command.js", () => ({

@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import { getModel } from "../src/models.js";
 import { convertMessages } from "../src/providers/openai-completions.js";
@@ -94,7 +95,7 @@ describe("openai-completions convertMessages", () => {
 		expect(imageMessage.role).toBe("user");
 		expect(Array.isArray(imageMessage.content)).toBe(true);
 
-		const imageParts = (imageMessage.content as Array<{ type?: string }>).filter(
+		const imageParts = fromAny<Array<{ type?: string }>, unknown>(imageMessage.content).filter(
 			(part) => part?.type === "image_url",
 		);
 		expect(imageParts.length).toBe(2);

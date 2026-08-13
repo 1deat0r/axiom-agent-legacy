@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const googleGenAiMock = vi.hoisted(() => ({
-	constructorCalls: [] as Array<Record<string, unknown>>,
+const googleGenAiMock = vi.hoisted((): { constructorCalls: Array<Record<string, unknown>> } => ({
+	constructorCalls: [],
 }));
 
 vi.mock("@google/genai", () => {

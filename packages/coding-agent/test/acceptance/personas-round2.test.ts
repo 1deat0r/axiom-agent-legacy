@@ -8,6 +8,7 @@
 
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import { handleProfileCommand } from "../../src/cli/profile-command.js";
 import {
@@ -33,11 +34,11 @@ describe("round-2 synthetic users", () => {
 			const pi = bootAxiom(home);
 			const { ctx, notified } = userCtx();
 			// 1. Nadia sets the cap with a command, not a file
-			await pi.commands.get("cap")!.handler("0.75", ctx as never);
+			await pi.commands.get("cap")!.handler("0.75", fromAny<never, unknown>(ctx));
 			expect(notified.at(-1)).toContain("cap set to $0.75");
 			log.push(`/cap 0.75 -> "${notified.at(-1)}"`);
 			// 2. /cap shows the headroom without arguments
-			await pi.commands.get("cap")!.handler("", ctx as never);
+			await pi.commands.get("cap")!.handler("", fromAny<never, unknown>(ctx));
 			expect(notified.at(-1)).toContain("cap $0.75");
 			expect(notified.at(-1)).toContain("session $0.0000");
 			log.push(`/cap -> "${notified.at(-1)}"`);
@@ -65,7 +66,7 @@ describe("round-2 synthetic users", () => {
 			expect(runNotified.at(-1)).toContain("/cap to adjust");
 			log.push(`cap stop with next steps -> "${runNotified.at(-1)}"`);
 			// 4. Nadia clears the cap the same way she set it
-			await pi.commands.get("cap")!.handler("none", ctx as never);
+			await pi.commands.get("cap")!.handler("none", fromAny<never, unknown>(ctx));
 			expect(notified.at(-1)).toContain("cap cleared");
 			log.push("/cap none -> cap cleared");
 		} finally {
@@ -94,16 +95,16 @@ describe("round-2 synthetic users", () => {
 			const tool = pi.tools.find((t) => t.name === "memory")!;
 			const results: string[] = [];
 			for (let i = 0; i < 52; i++) {
-				const r = (await tool.execute("c1", { action: "add", content: `fact ${i}`, scope: "user" })) as {
+				const r = fromPartial<{
 					content: Array<{ type: string; text: string }>;
-				};
+				}>(await tool.execute("c1", { action: "add", content: `fact ${i}`, scope: "user" }));
 				if (r.content[0]!.text.includes("evicted")) results.push(r.content[0]!.text);
 			}
 			expect(results.length).toBe(2); // adds 51 and 52 each evict one
 			expect(results[0]).toContain("evicted 1 stale entry");
 			log.push(`eviction named on 2 over-cap adds, e.g. "${results[0]}"`);
 			// 3. a zero cap via /cap gives the way out
-			await pi.commands.get("cap")!.handler("0", ctx as never);
+			await pi.commands.get("cap")!.handler("0", fromAny<never, unknown>(ctx));
 			expect(notified.at(-1)).toContain("/cap none to re-enable");
 			log.push("zero cap points to /cap none to re-enable");
 		} finally {
@@ -145,7 +146,7 @@ describe("round-2 synthetic users", () => {
 				}),
 			}));
 			const { ctx, notified } = userCtx(entries);
-			await pi.commands.get("cost")!.handler("", ctx as never);
+			await pi.commands.get("cost")!.handler("", fromAny<never, unknown>(ctx));
 			const report = notified.at(-1)!;
 			expect(report).toContain("cap $2.00");
 			expect(report).toContain("mistral-m $0.5000");

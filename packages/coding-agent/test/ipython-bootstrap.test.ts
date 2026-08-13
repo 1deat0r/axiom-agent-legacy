@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny } from "@total-typescript/shoehorn";
 import { afterAll, describe, expect, it } from "vitest";
 import { KernelManager } from "../src/core/kernel/index.js";
 import { buildRlmBootstrapCode } from "../src/core/tools/ipython.js";
@@ -65,7 +66,7 @@ describeIfKernel("IPython RLM bootstrap (real kernel)", () => {
 	});
 
 	it("binds asyncio in the user namespace", async () => {
-		const manager = new KernelManager({ python: python as string, cwd: dir });
+		const manager = new KernelManager({ python: fromAny<string, unknown>(python), cwd: dir });
 		try {
 			await manager.start();
 			const bootstrap = await manager.execute(buildRlmBootstrapCode());
@@ -92,7 +93,7 @@ describeIfKernel("IPython RLM bootstrap (real kernel)", () => {
 		writeFileSync(join(secondDir, "same.txt"), "old");
 		const editSkillRoot = join(process.cwd(), "skills", "edit");
 		const manager = new KernelManager({
-			python: python as string,
+			python: fromAny<string, unknown>(python),
 			cwd: dir,
 			env: { PYTHONPATH: join(editSkillRoot, "src") },
 		});

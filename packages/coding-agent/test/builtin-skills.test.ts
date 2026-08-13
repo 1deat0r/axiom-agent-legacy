@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getBundledSkillsDir } from "../src/config.js";
 import { DefaultPackageManager } from "../src/core/package-manager.js";
@@ -275,7 +276,9 @@ describe("builtin skills", () => {
 			const section = reference.match(/## Minimal Template([\s\S]*?)\n## /)?.[1];
 			expect(section).toBeDefined();
 
-			const files = [...(section as string).matchAll(/\*\*`([^`]+)`\*\*\s*\n+```[a-z]*\n([\s\S]*?)\n```/g)];
+			const files = [
+				...fromAny<string, unknown>(section).matchAll(/\*\*`([^`]+)`\*\*\s*\n+```[a-z]*\n([\s\S]*?)\n```/g),
+			];
 			expect(files.map((m) => m[1])).toEqual(["SKILL.md", "pyproject.toml", "src/word_count/__init__.py"]);
 
 			const templateRoot = join(tempDir, "template-skills");
@@ -303,10 +306,10 @@ describe("builtin skills", () => {
 		const repoRoot = join(packageRoot, "..", "..");
 
 		it("npm build (copy-assets) copies skills into dist", () => {
-			const pkg = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf-8")) as {
+			const pkg = fromPartial<{
 				files?: string[];
 				scripts?: Record<string, string>;
-			};
+			}>(JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf-8")));
 			expect(pkg.scripts?.["copy-assets"]).toContain("skills dist/skills");
 			// npm publish ships the source skills/ dir via the files allowlist too.
 			expect(pkg.files).toContain("skills");

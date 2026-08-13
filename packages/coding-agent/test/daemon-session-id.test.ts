@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import { SessionManager } from "../src/core/session-manager.js";
 import type { ActiveSessionState } from "../src/modes/daemon/active-session-state.js";
@@ -130,7 +131,7 @@ function makeSessionMap(states: ActiveSessionState[]): Map<string, ActiveSession
 }
 
 function makeState(activeSessionId: string, sessionId: string): ActiveSessionState {
-	return {
+	return fromAny<ActiveSessionState, unknown>({
 		activeSessionId,
 		clients: new Set(),
 		runtime: {
@@ -139,7 +140,7 @@ function makeState(activeSessionId: string, sessionId: string): ActiveSessionSta
 				sessionName: undefined,
 			},
 		},
-	} as unknown as ActiveSessionState;
+	});
 }
 
 function createSavedSession(cwd: string, sessionDir: string, sessionId: string): string {

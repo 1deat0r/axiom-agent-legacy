@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as DaemonUpdateRestartModule from "../src/cli/daemon-update-restart.js";
 import {
@@ -119,49 +120,81 @@ interface MockDaemonRequest {
 
 type MockDaemonResponse = { success: true; data?: unknown } | { success: false; error: string };
 
-const mockState = vi.hoisted(() => ({
-	calls: [] as string[],
-	createActiveSessionIds: [] as string[],
-	createThrowSessionPaths: [] as string[],
-	daemonProbe: { reachable: true, activeSessions: [] } as MockRunningDaemonProbe,
-	daemonProbeAfterShutdown: undefined as MockRunningDaemonProbe | undefined,
-	globalPackageRoot: "",
-	hello: { protocol: { version: 0 } } as {
-		protocol: { version: number };
-		schemaId?: string;
-		supervisorGeneration?: string;
-		supervisorOwnerToken?: string;
-		supervisorPid?: number;
-		supervisorProcessStartId?: string;
-		supervisorSocketPath?: string;
-	},
-	helloCount: 0,
-	lastCoordinatorStatus: undefined as DaemonUpdateRestartStatus | undefined,
-	listResponse: undefined as MockDaemonResponse | undefined,
-	noticeError: undefined as string | undefined,
-	prepareError: undefined as string | undefined,
-	prepareManifest: {
-		formatVersion: 1,
-		createdAt: "2026-07-07T00:00:00.000Z",
-		sessions: [],
-	} as MockUpdateRestartManifest,
-	preparedManifestPath: "",
-	prepareResponse: undefined as MockDaemonResponse | undefined,
-	promptFailures: 0,
-	probeSocketPaths: [] as string[],
-	requestThrowTypes: [] as string[],
-	disconnectRequestTypes: [] as string[],
-	disconnectAfterPersistRequestTypes: [] as string[],
-	requestPayloads: [] as MockDaemonRequest[],
-	helloWaitFailures: 0,
-	restoreActionFailures: 0,
-	restoreNextTurnFailures: 0,
-	socketPath: "",
-	successorProcessStartId: "replacement-start" as string | undefined,
-	successorSocketPath: undefined as string | undefined,
-	spawnExitCodes: [] as number[],
-	shutdownResult: true,
-}));
+const mockState = vi.hoisted(
+	(): {
+		calls: string[];
+		createActiveSessionIds: string[];
+		createThrowSessionPaths: string[];
+		daemonProbe: MockRunningDaemonProbe;
+		daemonProbeAfterShutdown: MockRunningDaemonProbe | undefined;
+		globalPackageRoot: string;
+		hello: {
+			protocol: { version: number };
+			schemaId?: string;
+			supervisorGeneration?: string;
+			supervisorOwnerToken?: string;
+			supervisorPid?: number;
+			supervisorProcessStartId?: string;
+			supervisorSocketPath?: string;
+		};
+		helloCount: number;
+		lastCoordinatorStatus: DaemonUpdateRestartStatus | undefined;
+		listResponse: MockDaemonResponse | undefined;
+		noticeError: string | undefined;
+		prepareError: string | undefined;
+		prepareManifest: MockUpdateRestartManifest;
+		preparedManifestPath: string;
+		prepareResponse: MockDaemonResponse | undefined;
+		promptFailures: number;
+		probeSocketPaths: string[];
+		requestThrowTypes: string[];
+		disconnectRequestTypes: string[];
+		disconnectAfterPersistRequestTypes: string[];
+		requestPayloads: MockDaemonRequest[];
+		helloWaitFailures: number;
+		restoreActionFailures: number;
+		restoreNextTurnFailures: number;
+		socketPath: string;
+		successorProcessStartId: string | undefined;
+		successorSocketPath: string | undefined;
+		spawnExitCodes: number[];
+		shutdownResult: boolean;
+	} => ({
+		calls: [],
+		createActiveSessionIds: [],
+		createThrowSessionPaths: [],
+		daemonProbe: { reachable: true, activeSessions: [] },
+		daemonProbeAfterShutdown: undefined,
+		globalPackageRoot: "",
+		hello: { protocol: { version: 0 } },
+		helloCount: 0,
+		lastCoordinatorStatus: undefined,
+		listResponse: undefined,
+		noticeError: undefined,
+		prepareError: undefined,
+		prepareManifest: {
+			formatVersion: 1,
+			createdAt: "2026-07-07T00:00:00.000Z",
+			sessions: [],
+		},
+		preparedManifestPath: "",
+		prepareResponse: undefined,
+		promptFailures: 0,
+		probeSocketPaths: [],
+		requestThrowTypes: [],
+		disconnectRequestTypes: [],
+		disconnectAfterPersistRequestTypes: [],
+		requestPayloads: [],
+		helloWaitFailures: 0,
+		restoreActionFailures: 0,
+		restoreNextTurnFailures: 0,
+		socketPath: "",
+		successorProcessStartId: "replacement-start",
+		successorSocketPath: undefined,
+		spawnExitCodes: [],
+		shutdownResult: true,
+	}),
+);
 
 function useFixedOwnerHello(): void {
 	mockState.hello = {
@@ -183,7 +216,7 @@ vi.mock("child_process", () => ({
 			on(event: string, listener: unknown) {
 				if (event === "close") {
 					queueMicrotask(() => {
-						(listener as (code: number | null, signal: string | null) => void)(exitCode, null);
+						fromAny<(code: number | null, signal: string | null) => void, unknown>(listener)(exitCode, null);
 					});
 				}
 				return child;
@@ -251,7 +284,7 @@ vi.mock("../src/cli/daemon-launch.js", () => ({
 		if (!value || typeof value !== "object") {
 			return false;
 		}
-		const summary = value as { activeSessionId?: unknown; id?: unknown };
+		const summary = fromPartial<{ activeSessionId?: unknown; id?: unknown }>(value);
 		return typeof summary.activeSessionId === "string" || typeof summary.id === "string";
 	},
 	isSessionBusy: (summary: MockSessionSummary) =>
@@ -703,7 +736,7 @@ describe("self-update daemon restart", () => {
 		statusWriter.update({ phase: "preparing" });
 		const killSpy = vi.spyOn(process, "kill").mockImplementation(() => {
 			statusWriter.update({ phase: "complete" });
-			const error = new Error("process exited") as NodeJS.ErrnoException;
+			const error = fromPartial<NodeJS.ErrnoException>(new Error("process exited"));
 			error.code = "ESRCH";
 			throw error;
 		});

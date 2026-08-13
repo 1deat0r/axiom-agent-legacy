@@ -1,5 +1,6 @@
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import { type AssistantMessage, fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it } from "vitest";
 import { createHarness, type Harness } from "../harness.js";
 
@@ -114,10 +115,13 @@ describe("issue #4491 provider stale after repeated 401", () => {
 		});
 		harnesses.push(harness);
 		const message = bareProvider401Message();
-		const event = { type: "agent_end", messages: [message] } as AgentEvent;
-		const session = harness.session as unknown as {
-			_createRetryPromiseForAgentEnd(event: AgentEvent): void;
-		};
+		const event = fromPartial<AgentEvent>({ type: "agent_end", messages: [message] });
+		const session = fromAny<
+			{
+				_createRetryPromiseForAgentEnd(event: AgentEvent): void;
+			},
+			unknown
+		>(harness.session);
 
 		session._createRetryPromiseForAgentEnd(event);
 
@@ -130,11 +134,14 @@ describe("issue #4491 provider stale after repeated 401", () => {
 			settings: { retry: { enabled: true, maxRetries: 2, baseDelayMs: 1 } },
 		});
 		harnesses.push(harness);
-		const event = { type: "agent_end", messages: [provider401Message()] } as AgentEvent;
-		const session = harness.session as unknown as {
-			_retryAttempt: number;
-			_createRetryPromiseForAgentEnd(event: AgentEvent): void;
-		};
+		const event = fromPartial<AgentEvent>({ type: "agent_end", messages: [provider401Message()] });
+		const session = fromAny<
+			{
+				_retryAttempt: number;
+				_createRetryPromiseForAgentEnd(event: AgentEvent): void;
+			},
+			unknown
+		>(harness.session);
 		session._retryAttempt = 1;
 
 		session._createRetryPromiseForAgentEnd(event);
@@ -243,11 +250,14 @@ describe("issue #4491 provider stale after repeated 401", () => {
 		});
 		harnesses.push(harness);
 		const message = provider401Message();
-		const event = { type: "agent_end", messages: [message] } as AgentEvent;
-		const session = harness.session as unknown as {
-			_createRetryPromiseForAgentEnd(event: AgentEvent): void;
-			_processAgentEvent(event: AgentEvent): Promise<void>;
-		};
+		const event = fromPartial<AgentEvent>({ type: "agent_end", messages: [message] });
+		const session = fromAny<
+			{
+				_createRetryPromiseForAgentEnd(event: AgentEvent): void;
+				_processAgentEvent(event: AgentEvent): Promise<void>;
+			},
+			unknown
+		>(harness.session);
 
 		session._createRetryPromiseForAgentEnd(event);
 		await session._processAgentEvent(event);

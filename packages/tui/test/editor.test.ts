@@ -1,6 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { stripVTControlCharacters } from "node:util";
+import { fromAny } from "@total-typescript/shoehorn";
 import { type AutocompleteProvider, CombinedAutocompleteProvider } from "../src/autocomplete.js";
 import { Editor, wordWrapLine } from "../src/components/editor.js";
 import { TUI } from "../src/tui.js";
@@ -2042,8 +2043,8 @@ describe("Editor component", () => {
 			assert.equal(editor.render(60).length, editorHeight);
 			assert.equal(tui.hasOverlay(), true);
 			assert.ok(!editor.render(60).some((line) => line.includes("Change model")));
-			const overlayLines = (
-				editor as unknown as { renderAutocompleteOverlay: (width: number) => string[] }
+			const overlayLines = fromAny<{ renderAutocompleteOverlay: (width: number) => string[] }, unknown>(
+				editor,
 			).renderAutocompleteOverlay(60);
 			assert.equal(stripVTControlCharacters(overlayLines[0] ?? "").trim(), "");
 			assert.match(stripVTControlCharacters(overlayLines[1] ?? ""), /model/);
@@ -2736,9 +2737,10 @@ describe("Editor component", () => {
 					{
 						name: "load-skills",
 						description: "Load skills",
-						getArgumentCompletions: (() => "not-an-array") as unknown as (
-							argumentPrefix: string,
-						) => Promise<{ value: string; label: string }[] | null>,
+						getArgumentCompletions: fromAny<
+							(argumentPrefix: string) => Promise<{ value: string; label: string }[] | null>,
+							unknown
+						>(() => "not-an-array"),
 					},
 				],
 				process.cwd(),

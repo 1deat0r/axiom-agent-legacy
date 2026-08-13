@@ -16,20 +16,28 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
 
 type ChmodSync = typeof chmodSync;
 type ChownSync = typeof chownSync;
 type RenameSync = typeof renameSync;
 type WriteFileSync = typeof writeFileSync;
 
-const fsMocks = vi.hoisted(() => ({
-	actualWriteFileSync: undefined as WriteFileSync | undefined,
-	chmodSync: vi.fn<ChmodSync>(),
-	chownSync: vi.fn<ChownSync>(),
-	renameSync: vi.fn<RenameSync>(),
-	writeFileSync: vi.fn<WriteFileSync>(),
-}));
+const fsMocks = vi.hoisted(
+	(): {
+		actualWriteFileSync: WriteFileSync | undefined;
+		chmodSync: Mock<ChmodSync>;
+		chownSync: Mock<ChownSync>;
+		renameSync: Mock<RenameSync>;
+		writeFileSync: Mock<WriteFileSync>;
+	} => ({
+		actualWriteFileSync: undefined,
+		chmodSync: vi.fn<ChmodSync>(),
+		chownSync: vi.fn<ChownSync>(),
+		renameSync: vi.fn<RenameSync>(),
+		writeFileSync: vi.fn<WriteFileSync>(),
+	}),
+);
 vi.mock("node:fs", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("node:fs")>();
 	fsMocks.actualWriteFileSync = actual.writeFileSync;
@@ -46,6 +54,7 @@ vi.mock("node:fs", async (importOriginal) => {
 	};
 });
 
+import { fromAny } from "@total-typescript/shoehorn";
 import { SessionManager } from "../src/core/session-manager.js";
 
 const tempDirs: string[] = [];
@@ -135,7 +144,10 @@ describe("SessionManager.flushNow", () => {
 		expect(tempPath).toEqual(expect.any(String));
 		expect(fsMocks.chownSync).toHaveBeenCalledWith(tempPath, before.uid, before.gid);
 		expect(fsMocks.chmodSync).toHaveBeenCalledWith(tempPath, before.mode & 0o777);
-		expect(fsMocks.renameSync).toHaveBeenCalledWith(tempPath, join(dirname(tempPath as string), basename(file)));
+		expect(fsMocks.renameSync).toHaveBeenCalledWith(
+			tempPath,
+			join(dirname(fromAny<string, unknown>(tempPath)), basename(file)),
+		);
 		expect(fsMocks.chownSync.mock.invocationCallOrder[0]!).toBeLessThan(
 			fsMocks.chmodSync.mock.invocationCallOrder[0]!,
 		);
@@ -299,7 +311,7 @@ describe("SessionManager.flushNow", () => {
 			stopReason: "stop",
 			timestamp: Date.now(),
 		});
-		const rewriteFile = vi.spyOn(mgr as unknown as { _rewriteFile(): void }, "_rewriteFile");
+		const rewriteFile = vi.spyOn(fromAny<{ _rewriteFile(): void }, unknown>(mgr), "_rewriteFile");
 
 		mgr.appendCustomEntry("thread_goal_state", { active: true, status: "active" });
 		mgr.flushNow();
@@ -343,7 +355,7 @@ function createPersistedSessionForRollbackTest(): { mgr: SessionManager; file: s
 }
 
 function failNextOutcomeAppend(mgr: SessionManager, file: string): void {
-	const internals = mgr as unknown as { _persist(entry: unknown): void };
+	const internals = fromAny<{ _persist(entry: unknown): void }, unknown>(mgr);
 	internals._persist = () => {
 		appendFileSync(file, '{"type":"custom_message","truncat');
 		throw new Error("append failed");
@@ -404,7 +416,7 @@ describe("SessionManager.appendCustomMessageEntryWithRollback", () => {
 		const before = readFileSync(file, "utf8");
 
 		// Simulate a partial append: the fs write tears the file, then throws.
-		const internals = mgr as unknown as { _persist(entry: unknown): void };
+		const internals = fromAny<{ _persist(entry: unknown): void }, unknown>(mgr);
 		const originalPersist = internals._persist.bind(mgr);
 		internals._persist = () => {
 			appendFileSync(file, '{"type":"custom_message","truncat');

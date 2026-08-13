@@ -1,3 +1,4 @@
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { Type } from "typebox";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getModel } from "../src/models.js";
@@ -28,8 +29,8 @@ interface CapturedParams {
 	tools?: ToolWithCacheControl[];
 }
 
-const mockState = vi.hoisted(() => ({
-	lastParams: undefined as CapturedParams | undefined,
+const mockState = vi.hoisted((): { lastParams: CapturedParams | undefined } => ({
+	lastParams: undefined,
 }));
 
 vi.mock("openai", () => {
@@ -56,12 +57,14 @@ vi.mock("openai", () => {
 							};
 						},
 					};
-					const promise = Promise.resolve(stream) as Promise<typeof stream> & {
-						withResponse: () => Promise<{
-							data: typeof stream;
-							response: { status: number; headers: Headers };
-						}>;
-					};
+					const promise = fromPartial<
+						Promise<typeof stream> & {
+							withResponse: () => Promise<{
+								data: typeof stream;
+								response: { status: number; headers: Headers };
+							}>;
+						}
+					>(Promise.resolve(stream));
 					promise.withResponse = async () => ({
 						data: stream,
 						response: { status: 200, headers: new Headers() },
@@ -124,7 +127,7 @@ function expectAnthropicCacheMarkers(
 	const instructionMessage = getInstructionMessage(params);
 	expect(instructionMessage).toBeDefined();
 	expect(Array.isArray(instructionMessage?.content)).toBe(true);
-	expect((instructionMessage?.content as TextPart[])[0]?.cache_control).toEqual(expectedCacheControl);
+	expect(fromAny<TextPart[], unknown>(instructionMessage?.content)[0]?.cache_control).toEqual(expectedCacheControl);
 
 	expect(params.tools).toHaveLength(1);
 	expect(params.tools?.[0]?.cache_control).toEqual(expectedCacheControl);
@@ -132,7 +135,7 @@ function expectAnthropicCacheMarkers(
 	const lastMessage = params.messages[params.messages.length - 1];
 	expect(lastMessage.role).toBe("user");
 	expect(Array.isArray(lastMessage.content)).toBe(true);
-	expect((lastMessage.content as TextPart[])[0]?.cache_control).toEqual(expectedCacheControl);
+	expect(fromAny<TextPart[], unknown>(lastMessage.content)[0]?.cache_control).toEqual(expectedCacheControl);
 }
 
 function expectNoAnthropicCacheMarkers(params: CapturedParams): void {

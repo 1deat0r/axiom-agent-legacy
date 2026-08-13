@@ -1,3 +1,4 @@
+import { fromPartial } from "@total-typescript/shoehorn";
 import { execSync, spawn } from "child_process";
 import { platform } from "os";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -71,14 +72,16 @@ beforeEach(() => {
 		nativeResolved = true;
 	});
 	originalWrite = process.stdout.write.bind(process.stdout);
-	process.stdout.write = ((...args: Parameters<typeof process.stdout.write>) => {
-		const [chunk] = args;
-		if (typeof chunk === "string" && chunk.startsWith("\x1b]52;c;")) {
-			stdoutWrites.push(chunk);
-			return true;
-		}
-		return originalWrite(...args);
-	}) as typeof process.stdout.write;
+	process.stdout.write = fromPartial<typeof process.stdout.write>(
+		(...args: Parameters<typeof process.stdout.write>) => {
+			const [chunk] = args;
+			if (typeof chunk === "string" && chunk.startsWith("\x1b]52;c;")) {
+				stdoutWrites.push(chunk);
+				return true;
+			}
+			return originalWrite(...args);
+		},
+	);
 });
 
 afterEach(() => {

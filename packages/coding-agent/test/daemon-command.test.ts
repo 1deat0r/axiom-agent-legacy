@@ -26,11 +26,16 @@ const daemonClientMock = vi.hoisted(() => {
 		| { type: "response"; command: string; success: false; error: string };
 
 	const instances: MockDaemonClient[] = [];
-	const behavior = {
+	const behavior: {
+		promptSucceeds: boolean;
+		emitStaleAgentEndOnAttach: boolean;
+		connectFails: boolean;
+		sessions: Array<Record<string, unknown>>;
+	} = {
 		promptSucceeds: false,
 		emitStaleAgentEndOnAttach: false,
 		connectFails: false,
-		sessions: [] as Array<Record<string, unknown>>,
+		sessions: [],
 	};
 
 	class MockDaemonClient {
@@ -106,7 +111,7 @@ const spawnMock = vi.hoisted(() => {
 	return {
 		calls,
 		mockSpawn: (...args: unknown[]) => {
-			calls.push(args[1] as string[]);
+			calls.push(fromAny<string[], unknown>(args[1]));
 			return {
 				unref: () => {},
 				kill: () => {},
@@ -122,10 +127,11 @@ const spawnMock = vi.hoisted(() => {
 });
 
 vi.mock("node:child_process", async (importOriginal) => {
-	const original = (await importOriginal()) as Record<string, unknown>;
+	const original = await importOriginal<typeof import("node:child_process")>();
 	return { ...original, spawn: spawnMock.mockSpawn as never };
 });
 
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { handleDaemonCommand } from "../src/cli/daemon-command.js";
 
 describe("daemon command", () => {
@@ -139,9 +145,11 @@ describe("daemon command", () => {
 		daemonClientMock.behavior.connectFails = false;
 		daemonClientMock.behavior.sessions = [];
 		consoleErrorMessages = [];
-		vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null | undefined) => {
-			throw new Error(`exit ${code}`);
-		}) as typeof process.exit);
+		vi.spyOn(process, "exit").mockImplementation(
+			fromPartial<typeof process.exit>((code?: string | number | null | undefined) => {
+				throw new Error(`exit ${code}`);
+			}),
+		);
 		vi.spyOn(console, "error").mockImplementation((...messages: unknown[]) => {
 			consoleErrorMessages.push(...messages);
 		});

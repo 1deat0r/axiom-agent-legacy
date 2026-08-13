@@ -1,6 +1,7 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import { bwrapCreatesNamespace } from "../../src/extensions/workspace/sandbox.js";
 import {
@@ -108,7 +109,7 @@ describe("CliCompletionRunner", () => {
 			process.env.SHIM_ARGV = join(outDir, "argv.json");
 			const runner = new CliCompletionRunner({ bin, printFlag: "-p" });
 			const out = await runner.runCompletion({ sessionId: "gw-abc", prompt: "hello", profile: { name: "builder" } });
-			const argv = JSON.parse(await readFile(join(outDir, "argv.json"), "utf8")) as string[];
+			const argv = fromPartial<string[]>(JSON.parse(await readFile(join(outDir, "argv.json"), "utf8")));
 			expect(argv).toEqual(["-p", "hello", "--profile", "builder", "--session-id", "gw-abc"]);
 			expect(out.reply).toBe("gateway: the SOUL.md ride lives here");
 			expect(out.error).toBeUndefined();
@@ -132,7 +133,7 @@ describe("CliCompletionRunner", () => {
 				profile: { name: "builder" },
 				model: { provider: "deepseek", model: "deepseek-v4-pro" },
 			});
-			const argv = JSON.parse(await readFile(join(outDir, "argv.json"), "utf8")) as string[];
+			const argv = fromPartial<string[]>(JSON.parse(await readFile(join(outDir, "argv.json"), "utf8")));
 			expect(argv).toContain("--provider");
 			expect(argv[argv.indexOf("--provider") + 1]).toBe("deepseek");
 			expect(argv).toContain("--model");
@@ -157,7 +158,7 @@ describe("CliCompletionRunner", () => {
 				profile: { name: "builder" },
 				model: { provider: "", model: "deepseek-v4-pro" },
 			});
-			const argv = JSON.parse(await readFile(join(outDir, "argv.json"), "utf8")) as string[];
+			const argv = fromPartial<string[]>(JSON.parse(await readFile(join(outDir, "argv.json"), "utf8")));
 			expect(argv).not.toContain("--provider");
 			expect(argv).toContain("--model");
 			expect(argv[argv.indexOf("--model") + 1]).toBe("deepseek-v4-pro");
@@ -189,11 +190,11 @@ describe("CliCompletionRunner", () => {
 					profile: { name: "default" },
 				});
 				expect(result.error).toBeUndefined();
-				const meta = JSON.parse(await readFile(join(out, "meta.json"), "utf8")) as {
+				const meta = fromPartial<{
 					cwd: string;
 					root: string | null;
 					confined: string | null;
-				};
+				}>(JSON.parse(await readFile(join(out, "meta.json"), "utf8")));
 				expect(meta.cwd).toBe(projectRoot);
 				expect(meta.root).toBe(projectRoot);
 				expect(meta.confined).toBe("1");
@@ -238,7 +239,7 @@ describe("CliCompletionRunner", () => {
 			process.env.SHIM_ARGV = join(outDir, "argv.json");
 			const runner = new CliCompletionRunner({ bin, printFlag: "-p" });
 			await runner.runCompletion({ sessionId: "gw-def", prompt: "hi", profile: { name: "default" } });
-			const argv = JSON.parse(await readFile(join(outDir, "argv.json"), "utf8")) as string[];
+			const argv = fromPartial<string[]>(JSON.parse(await readFile(join(outDir, "argv.json"), "utf8")));
 			expect(argv).toEqual(["-p", "hi", "--profile", "default", "--session-id", "gw-def"]);
 		} finally {
 			delete process.env.SHIM_ARGV;
@@ -345,11 +346,11 @@ describe("CliCompletionRunner per-call projectRoot override", () => {
 				projectRoot,
 			});
 			expect(result.error).toBeUndefined();
-			const meta = JSON.parse(await readFile(join(out, "meta.json"), "utf8")) as {
+			const meta = fromPartial<{
 				cwd: string;
 				root: string | null;
 				confined: string | null;
-			};
+			}>(JSON.parse(await readFile(join(out, "meta.json"), "utf8")));
 			expect(meta.cwd).toBe(projectRoot);
 			expect(meta.root).toBe(projectRoot);
 			expect(meta.confined).toBe("1");
@@ -428,7 +429,7 @@ describe("CliCompletionRunner.streamCompletion", () => {
 			process.env.SHIM_ARGV = join(outDir, "argv.json");
 			const runner = new CliCompletionRunner({ bin, printFlag: "-p" });
 			await runner.streamCompletion!({ sessionId: "s", prompt: "hi", profile: { name: "p" } }, () => {});
-			const argv = JSON.parse(await readFile(join(outDir, "argv.json"), "utf8")) as string[];
+			const argv = fromPartial<string[]>(JSON.parse(await readFile(join(outDir, "argv.json"), "utf8")));
 			expect(argv).toContain("--mode");
 			expect(argv[argv.indexOf("--mode") + 1]).toBe("json");
 			expect(argv).not.toContain("-p");

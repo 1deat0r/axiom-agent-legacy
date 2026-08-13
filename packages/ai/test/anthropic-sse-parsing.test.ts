@@ -1,4 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
+import { fromAny } from "@total-typescript/shoehorn";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { getModel } from "../src/models.js";
@@ -69,13 +70,13 @@ const minimalAnthropicEvents = [
 ];
 
 function createFakeAnthropicClient(response: Response): Anthropic {
-	return {
+	return fromAny<Anthropic, unknown>({
 		messages: {
 			create: () => ({
 				asResponse: async () => response,
 			}),
 		},
-	} as unknown as Anthropic;
+	});
 }
 
 function createCacheUsageEvents(cacheCreation: {

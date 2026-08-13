@@ -1,4 +1,5 @@
 import { type Component, Container } from "@earendil-works/pi-tui";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { InteractiveMode } from "../../../src/modes/interactive/interactive-mode.js";
 import { initTheme } from "../../../src/modes/interactive/theme/theme.js";
@@ -26,7 +27,7 @@ function createFeatureHintMode() {
 		pendingMessagesContainer: new Container(),
 		pendingBashComponents: [],
 		queuedMessagesContainer: new Container(),
-		connectionQueue: { steering: [] as string[], followUp: [] as string[] },
+		connectionQueue: { steering: fromPartial<string[]>([]), followUp: fromPartial<string[]>([]) },
 		compactionQueuedMessages: [],
 		loadingAnimation: loader,
 		workingVisible: true,

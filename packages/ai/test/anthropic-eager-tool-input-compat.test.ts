@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { streamAnthropic } from "../src/providers/anthropic.js";
@@ -44,7 +45,7 @@ async function readRequestBody(request: IncomingMessage): Promise<Record<string,
 	for await (const chunk of request) {
 		chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
 	}
-	return JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+	return fromPartial<Record<string, unknown>>(JSON.parse(Buffer.concat(chunks).toString("utf8")));
 }
 
 function writeEmptySseResponse(response: ServerResponse): void {
@@ -67,7 +68,7 @@ async function captureAnthropicRequest(
 	});
 
 	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-	const address = server.address() as AddressInfo;
+	const address = fromAny<AddressInfo, unknown>(server.address());
 
 	try {
 		const stream = streamAnthropic(createModel(`http://127.0.0.1:${address.port}`, compat), context, {
@@ -95,7 +96,7 @@ function getFirstTool(body: Record<string, unknown>): Record<string, unknown> {
 	if (!Array.isArray(tools) || typeof tools[0] !== "object" || tools[0] === null) {
 		throw new Error("Expected first tool in request body");
 	}
-	return tools[0] as Record<string, unknown>;
+	return fromPartial<Record<string, unknown>>(tools[0]);
 }
 
 describe("Anthropic eager tool input streaming compatibility", () => {

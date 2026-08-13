@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
+import { fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { RpcClient } from "../src/modes/rpc/rpc-client.js";
 
@@ -170,7 +171,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 		);
 
 		// Find assistant's response
-		const messageEndEvents = events.filter((e) => e.type === "message_end") as AgentEvent[];
+		const messageEndEvents = fromPartial<AgentEvent[]>(events.filter((e) => e.type === "message_end"));
 		const assistantMessage = messageEndEvents.find(
 			(e) => e.type === "message_end" && e.message?.role === "assistant",
 		) as any;

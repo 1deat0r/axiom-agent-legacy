@@ -1,6 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	type AgentCronJob,
@@ -422,10 +423,10 @@ describe("AgentCronJobStore", () => {
 		expect(dispatcher.claimDue(new Date("2026-01-01T12:34:10.000Z"))).toHaveLength(1);
 		writeJobsForTest(writer, [staleCancellation]);
 
-		const state = JSON.parse(readFileSync(artifactPath, "utf8")) as {
+		const state = fromPartial<{
 			jobs: AgentCronJob[];
 			dispatches: Array<{ jobId: string }>;
-		};
+		}>(JSON.parse(readFileSync(artifactPath, "utf8")));
 		expect(state.jobs).toContainEqual(expect.objectContaining({ id: heartbeat.id, status: "cancelled" }));
 		expect(state.dispatches).toContainEqual(expect.objectContaining({ jobId: heartbeat.id }));
 	});
@@ -1479,11 +1480,12 @@ describe("heartbeat delivery mode", () => {
 });
 
 function writeJobsForTest(store: AgentCronJobStore, jobs: readonly AgentCronJob[]): void {
-	(
-		store as unknown as {
+	fromAny<
+		{
 			writeJobs(jobs: readonly AgentCronJob[]): void;
-		}
-	).writeJobs(jobs);
+		},
+		unknown
+	>(store).writeJobs(jobs);
 }
 
 function makeStorePath(tempDirs: string[]): string {

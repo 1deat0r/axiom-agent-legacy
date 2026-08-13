@@ -1,5 +1,6 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ImageContent } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentAutonomousStatus } from "../src/core/autonomous.js";
 import {
@@ -136,7 +137,7 @@ describe("runPrintMode", () => {
 		const { session } = runtimeHost;
 		const images: ImageContent[] = [{ type: "image", mimeType: "image/png", data: "abc" }];
 
-		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+		const exitCode = await runPrintMode(fromAny<Parameters<typeof runPrintMode>[0], unknown>(runtimeHost), {
 			mode: "text",
 			initialMessage: "Say done",
 			initialImages: images,
@@ -159,9 +160,9 @@ describe("runPrintMode", () => {
 				}),
 		);
 		const onSpy = vi.spyOn(process, "on");
-		const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => undefined) as typeof process.exit);
+		const exitSpy = vi.spyOn(process, "exit").mockImplementation(fromPartial<typeof process.exit>(() => undefined));
 
-		const runPromise = runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+		const runPromise = runPrintMode(fromAny<Parameters<typeof runPrintMode>[0], unknown>(runtimeHost), {
 			mode: "text",
 			initialMessage: "Wait",
 		});
@@ -187,7 +188,7 @@ describe("runPrintMode", () => {
 		const runtimeHost = createRuntimeHost(result);
 		output.write.mockClear();
 
-		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+		const exitCode = await runPrintMode(fromAny<Parameters<typeof runPrintMode>[0], unknown>(runtimeHost), {
 			mode: "text",
 		});
 
@@ -209,7 +210,7 @@ describe("runPrintMode", () => {
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 		output.write.mockClear();
 
-		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+		const exitCode = await runPrintMode(fromAny<Parameters<typeof runPrintMode>[0], unknown>(runtimeHost), {
 			mode: "text",
 		});
 
@@ -223,7 +224,7 @@ describe("runPrintMode", () => {
 			reason: "requested",
 			outcome: "failed",
 		});
-		const malformed = { ...failed, details: { reason: "unknown", outcome: "failed" } } as AgentMessage;
+		const malformed = fromPartial<AgentMessage>({ ...failed, details: { reason: "unknown", outcome: "failed" } });
 		const assistant = createAssistantMessage({ text: "done" });
 
 		expect(selectHeadlessTerminalResult([assistant, failed, malformed])).toEqual({
@@ -260,7 +261,7 @@ describe("runPrintMode", () => {
 		const runtimeHost = createRuntimeHost(result);
 		output.write.mockClear();
 
-		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+		const exitCode = await runPrintMode(fromAny<Parameters<typeof runPrintMode>[0], unknown>(runtimeHost), {
 			mode: "text",
 		});
 
@@ -272,7 +273,7 @@ describe("runPrintMode", () => {
 		const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "done" }));
 		const { session } = runtimeHost;
 
-		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+		const exitCode = await runPrintMode(fromAny<Parameters<typeof runPrintMode>[0], unknown>(runtimeHost), {
 			mode: "json",
 			messages: ["hello"],
 		});
@@ -290,7 +291,7 @@ describe("runPrintMode", () => {
 		const { session } = runtimeHost;
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+		const exitCode = await runPrintMode(fromAny<Parameters<typeof runPrintMode>[0], unknown>(runtimeHost), {
 			mode: "text",
 		});
 
@@ -309,7 +310,7 @@ describe("runPrintMode", () => {
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 		output.write.mockClear();
 
-		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+		const exitCode = await runPrintMode(fromAny<Parameters<typeof runPrintMode>[0], unknown>(runtimeHost), {
 			mode: "text",
 		});
 
@@ -327,7 +328,7 @@ describe("runPrintMode", () => {
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 		output.write.mockClear();
 
-		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+		const exitCode = await runPrintMode(fromAny<Parameters<typeof runPrintMode>[0], unknown>(runtimeHost), {
 			mode: "text",
 		});
 
@@ -356,7 +357,7 @@ describe("runPrintMode", () => {
 		const { session } = runtimeHost;
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+		const exitCode = await runPrintMode(fromAny<Parameters<typeof runPrintMode>[0], unknown>(runtimeHost), {
 			mode: "text",
 		});
 
@@ -401,7 +402,7 @@ describe("runPrintMode", () => {
 			currentStatus = passingStatus;
 		});
 
-		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+		const exitCode = await runPrintMode(fromAny<Parameters<typeof runPrintMode>[0], unknown>(runtimeHost), {
 			mode: "text",
 		});
 
@@ -475,8 +476,8 @@ describe("runPrintMode", () => {
 		const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "still failing" }), statuses[0]);
 		const { session } = runtimeHost;
 		let statusIndex = 0;
-		session.getAutonomousStatus.mockImplementation(
-			() => statuses[Math.min(statusIndex++, statuses.length - 1)] as AgentAutonomousStatus,
+		session.getAutonomousStatus.mockImplementation(() =>
+			fromPartial<AgentAutonomousStatus>(statuses[Math.min(statusIndex++, statuses.length - 1)]),
 		);
 		session.prompt.mockImplementationOnce(async () => {
 			session.state.messages = [
@@ -489,7 +490,7 @@ describe("runPrintMode", () => {
 		});
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+		const exitCode = await runPrintMode(fromAny<Parameters<typeof runPrintMode>[0], unknown>(runtimeHost), {
 			mode: "text",
 		});
 
@@ -536,8 +537,8 @@ describe("runPrintMode", () => {
 		);
 		const { session } = runtimeHost;
 		let statusIndex = 0;
-		session.getAutonomousStatus.mockImplementation(
-			() => statuses[Math.min(statusIndex++, statuses.length - 1)] as AgentAutonomousStatus,
+		session.getAutonomousStatus.mockImplementation(() =>
+			fromPartial<AgentAutonomousStatus>(statuses[Math.min(statusIndex++, statuses.length - 1)]),
 		);
 		let waitCount = 0;
 		session.waitForIdle.mockImplementation(async () => {
@@ -548,7 +549,7 @@ describe("runPrintMode", () => {
 		});
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+		const exitCode = await runPrintMode(fromAny<Parameters<typeof runPrintMode>[0], unknown>(runtimeHost), {
 			mode: "text",
 		});
 
@@ -579,7 +580,7 @@ describe("runPrintMode", () => {
 		const { session } = runtimeHost;
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+		const exitCode = await runPrintMode(fromAny<Parameters<typeof runPrintMode>[0], unknown>(runtimeHost), {
 			mode: "text",
 		});
 
@@ -610,7 +611,7 @@ describe("runPrintMode", () => {
 		const { session } = runtimeHost;
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+		const exitCode = await runPrintMode(fromAny<Parameters<typeof runPrintMode>[0], unknown>(runtimeHost), {
 			mode: "text",
 		});
 
@@ -639,7 +640,7 @@ describe("runPrintMode", () => {
 		});
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+		const exitCode = await runPrintMode(fromAny<Parameters<typeof runPrintMode>[0], unknown>(runtimeHost), {
 			mode: "text",
 		});
 
@@ -662,7 +663,7 @@ describe("runPrintMode", () => {
 		});
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+		const exitCode = await runPrintMode(fromAny<Parameters<typeof runPrintMode>[0], unknown>(runtimeHost), {
 			mode: "text",
 		});
 
@@ -720,11 +721,11 @@ describe("runPrintMode", () => {
 		const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "still working" }), statuses[0]);
 		const { session } = runtimeHost;
 		let statusIndex = 0;
-		session.getAutonomousStatus.mockImplementation(
-			() => statuses[Math.min(statusIndex++, statuses.length - 1)] as AgentAutonomousStatus,
+		session.getAutonomousStatus.mockImplementation(() =>
+			fromPartial<AgentAutonomousStatus>(statuses[Math.min(statusIndex++, statuses.length - 1)]),
 		);
 
-		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+		const exitCode = await runPrintMode(fromAny<Parameters<typeof runPrintMode>[0], unknown>(runtimeHost), {
 			mode: "text",
 		});
 
@@ -827,11 +828,11 @@ describe("runPrintMode", () => {
 			},
 		];
 		let statusIndex = 0;
-		session.getAutonomousStatus.mockImplementation(
-			() => statuses[Math.min(statusIndex++, statuses.length - 1)] as AgentAutonomousStatus,
+		session.getAutonomousStatus.mockImplementation(() =>
+			fromPartial<AgentAutonomousStatus>(statuses[Math.min(statusIndex++, statuses.length - 1)]),
 		);
 
-		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+		const exitCode = await runPrintMode(fromAny<Parameters<typeof runPrintMode>[0], unknown>(runtimeHost), {
 			mode: "text",
 		});
 
@@ -914,11 +915,11 @@ describe("runPrintMode", () => {
 		const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "still failing" }), statuses[0]);
 		const { session } = runtimeHost;
 		let statusIndex = 0;
-		session.getAutonomousStatus.mockImplementation(
-			() => statuses[Math.min(statusIndex++, statuses.length - 1)] as AgentAutonomousStatus,
+		session.getAutonomousStatus.mockImplementation(() =>
+			fromPartial<AgentAutonomousStatus>(statuses[Math.min(statusIndex++, statuses.length - 1)]),
 		);
 
-		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+		const exitCode = await runPrintMode(fromAny<Parameters<typeof runPrintMode>[0], unknown>(runtimeHost), {
 			mode: "text",
 		});
 

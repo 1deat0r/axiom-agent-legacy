@@ -1,3 +1,4 @@
+import { fromAny } from "@total-typescript/shoehorn";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -111,7 +112,7 @@ describe("SessionManager append and tree traversal", () => {
 			const _msg2Id = session.appendMessage(assistantMsg("response"));
 
 			const entries = session.getEntries();
-			const customEntry = entries.find((e) => e.type === "custom") as CustomEntry;
+			const customEntry = fromAny<CustomEntry, unknown>(entries.find((e) => e.type === "custom"));
 			expect(customEntry).toBeDefined();
 			expect(customEntry.id).toBe(customId);
 			expect(customEntry.parentId).toBe(msgId);

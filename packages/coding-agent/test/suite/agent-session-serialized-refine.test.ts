@@ -1,5 +1,6 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHarness, type Harness } from "./harness.js";
@@ -100,7 +101,7 @@ function makeCtx(text: string) {
 
 /** Mock _planRefine and _applyRefine so _runSerializedRefine completes without real LLM calls. */
 function mockSerializedRefine(harness: Harness) {
-	const internals = harness.session as unknown as SerializedInternals;
+	const internals = fromAny<SerializedInternals, unknown>(harness.session);
 	const plan = { id: "test-plan", proposal: { edits: [] } };
 	vi.spyOn(internals, "_planRefine").mockResolvedValue(plan);
 	vi.spyOn(internals, "_applyRefine").mockResolvedValue(emptyRefinementResult());
@@ -131,7 +132,7 @@ describe("Serialized auto-refine checkpoint", () => {
 		});
 		harnesses.push(harness);
 		const { applyRefine } = mockSerializedRefine(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
 		for (let turn = 1; turn <= 26; turn++) {
 			internals._assistantTurnsSinceAutoRefine++; // simulate message_end increment
@@ -155,7 +156,7 @@ describe("Serialized auto-refine checkpoint", () => {
 			})),
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		internals._assistantTurnsSinceAutoRefine = 1;
 
 		let applyInFlight = false;
@@ -201,7 +202,7 @@ describe("Serialized auto-refine checkpoint", () => {
 		harnesses.push(harness);
 		const { applyRefine } = mockSerializedRefine(harness);
 
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		internals._assistantTurnsSinceAutoRefine = 1;
 
 		await internals._runSerializedRefineCheckpoint();
@@ -225,7 +226,7 @@ describe("Serialized auto-refine checkpoint", () => {
 		harnesses.push(harness);
 		const { applyRefine } = mockSerializedRefine(harness);
 
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		internals._assistantTurnsSinceAutoRefine = 1;
 
 		await harness.session.disposeAsync();
@@ -248,7 +249,7 @@ describe("Serialized auto-refine checkpoint", () => {
 		});
 		harnesses.push(harness);
 
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		expect(internals._serializedRefine).toBe(false);
 
 		let checkpointCalled = false;
@@ -277,9 +278,9 @@ describe("Serialized auto-refine checkpoint", () => {
 		const { applyRefine } = mockSerializedRefine(harness);
 
 		// Simulate "active" agent state (as during a tool loop)
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = true;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = true;
 
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		internals._assistantTurnsSinceAutoRefine = 1;
 
 		// Must resolve within 5 seconds — if _maybeAutoRefine were called,
@@ -313,13 +314,13 @@ describe("Serialized agent-callable refine", () => {
 			settings: { autoRefine: { enabled: true, turnInterval: 25, cooldownMs: 0 } },
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		const { applyRefine } = mockSerializedRefine(harness);
 		internals._pendingRequestedRefine = { instructions: "capture a lesson" };
 		internals._admitSessionInput(internals._createPreparedTurnAction("steer", "steer", undefined, {}));
 		const compactionSpy = vi
 			.spyOn(
-				internals as unknown as { _shouldStopForThresholdCompaction: (ctx: unknown) => Promise<boolean> },
+				fromAny<{ _shouldStopForThresholdCompaction: (ctx: unknown) => Promise<boolean> }, unknown>(internals),
 				"_shouldStopForThresholdCompaction",
 			)
 			.mockResolvedValue(false);
@@ -340,11 +341,11 @@ describe("Serialized agent-callable refine", () => {
 		harnesses.push(harness);
 		const { applyRefine } = mockSerializedRefine(harness);
 
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = true;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = true;
 		harness.session.handleRefineHostRequest("refine.run", { instructions: "capture a lesson" });
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = false;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = false;
 
 		// In serialized mode, handleRefineHostRequest immediately kicks off
 		// background planning, consuming the pending request.
@@ -374,12 +375,12 @@ describe("Serialized agent-callable refine", () => {
 		harnesses.push(harness);
 		const { applyRefine } = mockSerializedRefine(harness);
 
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		internals._assistantTurnsSinceAutoRefine = 1;
 
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = true;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = true;
 		harness.session.handleRefineHostRequest("refine.run", { instructions: "callable lesson" });
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = false;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = false;
 
 		await internals._runSerializedRefineCheckpoint();
 
@@ -401,11 +402,11 @@ describe("Serialized agent-callable refine", () => {
 		});
 		harnesses.push(harness);
 
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = true;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = true;
 		harness.session.handleRefineHostRequest("refine.run", { instructions: "test" });
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = false;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = false;
 
 		// In serialized mode, the pending request is consumed immediately
 		// by background planning, NOT left for fire-and-forget at agent_end.
@@ -422,11 +423,11 @@ describe("Serialized agent-callable refine", () => {
 		harnesses.push(harness);
 		const { applyRefine } = mockSerializedRefine(harness);
 
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = true;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = true;
 		harness.session.handleRefineHostRequest("refine.run", { instructions: "drain test" });
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = false;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = false;
 
 		await harness.session.disposeAsync();
 
@@ -460,7 +461,7 @@ describe("Serialized autonomous continuation", () => {
 		harnesses.push(harness);
 		const { applyRefine } = mockSerializedRefine(harness);
 
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
 		// Simulate shouldStopAfterTurn calls for turns 1-5.
 		const turnResults: boolean[] = [];
@@ -508,7 +509,7 @@ describe("Serialized background planning during tools", () => {
 			})),
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
 		let resolvePlan: () => void = () => {};
 		const planPromise = new Promise<void>((resolve) => {
@@ -528,8 +529,8 @@ describe("Serialized background planning during tools", () => {
 		// Step 1: simulate message_end — this should kick off background planning.
 		internals._assistantTurnsSinceAutoRefine++;
 		// Call the private method that starts background planning
-		(
-			internals as unknown as { _maybeStartSerializedBackgroundPlan: () => void }
+		fromAny<{ _maybeStartSerializedBackgroundPlan: () => void }, unknown>(
+			internals,
 		)._maybeStartSerializedBackgroundPlan();
 
 		// Wait a tick for the async plan to start
@@ -568,7 +569,7 @@ describe("Serialized background planning during tools", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
 		let resolveIntervalPlan: () => void = () => {};
 		const intervalPlanReady = new Promise<void>((resolve) => {
@@ -585,15 +586,15 @@ describe("Serialized background planning during tools", () => {
 		const apply = vi.spyOn(internals, "_applyRefine").mockResolvedValue(emptyRefinementResult());
 
 		internals._assistantTurnsSinceAutoRefine = 1;
-		(
-			internals as unknown as { _maybeStartSerializedBackgroundPlan: () => void }
+		fromAny<{ _maybeStartSerializedBackgroundPlan: () => void }, unknown>(
+			internals,
 		)._maybeStartSerializedBackgroundPlan();
 		await new Promise<void>((resolve) => setTimeout(resolve, 10));
 		expect(planCalls).toBe(1);
 
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = true;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = true;
 		harness.session.handleRefineHostRequest("refine.run", { instructions: "explicit plan" });
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = false;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = false;
 		expect(internals._pendingRequestedRefine?.instructions).toBe("explicit plan");
 
 		const checkpoint = internals._runSerializedRefineCheckpoint();
@@ -626,15 +627,15 @@ describe("Serialized background planning during tools", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
 		vi.spyOn(internals, "_planRefine").mockResolvedValue({ id: "p", proposal: { edits: [] } });
 		vi.spyOn(internals, "_applyRefine").mockResolvedValue(emptyRefinementResult());
 
 		// Simulate message_end
 		internals._assistantTurnsSinceAutoRefine++;
-		(
-			internals as unknown as { _maybeStartSerializedBackgroundPlan: () => void }
+		fromAny<{ _maybeStartSerializedBackgroundPlan: () => void }, unknown>(
+			internals,
 		)._maybeStartSerializedBackgroundPlan();
 
 		// Wait for planning to complete (reviewer is async)
@@ -694,7 +695,7 @@ describe("PR #503 model persistence regression", () => {
 		harnesses.push(harness);
 		const { applyRefine } = mockSerializedRefine(harness);
 
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		const modelBefore = harness.session.model;
 
 		internals._assistantTurnsSinceAutoRefine = 1;
@@ -729,16 +730,16 @@ describe("Serialized refine review-fix regressions", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
 		vi.spyOn(internals, "_planRefine").mockResolvedValue({ id: "p", proposal: { edits: [] } });
 		vi.spyOn(internals, "_applyRefine").mockResolvedValue(emptyRefinementResult());
 
 		// Queue a refine.run request — in serialized mode, this immediately
 		// kicks off background planning (skipping the review gate).
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = true;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = true;
 		harness.session.handleRefineHostRequest("refine.run", { instructions: "explicit lesson" });
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = false;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = false;
 
 		// Background planning was started automatically by handleRefineHostRequest.
 		expect(internals._serializedPlanInFlight).toBeDefined();
@@ -768,7 +769,7 @@ describe("Serialized refine review-fix regressions", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
 		// Make background planning fail
 		vi.spyOn(internals, "_planRefine").mockRejectedValue(new Error("plan failed"));
@@ -776,8 +777,8 @@ describe("Serialized refine review-fix regressions", () => {
 
 		// Start background planning
 		internals._assistantTurnsSinceAutoRefine++;
-		(
-			internals as unknown as { _maybeStartSerializedBackgroundPlan: () => void }
+		fromAny<{ _maybeStartSerializedBackgroundPlan: () => void }, unknown>(
+			internals,
 		)._maybeStartSerializedBackgroundPlan();
 
 		// Wait for background planning to fail
@@ -799,9 +800,12 @@ describe("Serialized refine review-fix regressions", () => {
 	it("non-serialized explicit refine suppresses interval auto-refine for that turn", async () => {
 		const harness = await createHarness({ persistSession: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals & {
-			refine(options: { instructions?: string }): Promise<unknown>;
-		};
+		const internals = fromAny<
+			SerializedInternals & {
+				refine(options: { instructions?: string }): Promise<unknown>;
+			},
+			unknown
+		>(harness.session);
 		internals._pendingRequestedRefine = { instructions: "explicit" };
 		const refine = vi.spyOn(internals, "refine").mockResolvedValue(emptyRefinementResult());
 		const schedule = vi.spyOn(internals, "_scheduleAutoRefineAfterAgentEnd");
@@ -828,7 +832,7 @@ describe("Serialized refine review-fix regressions", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
 		// Make background planning fail
 		vi.spyOn(internals, "_planRefine").mockRejectedValue(new Error("plan failed"));
@@ -836,8 +840,8 @@ describe("Serialized refine review-fix regressions", () => {
 
 		// Start background planning and let it fail
 		internals._assistantTurnsSinceAutoRefine = 1;
-		(
-			internals as unknown as { _maybeStartSerializedBackgroundPlan: () => void }
+		fromAny<{ _maybeStartSerializedBackgroundPlan: () => void }, unknown>(
+			internals,
 		)._maybeStartSerializedBackgroundPlan();
 		await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
@@ -884,7 +888,7 @@ describe("Serialized refine review-fix regressions", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
 		let planCalls = 0;
 		vi.spyOn(internals, "_planRefine").mockImplementation(async () => {
@@ -895,9 +899,9 @@ describe("Serialized refine review-fix regressions", () => {
 		vi.spyOn(internals, "_applyRefine").mockResolvedValue(emptyRefinementResult());
 
 		// Queue an explicit refine.run — this starts background planning at message_end.
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = true;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = true;
 		harness.session.handleRefineHostRequest("refine.run", { instructions: "explicit" });
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = false;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = false;
 
 		// Let the background plan fail.
 		await new Promise<void>((resolve) => setTimeout(resolve, 50));
@@ -925,15 +929,15 @@ describe("Serialized refine review-fix regressions", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
 		// Interval background planning fails (not explicit refine.run).
 		vi.spyOn(internals, "_planRefine").mockRejectedValue(new Error("plan failed"));
 		vi.spyOn(internals, "_applyRefine").mockResolvedValue(emptyRefinementResult());
 
 		internals._assistantTurnsSinceAutoRefine = 1;
-		(
-			internals as unknown as { _maybeStartSerializedBackgroundPlan: () => void }
+		fromAny<{ _maybeStartSerializedBackgroundPlan: () => void }, unknown>(
+			internals,
 		)._maybeStartSerializedBackgroundPlan();
 		await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
@@ -949,14 +953,17 @@ describe("Serialized refine review-fix regressions", () => {
 	it("classifies an aborted stale background plan as invalidated", async () => {
 		const harness = await createHarness({ persistSession: true, serializedRefine: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals & {
-			_runBackgroundPlan(
-				options: { instructions?: string },
-				abort: AbortController,
-				branchVersion: number,
-				skipReview?: boolean,
-			): Promise<unknown>;
-		};
+		const internals = fromAny<
+			SerializedInternals & {
+				_runBackgroundPlan(
+					options: { instructions?: string },
+					abort: AbortController,
+					branchVersion: number,
+					skipReview?: boolean,
+				): Promise<unknown>;
+			},
+			unknown
+		>(harness.session);
 		const branchVersion = internals._autoRefineBranchVersion;
 		vi.spyOn(internals, "_planRefine").mockImplementation(async () => {
 			internals._autoRefineBranchVersion++;
@@ -981,15 +988,15 @@ describe("Serialized refine review-fix regressions", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
 		vi.spyOn(internals, "_planRefine").mockRejectedValue(new Error("plan failed"));
 		vi.spyOn(internals, "_applyRefine").mockResolvedValue(emptyRefinementResult());
 
 		// Queue explicit refine.run — starts background planning.
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = true;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = true;
 		harness.session.handleRefineHostRequest("refine.run", { instructions: "explicit" });
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = false;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = false;
 		await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 		// Invalidate the branch (simulates a newer turn or branch reset).
@@ -1015,7 +1022,7 @@ describe("Serialized refine review-fix regressions", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
 		vi.spyOn(internals, "_planRefine").mockImplementation(async (opts) => {
 			if (opts.instructions === "older") throw new Error("bg plan failed");
@@ -1024,9 +1031,9 @@ describe("Serialized refine review-fix regressions", () => {
 		vi.spyOn(internals, "_applyRefine").mockResolvedValue(emptyRefinementResult());
 
 		// Queue older request — starts background planning.
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = true;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = true;
 		harness.session.handleRefineHostRequest("refine.run", { instructions: "older" });
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = false;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = false;
 		await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 		// Queue newer request before the boundary.
@@ -1052,7 +1059,7 @@ describe("Serialized refine review-fix regressions", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
 		let planCalls = 0;
 		vi.spyOn(internals, "_planRefine").mockImplementation(async () => {
@@ -1066,8 +1073,8 @@ describe("Serialized refine review-fix regressions", () => {
 		internals._pendingRequestedRefine = { instructions: "explicit" };
 
 		// Drive the disposal drain path.
-		(
-			internals as unknown as { _drainPendingRefinementForDisposal: () => Promise<void> }
+		fromAny<{ _drainPendingRefinementForDisposal: () => Promise<void> }, unknown>(
+			internals,
 		)._drainPendingRefinementForDisposal();
 		await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
@@ -1117,7 +1124,7 @@ describe("Serialized refine review-fix regressions", () => {
 			tools: [gateTool],
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
 		let planCalls = 0;
 		let maxConcurrentPlans = 0;
@@ -1184,12 +1191,12 @@ describe("Serialized refine review-fix regressions", () => {
 		expect(applyCalls).toHaveLength(2);
 		expect(planCalls).toBe(2);
 		// Verify apply order/identity: first apply is the bg plan, second is public.
-		const firstPlan = applyCalls[0].plan as { id: string };
-		const secondPlan = applyCalls[1].plan as { id: string };
+		const firstPlan = fromAny<{ id: string }, unknown>(applyCalls[0].plan);
+		const secondPlan = fromAny<{ id: string }, unknown>(applyCalls[1].plan);
 		expect(firstPlan.id).toBe("plan-1");
 		expect(secondPlan.id).toBe("plan-2");
-		const firstOptions = applyCalls[0].options as { instructions?: string };
-		const secondOptions = applyCalls[1].options as { instructions?: string };
+		const firstOptions = fromAny<{ instructions?: string }, unknown>(applyCalls[0].options);
+		const secondOptions = fromAny<{ instructions?: string }, unknown>(applyCalls[1].options);
 		expect(firstOptions.instructions).toBe("bg");
 		expect(secondOptions.instructions).toBe("public");
 	});
@@ -1197,7 +1204,7 @@ describe("Serialized refine review-fix regressions", () => {
 	it("public refine waits for active compaction without aborting it", async () => {
 		const harness = await createHarness({ persistSession: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		let releaseCompaction: () => void = () => {};
 		const compactionOperation = new Promise<void>((resolve) => {
 			releaseCompaction = resolve;
@@ -1224,7 +1231,7 @@ describe("Serialized refine review-fix regressions", () => {
 	it("public refine waits for active branch summary without aborting it", async () => {
 		const harness = await createHarness({ persistSession: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		let releaseBranchSummary: () => void = () => {};
 		const branchSummaryOperation = new Promise<void>((resolve) => {
 			releaseBranchSummary = resolve;
@@ -1251,7 +1258,7 @@ describe("Serialized refine review-fix regressions", () => {
 	it("public refine snapshots final events and operations after the agent becomes idle", async () => {
 		const harness = await createHarness({ persistSession: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		let releaseIdle: () => void = () => {};
 		const idleOperation = new Promise<void>((resolve) => {
 			releaseIdle = resolve;
@@ -1301,7 +1308,7 @@ describe("Serialized refine review-fix regressions", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
 		let capturedPlanOptions: { instructions?: string } | undefined;
 		vi.spyOn(internals, "_planRefine").mockImplementation(async (opts: { instructions?: string }) => {
@@ -1312,8 +1319,8 @@ describe("Serialized refine review-fix regressions", () => {
 
 		// Start background planning (interval-triggered)
 		internals._assistantTurnsSinceAutoRefine++;
-		(
-			internals as unknown as { _maybeStartSerializedBackgroundPlan: () => void }
+		fromAny<{ _maybeStartSerializedBackgroundPlan: () => void }, unknown>(
+			internals,
 		)._maybeStartSerializedBackgroundPlan();
 
 		// Wait for background planning
@@ -1329,7 +1336,7 @@ describe("Serialized refine review-fix regressions", () => {
 	it("emits refine_failed when a ready background plan fails to apply", async () => {
 		const harness = await createHarness({ persistSession: true, serializedRefine: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		internals._serializedPlanInFlight = Promise.resolve({
 			status: "plan",
 			plan: { id: "failed-plan", proposal: { edits: [] } },
@@ -1364,7 +1371,7 @@ describe("Serialized refine review-fix regressions", () => {
 			})),
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
 		const exactPlan = { id: "disposal-plan", proposal: { edits: [] } };
 		vi.spyOn(internals, "_planRefine").mockResolvedValue(exactPlan);
@@ -1372,8 +1379,8 @@ describe("Serialized refine review-fix regressions", () => {
 
 		// Start background planning
 		internals._assistantTurnsSinceAutoRefine++;
-		(
-			internals as unknown as { _maybeStartSerializedBackgroundPlan: () => void }
+		fromAny<{ _maybeStartSerializedBackgroundPlan: () => void }, unknown>(
+			internals,
 		)._maybeStartSerializedBackgroundPlan();
 
 		// Wait for the background plan to settle (plan ready)
@@ -1387,7 +1394,7 @@ describe("Serialized refine review-fix regressions", () => {
 
 		// _applyRefine was called with the exact plan (persisted before teardown).
 		expect(applySpy).toHaveBeenCalledTimes(1);
-		expect((applySpy.mock.calls[0] as unknown[])[0]).toBe(exactPlan);
+		expect(fromPartial<unknown[]>(applySpy.mock.calls[0])[0]).toBe(exactPlan);
 		expect(internals._disposed).toBe(true);
 	});
 
@@ -1404,7 +1411,7 @@ describe("Serialized refine review-fix regressions", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		const { applyRefine } = mockSerializedRefine(harness);
 
 		internals._scheduleAutoRefineAfterCompaction(true);
@@ -1429,7 +1436,7 @@ describe("Serialized refine review-fix regressions", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		const interactiveSpy = vi.spyOn(internals, "_maybeAutoRefine");
 		const { applyRefine } = mockSerializedRefine(harness);
 
@@ -1450,7 +1457,7 @@ describe("Serialized refine review-fix regressions", () => {
 			settings: { autoRefine: { enabled: true, compact: true, turnInterval: 999, cooldownMs: 0 } },
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		vi.spyOn(internals, "_getRequiredRequestAuth").mockResolvedValue({ apiKey: "test" });
 		vi.spyOn(internals, "_performCompaction").mockResolvedValue({
 			summary: "manual summary",
@@ -1474,7 +1481,7 @@ describe("Serialized refine review-fix regressions", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		internals._lastAutoRefineReviewAt = Date.now();
 		internals._scheduleAutoRefineAfterCompaction(true);
 
@@ -1493,7 +1500,7 @@ describe("Serialized refine review-fix regressions", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		internals._lastAutoRefineReviewAt = Date.now();
 		internals._compactAutoRefinePending = true;
 
@@ -1510,7 +1517,7 @@ describe("Serialized refine review-fix regressions", () => {
 			settings: { autoRefine: { enabled: true, compact: true, turnInterval: 1, cooldownMs: 60_000 } },
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		const settings = { enabled: true, compact: true, turnInterval: 1, cooldownMs: 60_000 };
 		vi.spyOn(harness.session.settingsManager, "getAutoRefineSettings")
 			.mockReturnValueOnce(settings)
@@ -1539,7 +1546,7 @@ describe("Serialized refine review-fix regressions", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		const { applyRefine } = mockSerializedRefine(harness);
 		internals._assistantTurnsSinceAutoRefine = 1;
 		internals._scheduleAutoRefineAfterCompaction(true);
@@ -1563,7 +1570,7 @@ describe("Serialized refine review-fix regressions", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		const { applyRefine } = mockSerializedRefine(harness);
 		internals._scheduleAutoRefineAfterCompaction(true);
 
@@ -1582,7 +1589,7 @@ describe("Serialized refine review-fix regressions", () => {
 			settings: { autoRefine: { enabled: true, compact: true, turnInterval: 999, cooldownMs: 0 } },
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		internals._compactAutoRefinePending = true;
 		vi.spyOn(internals, "_runSerializedAutoRefineReview").mockRejectedValue(
 			new Error("unexpected compact review failure"),
@@ -1599,7 +1606,7 @@ describe("Serialized refine review-fix regressions", () => {
 			settings: { autoRefine: { enabled: true, turnInterval: 999, cooldownMs: 0 } },
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		const options = { instructions: "explicit recovery" };
 		internals._serializedPlanInFlight = Promise.resolve({
 			status: "failure",
@@ -1644,11 +1651,11 @@ describe("Serialized refine event-ordering integration", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
 		const planSpy = vi
 			.spyOn(internals, "_planRefine")
-			.mockResolvedValue({ id: "p", proposal: { edits: [] } } as never);
+			.mockResolvedValue(fromAny<never, unknown>({ id: "p", proposal: { edits: [] } }));
 		const applySpy = vi.spyOn(internals, "_applyRefine").mockResolvedValue(emptyRefinementResult());
 
 		// Send a prompt that produces a text response (no tool calls).
@@ -1710,7 +1717,7 @@ describe("P0 concurrency regressions", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		internals._admitSessionInput(internals._createPreparedTurnAction("steer", "steer", undefined, {}));
 
 		let planResolved = false;
@@ -1732,7 +1739,7 @@ describe("P0 concurrency regressions", () => {
 		// when compaction check runs, return true to simulate compaction firing.
 		const compactionSpy = vi
 			.spyOn(
-				internals as unknown as { _shouldStopForThresholdCompaction: (ctx: unknown) => Promise<boolean> },
+				fromAny<{ _shouldStopForThresholdCompaction: (ctx: unknown) => Promise<boolean> }, unknown>(internals),
 				"_shouldStopForThresholdCompaction",
 			)
 			.mockImplementation(async () => {
@@ -1742,8 +1749,8 @@ describe("P0 concurrency regressions", () => {
 
 		// Start background planning at message_end
 		internals._assistantTurnsSinceAutoRefine++;
-		(
-			internals as unknown as { _maybeStartSerializedBackgroundPlan: () => void }
+		fromAny<{ _maybeStartSerializedBackgroundPlan: () => void }, unknown>(
+			internals,
 		)._maybeStartSerializedBackgroundPlan();
 
 		// Wait for plan to start but not finish
@@ -1769,7 +1776,7 @@ describe("P0 concurrency regressions", () => {
 			})),
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
 		const applySpy = vi.spyOn(internals, "_applyRefine").mockResolvedValue(emptyRefinementResult());
 
@@ -1788,8 +1795,8 @@ describe("P0 concurrency regressions", () => {
 
 		// Start background planning
 		internals._assistantTurnsSinceAutoRefine++;
-		(
-			internals as unknown as { _maybeStartSerializedBackgroundPlan: () => void }
+		fromAny<{ _maybeStartSerializedBackgroundPlan: () => void }, unknown>(
+			internals,
 		)._maybeStartSerializedBackgroundPlan();
 
 		// Wait for the plan to start blocking
@@ -1799,11 +1806,12 @@ describe("P0 concurrency regressions", () => {
 
 		// Call _invalidatePendingAutoRefineForBranchChange while plan is pending.
 		// This increments _autoRefineBranchVersion and awaits _serializedPlanInFlight.
-		const invalidatePromise = (
-			harness.session as unknown as {
+		const invalidatePromise = fromAny<
+			{
 				_invalidatePendingAutoRefineForBranchChange: () => Promise<void>;
-			}
-		)._invalidatePendingAutoRefineForBranchChange();
+			},
+			unknown
+		>(harness.session)._invalidatePendingAutoRefineForBranchChange();
 
 		// The branchVersion was incremented, invalidating the plan.
 		const branchVersionAfter = internals._autoRefineBranchVersion;
@@ -1840,7 +1848,7 @@ describe("P0 concurrency regressions", () => {
 			autoRefineReviewer: reviewer,
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
 		// Mock only _planRefine (the LLM planning call), NOT _applyRefine.
 		const fauxPlan = {
@@ -1866,11 +1874,11 @@ describe("P0 concurrency regressions", () => {
 				],
 			},
 		};
-		vi.spyOn(internals, "_planRefine").mockResolvedValue(fauxPlan as never);
+		vi.spyOn(internals, "_planRefine").mockResolvedValue(fromAny<never, unknown>(fauxPlan));
 
 		// Spy on _rebuildSystemPrompt (call-through) to assert it was invoked.
 		const rebuildSpy = vi.spyOn(
-			harness.session as unknown as { _rebuildSystemPrompt: (tools: string[]) => string },
+			fromAny<{ _rebuildSystemPrompt: (tools: string[]) => string }, unknown>(harness.session),
 			"_rebuildSystemPrompt",
 		);
 		const extensionEmit = vi.spyOn(harness.session.extensionRunner, "emit");
@@ -1913,7 +1921,7 @@ describe("P0 concurrency regressions", () => {
 			settings: { autoRefine: { enabled: true, turnInterval: 25, cooldownMs: 0 } },
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
 		// Make planning fail for the explicit refine.run request.
 		const planError = new Error("planning network failure");
@@ -1921,9 +1929,9 @@ describe("P0 concurrency regressions", () => {
 		const applySpy = vi.spyOn(internals, "_applyRefine").mockResolvedValue(emptyRefinementResult());
 
 		// Queue a refine.run request — this starts background planning.
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = true;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = true;
 		harness.session.handleRefineHostRequest("refine.run", { instructions: "test" });
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = false;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = false;
 
 		// Wait for background planning to fail.
 		await new Promise<void>((resolve) => setTimeout(resolve, 50));
@@ -1952,7 +1960,7 @@ describe("P0 concurrency regressions", () => {
 			settings: { autoRefine: { enabled: true, turnInterval: 1, cooldownMs: 0 } },
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
 		// Seed a memory entry on disk so the plan has something to update.
 		const { getLocalHarnessStateDir, loadHarnessState, saveHarnessState } = await import(
@@ -1997,7 +2005,7 @@ describe("P0 concurrency regressions", () => {
 		vi.spyOn(internals, "_planRefine").mockImplementation(async () => {
 			planStarted?.();
 			await planGate;
-			return {
+			return fromAny<never, unknown>({
 				id: "refine_conflict_test",
 				proposal: {
 					summary: "Update shared memory",
@@ -2014,7 +2022,7 @@ describe("P0 concurrency regressions", () => {
 					],
 				},
 				baselineState,
-			} as never;
+			});
 		});
 
 		// Start the serialized refine — begins background planning.
@@ -2048,9 +2056,12 @@ describe("P0 concurrency regressions", () => {
 	it("aborted non-serialized turn clears _pendingRequestedRefine at agent_end", async () => {
 		const harness = await createHarness({ persistSession: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals & {
-			refine: (options: { instructions?: string }) => Promise<unknown>;
-		};
+		const internals = fromAny<
+			SerializedInternals & {
+				refine: (options: { instructions?: string }) => Promise<unknown>;
+			},
+			unknown
+		>(harness.session);
 
 		// Seed a pending explicit refine.run request.
 		internals._pendingRequestedRefine = { instructions: "leaked-explicit" };
@@ -2075,12 +2086,15 @@ describe("P0 concurrency regressions", () => {
 	it("explicit abort during a tool call clears a non-serialized refine.run before agent_end", async () => {
 		const harness = await createHarness({ persistSession: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals & {
-			refine: (options: { instructions?: string }) => Promise<unknown>;
-		};
+		const internals = fromAny<
+			SerializedInternals & {
+				refine: (options: { instructions?: string }) => Promise<unknown>;
+			},
+			unknown
+		>(harness.session);
 		const refineSpy = vi.spyOn(internals, "refine").mockResolvedValue(undefined);
 
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = true;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = true;
 		expect(
 			harness.session.handleRefineHostRequest("refine.run", {
 				instructions: "must not survive cancellation",
@@ -2091,7 +2105,7 @@ describe("P0 concurrency regressions", () => {
 		harness.session.requestAbort();
 		expect(internals._pendingRequestedRefine).toBeUndefined();
 
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = false;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = false;
 		const toolUseAssistant = fauxAssistantMessage([fauxToolCall("ipython", { code: "await refine.run()" })], {
 			stopReason: "toolUse",
 		});
@@ -2106,7 +2120,7 @@ describe("P0 concurrency regressions", () => {
 	it("explicit abort invalidates an in-flight serialized refine.run plan", async () => {
 		const harness = await createHarness({ persistSession: true, serializedRefine: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		const applyRefine = vi.spyOn(internals, "_applyRefine").mockResolvedValue(emptyRefinementResult());
 		let planSignal: AbortSignal | undefined;
 		vi.spyOn(internals, "_planRefine").mockImplementation(
@@ -2118,7 +2132,7 @@ describe("P0 concurrency regressions", () => {
 			},
 		);
 
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = true;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = true;
 		harness.session.handleRefineHostRequest("refine.run", {
 			instructions: "must not survive cancellation",
 		});
@@ -2130,7 +2144,7 @@ describe("P0 concurrency regressions", () => {
 		expect(planSignal?.aborted).toBe(true);
 		expect(internals._autoRefineBranchVersion).toBeGreaterThan(branchVersion);
 
-		(harness.session.agent.state as { isStreaming: boolean }).isStreaming = false;
+		fromPartial<{ isStreaming: boolean }>(harness.session.agent.state).isStreaming = false;
 		await internals._runSerializedRefineCheckpoint();
 		expect(applyRefine).not.toHaveBeenCalled();
 		expect(internals._serializedPlanInFlight).toBeUndefined();
@@ -2139,7 +2153,7 @@ describe("P0 concurrency regressions", () => {
 	it("explicit abort cancels an in-flight public refinement plan", async () => {
 		const harness = await createHarness({ persistSession: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		let planSignal: AbortSignal | undefined;
 		vi.spyOn(internals, "_planRefine").mockImplementation(
 			(_options: { instructions?: string }, signal: AbortSignal) => {
@@ -2162,7 +2176,7 @@ describe("P0 concurrency regressions", () => {
 	it("explicit abort cancels direct serialized refinement planning", async () => {
 		const harness = await createHarness({ persistSession: true, serializedRefine: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		const applyRefine = vi.spyOn(internals, "_applyRefine").mockResolvedValue(emptyRefinementResult());
 		let planSignal: AbortSignal | undefined;
 		vi.spyOn(internals, "_planRefine").mockImplementation(
@@ -2192,7 +2206,7 @@ describe("P0 concurrency regressions", () => {
 	it("direct serialized planning blocks a concurrent public refinement plan", async () => {
 		const harness = await createHarness({ persistSession: true, serializedRefine: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		let releaseDirectPlan: () => void = () => {};
 		const directPlanGate = new Promise<void>((resolve) => {
 			releaseDirectPlan = resolve;
@@ -2231,7 +2245,7 @@ describe("P0 concurrency regressions", () => {
 	it("explicit abort cancels a serialized auto-refine review", async () => {
 		const harness = await createHarness({ persistSession: true, serializedRefine: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		let reviewSignal: AbortSignal | undefined;
 		vi.spyOn(internals, "_reviewAutoRefine").mockImplementation((_context, signal) => {
 			reviewSignal = signal;
@@ -2258,7 +2272,7 @@ describe("P0 concurrency regressions", () => {
 	it("does not stamp cooldown when the branch changes during serialized refinement", async () => {
 		const harness = await createHarness({ persistSession: true, serializedRefine: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		internals._assistantTurnsSinceAutoRefine = 4;
 		internals._lastAutoRefineReviewAt = 0;
 		vi.spyOn(internals, "_reviewAutoRefine").mockResolvedValue({
@@ -2280,7 +2294,7 @@ describe("P0 concurrency regressions", () => {
 	it("services a pending request after an invalidated background plan", async () => {
 		const harness = await createHarness({ persistSession: true, serializedRefine: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		internals._serializedPlanInFlight = Promise.resolve({ status: "invalidated" });
 		internals._pendingRequestedRefine = { instructions: "latest" };
 		const run = vi.spyOn(internals, "_runSerializedRefine").mockResolvedValue();
@@ -2294,7 +2308,7 @@ describe("P0 concurrency regressions", () => {
 	it("records cooldown after dropping a stale ready background plan", async () => {
 		const harness = await createHarness({ persistSession: true, serializedRefine: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		const apply = vi.spyOn(internals, "_applyRefine").mockResolvedValue(emptyRefinementResult());
 		const reviewAtBeforeCheckpoint = internals._lastAutoRefineReviewAt;
 		internals._assistantTurnsSinceAutoRefine = 1;
@@ -2325,9 +2339,12 @@ describe("P0 concurrency regressions", () => {
 			})),
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals & {
-			refine: (options: { instructions?: string }) => Promise<unknown>;
-		};
+		const internals = fromAny<
+			SerializedInternals & {
+				refine: (options: { instructions?: string }) => Promise<unknown>;
+			},
+			unknown
+		>(harness.session);
 
 		// Seed a pending explicit refine.run request.
 		internals._pendingRequestedRefine = { instructions: "leaked-explicit" };
@@ -2367,7 +2384,7 @@ describe("P0 concurrency regressions", () => {
 	it("public refine resumes pending messages after the application phase", async () => {
 		const harness = await createHarness({ persistSession: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 
 		// Provide a provider response first so a resumed turn can complete.
 		harness.setResponses([fauxAssistantMessage("resumed")]);
@@ -2392,7 +2409,7 @@ describe("P0 concurrency regressions", () => {
 	it("surfaces an explicit serialized planning failure without terminating the turn", async () => {
 		const harness = await createHarness({ persistSession: true, serializedRefine: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		internals._pendingRequestedRefine = { instructions: "fail planning" };
 		vi.spyOn(internals, "_planRefine").mockRejectedValue(new Error("planner unavailable"));
 		const failed = new Promise<string>((resolve) => {
@@ -2411,7 +2428,7 @@ describe("P0 concurrency regressions", () => {
 	it("isolates an explicit serialized apply failure from the turn boundary", async () => {
 		const harness = await createHarness({ persistSession: true, serializedRefine: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		internals._pendingRequestedRefine = { instructions: "fail at apply" };
 		vi.spyOn(internals, "_planRefine").mockResolvedValue({ id: "plan", proposal: { edits: [] } });
 		vi.spyOn(internals, "_applyRefine").mockRejectedValue(new Error("disk full"));
@@ -2431,7 +2448,7 @@ describe("P0 concurrency regressions", () => {
 	it("consumes a serialized background plan only once across concurrent drains", async () => {
 		const harness = await createHarness({ persistSession: true, serializedRefine: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		let resolvePlan: (value: unknown) => void = () => {};
 		internals._serializedPlanInFlight = new Promise((resolve) => {
 			resolvePlan = resolve;
@@ -2469,7 +2486,7 @@ describe("P0 concurrency regressions", () => {
 	it("disposal waits for the checkpoint owner to finish applying a claimed plan", async () => {
 		const harness = await createHarness({ persistSession: true, serializedRefine: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		let resolvePlan: (value: unknown) => void = () => {};
 		internals._serializedPlanInFlight = new Promise((resolve) => {
 			resolvePlan = resolve;
@@ -2514,7 +2531,7 @@ describe("P0 concurrency regressions", () => {
 			settings: { autoRefine: { enabled: true, turnInterval: 1, cooldownMs: 0 } },
 		});
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		internals._assistantTurnsSinceAutoRefine = 1;
 		const waitForIdle = vi.spyOn(harness.session.agent, "waitForIdle").mockResolvedValue();
 		const maybeAutoRefine = vi.spyOn(internals, "_maybeAutoRefine").mockResolvedValue();
@@ -2528,7 +2545,7 @@ describe("P0 concurrency regressions", () => {
 	it("waits for an interactive auto-refine operation before disposal drain continues", async () => {
 		const harness = await createHarness({ persistSession: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		let releaseOperation: () => void = () => {};
 		const operation = new Promise<void>((resolve) => {
 			releaseOperation = resolve;
@@ -2549,7 +2566,7 @@ describe("P0 concurrency regressions", () => {
 	it("memoizes disposeAsync before refinement drain completes", async () => {
 		const harness = await createHarness({ persistSession: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals;
+		const internals = fromAny<SerializedInternals, unknown>(harness.session);
 		let releaseDrain: () => void = () => {};
 		const drain = new Promise<void>((resolve) => {
 			releaseDrain = resolve;
@@ -2566,9 +2583,12 @@ describe("P0 concurrency regressions", () => {
 	it("public refine clears a settled serialized plan left by an aborted turn", async () => {
 		const harness = await createHarness({ persistSession: true, serializedRefine: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals & {
-			_serializedExplicitRefineOptions?: { instructions?: string; global?: boolean };
-		};
+		const internals = fromAny<
+			SerializedInternals & {
+				_serializedExplicitRefineOptions?: { instructions?: string; global?: boolean };
+			},
+			unknown
+		>(harness.session);
 		internals._serializedPlanInFlight = Promise.resolve({ status: "skip" });
 		internals._serializedExplicitRefineOptions = { instructions: "stale", global: true };
 		vi.spyOn(internals, "_planRefine").mockResolvedValue({ id: "public-plan", proposal: { edits: [] } });
@@ -2586,10 +2606,13 @@ describe("P0 concurrency regressions", () => {
 	it("public refine waits for idle without aborting the session or child runs", async () => {
 		const harness = await createHarness({ persistSession: true });
 		harnesses.push(harness);
-		const internals = harness.session as unknown as SerializedInternals & {
-			_goalAbortInProgress: boolean;
-			_cancelActiveRlmChildRuns: () => void;
-		};
+		const internals = fromAny<
+			SerializedInternals & {
+				_goalAbortInProgress: boolean;
+				_cancelActiveRlmChildRuns: () => void;
+			},
+			unknown
+		>(harness.session);
 
 		vi.spyOn(internals, "_planRefine").mockResolvedValue({ id: "plan", proposal: { edits: [] } });
 		vi.spyOn(internals, "_applyRefine").mockResolvedValue(emptyRefinementResult());

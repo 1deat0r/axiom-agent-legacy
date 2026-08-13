@@ -1,3 +1,4 @@
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DaemonClient, getDaemonSocketCloseReason } from "../src/modes/daemon/daemon-client.js";
 import {
@@ -19,7 +20,7 @@ const netMock = vi.hoisted(() => {
 
 		on(event: string, listener: Listener): this {
 			const listeners = this.listeners.get(event) ?? new Set<TrackedListener>();
-			listeners.add(listener as TrackedListener);
+			listeners.add(fromAny<TrackedListener, unknown>(listener));
 			this.listeners.set(event, listeners);
 			return this;
 		}
@@ -348,13 +349,13 @@ describe("DaemonClient", () => {
 
 		const response = client.request({ type: "attach", activeSessionId: "active-1" });
 		expect(socket.writes).toHaveLength(1);
-		const envelope = JSON.parse(socket.writes[0]!.trim()) as {
+		const envelope = fromPartial<{
 			id?: string;
 			type?: string;
 			clientId?: string;
 			protocol?: { name?: string; version?: number };
 			command?: { type?: string; activeSessionId?: string; daemonSessionId?: unknown };
-		};
+		}>(JSON.parse(socket.writes[0]!.trim()));
 
 		expect(envelope).toMatchObject({
 			type: "command",
@@ -385,11 +386,11 @@ describe("DaemonClient", () => {
 
 		const response = client.request({ type: "list", all: true });
 		expect(socket.writes).toHaveLength(1);
-		const envelope = JSON.parse(socket.writes[0]!.trim()) as {
+		const envelope = fromPartial<{
 			id?: string;
 			type?: string;
 			command?: { type?: string; all?: boolean };
-		};
+		}>(JSON.parse(socket.writes[0]!.trim()));
 
 		expect(envelope).toMatchObject({ type: "command", command: { type: "list", all: true } });
 
@@ -426,10 +427,10 @@ describe("DaemonClient", () => {
 		emitHello(socket, DAEMON_PROTOCOL_VERSION);
 
 		const response = client.request({ type: "create" });
-		const request = JSON.parse(socket.writes[0]!.trim()) as {
+		const request = fromPartial<{
 			id: string;
 			protocol: { version: number };
-		};
+		}>(JSON.parse(socket.writes[0]!.trim()));
 		expect(request.protocol.version).toBe(DAEMON_PROTOCOL_VERSION);
 
 		socket.emit(
@@ -438,10 +439,10 @@ describe("DaemonClient", () => {
 		);
 		await response;
 
-		const acknowledgement = JSON.parse(socket.writes[1]!.trim()) as {
+		const acknowledgement = fromPartial<{
 			protocol: { version: number };
 			command: { type: string; commandId: string };
-		};
+		}>(JSON.parse(socket.writes[1]!.trim()));
 		expect(acknowledgement).toMatchObject({
 			protocol: { version: DAEMON_PROTOCOL_VERSION },
 			command: { type: "ack_result", commandId: request.id },
@@ -481,11 +482,11 @@ describe("DaemonClient", () => {
 			},
 		);
 		expect(socket.writes).toHaveLength(1);
-		const envelope = JSON.parse(socket.writes[0]!.trim()) as {
+		const envelope = fromPartial<{
 			id?: string;
 			type?: string;
 			command?: { activeSessionId?: string; scope?: string };
-		};
+		}>(JSON.parse(socket.writes[0]!.trim()));
 
 		socket.emit(
 			"data",
@@ -567,7 +568,7 @@ describe("DaemonClient", () => {
 			},
 		});
 		expect(socket.writes).toHaveLength(1);
-		const envelope = JSON.parse(socket.writes[0]!.trim()) as {
+		const envelope = fromPartial<{
 			id?: string;
 			type?: string;
 			command?: {
@@ -581,7 +582,7 @@ describe("DaemonClient", () => {
 				cwd?: unknown;
 				model?: unknown;
 			};
-		};
+		}>(JSON.parse(socket.writes[0]!.trim()));
 
 		expect(envelope).toMatchObject({
 			type: "command",
@@ -616,7 +617,7 @@ describe("DaemonClient", () => {
 		emitHello(socket);
 
 		const response = client.request({ type: "create" });
-		const request = JSON.parse(socket.writes[0]!.trim()) as { id: string };
+		const request = fromPartial<{ id: string }>(JSON.parse(socket.writes[0]!.trim()));
 		socket.emit(
 			"data",
 			`${JSON.stringify({ id: request.id, type: "response", command: "create", success: true })}\n`,
@@ -765,7 +766,7 @@ describe("DaemonClient", () => {
 
 		const response = client.request({ type: "prompt", activeSessionId: "active-1", message: "hello" });
 		const firstWireData = firstSocket.writes[0]!;
-		const firstEnvelope = JSON.parse(firstWireData) as { id: string };
+		const firstEnvelope = fromPartial<{ id: string }>(JSON.parse(firstWireData));
 		firstSocket.emit("close");
 
 		const secondConnect = client.connect();
@@ -813,7 +814,7 @@ describe("DaemonClient", () => {
 				settled = true;
 			},
 		);
-		const firstEnvelope = JSON.parse(firstSocket.writes[0]!) as { id: string };
+		const firstEnvelope = fromPartial<{ id: string }>(JSON.parse(firstSocket.writes[0]!));
 		firstSocket.emit("close");
 		await vi.advanceTimersByTimeAsync(500);
 		expect(settled).toBe(false);
@@ -885,7 +886,7 @@ describe("DaemonClient", () => {
 		});
 		const response = client.request({ type: "list" });
 		const firstWireData = firstSocket.writes[0]!;
-		const firstEnvelope = JSON.parse(firstWireData) as { id: string };
+		const firstEnvelope = fromPartial<{ id: string }>(JSON.parse(firstWireData));
 
 		firstSocket.emit("close");
 		await vi.waitFor(() => expect(netMock.sockets).toHaveLength(2));

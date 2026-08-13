@@ -1,5 +1,6 @@
 import type { AutocompleteProvider, EditorTheme, OverlayHandle, TUI } from "@earendil-works/pi-tui";
 import { CURSOR_MARKER, setKeybindings, visibleWidth } from "@earendil-works/pi-tui";
+import { fromAny } from "@total-typescript/shoehorn";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { KeybindingsManager } from "../src/core/keybindings.js";
 import { CustomEditor } from "../src/modes/interactive/components/custom-editor.js";
@@ -26,11 +27,11 @@ const fakeOverlayHandle: OverlayHandle = {
 	isFocused: () => false,
 };
 
-const fakeTui = {
+const fakeTui = fromAny<TUI, unknown>({
 	requestRender: vi.fn(),
 	showOverlay: vi.fn(() => fakeOverlayHandle),
 	terminal: { rows: 24, columns: 80 },
-} as unknown as TUI;
+});
 
 const autocompleteProvider: AutocompleteProvider = {
 	async getSuggestions() {

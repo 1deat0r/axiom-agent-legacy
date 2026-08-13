@@ -1,3 +1,4 @@
+import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it, vi } from "vitest";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.js";
 import { QueueSelection } from "../src/modes/interactive/queue-selection.js";
@@ -31,11 +32,11 @@ type Harness = {
 	collectQueueReplaceImages: (text: string) => unknown;
 };
 
-const proto = InteractiveMode.prototype as unknown as Record<string, (...args: unknown[]) => unknown>;
+const proto = fromAny<Record<string, (...args: unknown[]) => unknown>, unknown>(InteractiveMode.prototype);
 
 function createHarness(queue: { steering: string[]; followUp: string[] }, mutateResult = "applied"): Harness {
 	let editorText = "";
-	const harness = {
+	const harness = fromAny<Harness, unknown>({
 		queueSelection: new QueueSelection(),
 		connectionQueue: queue,
 		editor: {
@@ -68,7 +69,7 @@ function createHarness(queue: { steering: string[]; followUp: string[] }, mutate
 		replaceConnectionQueue: proto.replaceConnectionQueue,
 		setEditorTextFromQueueSelection: proto.setEditorTextFromQueueSelection,
 		collectQueueReplaceImages: proto.collectQueueReplaceImages,
-	} as unknown as Harness;
+	});
 	return harness;
 }
 
@@ -446,7 +447,7 @@ describe("interactive interrupt preserves the queue", () => {
 			showError: vi.fn(),
 			editor: { getText: () => "", setText: vi.fn() },
 		};
-		(proto.interruptOrClearInput as (this: unknown) => void).call(harness);
+		fromPartial<(this: unknown) => void>(proto.interruptOrClearInput).call(harness);
 		expect(abort).toHaveBeenCalledOnce();
 		expect(harness.editor.setText).not.toHaveBeenCalled();
 	});
