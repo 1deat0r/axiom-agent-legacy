@@ -218,7 +218,7 @@ export async function handleMemoryConsolidationCommand(
 		});
 		const entryIds = applied.result?.appliedEdits.filter((edit) => edit.applied).map((edit) => edit.id) ?? [];
 		const rejected = applied.skipped.map((skip) => `${skip.fact.title || "(untitled)"}: ${skip.reasons.join("; ")}`);
-		const resolved = resolvePendingProposal(pendingDir, pending.id, "approved");
+		const resolved = resolvePendingProposal(pendingDir, pending.id);
 		appendAuditEvent(
 			auditPath,
 			auditEvent("approved", {
@@ -228,7 +228,12 @@ export async function handleMemoryConsolidationCommand(
 			}),
 		);
 		if (!resolved) {
-			write("memory-consolidation: proposal disappeared before it could be resolved");
+			// The apply already happened; report the facts, not just the lost file.
+			write(
+				applied.acceptedCount > 0
+					? `Approved ${pending.id}: ${applied.acceptedCount} harness memory entr${applied.acceptedCount === 1 ? "y" : "ies"} applied, but the pending file was already removed`
+					: `Approved ${pending.id}: pending file was already removed`,
+			);
 			return true;
 		}
 		if (applied.acceptedCount > 0) {
@@ -245,7 +250,7 @@ export async function handleMemoryConsolidationCommand(
 	}
 
 	// reject
-	const resolved = resolvePendingProposal(pendingDir, pending.id, "rejected");
+	const resolved = resolvePendingProposal(pendingDir, pending.id);
 	appendAuditEvent(auditPath, auditEvent("rejected", {}));
 	if (!resolved) {
 		write("memory-consolidation: proposal disappeared before it could be resolved");

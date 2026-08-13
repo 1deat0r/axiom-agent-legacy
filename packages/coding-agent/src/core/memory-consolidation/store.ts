@@ -117,17 +117,11 @@ export function loadPendingProposal(pendingDir: string, id: string): PendingProp
 	}
 }
 
-export type ResolveAction = "approved" | "rejected";
-
 /**
  * Load + remove a pending proposal in one step so approve/reject can audit
  * the exact staged content. Returns undefined when the proposal is unknown.
  */
-export function resolvePendingProposal(
-	pendingDir: string,
-	id: string,
-	_action: ResolveAction,
-): PendingProposal | undefined {
+export function resolvePendingProposal(pendingDir: string, id: string): PendingProposal | undefined {
 	const pending = loadPendingProposal(pendingDir, id);
 	if (!pending) {
 		return undefined;

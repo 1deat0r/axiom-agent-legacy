@@ -162,6 +162,15 @@ describe("handleMemoryConsolidationCommand", () => {
 		expect(lines.join("\n")).toContain("approved");
 	});
 
+	it("emits raw JSON audit lines with --json", async () => {
+		const dir = makeTempDir();
+		await run(["memory-consolidation", "approve", stageOne(dir).id], dir);
+		const lines = await run(["memory-consolidation", "audit", "--json"], dir);
+		expect(lines).toHaveLength(1);
+		const parsed = JSON.parse(lines[0] ?? "");
+		expect(parsed.action).toBe("approved");
+	});
+
 	it("prints help for --help", async () => {
 		const lines = await run(["memory-consolidation", "--help"], makeTempDir());
 		expect(lines.join("\n")).toContain("Usage:");

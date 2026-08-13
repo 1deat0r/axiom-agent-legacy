@@ -226,17 +226,17 @@ describe("pending proposal store + audit log", () => {
 		const dir = makeTempDir();
 		const pendingDir = consolidationPendingDir(dir);
 		const staged = stagePendingProposal(pendingDir, { summary: "s", rationale: "", facts: [durableFact()] });
-		const resolved = resolvePendingProposal(pendingDir, staged.id, "approved");
+		const resolved = resolvePendingProposal(pendingDir, staged.id);
 		expect(resolved?.id).toBe(staged.id);
 		expect(listPendingProposals(pendingDir)).toHaveLength(0);
-		expect(resolvePendingProposal(pendingDir, staged.id, "approved")).toBeUndefined();
+		expect(resolvePendingProposal(pendingDir, staged.id)).toBeUndefined();
 	});
 
 	it("rejects path-traversal ids without touching the filesystem", () => {
 		const dir = makeTempDir();
 		const pendingDir = consolidationPendingDir(dir);
 		expect(loadPendingProposal(pendingDir, "../../etc/passwd")).toBeUndefined();
-		expect(resolvePendingProposal(pendingDir, "mc_1/../mc_1", "rejected")).toBeUndefined();
+		expect(resolvePendingProposal(pendingDir, "mc_1/../mc_1")).toBeUndefined();
 	});
 
 	it("appends and reads audit events newest-first with a limit", () => {
