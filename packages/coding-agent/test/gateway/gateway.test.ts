@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { activeModelPath, FileActiveModelStore } from "../../src/gateway/active-model.js";
 import { MemoryActiveProjectStore } from "../../src/gateway/active-project.js";
 import { MemoryChannelIndex } from "../../src/gateway/channel-index.js";
@@ -9,6 +9,7 @@ import { fakeCompletionRunner, sessionIdForChannel } from "../../src/gateway/com
 import { GatewayCron } from "../../src/gateway/cron.js";
 import { Gateway } from "../../src/gateway/gateway.js";
 import { InMemoryRestartNoticeStore } from "../../src/gateway/restart-notice.js";
+import { FileStreamJournal } from "../../src/gateway/stream-journal.js";
 import type { CompletionRunner, GatewayMessage, GatewayRecipient, GatewayTransport } from "../../src/gateway/types.js";
 
 /** A scriptable in-memory transport that also supports streaming edits. */
@@ -16,6 +17,7 @@ function streamingTransport() {
 	const sent: Array<{ to: string; text: string }> = [];
 	const placed: Array<{ to: string; text: string }> = [];
 	const edits: Array<{ chatId: string; messageId: number; text: string }> = [];
+	const chatActions: Array<{ to: string; action: string }> = [];
 	let id = 0;
 	let handler: ((msg: GatewayMessage) => void) | undefined;
 	let failEdit = false;
@@ -36,6 +38,9 @@ function streamingTransport() {
 			if (failEdit) throw new Error("edit failed");
 			edits.push({ chatId, messageId, text });
 		},
+		async sendChatAction(to, action) {
+			chatActions.push({ to: to.recipient, action });
+		},
 		onMessage(h) {
 			handler = h;
 		},
@@ -45,6 +50,7 @@ function streamingTransport() {
 		sent,
 		placed,
 		edits,
+		chatActions,
 		push: (m: GatewayMessage) => handler?.(m),
 		setFailEdit(v: boolean) {
 			failEdit = v;
@@ -777,6 +783,138 @@ describe("Gateway streaming replies", () => {
 			s.push({ channelId: "+1", sender: "+1", text: "hello", isCommand: false, timestamp: 1 });
 			await new Promise((r) => setTimeout(r, 30));
 			expect(s.sent.some((x) => x.text === "final different")).toBe(true);
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("pings a typing action while the run thinks and stops once text flows", async () => {
+		vi.useFakeTimers();
+		try {
+			const dir = await home("axiom-gw-stream-");
+			try {
+				const s = streamingTransport();
+				let release: (() => void) | undefined;
+				let onDeltaRef: ((delta: string) => void) | undefined;
+				const completion: CompletionRunner = {
+					async runCompletion(input) {
+						return { reply: "x", sessionId: input.sessionId };
+					},
+					async streamCompletion(input, onDelta) {
+						onDeltaRef = onDelta;
+						await new Promise<void>((resolve) => {
+							release = resolve;
+						}); // hold the stream open (model still "thinking")
+						return { reply: "axiom reply", sessionId: input.sessionId };
+					},
+				};
+				const g = new Gateway({
+					transport: s.t,
+					index: new MemoryChannelIndex(),
+					completion,
+					axiomHomeDir: dir,
+					profile: "default",
+					senders: ["+1"],
+				});
+				await g.start();
+				s.push({ channelId: "+1", sender: "+1", text: "hello", isCommand: false, timestamp: 1 });
+				await vi.advanceTimersByTimeAsync(10_000); // pings every 4s
+				const pingsBefore = s.chatActions.length;
+				expect(pingsBefore).toBeGreaterThanOrEqual(2);
+				expect(s.chatActions.every((a) => a.action === "typing")).toBe(true);
+				onDeltaRef?.("first");
+				await vi.advanceTimersByTimeAsync(20_000);
+				expect(s.chatActions.length).toBe(pingsBefore); // stopped refreshing once text flows
+				release?.();
+				await vi.advanceTimersByTimeAsync(0);
+				await g.stop();
+			} finally {
+				await rm(dir, { recursive: true, force: true });
+			}
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("pings typing on the batch path and stops when the reply lands", async () => {
+		vi.useFakeTimers();
+		try {
+			const dir = await home("axiom-gw-stream-");
+			try {
+				const s = streamingTransport();
+				let release: (() => void) | undefined;
+				const completion: CompletionRunner = {
+					async runCompletion(input) {
+						await new Promise<void>((resolve) => {
+							release = resolve;
+						});
+						return { reply: "batch reply", sessionId: input.sessionId };
+					},
+				};
+				const g = new Gateway({
+					transport: s.t,
+					index: new MemoryChannelIndex(),
+					completion,
+					axiomHomeDir: dir,
+					profile: "default",
+					senders: ["+1"],
+				});
+				await g.start();
+				s.push({ channelId: "+1", sender: "+1", text: "hello", isCommand: false, timestamp: 1 });
+				await vi.advanceTimersByTimeAsync(9_000);
+				const pingsBefore = s.chatActions.length;
+				expect(pingsBefore).toBeGreaterThanOrEqual(2);
+				release?.();
+				await vi.advanceTimersByTimeAsync(20_000);
+				expect(s.chatActions.length).toBe(pingsBefore); // no more pings after the reply
+				expect(s.sent.some((x) => x.text === "batch reply")).toBe(true);
+				await g.stop();
+			} finally {
+				await rm(dir, { recursive: true, force: true });
+			}
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("journals the bubble while the stream is in flight and clears it on completion", async () => {
+		const dir = await home("axiom-gw-stream-");
+		try {
+			const s = streamingTransport();
+			let release: (() => void) | undefined;
+			const completion: CompletionRunner = {
+				async runCompletion(input) {
+					return { reply: "x", sessionId: input.sessionId };
+				},
+				async streamCompletion(input, onDelta) {
+					onDelta("half");
+					await new Promise<void>((resolve) => {
+						release = resolve;
+					});
+					return { reply: "done", sessionId: input.sessionId };
+				},
+			};
+			const journal = new FileStreamJournal(join(dir, "streams.jsonl"));
+			const g = new Gateway({
+				transport: s.t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+				streamJournal: journal,
+			});
+			await g.start();
+			s.push({ channelId: "+1", sender: "+1", text: "hello", isCommand: false, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 30));
+			const inFlight = journal.load();
+			expect(inFlight).toHaveLength(1);
+			expect(inFlight[0]).toMatchObject({ channelId: "+1", messageId: 1 });
+			release?.();
+			await new Promise((r) => setTimeout(r, 30));
+			expect(journal.load()).toEqual([]);
+			expect(s.sent).toHaveLength(0); // streamed to the bubble, no fallback
 			await g.stop();
 		} finally {
 			await rm(dir, { recursive: true, force: true });

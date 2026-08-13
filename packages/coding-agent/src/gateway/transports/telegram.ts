@@ -40,6 +40,8 @@ export interface TelegramClient {
 	sendMessage(input: { chatId: string; text: string }): Promise<number>;
 	/** Edits an existing message's text in place (streaming, ADR-0004/#6). */
 	editMessageText(input: { chatId: string; messageId: number; text: string }): Promise<void>;
+	/** Sends a chat action (typing/…) so the peer sees live activity. */
+	sendChatAction(input: { chatId: string; action: string }): Promise<void>;
 	/**
 	 * Long-poll getUpdates. `timeout` is in SECONDS (the Bot API parameter, max
 	 * 50) — the transport converts its ms option at this boundary.
@@ -188,6 +190,11 @@ export class TelegramTransport implements GatewayTransport {
 		await this.client.editMessageText({ chatId, messageId, text });
 	}
 
+	/** Ping a chat action (typing) so the peer sees the gateway is alive. */
+	async sendChatAction(to: GatewayRecipient, action: string): Promise<void> {
+		await this.client.sendChatAction({ chatId: to.channelId, action });
+	}
+
 	async send(to: GatewayRecipient, text: string): Promise<void> {
 		const chunks = chunkTelegramText(text, TELEGRAM_TEXT_LIMIT);
 		for (const chunk of chunks) {
@@ -307,6 +314,10 @@ export class HttpTelegramClient implements TelegramClient {
 			message_id: input.messageId,
 			text: input.text,
 		});
+	}
+
+	async sendChatAction(input: { chatId: string; action: string }): Promise<void> {
+		await this.post("sendChatAction", { chat_id: input.chatId, action: input.action });
 	}
 
 	async getUpdates(input: { offset?: number; timeout?: number; signal?: AbortSignal }): Promise<TelegramUpdate[]> {

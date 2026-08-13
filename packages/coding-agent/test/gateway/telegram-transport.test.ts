@@ -16,7 +16,7 @@ import {
 
 /** An in-memory Telegram client the transport polls (configuration via the returned object). */
 function fakeClient(initial: TelegramUpdate[] = []) {
-	const sent: Array<{ chatId: string; text: string; messageId?: number; edited?: boolean }> = [];
+	const sent: Array<{ chatId: string; text: string; messageId?: number; edited?: boolean; action?: string }> = [];
 	const offsets: number[] = [];
 	const timeouts: Array<number | undefined> = [];
 	const queue: TelegramUpdate[] = [...initial];
@@ -31,6 +31,9 @@ function fakeClient(initial: TelegramUpdate[] = []) {
 		},
 		async editMessageText(input) {
 			sent.push({ chatId: input.chatId, text: input.text, messageId: input.messageId, edited: true });
+		},
+		async sendChatAction(input) {
+			sent.push({ chatId: input.chatId, text: `action:${input.action}`, action: input.action });
 		},
 		async getUpdates(input) {
 			if (input.offset !== undefined) offsets.push(input.offset);
@@ -223,6 +226,7 @@ describe("TelegramTransport", () => {
 		const clientWithSignal: TelegramClient = {
 			sendMessage: async () => 1,
 			editMessageText: async () => {},
+			sendChatAction: async () => {},
 			async getUpdates(input) {
 				if (input.signal) {
 					input.signal.addEventListener("abort", () => {
@@ -322,6 +326,13 @@ describe("TelegramTransport", () => {
 		expect(t.isRunning()).toBe(true);
 		await t.disconnect();
 	});
+
+	it("passes sendChatAction through to the client for the channel", async () => {
+		const f = fakeClient();
+		const t = new TelegramTransport(f.client);
+		await t.sendChatAction({ channelId: "123", recipient: "123" }, "typing");
+		expect(f.sent).toEqual([{ chatId: "123", text: "action:typing", action: "typing" }]);
+	});
 });
 
 describe("FileTelegramOffsetStore", () => {
@@ -381,6 +392,32 @@ describe("HttpTelegramClient (local server boundary)", () => {
 			const up = requests.find((r) => r.url.includes("getUpdates"))!;
 			expect(up.body).toEqual({ offset: 3, timeout: 5 });
 			expect(updates).toEqual([{ update_id: 9, message: { chat: { id: 42, type: "private" }, text: "hi" } }]);
+		} finally {
+			if (server) server.close();
+		}
+	});
+
+	it("POSTs sendChatAction with the chat id and action", async () => {
+		const requests: Array<{ url: string; body: unknown }> = [];
+		let server: Server | undefined;
+		const port = await new Promise<number>((resolve, reject) => {
+			server = createServer((req, res) => {
+				let raw = "";
+				req.on("data", (c) => (raw += c));
+				req.on("end", () => {
+					requests.push({ url: req.url ?? "", body: JSON.parse(raw || "{}") });
+					res.writeHead(200, { "content-type": "application/json" });
+					res.end(JSON.stringify({ ok: true, result: true }));
+				});
+			});
+			server.on("error", reject);
+			server.listen(0, "127.0.0.1", () => resolve((server!.address() as { port: number }).port));
+		});
+		try {
+			const client = new HttpTelegramClient({ token: "TESTTOKEN", baseUrl: `http://127.0.0.1:${port}` });
+			await client.sendChatAction({ chatId: "42", action: "typing" });
+			expect(requests[0]?.url).toBe("/botTESTTOKEN/sendChatAction");
+			expect(requests[0]?.body).toEqual({ chat_id: "42", action: "typing" });
 		} finally {
 			if (server) server.close();
 		}

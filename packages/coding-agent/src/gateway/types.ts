@@ -31,6 +31,17 @@ export interface GatewayTransport {
 	disconnect(): Promise<void>;
 	send(to: GatewayRecipient, text: string): Promise<void>;
 	onMessage(handler: (msg: GatewayMessage) => void): void;
+	/**
+	 * Optional streaming support (ADR-0004/#6): place a bubble and edit it in
+	 * place as text arrives. Absent => batch-only delivery.
+	 */
+	sendMessage?(to: GatewayRecipient, text: string): Promise<number>;
+	editMessage?(chatId: string, messageId: number, text: string): Promise<void>;
+	/**
+	 * Optional typing indicator (Telegram chatAction). The gateway pings it
+	 * while a run is "thinking" and stops once text flows. Absent => skipped.
+	 */
+	sendChatAction?(to: GatewayRecipient, action: string): Promise<void>;
 }
 
 /** The profile a gateway run boots under (SOUL.md rides the prompt). */

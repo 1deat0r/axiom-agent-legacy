@@ -18,6 +18,7 @@ import { GatewayCron } from "../gateway/cron.js";
 import { FileDeliveryLedger } from "../gateway/delivery-ledger.js";
 import { Gateway } from "../gateway/gateway.js";
 import { FileRestartNoticeStore, restartNoticePath } from "../gateway/restart-notice.js";
+import { FileStreamJournal, recoverInterruptedStreams, streamJournalPath } from "../gateway/stream-journal.js";
 import { DiscordTransport, FileDiscordCursorStore, HttpDiscordClient } from "../gateway/transports/discord.js";
 import { CliSignalClient, SignalTransport } from "../gateway/transports/signal.js";
 import { FileSlackCursorStore, HttpSlackClient, SlackTransport } from "../gateway/transports/slack.js";
@@ -180,6 +181,11 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 	}
 	const completion = new CliCompletionRunner({ projectRoot });
 	const transport = buildTransport(opts, root);
+	// Boot recovery (streaming v2): edit any bubble a previous process left
+	// mid-stream into an interruption notice, so a restart never strands a
+	// silent "…". No-op on transports without in-place edits.
+	const streamJournal = new FileStreamJournal(streamJournalPath(root));
+	await recoverInterruptedStreams(transport, streamJournal);
 	const config = loadGatewayConfig(root);
 	// One shared ledger records every outbound delivery — interactive replies,
 	// /announce fan-out, and scheduled cron-run deliveries alike (ADR-0022).
@@ -210,6 +216,7 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 		senders: config.senders,
 		cron,
 		ledger,
+		streamJournal,
 		transportName: opts.transport,
 		modelStore: new FileActiveModelStore(activeModelPath(root, profile)),
 		restartNoticeStore: new FileRestartNoticeStore(restartNoticePath(root)),

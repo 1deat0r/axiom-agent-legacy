@@ -29,6 +29,8 @@ import type { DeliveryLedger } from "./delivery-ledger.js";
 import type { RestartNoticeStore } from "./restart-notice.js";
 import type { UpdateConfig, UpdateShell } from "./self-update.js";
 import { applyUpdate, CliUpdateShell, checkUpdate } from "./self-update.js";
+import { STREAM_EDIT_MIN_INTERVAL_MS, StreamEditor } from "./stream-editor.js";
+import type { StreamJournal } from "./stream-journal.js";
 import type {
 	CompletionRunner,
 	GatewayCommandContext,
@@ -40,6 +42,9 @@ import type {
 } from "./types.js";
 
 const UNRECOGNIZED = "unrecognized sender — this gateway is private to allowed senders.";
+
+/** Chat-action refresh cadence (Telegram drops actions older than ~5s). */
+const TYPING_REFRESH_MS = 4_000;
 
 export interface GatewayDeps {
 	transport: GatewayTransport;
@@ -71,6 +76,8 @@ export interface GatewayDeps {
 	cron?: GatewayCronCommandApi & { start(): void; stop(): void };
 	/** Delivery ledger (ADR-0022); deliveries are recorded when present. */
 	ledger?: DeliveryLedger;
+	/** In-flight stream journal (streaming v2): records placeholder bubbles so a restart can recover them. */
+	streamJournal?: StreamJournal;
 	/** The active transport's name, recorded on each ledger entry. */
 	transportName?: string;
 	/**
@@ -93,6 +100,7 @@ export class Gateway {
 	private readonly senders: Set<string>;
 	private readonly projectHome: string;
 	private readonly ledger: DeliveryLedger | undefined;
+	private readonly streamJournal: StreamJournal | undefined;
 	private readonly transportName: string;
 	private readonly transports: Record<string, GatewayTransport>;
 	private readonly sessionsDir?: string;
@@ -118,6 +126,7 @@ export class Gateway {
 			deps.projectHome ??
 			(deps.profile === "default" ? deps.axiomHomeDir : join(deps.axiomHomeDir, "profiles", deps.profile));
 		this.ledger = deps.ledger;
+		this.streamJournal = deps.streamJournal;
 		this.transportName = deps.transportName ?? "transport";
 		this.transports = deps.transports ?? {};
 		this.sessionsDir = deps.sessionsDir;
@@ -293,51 +302,86 @@ export class Gateway {
 			model: this.modelStore?.load(),
 			...(anchoredRoot ? { projectRoot: anchoredRoot } : {}),
 		};
-		// Streaming (ADR-0004/#6): when both the transport and the runner support
-		// it, send a placeholder bubble and edit it per text delta — the operator
-		// sees the answer arrive live. Any edit/send failure falls back to the
-		// batch guarantee below (single final message).
-		const streamer = this.transport as GatewayTransport & {
-			sendMessage?(to: GatewayRecipient, text: string): Promise<number>;
-			editMessage?(chatId: string, messageId: number, text: string): Promise<void>;
-		};
+		// Streaming (ADR-0004/#6, streaming v2): when both the transport and the
+		// runner support it, place a placeholder bubble and edit it in place as
+		// text arrives. Edits go through a StreamEditor — coalesced, strictly
+		// serialized, spacing-throttled — so the Bot API is never flooded and an
+		// older edit can never clobber newer text. The bubble is journaled while
+		// in flight so a restart can replace a stranded "…" on boot. Any
+		// placeholder-send failure falls back to the batch guarantee below.
+		const streamer = this.transport;
 		if (streamer.sendMessage && streamer.editMessage && this.completion.streamCompletion) {
 			try {
-				const messageId = await streamer.sendMessage(recipient, "…");
-				let lastText = "";
-				const streamed = await this.completion.streamCompletion(input, (delta) => {
-					lastText += delta;
-					void streamer.editMessage!(msg.channelId, messageId, lastText).catch(() => {
-						/* per-delta edits are best-effort; the final edit / fallback below recovers */
+				const stopTyping = this.startTyping(recipient);
+				let messageId: number | undefined;
+				try {
+					messageId = await streamer.sendMessage(recipient, "…");
+					const editor = new StreamEditor({
+						edit: (text) => streamer.editMessage!(msg.channelId, messageId!, text),
+						minIntervalMs: STREAM_EDIT_MIN_INTERVAL_MS,
 					});
-				});
-				const finalText =
-					streamed.error !== undefined
-						? `could not run the agent: ${streamed.error}`
-						: streamed.reply.length > 0
-							? streamed.reply
-							: "(no reply)";
-				// The streamed bubble already shows `lastText`. Only edit again when
-				// the final text differs; editing to unchanged text makes Telegram
-				// reject with "message is not modified", which would otherwise
-				// trip the batch fallback and send the answer twice.
-				if (lastText.trimEnd() !== finalText) {
-					try {
-						await streamer.editMessage(msg.channelId, messageId, finalText);
-					} catch {
+					this.streamJournal?.add({ channelId: msg.channelId, messageId, startedAt: Date.now() });
+					let lastText = "";
+					const streamed = await this.completion.streamCompletion(input, (delta) => {
+						if (lastText === "") stopTyping(); // text is flowing; stop pinging
+						lastText += delta;
+						editor.setTarget(lastText);
+					});
+					const finalText =
+						streamed.error !== undefined
+							? `could not run the agent: ${streamed.error}`
+							: streamed.reply.length > 0
+								? streamed.reply
+								: "(no reply)";
+					// The editor applies the final text itself (and skips the edit
+					// when the bubble already shows it, so Telegram never rejects a
+					// no-op "message is not modified"). A failed final edit falls
+					// back to one fresh message so the answer always lands.
+					editor.setTarget(finalText);
+					if (!(await editor.finish())) {
 						await this.deliver(recipient, finalText);
 					}
+				} finally {
+					stopTyping();
+					if (messageId !== undefined) this.streamJournal?.remove(msg.channelId, messageId);
 				}
 				return;
 			} catch {
 				/* fall through to batch — the placeholder send itself failed */
 			}
 		}
-		const result = await this.completion.runCompletion(input);
-		if (result.error) {
-			await this.deliver(recipient, `could not run the agent: ${result.error}`);
-			return;
+		const stopTyping = this.startTyping(recipient);
+		try {
+			const result = await this.completion.runCompletion(input);
+			if (result.error) {
+				await this.deliver(recipient, `could not run the agent: ${result.error}`);
+				return;
+			}
+			await this.deliver(recipient, result.reply.length > 0 ? result.reply : "(no reply)");
+		} finally {
+			stopTyping();
 		}
-		await this.deliver(recipient, result.reply.length > 0 ? result.reply : "(no reply)");
+	}
+
+	/**
+	 * Ping a chat action ("typing") while a run is thinking, refreshed every
+	 * TYPING_REFRESH_MS until stopped (first delta / run end). No-op when the
+	 * transport has no sendChatAction capability.
+	 */
+	private startTyping(to: GatewayRecipient): () => void {
+		const sendChatAction = this.transport.sendChatAction?.bind(this.transport);
+		if (!sendChatAction) return () => {};
+		let stopped = false;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const ping = () => {
+			if (stopped) return;
+			void sendChatAction(to, "typing").catch(() => undefined);
+			timer = setTimeout(ping, TYPING_REFRESH_MS);
+		};
+		timer = setTimeout(ping, 0);
+		return () => {
+			stopped = true;
+			if (timer !== undefined) clearTimeout(timer);
+		};
 	}
 }
