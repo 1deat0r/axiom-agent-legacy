@@ -390,11 +390,24 @@ export class Gateway {
 				try {
 					const stopTyping = this.startTyping(recipient);
 					let messageId: number | undefined;
+					const openedMessageIds: number[] = [];
 					try {
 						messageId = await streamer.sendMessage(recipient, "…");
+						openedMessageIds.push(messageId);
 						const editor = new StreamEditor({
 							edit: (text) => streamer.editMessage!(msg.channelId, messageId!, text),
 							minIntervalMs: STREAM_EDIT_MIN_INTERVAL_MS,
+							// Long replies roll over: when the bubble hits the
+							// transport's text cap, Telegram rejects every further
+							// edit — so the editor seals the bubble at the cap and a
+							// fresh message continues with the overflow.
+							maxTextLength: streamer.textLimit,
+							rollover: async (overflow) => {
+								const nextId = await streamer.sendMessage!(recipient, overflow);
+								openedMessageIds.push(nextId);
+								this.streamJournal?.add({ channelId: msg.channelId, messageId: nextId, startedAt: Date.now() });
+								messageId = nextId;
+							},
 						});
 						this.streamJournal?.add({ channelId: msg.channelId, messageId, startedAt: Date.now() });
 						// A reset note rides the bubble from the first edit so the
@@ -420,8 +433,9 @@ export class Gateway {
 						editor.setTarget(finalText);
 						if (!(await editor.finish())) {
 							// The final in-place edit failed: one fresh send (ledgered
-							// by deliver) so the answer always lands.
-							await this.deliver(recipient, finalText);
+							// by deliver) so the answer always lands. Only the
+							// unlanded tail is sent — earlier bubbles already landed.
+							await this.deliver(recipient, editor.remainingText());
 						} else {
 							// The streamed bubble IS the delivery: record it like any
 							// outbound delivery so /ledger stays complete (ADR-0022)
@@ -437,7 +451,7 @@ export class Gateway {
 						}
 					} finally {
 						stopTyping();
-						if (messageId !== undefined) this.streamJournal?.remove(msg.channelId, messageId);
+						for (const id of openedMessageIds) this.streamJournal?.remove(msg.channelId, id);
 					}
 					return;
 				} catch {

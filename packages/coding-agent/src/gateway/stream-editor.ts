@@ -11,6 +11,15 @@
  * - finish() drains everything and applies one final edit when the last shown
  *   text differs from the target, then reports whether the bubble shows the
  *   final text (false => the caller falls back to a fresh send).
+ *
+ * Long replies roll over: when a target exceeds `maxTextLength`, the current
+ * bubble is sealed at the cap and a new bubble opens with the overflow (the
+ * platform rejects in-place edits beyond the message-size cap, e.g. Telegram's
+ * 4096 chars — one oversized edit breaks every later edit). The `rollover`
+ * callback must deliver the overflow to a fresh message and becomes the new
+ * edit target; the overflow is considered delivered once it resolves, so no
+ * redundant identical edit follows (the platform would reject it as "message
+ * is not modified").
  */
 
 /** Minimum spacing between successive edits (Telegram flood safety). */
@@ -29,6 +38,19 @@ export interface StreamEditorOptions {
 	retries?: number;
 	/** Observability sink for swallowed edit failures; defaults to console.error. */
 	logger?: (line: string) => void;
+	/**
+	 * Max characters a single bubble may hold before it rolls over into a new
+	 * message. Defaults to Infinity (no rollover). When set, `rollover` must
+	 * also be provided — without it the cap is ignored.
+	 */
+	maxTextLength?: number;
+	/**
+	 * Called when the current bubble is full: `overflow` (never longer than
+	 * `maxTextLength`) must be delivered as a fresh message, which then
+	 * becomes the bubble the editor edits. Must resolve once delivered; a
+	 * rejection aborts the rollover (the editor keeps the previous bubble).
+	 */
+	rollover?: (overflow: string) => Promise<void>;
 }
 
 /**
@@ -59,12 +81,21 @@ export class StreamEditor {
 	private readonly minIntervalMs: number;
 	private readonly retries: number;
 	private readonly logger: (line: string) => void;
+	private readonly maxTextLength: number;
+	private readonly rollover: ((overflow: string) => Promise<void>) | undefined;
+	/** Chars sealed into earlier bubbles; the current bubble shows target.slice(base). */
+	private base = 0;
 
 	constructor(options: StreamEditorOptions) {
 		this.edit = options.edit;
 		this.minIntervalMs = options.minIntervalMs ?? STREAM_EDIT_MIN_INTERVAL_MS;
 		this.retries = options.retries ?? STREAM_EDIT_RETRIES;
 		this.logger = options.logger ?? ((line) => console.error(line));
+		this.maxTextLength =
+			options.maxTextLength !== undefined && options.rollover !== undefined
+				? options.maxTextLength
+				: Number.POSITIVE_INFINITY;
+		this.rollover = options.rollover;
 	}
 
 	/** Replace the desired bubble text (full text, not a delta). */
@@ -73,6 +104,15 @@ export class StreamEditor {
 		if (text === this.target) return;
 		this.target = text;
 		this.schedule();
+	}
+
+	/**
+	 * The text the current (open) bubble should show — everything sealed into
+	 * earlier bubbles is excluded. A caller that falls back to a fresh send
+	 * after a failed finish sends only this tail, never the whole reply.
+	 */
+	remainingText(): string {
+		return this.target.slice(this.base);
 	}
 
 	/**
@@ -97,22 +137,20 @@ export class StreamEditor {
 
 	private async pump(): Promise<void> {
 		if (this.editing) return;
-		if (this.target === this.applied) {
+		if (this.currentText() === this.applied) {
 			this.signalSettled();
 			return;
 		}
 		this.editing = true;
-		const text = this.target;
 		try {
-			await this.editWithRetry(text);
-			this.applied = text;
+			await this.pumpOnce();
 		} catch (error) {
 			this.logger(`stream edit failed: ${error instanceof Error ? error.message : String(error)}`);
 		} finally {
 			this.editing = false;
 			this.lastEditDoneAt = Date.now();
 		}
-		if (this.target !== this.applied) {
+		if (this.currentText() !== this.applied) {
 			if (this.done) {
 				// Final drain: no spacing throttle — finish() must not stall.
 				void this.pump();
@@ -121,6 +159,36 @@ export class StreamEditor {
 			}
 		}
 		this.signalSettled();
+	}
+
+	/** The text the current bubble should show (sealed bubbles excluded). */
+	private currentText(): string {
+		return this.target.slice(this.base);
+	}
+
+	/**
+	 * One serialized edit pass: seal full bubbles and roll them over (at most
+	 * one cap of text per rollover call), then apply the current bubble's text.
+	 */
+	private async pumpOnce(): Promise<void> {
+		while (this.rollover !== undefined && this.target.length > this.base + this.maxTextLength) {
+			const sealed = this.target.slice(this.base, this.base + this.maxTextLength);
+			if (sealed !== this.applied) {
+				await this.editWithRetry(sealed);
+				this.applied = sealed;
+			}
+			const overflow = this.target.slice(this.base + this.maxTextLength, this.base + 2 * this.maxTextLength);
+			await this.rollover(overflow);
+			this.base += this.maxTextLength;
+			// The rollover delivered the overflow to the new bubble: mark it
+			// applied so no redundant identical edit follows (the platform
+			// would reject "message is not modified").
+			this.applied = overflow;
+		}
+		const desired = this.currentText();
+		if (desired === this.applied) return;
+		await this.editWithRetry(desired);
+		this.applied = desired;
 	}
 
 	private async finishImpl(): Promise<boolean> {
@@ -136,10 +204,12 @@ export class StreamEditor {
 	}
 
 	private async applyFinal(): Promise<boolean> {
-		if (this.target === this.applied) return true;
 		try {
-			await this.editWithRetry(this.target);
-			this.applied = this.target;
+			await this.flushRollovers();
+			const desired = this.currentText();
+			if (desired === this.applied) return true;
+			await this.editWithRetry(desired);
+			this.applied = desired;
 			return true;
 		} catch (error) {
 			this.logger(`final stream edit failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -147,13 +217,28 @@ export class StreamEditor {
 		}
 	}
 
+	/** Seal and roll over every full bubble, ending with the current bubble's text applied. */
+	private async flushRollovers(): Promise<void> {
+		while (this.rollover !== undefined && this.target.length > this.base + this.maxTextLength) {
+			const sealed = this.target.slice(this.base, this.base + this.maxTextLength);
+			if (sealed !== this.applied) {
+				await this.editWithRetry(sealed);
+				this.applied = sealed;
+			}
+			const overflow = this.target.slice(this.base + this.maxTextLength, this.base + 2 * this.maxTextLength);
+			await this.rollover(overflow);
+			this.base += this.maxTextLength;
+			this.applied = overflow;
+		}
+	}
+
 	private settled(): Promise<void> {
-		if (!this.editing && this.target === this.applied) return Promise.resolve();
+		if (!this.editing && this.currentText() === this.applied) return Promise.resolve();
 		return new Promise<void>((resolve) => this.waiters.push(resolve));
 	}
 
 	private signalSettled(): void {
-		if (this.editing || this.target !== this.applied) return;
+		if (this.editing || this.currentText() !== this.applied) return;
 		const waiters = this.waiters;
 		this.waiters = [];
 		for (const resolve of waiters) resolve();
