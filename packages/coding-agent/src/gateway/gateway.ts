@@ -209,6 +209,20 @@ export class Gateway {
 		});
 	}
 
+	/**
+	 * Run an outbound burst with the receive long-poll paused (ADR-0039):
+	 * Telegram queues outbound calls behind an open long-poll, so every
+	 * delivery must pause first and resume after — even when the burst throws.
+	 */
+	private async withPollingPaused<T>(fn: () => Promise<T>): Promise<T> {
+		this.transport.pausePolling?.();
+		try {
+			return await fn();
+		} finally {
+			this.transport.resumePolling?.();
+		}
+	}
+
 	/** Reply/denial on the active transport, recorded in the ledger. */
 	private deliver(to: GatewayRecipient, text: string): Promise<void> {
 		return this.deliverVia(this.transport, this.transportName, to, text);
@@ -241,8 +255,7 @@ export class Gateway {
 	async deliverToAll(text: string): Promise<{ channels: number }> {
 		const config = loadGatewayConfig(this.axiomHomeDir);
 		const targets = config.deliverTo ?? [];
-		this.transport.pausePolling?.();
-		try {
+		await this.withPollingPaused(async () => {
 			for (const target of targets) {
 				// Resolve the actual transport first: a named target we do not hold
 				// degrades to the active transport, and the ledger labels what really
@@ -252,9 +265,7 @@ export class Gateway {
 				const name = named !== undefined ? target.transport! : this.transportName;
 				await this.deliverVia(transport, name, { channelId: target.channel, recipient: "" }, text);
 			}
-		} finally {
-			this.transport.resumePolling?.();
-		}
+		});
 		return { channels: targets.length };
 	}
 
@@ -262,12 +273,9 @@ export class Gateway {
 		const config = loadGatewayConfig(this.axiomHomeDir);
 		const allowed = this.senders.size > 0 ? this.senders.has(msg.sender) : isAllowedSender(config, msg.sender);
 		if (!allowed) {
-			this.transport.pausePolling?.();
-			try {
-				await this.deliver({ channelId: msg.channelId, recipient: msg.sender }, UNRECOGNIZED);
-			} finally {
-				this.transport.resumePolling?.();
-			}
+			await this.withPollingPaused(() =>
+				this.deliver({ channelId: msg.channelId, recipient: msg.sender }, UNRECOGNIZED),
+			);
 			return;
 		}
 		if (msg.isCommand) {
@@ -292,13 +300,10 @@ export class Gateway {
 				resetSession: () => this.resetChannelSession(msg.channelId),
 			};
 			const reply = dispatchCommand(msg.text, ctx);
-			this.transport.pausePolling?.();
-			try {
+			await this.withPollingPaused(async () => {
 				await this.deliver({ channelId: msg.channelId, recipient: msg.sender }, reply);
 				if (ctx.afterReply) await ctx.afterReply();
-			} finally {
-				this.transport.resumePolling?.();
-			}
+			});
 			if (ctx.restartRequested) this.restart?.();
 			return;
 		}
@@ -356,9 +361,9 @@ export class Gateway {
 		};
 		// Replies go out while the receive loop must hold (ADR-0039): Telegram
 		// queues outbound calls behind an open long-poll, so an edit would hang
-		// for the whole poll window. Pause before any delivery, resume after.
-		this.transport.pausePolling?.();
-		try {
+		// for the whole poll window. Pause before any delivery, resume after
+		// (withPollingPaused resumes even when a run throws).
+		await this.withPollingPaused(async () => {
 			// Streaming (ADR-0004/#6, streaming v2): when both the transport and the
 			// runner support it, place a placeholder bubble and edit it in place as
 			// text arrives. Edits go through a StreamEditor — coalesced, strictly
@@ -435,15 +440,13 @@ export class Gateway {
 				const prefix = sessionWasReset
 					? `${SESSION_RESET_NOTICE}
 
-`
+	`
 					: "";
 				await this.deliver(recipient, `${prefix}${result.reply.length > 0 ? result.reply : "(no reply)"}`);
 			} finally {
 				stopTyping();
 			}
-		} finally {
-			this.transport.resumePolling?.();
-		}
+		});
 	}
 
 	/**

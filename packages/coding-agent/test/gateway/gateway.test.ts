@@ -864,6 +864,39 @@ describe("Gateway streaming replies", () => {
 		}
 	});
 
+	it("resumes the poll loop even when a completion throws", async () => {
+		const dir = await home("axiom-gw-stream-");
+		try {
+			const s = streamingTransport();
+			const events: string[] = [];
+			s.t.pausePolling = () => events.push("pause");
+			s.t.resumePolling = () => events.push("resume");
+			const completion: CompletionRunner = {
+				async runCompletion() {
+					throw new Error("run failed");
+				},
+				async streamCompletion() {
+					throw new Error("run failed");
+				},
+			};
+			const g = new Gateway({
+				transport: s.t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+			});
+			await g.start();
+			s.push({ channelId: "+1", sender: "+1", text: "hello", isCommand: false, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 30));
+			expect(events).toEqual(["pause", "resume"]);
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
 	it("records a streamed reply in the delivery ledger exactly once", async () => {
 		const dir = await home("axiom-gw-stream-");
 		try {
