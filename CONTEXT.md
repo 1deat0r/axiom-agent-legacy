@@ -190,6 +190,17 @@ sensitive-tool fence (a configurable approved-tool ladder, opt-in, escaped via
 the ADR-0019 OS-sandbox tier, never string-fenced.
 _Avoid_: Firewall (a wall, not a fence — the fence is one rung of the ladder)
 
+**Git guard**:
+The ADR-0048 rung-3 addition, on the same `tool_call` seam and inert unless
+anchored: `checkGitCommand` scans the freeform shell tools (`bash` command,
+`ipython` code) against a port of the git-guardrails skill blocklist (push in
+all forms, reset --hard, clean -f variants, branch -D, checkout/restore ".")
+and blocks with a reason that names the pattern and the escape. Best-effort by
+design (not confinement — that stays ADR-0019); escaped via
+`AXIOM_GIT_GUARD_ALLOW` (exact commands) or the operator's own terminal;
+`user_bash` stays unguarded (the operator has authority).
+_Avoid_: Sandbox, confinement (a guard, not a wall — the OS tier stays the wall)
+
 **Self-update**:
 The gateway-local `/update` command (ADR-0034): fetch + report, or `/update
 now` to fast-forward the configured worktree (`AXIOM_UPDATE_REPO` /
