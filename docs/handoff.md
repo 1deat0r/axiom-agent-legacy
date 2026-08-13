@@ -29,9 +29,12 @@ audit trail. Recall stays the read path; /refine stays manual; this closes the
 - **Unit — 52 new tests green** (29 core, 7 extension, 13 CLI, 3 refinement
   provenance/extract additions). Red-first on the refinement changes; a
   mutation check confirmed the dedup tests catch real regressions.
-- **Full `./test.sh` — 4853 passed, 14 failed**, and the 14 are exactly the
-  documented sandbox known-fails (daemon-serialized-refine ×1, 4603 ×4,
-  4685 ×9 EXDEV hard-link) — no regressions vs the pristine baseline.
+- **Full `./test.sh`** — 4852 passed; failures are only documented
+  sandbox/known-flake suites: daemon-serialized-refine ×1, 4603 ×4, 4685 ×9
+  EXDEV hard-links, plus daemon-supervisor-process ×1 and
+  kernel-agent-message-skill ×1 (both real-process/kernel flakes that pass
+  standalone: 8 passed/8 skipped and 7/7). No regressions vs the pristine
+  baseline.
 - **biome clean; tsgo --noEmit clean.**
 - **Live end-to-end CLI smoke** against a scratch `AXIOM_HOME` +
   `AXIOM_CODING_AGENT_DIR` with the real dist bundle: stage → show → approve
@@ -48,6 +51,14 @@ audit trail. Recall stays the read path; /refine stays manual; this closes the
   audit line) — documented in the ADR and feature-log.
 - Child sessions inherit the env flags and consolidate into the same global
   store — bounded by gate + dedup, documented.
+
+## Post-first-commit polish (b07459587)
+
+- Dropped the unused `ResolveAction` param from `resolvePendingProposal`
+  (the caller's audit line carries the action).
+- `approve` now reports applied entries honestly even when the pending file
+  vanished mid-run.
+- Added a `--json` audit output test.
 
 ## Merge/cleanup notes
 
