@@ -229,14 +229,39 @@ export class Gateway {
 	}
 
 	/**
+	 * Resolve the channel's usable active project — the one guard shared by the
+	 * agent-run path and /new. A stored name that fails the grammar (hand-edited
+	 * store file) or a project deleted out-of-band is a stale entry: clear the
+	 * mapping and drop its composite index entry so the /projects menu never
+	 * lies, the channel runs unanchored, and /new never archives a dead session
+	 * key. Returns the resolved project (name, root, generation) or undefined
+	 * when the channel runs unanchored.
+	 */
+	private resolveUsableProject(channelId: string): { project: string; root: string; generation: number } | undefined {
+		const active = this.activeProjects.get(channelId);
+		if (!active) return undefined;
+		const scoped = resolveProjectRoot(this.projectHome, active);
+		const usable = isValidProjectName(active) && existsSync(scoped);
+		if (!usable) {
+			this.index.remove(`${channelId}:${active}:${this.activeProjects.generation(active)}`);
+			this.activeProjects.clear(channelId);
+			return undefined;
+		}
+		return { project: active, root: scoped, generation: this.activeProjects.generation(active) };
+	}
+
+	/**
 	 * /new: archive the channel's current session file so the next agent run
 	 * starts fresh. The archive keeps its *.jsonl name, so /search still
 	 * indexes it. Returns a short human-readable report for the command reply.
 	 */
 	private resetChannelSession(channelId: string): string {
 		if (!this.sessionsDir) return "sessions directory is not configured";
-		const active = this.activeProjects.get(channelId);
-		const sessionKey = active ? `${channelId}:${active}:${this.activeProjects.generation(active)}` : channelId;
+		// Resolve the same usable project the run path would: a stale mapping
+		// (deleted project, hand-edited name) is cleared here, so /new archives
+		// the session the next run will actually resume — never a dead key.
+		const resolved = this.resolveUsableProject(channelId);
+		const sessionKey = resolved ? `${channelId}:${resolved.project}:${resolved.generation}` : channelId;
 		const path = sessionFilePath(this.sessionsDir, sessionKey);
 		if (!existsSync(path)) return "no session to reset — this channel is already fresh";
 		try {
@@ -312,23 +337,12 @@ export class Gateway {
 		// when anchored — a re-created project gets a fresh generation so it
 		// never resumes a deleted project's conversation), and run the
 		// completion anchored to the project root (per-call override).
-		const active = this.activeProjects.get(msg.channelId);
+		const resolved = this.resolveUsableProject(msg.channelId);
 		let anchoredRoot: string | undefined;
 		let sessionKey = msg.channelId;
-		if (active) {
-			const scoped = resolveProjectRoot(this.projectHome, active);
-			// A stored name that fails the grammar (hand-edited store file) or a
-			// project deleted out-of-band is a stale entry: clear it and drop its
-			// composite mapping so the /projects menu never lies, the channel runs
-			// unanchored, and a re-created project never resumes the dead session.
-			const usable = isValidProjectName(active) && existsSync(scoped);
-			if (!usable) {
-				this.index.remove(`${msg.channelId}:${active}:${this.activeProjects.generation(active)}`);
-				this.activeProjects.clear(msg.channelId);
-			} else {
-				anchoredRoot = scoped;
-				sessionKey = `${msg.channelId}:${active}:${this.activeProjects.generation(active)}`;
-			}
+		if (resolved) {
+			anchoredRoot = resolved.root;
+			sessionKey = `${msg.channelId}:${resolved.project}:${resolved.generation}`;
 		}
 		let sessionId = this.index.get(sessionKey);
 		if (sessionId === null) {
