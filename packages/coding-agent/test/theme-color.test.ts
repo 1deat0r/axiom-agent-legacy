@@ -29,6 +29,45 @@ describe("roleHex", () => {
 	});
 });
 
+describe("markdown theme backgrounded", () => {
+	beforeEach(() => {
+		useThemeMode("truecolor");
+	});
+
+	afterEach(() => {
+		useThemeMode("truecolor");
+	});
+
+	it("colors a role descriptor with a truecolor background escape", () => {
+		const backgrounded = getMarkdownTheme().backgrounded;
+		expect(backgrounded).toBeDefined();
+		expect(backgrounded?.("warn me", { channel: "bg", kind: "role", value: "warn" })).toBe(
+			"\x1b[48;2;255;184;108mwarn me\x1b[49m",
+		);
+	});
+
+	it("colors a hex descriptor with the exact RGB values", () => {
+		const backgrounded = getMarkdownTheme().backgrounded;
+		expect(backgrounded?.("hex", { channel: "bg", kind: "hex", value: "00FF00" })).toBe(
+			"\x1b[48;2;0;255;0mhex\x1b[49m",
+		);
+	});
+
+	it("leaves text unchanged for unknown roles", () => {
+		const backgrounded = getMarkdownTheme().backgrounded;
+		expect(backgrounded?.("plain", { channel: "bg", kind: "role", value: "missing" })).toBe("plain");
+	});
+
+	it("renders 256color escapes when the theme is in 256color mode", () => {
+		useThemeMode("256color");
+		const index = rgbTo256({ r: 255, g: 184, b: 108 });
+		const backgrounded = getMarkdownTheme().backgrounded;
+		expect(backgrounded?.("warn me", { channel: "bg", kind: "role", value: "warn" })).toBe(
+			`\x1b[48;5;${index}mwarn me\x1b[49m`,
+		);
+	});
+});
+
 describe("markdown theme colored", () => {
 	beforeEach(() => {
 		useThemeMode("truecolor");

@@ -1338,6 +1338,11 @@ export function getMarkdownTheme(): MarkdownTheme {
 			if (!hex) return text;
 			return `${fgAnsi(hex, theme.colorMode)}${text}\x1b[39m`;
 		},
+		backgrounded: (text: string, color: ColorDescriptor): string => {
+			const hex = resolveDescriptorHex(color);
+			if (!hex) return text;
+			return `${bgAnsi(hex, theme.colorMode)}${text}\x1b[49m`;
+		},
 		strikethrough: (text: string) => chalk.strikethrough(text),
 		math: (text: string) => theme.fg("mdCode", text),
 		mathBlock: (text: string) => theme.fg("mdCodeBlock", text),
