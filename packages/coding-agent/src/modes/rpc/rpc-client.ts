@@ -5,6 +5,8 @@
  */
 
 import { type ChildProcess, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { AgentEvent, AgentMessage, ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { ImageContent } from "@earendil-works/pi-ai";
 import type { AgentSessionMessageReceipt, AgentSessionMessageSafetyStatus } from "../../core/agent-messages.js";
@@ -35,6 +37,33 @@ import type {
 /** Extended response timeout for refine requests, which run an LLM pass. */
 export const REFINE_REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
 
+/**
+ * Candidate CLI entry points checked in order when no explicit cliPath is
+ * given. The legacy layout keeps a dist/ at the working-tree root; the
+ * monorepo layout keeps it under packages/coding-agent/dist.
+ */
+const DEFAULT_CLI_PATH_CANDIDATES: Array<(cwd: string) => string> = [
+	(cwd) => join(cwd, "dist", "cli.js"),
+	(cwd) => join(cwd, "packages", "coding-agent", "dist", "cli.js"),
+];
+
+/**
+ * Resolve the default CLI entry point for a working directory.
+ *
+ * Returns the first candidate that exists on disk, falling back to the
+ * legacy repo-root path (so callers keep a stable, debuggable default even
+ * when the tree is unbuilt).
+ */
+export function resolveDefaultCliPath(cwd: string): string {
+	for (const candidate of DEFAULT_CLI_PATH_CANDIDATES) {
+		const cliPath = candidate(cwd);
+		if (existsSync(cliPath)) {
+			return cliPath;
+		}
+	}
+	return join(cwd, "dist", "cli.js");
+}
+
 /** Distributive Omit that works with union types */
 type DistributiveOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never;
 
@@ -42,7 +71,7 @@ type DistributiveOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : n
 type RpcCommandBody = DistributiveOmit<RpcCommand, "id">;
 
 export interface RpcClientOptions {
-	/** Path to the CLI entry point (default: searches for dist/cli.js) */
+	/** Path to the CLI entry point (default: resolveDefaultCliPath) */
 	cliPath?: string;
 	/** Working directory for the agent */
 	cwd?: string;
@@ -90,7 +119,7 @@ export class RpcClient {
 			throw new Error("Client already started");
 		}
 
-		const cliPath = this.options.cliPath ?? "dist/cli.js";
+		const cliPath = this.options.cliPath ?? resolveDefaultCliPath(this.options.cwd ?? process.cwd());
 		const args = ["--mode", "rpc"];
 
 		if (this.options.provider) {
