@@ -2,7 +2,12 @@
  * System prompt construction and project context loading
  */
 
-import { buildChildAgentDoctrine, buildRlmPrompt, buildSubagentGuidance } from "./prompts/index.js";
+import {
+	buildChildAgentDoctrine,
+	buildParallelToolCallGuidance,
+	buildRlmPrompt,
+	buildSubagentGuidance,
+} from "./prompts/index.js";
 import { formatHarnessStateForPrompt, type HarnessState, REFINE_SKILL_NAME } from "./refinement/index.js";
 import { formatSkillsForPrompt, getPythonSkillRuntimeInfo, type Skill } from "./skills.js";
 
@@ -101,6 +106,10 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 		if (childDoctrine) {
 			prompt += `\n\n${childDoctrine}`;
 		}
+
+		// Custom prompts (gateway profiles, anchored sessions) bypass the
+		// default RLM prompt, so append the parallel tool-call guidance here.
+		prompt += `\n\n${buildParallelToolCallGuidance()}`;
 
 		if (harnessState) {
 			prompt += `\n\n${formatHarnessStateForPrompt(harnessState, { includeIpythonExamples: hasIpython, includeShellExamples: hasBash, includeRefineExamples: hasIpython && hasRefineSkill })}`;

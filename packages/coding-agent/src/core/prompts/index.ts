@@ -1,5 +1,6 @@
 export {
 	buildChildAgentDoctrine,
+	buildParallelToolCallGuidance,
 	buildRlmPrompt,
 	buildSubagentGuidance,
 	type ChildAgentDoctrineOptions,

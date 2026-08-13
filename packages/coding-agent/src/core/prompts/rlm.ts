@@ -33,6 +33,25 @@ const IPYTHON_CONTROL_PROMPT = [
 	"RLM-native call contract: installed Python skills are pre-imported modules. Read the matching SKILL.md and call its documented function, such as `await <skill_import>.<function>(...)`; when a CLI exists, use `<skill_import> ...` from shell. Continual harness skill entries are Python REPL skills with an explicit Python `reference` and `arguments` contract. Spawn a reusable delegation spec with `await rlm('sub-task')`; admission returns a child handle immediately. Results arrive only through an available messaging capability or files, never as an `rlm()` return value. Do not invent non-native wrappers such as `call_skill(...)` or `run_subagent(...)`.",
 ].join("\n");
 
+/**
+ * Parallel tool-call guidance for the model. Claims only what the runtime
+ * actually guarantees: independent calls from one assistant message run
+ * concurrently unless the batch contains a sequential-mode tool (ipython),
+ * which serializes the whole batch. See ADR-0042 and agent-loop.ts.
+ */
+export function buildParallelToolCallGuidance(): string {
+	const lines = [
+		"# Parallel tool calls",
+		"",
+		"Emit independent tool calls together in one response. The runtime executes them concurrently, so one batched response costs one round trip instead of one per call.",
+		"",
+		"`ipython` is the exception: a batch containing an ipython call runs fully sequential. Fold multiple shell commands into one `%%bash` cell instead of several ipython calls.",
+		"",
+		"Split calls across responses only when a later call depends on an earlier result.",
+	];
+	return lines.join("\n");
+}
+
 export interface ChildAgentDoctrineOptions {
 	depth?: number;
 	parentAgent?: string;
@@ -69,8 +88,10 @@ export function buildRlmPrompt(options: RlmPromptOptions): string {
 	const canRunShellSkills = hasIpython || activeTools.includes("bash");
 	const parts = [
 		"You are a general purpose agent that uses code to solve tasks.",
-		"You solve tasks by breaking down problems into sub-tasks, writing and executing code, observing results, and iterating one step at a time.",
+		"You solve tasks by breaking down problems into sub-tasks, writing and executing code, observing results, and iterating until the task is done.",
 		"When you are done, stop calling tools and state your final answer.",
+		"",
+		buildParallelToolCallGuidance(),
 		"",
 		`Working directory: ${cwd}`,
 		`Conversation log: ${messagesPath}`,

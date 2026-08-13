@@ -49,8 +49,16 @@ describe("buildRlmPrompt", () => {
 		expect(prompt).toBe(
 			[
 				"You are a general purpose agent that uses code to solve tasks.",
-				"You solve tasks by breaking down problems into sub-tasks, writing and executing code, observing results, and iterating one step at a time.",
+				"You solve tasks by breaking down problems into sub-tasks, writing and executing code, observing results, and iterating until the task is done.",
 				"When you are done, stop calling tools and state your final answer.",
+				"",
+				"# Parallel tool calls",
+				"",
+				"Emit independent tool calls together in one response. The runtime executes them concurrently, so one batched response costs one round trip instead of one per call.",
+				"",
+				"`ipython` is the exception: a batch containing an ipython call runs fully sequential. Fold multiple shell commands into one `%%bash` cell instead of several ipython calls.",
+				"",
+				"Split calls across responses only when a later call depends on an earlier result.",
 				"",
 				"Working directory: /repo",
 				"Conversation log: /repo/.pi/sessions/session.jsonl",
