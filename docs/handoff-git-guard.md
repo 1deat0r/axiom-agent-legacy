@@ -18,6 +18,9 @@
   and extraPatterns; wiring blocks anchored bash/ipython calls, is inert
   without a root, leaves other tools alone.
 - Extension suites: 17 files, 286 passed, 1 skipped, no regressions.
+- Full ./test.sh: 5044 passed, 15 failed. The 15 are the documented sandbox
+  known-fails (4603x4, 4685x9 EXDEV, daemon-serialized-refine x1) plus the
+  kernel-agent-message flake, which passes standalone (7/7).
 - biome check clean on all touched files. tsgo --noEmit exit 0.
 
 ## How (unit / mock / live)
