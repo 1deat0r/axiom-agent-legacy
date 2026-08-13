@@ -28,6 +28,10 @@ describe("completionCandidates", () => {
 		expect(await completionCandidates(["projects", ""])).toEqual(["add", "rm"]);
 	});
 
+	it("yields the peers subcommands", async () => {
+		expect(await completionCandidates(["peers", ""])).toEqual(["group", "inbox", "list", "msg"]);
+	});
+
 	it("yields the completion shells", async () => {
 		expect(await completionCandidates(["completion", ""])).toEqual(["bash", "zsh"]);
 	});

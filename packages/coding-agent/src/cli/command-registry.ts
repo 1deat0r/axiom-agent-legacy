@@ -188,6 +188,32 @@ export const COMMAND_SPECS: readonly CommandSpec[] = [
 		summary: "Remove a project from the active profile",
 	},
 	{
+		path: ["peers"],
+		usage: "peers <list|inbox|msg|group>",
+		summary: "Coordinate with co-anchored peer agents (ADR-0038)",
+		description: "Peers are Axiom instances anchored on the same project, sharing presence and a message board.",
+	},
+	{
+		path: ["peers", "list"],
+		usage: "peers list",
+		summary: "List co-anchored peers and their presence",
+	},
+	{
+		path: ["peers", "inbox"],
+		usage: "peers inbox",
+		summary: "Peek at unread peer messages",
+	},
+	{
+		path: ["peers", "msg"],
+		usage: "peers msg <instance-id|*> <text>",
+		summary: "Send a message to one peer (or all via *)",
+	},
+	{
+		path: ["peers", "group"],
+		usage: "peers group <text>",
+		summary: "Broadcast a message to all peers",
+	},
+	{
 		path: ["completion"],
 		usage: "completion <bash|zsh>",
 		summary: "Print a shell completion script",
