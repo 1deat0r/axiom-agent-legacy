@@ -1,5 +1,5 @@
 import { Marked, type Token, Tokenizer, type TokenizerExtension, type Tokens } from "marked";
-import type { ColorDescriptor } from "../color-descriptor.js";
+import { type ColorDescriptor, parseColorDescriptor } from "../color-descriptor.js";
 import { latexToUnicode } from "../latex.js";
 import {
 	extractTableCellSelectionRegions,
@@ -642,6 +642,18 @@ export class Markdown implements Component {
 				}
 
 				case "link": {
+					const colorDescriptor = parseColorDescriptor(token.href);
+					if (colorDescriptor) {
+						const inner = this.renderInlineTokens(token.tokens || [], resolvedStyleContext);
+						if (colorDescriptor.channel === "fg") {
+							result += this.theme.colored ? this.theme.colored(inner, colorDescriptor) + stylePrefix : inner;
+						} else {
+							result += this.theme.backgrounded
+								? this.theme.backgrounded(inner, colorDescriptor) + stylePrefix
+								: inner;
+						}
+						break;
+					}
 					const linkText = this.renderInlineTokens(token.tokens || [], resolvedStyleContext);
 					const styledLink = this.theme.link(this.theme.underline(linkText));
 					if (getCapabilities().hyperlinks) {
