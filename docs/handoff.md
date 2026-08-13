@@ -1,30 +1,33 @@
-# Handoff — 2026-08-13 (parallel tool-calling: P1-P4 latency plan complete)
+# Handoff — 2026-08-13 (latency plan P1-P4 complete + profile editing + probe tooling)
 
 ## Done
-1. **P1 (ADR-0042)** — "# Parallel tool calls" prompt guidance in
-   `buildRlmPrompt` + customPrompt path; "one step at a time" reworded.
-2. **P2 (ADR-0043)** — `planToolCallSegments`: sequential-mode tools
-   serialize only their own segment; parallel runs stay concurrent.
-3. **P3 (ADR-0044)** — non-blocking delegate (`background=true` + handle
-   collection + result files + session_shutdown reaping).
-4. **P4 (ADR-0045)** — `toolTurnThinkingLevel`: opt-in reduced reasoning on
-   tool-followup turns via a per-turn `getReasoningForTurn` loop hook.
-5. **RpcClient default cliPath fix** — `resolveDefaultCliPath`.
+1. **P1-P4 latency plan (ADRs 0042-0045)** — parallel tool-call guidance,
+   segment planner, non-blocking delegate, tool-turn thinking override.
+2. **Profile file editing (ADR-0046)** — `profile edit <name> [--settings]`
+   CLI + `/profiles edit <name>` slash command + second-level action menu
+   in the /profiles TUI menu (Switch / Edit SOUL.md / Edit settings.json).
+   TUI editing stops the interface, runs $EDITOR blocking, restores it.
+3. **Latency probe tooling** — `tools/latency-probe/analyze.mjs` +
+   `tools/latency-probe/RUN.md` (A/B turns-per-task measurement; needs a
+   profile with API keys, not available in this sandbox).
+4. **RpcClient default cliPath fix** (2220c1727).
 
 ## How it was verified
-- Red-first throughout: agent-loop 43/43, delegate 39/40 (1 live-gated),
-  settings-manager 40/40, system-prompt 35/35, rpc cli-path 4/4.
-- Full `./test.sh`: 4972 passed / 14 failed = only documented sandbox
-  known-fails (4603x4, 4685x9, daemon-serialized-refine x1).
-- biome + tsgo clean. Dist rebuilt after source changes.
+- Red-first tests: profile-command 14/14, profile-edit-flow 6/6,
+  completion+public-command snapshots 50/50, plus the full P1-P4 suites.
+- PTY probe (tmux, scratch AXIOM_HOME, fake $EDITOR): /profiles -> alpha ->
+  Edit SOUL.md -> editor ran (marker file) -> TUI restored with the
+  confirmation line; `axiom profile edit beta` verified via CLI too.
+- Full ./test.sh: 4978 passed / 14 failed = documented sandbox known-fails
+  (4603x4, 4685x9+2 EXDEV variance, daemon-serialized-refine x1); all
+  other parallel-shard flakes pass standalone. biome + tsgo clean; dist
+  rebuilt.
 
 ## Notes
-- Enable P4 by adding `"toolTurnThinkingLevel": "low"` to the profile's
-  settings.json (unset = off). Measure with the A/B probe before trusting it.
-- Live gateway still runs its old in-memory module graph; fresh completion
-  children pick up the rebuilt bundle next message. Remove the gitignored
-  repo-root `dist/cli.js` symlink after the next gateway restart.
-- Remaining: A/B probe (turns-per-task + answer-quality on a fixed
-  workload, before/after the P1-P4 changes), then optionally Hermes-style
-  path-conflict reservations + a concurrency cap (from the P1 semantics
-  audit).
+- The live gateway still runs its old in-memory module graph; fresh
+  completion children pick up the rebuilt bundle next message. Remove the
+  gitignored repo-root dist/cli.js symlink after the next gateway restart.
+- To enable P4: add "toolTurnThinkingLevel": "low" to the profile's
+  settings.json, then run the latency probe before/after to quantify.
+- /profiles edit currently edits SOUL.md and settings.json; sessions or
+  key files are deliberately not editable from the menu.

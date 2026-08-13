@@ -62,7 +62,12 @@ import {
 	setConnectorToken,
 	switchGatewayTransport,
 } from "../../cli/gateway-service.js";
-import { handleProfileCommand, listProfileNames, profileBaseHome } from "../../cli/profile-command.js";
+import {
+	handleProfileCommand,
+	listProfileNames,
+	parseProfileEditArgs,
+	profileBaseHome,
+} from "../../cli/profile-command.js";
 import { handleProjectsCommand, listProjectNames } from "../../cli/projects-command.js";
 import {
 	APP_NAME,
@@ -218,6 +223,7 @@ import { HeartbeatManagerComponent } from "./components/heartbeat-manager.js";
 import { InjectedPromptMessageComponent, isInjectedPromptMessage } from "./components/injected-prompt-message.js";
 import { formatKeyText, keyHint, keyText, rawKeyHint } from "./components/keybinding-hints.js";
 import type { AuthSelectorProvider } from "./components/oauth-selector.js";
+import { defaultProfileEditFlowDeps, runProfileEditFlow } from "./components/profile-edit-flow.js";
 import { ScopedModelsSelectorComponent } from "./components/scoped-models-selector.js";
 import { SettingsSelectorComponent } from "./components/settings-selector.js";
 import { SideQuestionComponent } from "./components/side-question.js";
@@ -9512,6 +9518,13 @@ export class InteractiveMode {
 	 * gateway's /profiles//projects. Operates on the active axiom home.
 	 */
 	private async handleProfilesSlashCommand(args: string): Promise<void> {
+		const editRequest = parseProfileEditArgs(args);
+		if (editRequest) {
+			this.printLocalLines([
+				await runProfileEditFlow(axiomHome(), editRequest.name, editRequest.kind, this.profileEditFlowDeps()),
+			]);
+			return;
+		}
 		if (!shouldOpenWorkspaceMenu(args)) {
 			await this.runProfileSurfaceCommand(handleProfileCommand, ["profile"], args);
 			return;
@@ -9519,16 +9532,53 @@ export class InteractiveMode {
 		const current = profileLabel(axiomHome());
 		await this.openWorkspaceSelector({
 			title: "profiles",
-			hint: "↑/↓ choose · Enter switch (relaunch under the profile) · Esc close",
+			hint: "↑/↓ choose · Enter actions (switch/edit) · Esc close",
 			options: (await listProfileNames(profileBaseHome(axiomHome()))).map((name) => ({
 				value: name,
 				label: name,
 				current: name === current,
 			})),
 			onSelect: (name) => {
-				if (name !== current) void this.switchWorkspace({ profile: name });
+				void this.openProfileActionsMenu(name, current);
 			},
 		});
+	}
+
+	/** Second-level menu for one profile: switch or edit its files. */
+	private async openProfileActionsMenu(name: string, current: string): Promise<void> {
+		const action = await this.openSelectorMenu({
+			title: `profile '${name}'`,
+			hint: "↑/↓ choose · Enter run · Esc back",
+			options: [
+				{
+					value: "switch",
+					label: "Switch to profile",
+					description: name === current ? "(current)" : undefined,
+				},
+				{ value: "edit-soul", label: "Edit SOUL.md" },
+				{ value: "edit-settings", label: "Edit settings.json" },
+			],
+		});
+		if (!action) return;
+		if (action === "switch") {
+			if (name !== current) void this.switchWorkspace({ profile: name });
+			return;
+		}
+		const kind = action === "edit-soul" ? "soul" : "settings";
+		this.printLocalLines([await runProfileEditFlow(axiomHome(), name, kind, this.profileEditFlowDeps())]);
+	}
+
+	/** Flow deps that stop the TUI, run $EDITOR, and restore the TUI. */
+	private profileEditFlowDeps() {
+		const ui = {
+			stop: () => this.ui.stop(),
+			start: () => {
+				this.ui.start();
+				if (this.fullscreenEnabled) this.applyFullscreen(true);
+				this.ui.requestRender(true);
+			},
+		};
+		return defaultProfileEditFlowDeps(ui, (home) => listProfileNames(profileBaseHome(home)));
 	}
 
 	private async handleProjectsSlashCommand(args: string): Promise<void> {

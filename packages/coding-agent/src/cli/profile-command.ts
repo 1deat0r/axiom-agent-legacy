@@ -10,6 +10,7 @@
  * persistent boot). Returns true when the invocation was a profile command.
  */
 
+import { spawnSync } from "node:child_process";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { axiomHome, isValidProfileName, profileDir, profileLabel } from "../extensions/profile/registry.js";
@@ -20,6 +21,46 @@ export interface ProfileCommandIO {
 	mkdirp?(path: string): Promise<void>;
 	readdir?(path: string): Promise<string[]>;
 	stdout?(text: string): void;
+	/** Blocking editor runner (default: $EDITOR via spawnSync). */
+	runEdit?(file: string, editor: EditorCommand): Promise<{ status: number | null }>;
+	/** Environment for $EDITOR/$VISUAL resolution (default: process.env). */
+	env?: { EDITOR?: string; VISUAL?: string };
+}
+
+export type ProfileEditKind = "soul" | "settings";
+
+export interface EditorCommand {
+	cmd: string;
+	args: string[];
+}
+
+/** Split EDITOR/VISUAL into a command plus args ("code --wait" -> code + [--wait]). */
+export function resolveEditorCommand(env: { EDITOR?: string; VISUAL?: string } = {}): EditorCommand {
+	const raw = (env.EDITOR ?? env.VISUAL ?? "").trim();
+	if (raw.length === 0) {
+		return { cmd: "vi", args: [] };
+	}
+	const parts = raw.split(/\s+/).filter((part) => part.length > 0);
+	const cmd = parts[0]!.replace(/^['"]|['"]$/g, "");
+	return { cmd, args: parts.slice(1).map((part) => part.replace(/^['"]|['"]$/g, "")) };
+}
+
+/** Parse a "/profiles edit <name> [--settings]" argument string. */
+export function parseProfileEditArgs(args: string): { name: string; kind: ProfileEditKind } | undefined {
+	const parts = args
+		.trim()
+		.split(/\s+/)
+		.filter((part) => part.length > 0);
+	if (parts[0] !== "edit" || !parts[1]) {
+		return undefined;
+	}
+	return { name: parts[1]!, kind: parts.includes("--settings") ? "settings" : "soul" };
+}
+
+/** Resolve the file a profile edit opens, against the base profile home. */
+export function resolveProfileEditTarget(home: string, name: string, kind: ProfileEditKind): { file: string } {
+	const base = profileBaseHome(home);
+	return { file: join(profileDir(name, base), kind === "soul" ? "SOUL.md" : "settings.json") };
 }
 
 function starterSoul(name: string): string {
@@ -110,6 +151,41 @@ export async function handleProfileCommand(args: string[], io: ProfileCommandIO 
 		}
 		return true;
 	}
+	if (sub === "edit") {
+		const name = args[2] ?? "";
+		const kind: ProfileEditKind = args.includes("--settings") ? "settings" : "soul";
+		const base = profileBaseHome(home);
+		const profilesDir = join(base, "profiles");
+		let names: string[] = [];
+		try {
+			names = (await list(profilesDir)).filter((n) => isValidProfileName(n)).sort();
+		} catch {
+			names = [];
+		}
+		if (!name || !names.includes(name)) {
+			out(
+				names.length === 0
+					? "No profiles yet — create one with 'profile create <name>'."
+					: `Unknown profile '${name}' — existing: ${names.join(", ")}`,
+			);
+			return true;
+		}
+		const target = resolveProfileEditTarget(base, name, kind);
+		const editor = resolveEditorCommand(io.env);
+		const runEdit =
+			io.runEdit ??
+			(async (file, command) => {
+				const result = spawnSync(command.cmd, [...command.args, file], { stdio: "inherit" });
+				return { status: result.status };
+			});
+		const { status } = await runEdit(target.file, editor);
+		if (status === 0 || status === null) {
+			out(`edited '${name}' ${kind === "soul" ? "SOUL.md" : "settings.json"} (${target.file})`);
+		} else {
+			out(`editor exited with status ${status}`);
+		}
+		return true;
+	}
 	if (sub === "switch") {
 		const name = args[2] ?? "";
 		const base = profileBaseHome(home);
@@ -139,9 +215,10 @@ export async function handleProfileCommand(args: string[], io: ProfileCommandIO 
 		return true;
 	}
 	out(
-		"Usage: profile create <name>   scaffold a new profile (own home + SOUL.md)\n" +
-			"       profile list           list existing profiles\n" +
-			"       profile switch <name>  validate a profile; run 'axiom --profile <name>' as it",
+		"Usage: profile create <name>          scaffold a new profile (own home + SOUL.md)\n" +
+			"       profile list                  list existing profiles\n" +
+			"       profile switch <name>         validate a profile; run 'axiom --profile <name>' as it\n" +
+			"       profile edit <name> [--settings]  open SOUL.md (or settings.json) in $EDITOR",
 	);
 	return true;
 }

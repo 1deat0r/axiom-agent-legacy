@@ -399,7 +399,7 @@ describe("profile, projects, and completion routing", () => {
 
 	it("shows command help for profile and projects", async () => {
 		await handlePublicCommand(["help", "profile"]);
-		expect(console.log).toHaveBeenCalledWith(expect.stringContaining("profile <create|list|switch>"));
+		expect(console.log).toHaveBeenCalledWith(expect.stringContaining("profile <create|list|switch|edit>"));
 		await handlePublicCommand(["help", "projects"]);
 		expect(console.log).toHaveBeenCalledWith(expect.stringContaining("projects"));
 		expect(console.error).not.toHaveBeenCalled();

@@ -152,9 +152,14 @@ export const COMMAND_SPECS: readonly CommandSpec[] = [
 	},
 	{
 		path: ["profile"],
-		usage: "profile <create|list|switch>",
+		usage: "profile <create|list|switch|edit>",
 		summary: "Manage profile identities (ADR-0014)",
 		description: "A profile is a separate axiom home with its own SOUL.md, keys, memory, and sessions.",
+	},
+	{
+		path: ["profile", "edit"],
+		usage: "profile edit <name> [--settings]",
+		summary: "Open a profile's SOUL.md (or settings.json) in $EDITOR",
 	},
 	{
 		path: ["profile", "create"],
