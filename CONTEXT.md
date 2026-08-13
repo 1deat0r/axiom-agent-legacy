@@ -182,3 +182,18 @@ cgroup). `/connectors status` and `/connectors help <name>` print the same
 state without a menu. The service name is `AXIOM_GATEWAY_SERVICE` (default
 `axiom-telegram-gateway.service`).
 _Avoid_: Transport flag (a connector is the transport plus its credential)
+
+**Peer coordination**:
+Instances of axiom-agent anchored to the same project root (AXIOM_PROJECT_ROOT)
+see and talk to each other (ADR-0038). Each axiom home has a stable instance ID
+(`<home>/instance-id.json`); per-process run IDs distinguish concurrent runs.
+Coordination state lives under `<home>/peers/<sha256(realpath(root))[:12]>/` —
+never inside the repo tree. Presence files carry pid/model/intent/heartbeat;
+liveness is pid existence plus heartbeat freshness (default 5 min), so crashed
+instances go stale on their own. An append-only JSONL board carries directed
+messages (`to=<instanceId>`) and group messages (`to="*"`, visible to every
+live instance — the group chat); each instance tails the board from a
+byte-offset cursor. Agent tools: peers_list, peers_send, peers_inbox,
+peers_intent; CLI: `axiom peers [list|inbox]`, `axiom peers msg <id|*> <text>`,
+`axiom peers group <text>`. Inert unless anchored; zero new dependencies.
+_Avoid_: Harness sub-agents (RLM children are parent-to-child, not siblings)
