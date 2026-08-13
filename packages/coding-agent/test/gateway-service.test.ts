@@ -276,8 +276,8 @@ describe("formatConnectorStatusLines", () => {
 describe("setConnectorToken", () => {
 	test("writes the token into the unit Environment and the env file", async () => {
 		const { deps, written } = makeDeps();
-		const message = await setConnectorToken(connectorById("discord")!, "DISCORD_TOKEN", deps);
-		expect(message).toContain("AXIOM_DISCORD_BOT_TOKEN");
+		const lines = await setConnectorToken(connectorById("discord")!, "DISCORD_TOKEN", deps);
+		expect(lines.join("\n")).toContain("AXIOM_DISCORD_BOT_TOKEN");
 		const unit = written.get("/home/mustbearn/.config/systemd/user/axiom-telegram-gateway.service")!;
 		expect(parseUnitTokenVars(unit)).toContain("AXIOM_DISCORD_BOT_TOKEN");
 		expect(unit).toContain("Environment=AXIOM_DISCORD_BOT_TOKEN=DISCORD_TOKEN");
@@ -296,8 +296,8 @@ describe("setConnectorToken", () => {
 describe("switchGatewayTransport", () => {
 	test("rewrites the unit, daemon-reloads, and restarts the service", async () => {
 		const { deps, execCalls } = makeDeps({ env: { AXIOM_DISCORD_BOT_TOKEN: "tok" } });
-		const message = await switchGatewayTransport(connectorById("discord")!, deps);
-		expect(message).toContain("discord");
+		const lines = await switchGatewayTransport(connectorById("discord")!, deps);
+		expect(lines.join("\n")).toContain("discord");
 		expect(execCalls.map((c) => `${c.command} ${c.args.join(" ")}`)).toEqual([
 			"systemctl --user show axiom-telegram-gateway.service -p ActiveState -p FragmentPath",
 			"systemctl --user daemon-reload",
@@ -307,15 +307,15 @@ describe("switchGatewayTransport", () => {
 
 	test("refuses to switch to a token connector with no token anywhere", async () => {
 		const { deps, execCalls } = makeDeps();
-		const message = await switchGatewayTransport(connectorById("slack")!, deps);
-		expect(message).toContain("AXIOM_SLACK_BOT_TOKEN");
+		const lines = await switchGatewayTransport(connectorById("slack")!, deps);
+		expect(lines.join("\n")).toContain("AXIOM_SLACK_BOT_TOKEN");
 		expect(execCalls.filter((c) => c.args.includes("restart"))).toEqual([]);
 	});
 
 	test("no-ops when the gateway already runs under the connector", async () => {
 		const { deps, execCalls } = makeDeps();
-		const message = await switchGatewayTransport(connectorById("telegram")!, deps);
-		expect(message).toContain("already");
+		const lines = await switchGatewayTransport(connectorById("telegram")!, deps);
+		expect(lines.join("\n")).toContain("already");
 		expect(execCalls.filter((c) => c.args.includes("restart"))).toEqual([]);
 	});
 
@@ -324,8 +324,8 @@ describe("switchGatewayTransport", () => {
 			cgroupText: "0::/user.slice/user-1000.slice/user@1000.service/app.slice/axiom-telegram-gateway.service\n",
 			env: { AXIOM_DISCORD_BOT_TOKEN: "tok" },
 		});
-		const message = await switchGatewayTransport(connectorById("discord")!, deps);
-		expect(message).toContain("standalone terminal");
+		const lines = await switchGatewayTransport(connectorById("discord")!, deps);
+		expect(lines.join("\n")).toContain("standalone terminal");
 	});
 
 	test("errors when the service unit cannot be found", async () => {
@@ -338,16 +338,16 @@ describe("switchGatewayTransport", () => {
 			]),
 			env: { AXIOM_DISCORD_BOT_TOKEN: "tok" },
 		});
-		const message = await switchGatewayTransport(connectorById("discord")!, deps);
-		expect(message).toContain("no gateway systemd unit");
+		const lines = await switchGatewayTransport(connectorById("discord")!, deps);
+		expect(lines.join("\n")).toContain("no gateway systemd unit");
 	});
 
 	test("warns when switching to signal without signal-cli on PATH", async () => {
 		const { deps } = makeDeps({
 			execResults: new Map([["which signal-cli", { code: 1, stdout: "", stderr: "not found" }]]),
 		});
-		const message = await switchGatewayTransport(connectorById("signal")!, deps);
-		expect(message).toContain("signal-cli");
+		const lines = await switchGatewayTransport(connectorById("signal")!, deps);
+		expect(lines.join("\n")).toContain("signal-cli");
 	});
 });
 

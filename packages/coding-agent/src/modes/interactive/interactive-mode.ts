@@ -9646,13 +9646,13 @@ export class InteractiveMode {
 			const token = await this.promptForConnectorToken(connector);
 			if (!token) return;
 			try {
-				this.printLocalLines((await setConnectorToken(connector, token, deps)).split("\n"));
+				this.printLocalLines(await setConnectorToken(connector, token, deps));
 			} catch (error) {
 				this.showError(error instanceof Error ? error.message : String(error));
 			}
 			return;
 		}
-		this.printLocalLines((await switchGatewayTransport(connector, deps)).split("\n"));
+		this.printLocalLines(await switchGatewayTransport(connector, deps));
 	}
 
 	/** The per-connector action menu (status guide / set token / switch). */
