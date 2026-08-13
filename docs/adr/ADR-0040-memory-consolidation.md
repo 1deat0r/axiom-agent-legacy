@@ -1,4 +1,4 @@
-# ADR-0037: Agent-side automatic memory consolidation
+# ADR-0040: Agent-side automatic memory consolidation
 
 **Status:** accepted
 **Date:** 2026-08-13

@@ -98,7 +98,7 @@ leaves the project root, returning a plain-English reason surfaced to the
 model (ADR-0018). Freeform bash/ipython confinement is the OS-sandbox tier,
 recorded as a follow-up.
 **Memory consolidation**:
-The declarative-memory half of "gets smarter over time" (ADR-0037, issue #19):
+The declarative-memory half of "gets smarter over time" (ADR-0040, issue #19):
 after a run, an inert-by-default `agent_end` extension (enabled via
 `AXIOM_MEMORY_CONSOLIDATION=1`) has the model propose durable facts
 (`{title, content, path}`) from the finished session, filters them through a

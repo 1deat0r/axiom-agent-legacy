@@ -1,4 +1,4 @@
-# Handoff — Agent-side automatic memory consolidation (ADR-0037, issue #19)
+# Handoff — Agent-side automatic memory consolidation (ADR-0040, issue #19)
 
 **Branch:** `feat/memory-consolidation` (isolated worktree at `.worktrees/memory-consolidation`)
 **Base:** `main` @ 00da2f3f0 (includes the parallel session's board loop-closure handoff)
@@ -11,7 +11,7 @@ audit trail. Recall stays the read path; /refine stays manual; this closes the
 "gets smarter over time" loop automatically and complements skill-capture.
 
 - Core `packages/coding-agent/src/core/memory-consolidation/` (request →
-  propose → gate → store → apply pipeline; see ADR-0037 for the design).
+  propose → gate → store → apply pipeline; see ADR-0040 for the design).
 - Extension `src/extensions/memory-consolidation/` — `agent_end` hook, inert
   unless `AXIOM_MEMORY_CONSOLIDATION=1`; propose mode stages + notifies;
   `AXIOM_MEMORY_CONSOLIDATION_AUTO=1` auto-applies with audit; silent skip
@@ -22,7 +22,7 @@ audit trail. Recall stays the read path; /refine stays manual; this closes the
   `source` on `applyRefinementProposal` (default "refine") — entries created
   by consolidation carry `source: "consolidate"` and are rollback-able via
   the existing refinement history.
-- Docs: ADR-0037, CONTEXT.md term, feature-log, this handoff. Issue #19.
+- Docs: ADR-0040, CONTEXT.md term, feature-log, this handoff. Issue #19.
 
 ## What was verified, and how
 

@@ -1,4 +1,4 @@
-# Feature log — Agent-side automatic memory consolidation (ADR-0037, issue #19)
+# Feature log — Agent-side automatic memory consolidation (ADR-0040, issue #19)
 
 **Branch:** `feat/memory-consolidation` (isolated worktree `.worktrees/memory-consolidation`)
 **Base:** `main` @ 00da2f3f0
@@ -28,7 +28,7 @@ auto-flagging: tasks → skills (procedural), facts → harness memory (declarat
 - `packages/coding-agent/src/core/refinement/refinement.ts` — two minimal
   additions: `extractJsonObject` exported (shared JSON recovery) and an
   optional `source` option on `applyRefinementProposal` (default "refine").
-- Docs: `docs/adr/ADR-0037-memory-consolidation.md`, `CONTEXT.md` term,
+- Docs: `docs/adr/ADR-0040-memory-consolidation.md`, `CONTEXT.md` term,
   this log, handoff.
 
 ## Verified, and how
