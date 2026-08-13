@@ -345,7 +345,10 @@ async function runLoop(
 			}
 
 			// Stream assistant response
-			const message = await streamAssistantResponse(currentContext, config, signal, emit, streamFn);
+			const message = await streamAssistantResponse(currentContext, config, signal, emit, streamFn, {
+				firstTurn,
+				lastTurn,
+			});
 			newMessages.push(message);
 
 			if (message.stopReason === "error" || message.stopReason === "aborted") {
@@ -470,6 +473,7 @@ async function streamAssistantResponse(
 	signal: AbortSignal | undefined,
 	emit: AgentEventSink,
 	streamFn?: StreamFn,
+	turnState?: { firstTurn: boolean; lastTurn?: { message: AssistantMessage; toolResults: ToolResultMessage[] } },
 ): Promise<AssistantMessage> {
 	let partialMessage: AssistantMessage | null = null;
 	let addedPartial = false;
@@ -511,9 +515,16 @@ async function streamAssistantResponse(
 			tools: context.tools,
 		};
 
+		// Per-turn reasoning override (e.g. reduced reasoning on tool-followup
+		// turns); falls back to the configured level when unset or undefined.
+		const reasoning =
+			config.getReasoningForTurn?.({ firstTurn: turnState?.firstTurn ?? true, lastTurn: turnState?.lastTurn }) ??
+			config.reasoning;
+
 		const response = await maybePromiseWithAbort(
 			streamFunction(config.model, llmContext, {
 				...config,
+				reasoning,
 				apiKey: resolvedApiKey,
 				signal,
 			}),

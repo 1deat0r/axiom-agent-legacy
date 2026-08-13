@@ -578,6 +578,20 @@ describe("SettingsManager", () => {
 			expect(manager.getTelemetryEnabled()).toBe(false);
 		});
 	});
+
+	describe("toolTurnThinkingLevel", () => {
+		it("defaults to undefined (per-turn override off)", () => {
+			const manager = SettingsManager.create(projectDir, agentDir);
+			expect(manager.getToolTurnThinkingLevel()).toBeUndefined();
+		});
+
+		it("reads an explicitly configured level", () => {
+			const settingsPath = join(agentDir, "settings.json");
+			writeFileSync(settingsPath, JSON.stringify({ toolTurnThinkingLevel: "low" }));
+			const manager = SettingsManager.create(projectDir, agentDir);
+			expect(manager.getToolTurnThinkingLevel()).toBe("low");
+		});
+	});
 });
 
 describe("mermaid rendering setting", () => {

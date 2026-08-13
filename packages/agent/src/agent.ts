@@ -1,8 +1,10 @@
 import {
+	clampThinkingLevel,
 	createAssistantMessageDiagnostic,
 	type ImageContent,
 	type Message,
 	type Model,
+	type ModelThinkingLevel,
 	type SimpleStreamOptions,
 	streamSimple,
 	type TextContent,
@@ -115,6 +117,8 @@ export interface AgentOptions {
 	transport?: Transport;
 	maxRetryDelayMs?: number;
 	toolExecution?: ToolExecutionMode;
+	/** Optional reduced reasoning level for turns that follow a tool-call turn. */
+	toolTurnThinkingLevel?: ModelThinkingLevel;
 }
 
 class PendingMessageQueue {
@@ -216,6 +220,8 @@ export class Agent {
 	public maxRetryDelayMs?: number;
 	/** Tool execution strategy for assistant messages that contain multiple tool calls. */
 	public toolExecution: ToolExecutionMode;
+	/** Reduced reasoning level applied to tool-followup turns when set. */
+	public toolTurnThinkingLevel: ModelThinkingLevel | undefined;
 
 	constructor(options: AgentOptions = {}) {
 		this._state = createMutableAgentState(options.initialState);
@@ -237,6 +243,9 @@ export class Agent {
 		this.transport = options.transport ?? "auto";
 		this.maxRetryDelayMs = options.maxRetryDelayMs;
 		this.toolExecution = options.toolExecution ?? "parallel";
+		this.toolTurnThinkingLevel = options.toolTurnThinkingLevel
+			? clampThinkingLevel(this._state.model, options.toolTurnThinkingLevel)
+			: undefined;
 	}
 
 	/**
@@ -481,6 +490,14 @@ export class Agent {
 			thinkingBudgets: this.thinkingBudgets,
 			maxRetryDelayMs: this.maxRetryDelayMs,
 			toolExecution: this.toolExecution,
+			getReasoningForTurn: this.toolTurnThinkingLevel
+				? ({ lastTurn }) =>
+						lastTurn && lastTurn.message.content.some((block) => block.type === "toolCall")
+							? this.toolTurnThinkingLevel === "off"
+								? undefined
+								: this.toolTurnThinkingLevel
+							: undefined
+				: undefined,
 			beforeToolCall: this.beforeToolCall,
 			afterToolCall: this.afterToolCall,
 			shouldStopAfterTurn: async (context) => this.shouldStopAfterTurn?.(context) ?? false,

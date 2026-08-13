@@ -2233,3 +2233,95 @@ describe("segmented execution of mixed batches", () => {
 		expect(inFlight.max).toBeGreaterThanOrEqual(1);
 	});
 });
+
+describe("per-turn reasoning override", () => {
+	const echoToolSchema = Type.Object({ value: Type.String() });
+
+	function makeEchoTool(): AgentTool<typeof echoToolSchema, { value: string }> {
+		return {
+			name: "echo",
+			label: "Echo",
+			description: "Echo tool",
+			parameters: echoToolSchema,
+			async execute(_toolCallId, params) {
+				return { content: [{ type: "text", text: `echoed: ${params.value}` }], details: { value: params.value } };
+			},
+		};
+	}
+
+	it("lowers reasoning on a turn that follows a tool-call turn", async () => {
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [makeEchoTool()],
+		};
+		const seenReasoning: Array<string | undefined> = [];
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			reasoning: "high",
+			getReasoningForTurn: ({ lastTurn }) =>
+				lastTurn && lastTurn.message.content.some((c) => c.type === "toolCall") ? "low" : undefined,
+		};
+		let callIndex = 0;
+		const stream = agentLoop([createUserMessage("go")], context, config, undefined, (_model, _ctx, options) => {
+			seenReasoning.push(options?.reasoning);
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					const message = createAssistantMessage(
+						[{ type: "toolCall", id: "tool-1", name: "echo", arguments: { value: "x" } }],
+						"toolUse",
+					);
+					mockStream.push({ type: "done", reason: "toolUse", message });
+				} else {
+					const message = createAssistantMessage([{ type: "text", text: "done" }]);
+					mockStream.push({ type: "done", reason: "stop", message });
+				}
+				callIndex++;
+			});
+			return mockStream;
+		});
+		for await (const _event of stream) {
+			// consume
+		}
+		expect(seenReasoning).toEqual(["high", "low"]);
+	});
+
+	it("keeps a fixed reasoning level without the override hook", async () => {
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [makeEchoTool()],
+		};
+		const seenReasoning: Array<string | undefined> = [];
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			reasoning: "high",
+		};
+		let callIndex = 0;
+		const stream = agentLoop([createUserMessage("go")], context, config, undefined, (_model, _ctx, options) => {
+			seenReasoning.push(options?.reasoning);
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					const message = createAssistantMessage(
+						[{ type: "toolCall", id: "tool-1", name: "echo", arguments: { value: "x" } }],
+						"toolUse",
+					);
+					mockStream.push({ type: "done", reason: "toolUse", message });
+				} else {
+					const message = createAssistantMessage([{ type: "text", text: "done" }]);
+					mockStream.push({ type: "done", reason: "stop", message });
+				}
+				callIndex++;
+			});
+			return mockStream;
+		});
+		for await (const _event of stream) {
+			// consume
+		}
+		expect(seenReasoning).toEqual(["high", "high"]);
+	});
+});

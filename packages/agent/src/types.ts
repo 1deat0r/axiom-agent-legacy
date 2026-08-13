@@ -116,7 +116,21 @@ export interface ShouldStopAfterTurnContext {
 /** Context passed to `getContinuationMessages`. */
 export type GetContinuationMessagesContext = ShouldStopAfterTurnContext;
 
+/** State a per-turn reasoning override may inspect. */
+export interface TurnReasoningContext {
+	/** True for the first turn of an outer loop iteration. */
+	firstTurn: boolean;
+	/** The previous turn's assistant message and tool results, if any. */
+	lastTurn?: { message: AssistantMessage; toolResults: ToolResultMessage[] };
+}
+
 export interface AgentLoopConfig extends SimpleStreamOptions {
+	/**
+	 * Optional per-turn reasoning override. When set and it returns a level,
+	 * that level replaces `reasoning` for the upcoming turn only. Used to run
+	 * tool-followup turns at a reduced reasoning level.
+	 */
+	getReasoningForTurn?: (context: TurnReasoningContext) => NonNullable<SimpleStreamOptions["reasoning"]> | undefined;
 	model: Model<any>;
 
 	/**

@@ -1,4 +1,4 @@
-import type { ServiceTier, Transport } from "@earendil-works/pi-ai";
+import type { ModelThinkingLevel, ServiceTier, Transport } from "@earendil-works/pi-ai";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { dirname, join } from "path";
@@ -159,6 +159,7 @@ export interface Settings {
 	enabledModels?: string[]; // Model patterns for cycling (same format as --models CLI flag)
 	treeFilterMode?: "default" | "no-tools" | "user-only" | "labeled-only" | "all"; // Default: "user-only"
 	thinkingBudgets?: ThinkingBudgetsSettings; // Custom token budgets for thinking levels
+	toolTurnThinkingLevel?: ModelThinkingLevel; // Reduced reasoning on turns that follow a tool-call turn
 	editorPaddingX?: number; // Horizontal padding for input editor (default: 0)
 	autocompleteMaxVisible?: number; // Max visible items in autocomplete dropdown (default: 5)
 	showHardwareCursor?: boolean; // Show terminal cursor while still positioning it for IME
@@ -1116,6 +1117,11 @@ export class SettingsManager {
 
 	getThinkingBudgets(): ThinkingBudgetsSettings | undefined {
 		return this.settings.thinkingBudgets;
+	}
+
+	/** Reduced reasoning level for tool-followup turns; undefined disables the override. */
+	getToolTurnThinkingLevel(): ModelThinkingLevel | undefined {
+		return this.settings.toolTurnThinkingLevel;
 	}
 
 	getShowImages(): boolean {
