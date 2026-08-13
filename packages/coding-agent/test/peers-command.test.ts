@@ -60,6 +60,25 @@ describe("handlePeersCommand", () => {
 		}
 	});
 
+	it("msg and group share one stable cli run id per process", async () => {
+		const { project, home } = setup();
+		const log = vi.spyOn(console, "log").mockImplementation(() => {});
+		try {
+			const scopeDir = resolvePeerScopeDir(project, home);
+			registerRun(scopeDir, SELF, {}, { uuid: () => "run-x", pid: 1234 });
+			expect(await handlePeersCommand(["peers", "msg", SELF.instanceId, "one"])).toBe(true);
+			expect(await handlePeersCommand(["peers", "group", "two"])).toBe(true);
+			expect(inbox(scopeDir, SELF).messages.map((m) => m.fromRun)).toEqual([
+				`cli-${process.pid}`,
+				`cli-${process.pid}`,
+			]);
+		} finally {
+			log.mockRestore();
+			rmSync(project, { recursive: true, force: true });
+			rmSync(home, { recursive: true, force: true });
+		}
+	});
+
 	it("prints help on bad arguments", async () => {
 		const setupDirs = setup();
 		const log = vi.spyOn(console, "log").mockImplementation(() => {});

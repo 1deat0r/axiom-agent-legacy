@@ -22,7 +22,7 @@ export const GATEWAY_SESSION_BUDGET_BYTES = 256 * 1024;
 
 /** The note shown when the gateway reset the channel session mid-reply. */
 export const SESSION_RESET_NOTICE =
-	"♻️ (session was getting long, so I archived it and started fresh — /search still finds the old one)";
+	"(session was getting long, so I archived it and started fresh — /search still finds the old one)";
 
 /** The session file a channel's agent run reads/writes (deterministic id). */
 export function sessionFilePath(sessionsDir: string, sessionKey: string): string {

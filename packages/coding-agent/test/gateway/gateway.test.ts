@@ -796,6 +796,10 @@ describe("Gateway streaming replies", () => {
 		}
 	});
 
+	it("keeps the session reset notice free of emoji", () => {
+		expect(SESSION_RESET_NOTICE).not.toMatch(/\p{Extended_Pictographic}/u);
+	});
+
 	it("pauses the transport's poll loop while a reply is being delivered", async () => {
 		const dir = await home("axiom-gw-stream-");
 		try {
