@@ -21,6 +21,25 @@ import type { SourceInfo } from "../../../core/source-info.js";
 import { closeWatcher, watchWithErrorHandler } from "../../../utils/fs-watch.js";
 
 // ============================================================================
+// Role Palette
+// ============================================================================
+
+/** Palette hexes for the model-facing color descriptor roles. */
+const ROLE_PALETTE = new Map<string, string>([
+	["error", "#FF5555"],
+	["warn", "#FFB86C"],
+	["ok", "#50FA7B"],
+	["info", "#8BE9FD"],
+	["accent", "#BD93F9"],
+	["muted", "#6272A4"],
+]);
+
+/** Resolve a descriptor role name to its palette hex, or undefined. */
+export function roleHex(name: string): string | undefined {
+	return ROLE_PALETTE.get(name);
+}
+
+// ============================================================================
 // Types & Schema
 // ============================================================================
 
