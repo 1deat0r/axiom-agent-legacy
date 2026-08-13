@@ -49,6 +49,12 @@ function scheduleUpdate(ctx: GatewayCommandContext, apply: boolean): void {
 			await send(`update failed: ${applied.error} — still running ${short(check.current)}`);
 			return;
 		}
+		// Record the "back online" notice BEFORE the reply + restart, so the
+		// freshly-started gateway can announce it (ADR-0034 follow-up). It rides
+		// the operator's channel so the confirmation lands where /update ran.
+		if (ctx.channelId && ctx.restartNoticeStore) {
+			ctx.restartNoticeStore.write({ sha: applied.to, channelId: ctx.channelId });
+		}
 		await send(`updated ${short(applied.from)} -> ${short(applied.to)}; restarting…`);
 		ctx.restartRequested = true;
 	};

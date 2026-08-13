@@ -26,6 +26,7 @@ import { dispatchCommand } from "./commands/index.js";
 import { sessionIdForChannel } from "./completion.js";
 import { isAllowedSender, loadGatewayConfig } from "./config.js";
 import type { DeliveryLedger } from "./delivery-ledger.js";
+import type { RestartNoticeStore } from "./restart-notice.js";
 import type { UpdateConfig, UpdateShell } from "./self-update.js";
 import { applyUpdate, CliUpdateShell, checkUpdate } from "./self-update.js";
 import type {
@@ -55,6 +56,8 @@ export interface GatewayDeps {
 	searchIndexPath?: string;
 	/** Per-profile active-model store (/model hotswap). */
 	modelStore?: ActiveModelStore;
+	/** Restart-notice store for the post-update "back online" announcement. */
+	restartNoticeStore?: RestartNoticeStore;
 	/** Self-update configuration (/update, ADR-0034); inert unless set. */
 	update?: UpdateConfig;
 	/** Shell for update steps (tests inject a scripted fake). */
@@ -96,6 +99,7 @@ export class Gateway {
 	private readonly searchIndexPath?: string;
 	private readonly projectRoot?: string;
 	private readonly modelStore: ActiveModelStore | undefined;
+	private readonly restartNoticeStore: RestartNoticeStore | undefined;
 	private readonly updateApi: GatewayUpdateApi | undefined;
 	private readonly restart: (() => void) | undefined;
 	private readonly cron: (GatewayCronCommandApi & { start(): void; stop(): void }) | undefined;
@@ -120,6 +124,7 @@ export class Gateway {
 		this.searchIndexPath = deps.searchIndexPath;
 		this.projectRoot = deps.projectRoot;
 		this.modelStore = deps.modelStore;
+		this.restartNoticeStore = deps.restartNoticeStore;
 		this.updateApi = deps.update
 			? {
 					check: () => checkUpdate(deps.updateShell ?? new CliUpdateShell(), deps.update!),
@@ -137,6 +142,17 @@ export class Gateway {
 		this.transport.onMessage((msg) => void this.enqueue(msg));
 		this.cron?.start();
 		await this.transport.connect();
+		await this.announceRestartCompletion();
+	}
+
+	/** Post-update "back online" notice, sent by this (fresh) process on boot. */
+	private async announceRestartCompletion(): Promise<void> {
+		const notice = this.restartNoticeStore?.readAndClear();
+		if (!notice) return;
+		await this.deliver(
+			{ channelId: notice.channelId, recipient: notice.channelId },
+			`✅ back online — updated to ${notice.sha.slice(0, 8)} and restarted cleanly.`,
+		);
 	}
 
 	async stop(): Promise<void> {
@@ -227,6 +243,7 @@ export class Gateway {
 				...(this.searchIndexPath ? { searchIndexPath: this.searchIndexPath } : {}),
 				...(this.projectRoot ? { projectRoot: this.projectRoot } : {}),
 				modelStore: this.modelStore,
+				restartNoticeStore: this.restartNoticeStore,
 				...(this.updateApi ? { update: this.updateApi } : {}),
 				channelId: msg.channelId,
 				cron: this.cron,
@@ -274,7 +291,6 @@ export class Gateway {
 			profile: { name: this.profile },
 			model: this.modelStore?.load(),
 			...(anchoredRoot ? { projectRoot: anchoredRoot } : {}),
-
 		});
 		if (result.error) {
 			await this.deliver(

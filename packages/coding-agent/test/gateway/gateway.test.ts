@@ -8,6 +8,7 @@ import { MemoryChannelIndex } from "../../src/gateway/channel-index.js";
 import { fakeCompletionRunner, sessionIdForChannel } from "../../src/gateway/completion.js";
 import { GatewayCron } from "../../src/gateway/cron.js";
 import { Gateway } from "../../src/gateway/gateway.js";
+import { InMemoryRestartNoticeStore } from "../../src/gateway/restart-notice.js";
 import type { GatewayMessage, GatewayTransport } from "../../src/gateway/types.js";
 
 /** A scriptable in-memory transport. */
@@ -624,6 +625,56 @@ describe("Gateway hand-edited store guard", () => {
 			expect(completion.calls[0]!.projectRoot).toBeUndefined();
 			expect(store.get("+1")).toBeUndefined();
 			expect(index.get("+1:..:0")).toBeNull();
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("Gateway restart notice", () => {
+	it("announces 'back online' on start when a notice is recorded, then clears it", async () => {
+		const dir = await home("axiom-gw-notice-");
+		try {
+			const { t, sent } = fakeTransport();
+			const store = new InMemoryRestartNoticeStore();
+			store.write({ sha: "abc12345", channelId: "+1" });
+			const g = new Gateway({
+				transport: t,
+				index: new MemoryChannelIndex(),
+				completion: fakeCompletionRunner(),
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+				restartNoticeStore: store,
+			});
+			await g.start();
+			await new Promise((r) => setTimeout(r, 20));
+			expect(sent.some((s) => s.text.includes("back online"))).toBe(true);
+			expect(sent.some((s) => s.text.includes("abc12345"))).toBe(true);
+			expect(store.readAndClear()).toBeUndefined();
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("does not announce when no notice is recorded", async () => {
+		const dir = await home("axiom-gw-notice-");
+		try {
+			const { t, sent } = fakeTransport();
+			const g = new Gateway({
+				transport: t,
+				index: new MemoryChannelIndex(),
+				completion: fakeCompletionRunner(),
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+				restartNoticeStore: new InMemoryRestartNoticeStore(),
+			});
+			await g.start();
+			await new Promise((r) => setTimeout(r, 20));
+			expect(sent.some((s) => s.text.includes("back online"))).toBe(false);
 			await g.stop();
 		} finally {
 			await rm(dir, { recursive: true, force: true });

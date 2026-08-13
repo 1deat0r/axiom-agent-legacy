@@ -17,6 +17,7 @@ import { loadGatewayConfig } from "../gateway/config.js";
 import { GatewayCron } from "../gateway/cron.js";
 import { FileDeliveryLedger } from "../gateway/delivery-ledger.js";
 import { Gateway } from "../gateway/gateway.js";
+import { FileRestartNoticeStore, restartNoticePath } from "../gateway/restart-notice.js";
 import { DiscordTransport, FileDiscordCursorStore, HttpDiscordClient } from "../gateway/transports/discord.js";
 import { CliSignalClient, SignalTransport } from "../gateway/transports/signal.js";
 import { FileSlackCursorStore, HttpSlackClient, SlackTransport } from "../gateway/transports/slack.js";
@@ -211,6 +212,7 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 		ledger,
 		transportName: opts.transport,
 		modelStore: new FileActiveModelStore(activeModelPath(root, profile)),
+		restartNoticeStore: new FileRestartNoticeStore(restartNoticePath(root)),
 		transports: buildFanOutTransports(opts, root),
 		...(opts.updateRepo ? { update: { repoDir: opts.updateRepo } } : {}),
 		// The update path only fires on an explicit, successful /update now —

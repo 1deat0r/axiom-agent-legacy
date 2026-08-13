@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { dispatchCommand } from "../../src/gateway/commands/index.js";
+import { InMemoryRestartNoticeStore } from "../../src/gateway/restart-notice.js";
 import type { UpdateApply, UpdateCheck } from "../../src/gateway/self-update.js";
 import type { GatewayCommandContext, GatewayUpdateApi } from "../../src/gateway/types.js";
 
@@ -85,6 +86,22 @@ describe("/update command", () => {
 		expect(c.delivered.join("\n")).toContain("aaa -> bbb");
 		expect(c.delivered.join("\n")).toContain("restarting");
 		expect(c.restartRequested).toBe(true);
+	});
+
+	it("now, behind: records the post-restart notice for the operator's channel", async () => {
+		const store = new InMemoryRestartNoticeStore();
+		const c = ctx({
+			api: fakeApi(
+				{ ok: true, current: "aaa", latest: "bbb", upToDate: false },
+				{ ok: true, from: "aaa", to: "bbb" },
+			),
+			channelId: "119",
+			restartNoticeStore: store,
+		});
+		dispatchCommand("/update now", c);
+		await c.afterReply?.();
+		expect(c.restartRequested).toBe(true);
+		expect(store.readAndClear()).toEqual({ sha: "bbb", channelId: "119" });
 	});
 
 	it("now, apply fails: reports the error, does not restart", async () => {

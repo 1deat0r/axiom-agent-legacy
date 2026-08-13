@@ -6,6 +6,7 @@ import type { AgentCronJob } from "../core/cron-jobs.js";
 import type { ActiveModelStore } from "./active-model.js";
 import type { ActiveProjectStore } from "./active-project.js";
 import type { DeliveryLedger } from "./delivery-ledger.js";
+import type { RestartNoticeStore } from "./restart-notice.js";
 import type { UpdateApply, UpdateCheck } from "./self-update.js";
 
 /** A normalized, platform-agnostic inbound or outbound message. */
@@ -47,7 +48,6 @@ export interface CompletionRunner {
 		model?: { provider: string; model: string };
 		/** Per-run anchor override; wins over the runner's boot-time root. */
 		projectRoot?: string;
-
 	}): Promise<{
 		reply: string;
 		sessionId: string;
@@ -87,6 +87,8 @@ export interface GatewayCommandContext {
 	afterReply?: () => Promise<void> | void;
 	/** Set by a command's deferred action to restart the gateway process. */
 	restartRequested?: boolean;
+	/** Records the post-restart "back online" notice (/update); absent = not configured. */
+	restartNoticeStore?: RestartNoticeStore;
 	/** Deliver a follow-up to the channel the command arrived on. */
 	deliver?: (text: string) => Promise<void>;
 	/** The channel's current active project (gateway-resolved; undefined when unset). */
