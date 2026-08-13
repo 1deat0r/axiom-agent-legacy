@@ -40,3 +40,23 @@ without a terminal.
   stop/spawn/start ordering + error handling, arg parsing); two command
   snapshots updated. Full ./test.sh: 4978 passed / 14 failed = documented
   known-fails; remaining flakes under parallel shards all pass standalone.
+
+## Amendment (2026-08-14)
+
+The original flow treated a null editor exit status as success. A missing
+editor binary (for example `vi` on a box that has only `vim`) therefore
+printed "edited" while no editor ever ran. Two fixes share one path:
+
+- `runEditorSync` classifies each run honestly: spawn failure (missing
+  binary), signal termination, and non-zero exit are all reported as
+  failures; only a zero exit reports an edit.
+- When `EDITOR`/`VISUAL` are unset, the editor resolves to the Debian
+  alternatives editor when usable, then the first available of
+  `vi`/`vim`/`nano` on PATH. `vi` remains the last resort, and its absence
+  now surfaces as "could not start editor" with an EDITOR hint.
+
+The CLI and the TUI flow share `runEditorSync` and `formatEditorOutcome`.
+The /profiles menu catches flow errors and prints them instead of failing
+silently. Verified red-first (12 new CLI tests, 2 new flow tests) and with
+PTY probes: no `EDITOR` opens a real editor; a broken `EDITOR` prints the
+failure line and keeps the TUI alive.

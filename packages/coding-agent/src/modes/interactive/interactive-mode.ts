@@ -9539,7 +9539,10 @@ export class InteractiveMode {
 				current: name === current,
 			})),
 			onSelect: (name) => {
-				void this.openProfileActionsMenu(name, current);
+				void this.openProfileActionsMenu(name, current).catch((error) => {
+					const message = error instanceof Error ? error.message : String(error);
+					this.printLocalLines([`could not edit profile '${name}' — ${message}`]);
+				});
 			},
 		});
 	}

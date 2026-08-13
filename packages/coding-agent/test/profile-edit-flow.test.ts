@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseProfileEditArgs } from "../src/cli/profile-command.js";
+import { type EditorRunResult, parseProfileEditArgs } from "../src/cli/profile-command.js";
 import { type ProfileEditFlowDeps, runProfileEditFlow } from "../src/modes/interactive/components/profile-edit-flow.js";
 
 function makeDeps(overrides: Partial<ProfileEditFlowDeps> = {}): {
@@ -15,7 +15,7 @@ function makeDeps(overrides: Partial<ProfileEditFlowDeps> = {}): {
 			file: `/profiles/${name}/${kind === "soul" ? "SOUL.md" : "settings.json"}`,
 		}),
 		resolveEditor: () => ({ cmd: "vi", args: [] }),
-		spawnEditor: (cmd, args, file) => {
+		spawnEditor: (cmd, args, file): EditorRunResult => {
 			calls.push("spawn");
 			spawned.push({ cmd, args, file });
 			return { status: 0 };
@@ -64,6 +64,32 @@ describe("runProfileEditFlow", () => {
 		expect(line).toContain("/profiles/alpha/SOUL.md");
 		expect(calls).toEqual(["stop", "spawn", "start"]);
 		expect(spawned).toEqual([{ cmd: "vi", args: [], file: "/profiles/alpha/SOUL.md" }]);
+	});
+
+	it("reports a spawn failure instead of a false success", async () => {
+		const { deps, calls } = makeDeps({
+			spawnEditor: (): EditorRunResult => {
+				calls.push("spawn");
+				return { status: null, error: "spawnSync vi ENOENT" };
+			},
+		});
+		const line = await runProfileEditFlow("/home", "alpha", "soul", deps);
+		expect(line).toContain("could not start editor 'vi'");
+		expect(line).not.toContain("edited");
+		expect(calls).toEqual(["stop", "spawn", "start"]);
+	});
+
+	it("reports a signal-terminated editor instead of success", async () => {
+		const { deps, calls } = makeDeps({
+			spawnEditor: (): EditorRunResult => {
+				calls.push("spawn");
+				return { status: null, signal: "SIGINT" };
+			},
+		});
+		const line = await runProfileEditFlow("/home", "beta", "settings", deps);
+		expect(line).toContain("terminated by SIGINT");
+		expect(line).not.toContain("edited");
+		expect(calls).toEqual(["stop", "spawn", "start"]);
 	});
 
 	it("restarts the ui even when the editor reports a non-zero exit", async () => {

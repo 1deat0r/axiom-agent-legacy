@@ -2,7 +2,13 @@ import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { handleProfileCommand, resolveEditorCommand, resolveProfileEditTarget } from "../src/cli/profile-command.js";
+import {
+	formatEditorOutcome,
+	handleProfileCommand,
+	resolveEditorCommand,
+	resolveProfileEditTarget,
+	runEditorSync,
+} from "../src/cli/profile-command.js";
 
 // Uses a real temp home with injected fs io, mirroring the projects-command test rig.
 async function io(home?: string) {
@@ -29,6 +35,11 @@ async function io(home?: string) {
 		},
 	};
 	return { dir, opts, out };
+}
+
+/** Resolution deps with every probe disabled: no alternatives editor, nothing on PATH. */
+function noProbes(): { alternativesEditor(): undefined; findExecutable(): undefined } {
+	return { alternativesEditor: () => undefined, findExecutable: () => undefined };
 }
 
 describe("profile command", () => {
@@ -112,10 +123,35 @@ describe("profile edit", () => {
 		expect(target.file).toBe(join("/home/base", "profiles", "alpha", "SOUL.md"));
 	});
 
-	it("parses EDITOR with arguments and falls back to vi", () => {
-		expect(resolveEditorCommand({ EDITOR: "code --wait" })).toEqual({ cmd: "code", args: ["--wait"] });
-		expect(resolveEditorCommand({})).toEqual({ cmd: "vi", args: [] });
-		expect(resolveEditorCommand({ EDITOR: "" })).toEqual({ cmd: "vi", args: [] });
+	it("parses EDITOR with arguments", () => {
+		expect(resolveEditorCommand({ EDITOR: "code --wait" }, noProbes())).toEqual({ cmd: "code", args: ["--wait"] });
+	});
+
+	it("prefers the platform alternatives editor when EDITOR is unset", () => {
+		const resolved = resolveEditorCommand(
+			{},
+			{
+				alternativesEditor: () => "/usr/bin/vim.basic",
+				findExecutable: () => "/usr/bin/vim",
+			},
+		);
+		expect(resolved).toEqual({ cmd: "/usr/bin/vim.basic", args: [] });
+	});
+
+	it("falls back to the first available editor on PATH when EDITOR is unset", () => {
+		const resolved = resolveEditorCommand(
+			{ EDITOR: "" },
+			{
+				alternativesEditor: () => undefined,
+				findExecutable: (name) => (name === "vim" ? "/usr/bin/vim" : undefined),
+			},
+		);
+		expect(resolved).toEqual({ cmd: "/usr/bin/vim", args: [] });
+	});
+
+	it("keeps vi as the last-resort editor when nothing else resolves", () => {
+		const resolved = resolveEditorCommand({}, noProbes());
+		expect(resolved).toEqual({ cmd: "vi", args: [] });
 	});
 
 	it("runs the injected editor against an existing profile's SOUL.md", async () => {
@@ -173,9 +209,102 @@ describe("profile edit", () => {
 		}
 	});
 
+	it("reports a spawn failure instead of claiming the edit succeeded", async () => {
+		const { dir, opts, out } = await io();
+		try {
+			await handleProfileCommand(["profile", "create", "alpha"], opts);
+			out.length = 0;
+			await handleProfileCommand(["profile", "edit", "alpha"], {
+				...opts,
+				runEdit: async () => ({ status: null, error: "spawnSync vi ENOENT" }),
+			});
+			expect(out.join(" ")).toContain("could not start editor");
+			expect(out.join(" ")).not.toContain("edited");
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("reports a signal-terminated editor instead of success", async () => {
+		const { dir, opts, out } = await io();
+		try {
+			await handleProfileCommand(["profile", "create", "alpha"], opts);
+			out.length = 0;
+			await handleProfileCommand(["profile", "edit", "alpha"], {
+				...opts,
+				runEdit: async () => ({ status: null, signal: "SIGTERM" }),
+			});
+			expect(out.join(" ")).toContain("terminated by SIGTERM");
+			expect(out.join(" ")).not.toContain("edited");
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
 	it("lists edit in the usage text", async () => {
 		const { opts, out } = await io();
 		await handleProfileCommand(["profile"], opts);
 		expect(out.join(" ")).toContain("profile edit");
+	});
+});
+
+describe("runEditorSync", () => {
+	it("reports the spawn error when the editor binary is missing", () => {
+		const result = runEditorSync("/tmp/somewhere/SOUL.md", { cmd: "axiom-no-such-editor-xyz", args: [] });
+		expect(result.status).toBeNull();
+		expect(result.error).toContain("ENOENT");
+	});
+
+	it("returns the editor's exit status", () => {
+		const result = runEditorSync("/tmp/somewhere/SOUL.md", { cmd: "/bin/sh", args: ["-c", "exit 3"] });
+		expect(result.status).toBe(3);
+		expect(result.signal).toBeNull();
+		expect(result.error).toBeUndefined();
+	});
+
+	it("reports the signal when the editor is killed", () => {
+		const result = runEditorSync("/tmp/somewhere/SOUL.md", { cmd: "/bin/sh", args: ["-c", "kill -TERM $$"] });
+		expect(result.status).toBeNull();
+		expect(result.signal).toBe("SIGTERM");
+	});
+
+	it("reports success on a clean exit", () => {
+		const result = runEditorSync("/tmp/somewhere/SOUL.md", { cmd: "/bin/true", args: [] });
+		expect(result.status).toBe(0);
+		expect(result.signal).toBeNull();
+		expect(result.error).toBeUndefined();
+	});
+});
+
+describe("formatEditorOutcome", () => {
+	const editor = { cmd: "vi", args: [] };
+
+	it("formats a spawn failure with an EDITOR hint", () => {
+		const line = formatEditorOutcome("alpha", "soul", "/p/alpha/SOUL.md", editor, {
+			status: null,
+			error: "spawnSync vi ENOENT",
+		});
+		expect(line).toContain("could not start editor 'vi'");
+		expect(line).toContain("EDITOR");
+		expect(line).not.toContain("edited");
+	});
+
+	it("formats a signal termination", () => {
+		const line = formatEditorOutcome("alpha", "soul", "/p/alpha/SOUL.md", editor, {
+			status: null,
+			signal: "SIGTERM",
+		});
+		expect(line).toContain("terminated by SIGTERM");
+		expect(line).not.toContain("edited");
+	});
+
+	it("formats a clean edit", () => {
+		const line = formatEditorOutcome("alpha", "soul", "/p/alpha/SOUL.md", editor, { status: 0 });
+		expect(line).toBe("edited 'alpha' SOUL.md (/p/alpha/SOUL.md)");
+	});
+
+	it("formats a non-zero exit", () => {
+		const line = formatEditorOutcome("alpha", "settings", "/p/alpha/settings.json", editor, { status: 7 });
+		expect(line).toBe("editor exited with status 7");
 	});
 });

@@ -1,33 +1,50 @@
-# Handoff — 2026-08-13 (latency plan P1-P4 complete + profile editing + probe tooling)
+# Handoff — 2026-08-14 (profile edit: honest editor runs + real editor fallback)
 
 ## Done
-1. **P1-P4 latency plan (ADRs 0042-0045)** — parallel tool-call guidance,
-   segment planner, non-blocking delegate, tool-turn thinking override.
-2. **Profile file editing (ADR-0046)** — `profile edit <name> [--settings]`
-   CLI + `/profiles edit <name>` slash command + second-level action menu
-   in the /profiles TUI menu (Switch / Edit SOUL.md / Edit settings.json).
-   TUI editing stops the interface, runs $EDITOR blocking, restores it.
-3. **Latency probe tooling** — `tools/latency-probe/analyze.mjs` +
-   `tools/latency-probe/RUN.md` (A/B turns-per-task measurement; needs a
-   profile with API keys, not available in this sandbox).
-4. **RpcClient default cliPath fix** (2220c1727).
+
+1. **Profile edit false success fixed.** The /profiles menu printed
+   "edited" when no editor ran. Root cause: a null exit status from
+   `spawnSync` means the editor did not run (missing binary or signal),
+   but the flow treated it as success. `vi` is not installed here, so the
+   menu never opened an editor.
+2. **One shared editor-run path.** `runEditorSync` and
+   `formatEditorOutcome` in `cli/profile-command.ts` classify each run:
+   spawn failure, signal, non-zero exit, and zero exit. The CLI and the
+   TUI flow use the same functions. No divergent copies.
+3. **Real editor fallback.** When `EDITOR`/`VISUAL` are unset, the editor
+   resolves to the Debian alternatives editor when usable, then the first
+   available of `vi`/`vim`/`nano` on PATH (`vi` stays the last resort).
+   On this box that resolves to `/usr/bin/vim`.
+4. **Menu error net.** The /profiles action menu catches flow errors and
+   prints them. A failure can no longer disappear into an unhandled
+   promise.
 
 ## How it was verified
-- Red-first tests: profile-command 14/14, profile-edit-flow 6/6,
-  completion+public-command snapshots 50/50, plus the full P1-P4 suites.
-- PTY probe (tmux, scratch AXIOM_HOME, fake $EDITOR): /profiles -> alpha ->
-  Edit SOUL.md -> editor ran (marker file) -> TUI restored with the
-  confirmation line; `axiom profile edit beta` verified via CLI too.
-- Full ./test.sh: 4978 passed / 14 failed = documented sandbox known-fails
-  (4603x4, 4685x9+2 EXDEV variance, daemon-serialized-refine x1); all
-  other parallel-shard flakes pass standalone. biome + tsgo clean; dist
+
+- Red-first unit tests: `profile-command.test.ts` (27) and
+  `profile-edit-flow.test.ts` (8). 14 new tests cover spawn failure,
+  signal, exit-status classification, editor fallback order, and CLI/TUI
+  output lines.
+- PTY probes (tmux, scratch `AXIOM_HOME`, real binary):
+  - no `EDITOR` set: /profiles -> alpha -> Edit SOUL.md opened a real
+    vim with the SOUL.md content; `:q!` restored the TUI with the
+    confirmation line. Edit settings.json verified the same way.
+  - `EDITOR=definitely-not-an-editor`: the menu printed the
+    "could not start editor" line with an EDITOR hint; the TUI stayed
+    alive.
+- Full `./test.sh`: 4998 passed / 17 failed. 14 are the documented
+  sandbox known-fails (4603 x4, 4685 x9, daemon-serialized-refine x1).
+  The other 3 pass standalone (kernel-agent-message 7/7,
+  4600-supervisor-singleton 15/15, agent-session-recursion 96/96 with
+  RLM env scrubbed) = parallel-shard flakes.
+- `npx biome check .` clean (1082 files); `tsgo --noEmit` clean; dist
   rebuilt.
 
 ## Notes
-- The live gateway still runs its old in-memory module graph; fresh
-  completion children pick up the rebuilt bundle next message. Remove the
-  gitignored repo-root dist/cli.js symlink after the next gateway restart.
-- To enable P4: add "toolTurnThinkingLevel": "low" to the profile's
-  settings.json, then run the latency probe before/after to quantify.
-- /profiles edit currently edits SOUL.md and settings.json; sessions or
-  key files are deliberately not editable from the menu.
+
+- ADR-0046 gained an Amendment section for this fix.
+- If a box has no `vi`/`vim`/`nano` and no alternatives editor, the menu
+  now reports the missing editor instead of claiming success. Set
+  `EDITOR` to fix it.
+- The untracked `docs/hermes-improvements.html` in the working tree is
+  not part of this change; it was left alone.

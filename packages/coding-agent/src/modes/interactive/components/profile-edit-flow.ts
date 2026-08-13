@@ -8,12 +8,14 @@
  * All side effects are injected so the flow is unit-testable.
  */
 
-import { spawnSync } from "node:child_process";
 import {
 	type EditorCommand,
+	type EditorRunResult,
+	formatEditorOutcome,
 	type ProfileEditKind,
 	resolveEditorCommand,
 	resolveProfileEditTarget,
+	runEditorSync,
 } from "../../../cli/profile-command.js";
 
 export interface ProfileEditFlowDeps {
@@ -24,7 +26,7 @@ export interface ProfileEditFlowDeps {
 	/** Resolve the editor command from the environment. */
 	resolveEditor(): EditorCommand;
 	/** Blocking editor spawn with inherited stdio. */
-	spawnEditor(cmd: string, args: string[], file: string): { status: number | null };
+	spawnEditor(cmd: string, args: string[], file: string): EditorRunResult;
 	/** TUI lifecycle: stop before the editor runs, start after it exits. */
 	ui: { stop(): void; start(): void };
 }
@@ -49,16 +51,13 @@ export async function runProfileEditFlow(
 	const target = deps.resolveTarget(home, name, kind);
 	const editor = deps.resolveEditor();
 	deps.ui.stop();
-	let status: number | null;
+	let result: EditorRunResult;
 	try {
-		status = deps.spawnEditor(editor.cmd, editor.args, target.file).status;
+		result = deps.spawnEditor(editor.cmd, editor.args, target.file);
 	} finally {
 		deps.ui.start();
 	}
-	if (status === 0 || status === null) {
-		return `edited '${name}' ${kind === "soul" ? "SOUL.md" : "settings.json"} (${target.file})`;
-	}
-	return `editor exited with status ${status}`;
+	return formatEditorOutcome(name, kind, target.file, editor, result);
 }
 
 /** Build the default flow deps for the interactive TUI. */
@@ -70,10 +69,7 @@ export function defaultProfileEditFlowDeps(
 		listProfiles,
 		resolveTarget: resolveProfileEditTarget,
 		resolveEditor: () => resolveEditorCommand(process.env),
-		spawnEditor: (cmd, args, file) => {
-			const result = spawnSync(cmd, [...args, file], { stdio: "inherit" });
-			return { status: result.status };
-		},
+		spawnEditor: (cmd, args, file) => runEditorSync(file, { cmd, args }),
 		ui,
 	};
 }
