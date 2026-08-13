@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ExtensionAPI } from "../../src/core/extensions/types.js";
-import { resolveInstanceId } from "../../src/core/peers/instance-id.js";
 import { listPeers, resolvePeerScopeDir } from "../../src/core/peers/index.js";
+import { resolveInstanceId } from "../../src/core/peers/instance-id.js";
 import { createPeersExtension } from "../../src/extensions/peers/index.js";
 
 const NOW = 1_800_000_000_000;
@@ -25,19 +25,27 @@ function fakePi(): Fake {
 	const ctx = { hasUI: true, ui: { notify: (m: string, t?: string) => notify.push({ message: m, type: t }) } };
 	const pi = {
 		on: (evt: string, h: (...args: unknown[]) => unknown) => handlers.set(evt, [...(handlers.get(evt) ?? []), h]),
-		registerTool: (t: { name: string; execute: (...args: unknown[]) => Promise<unknown> }) => tools.set(t.name, { execute: t.execute }),
+		registerTool: (t: { name: string; execute: (...args: unknown[]) => Promise<unknown> }) =>
+			tools.set(t.name, { execute: t.execute }),
 	} as unknown as ExtensionAPI;
 	return { pi, tools, handlers, notify, ctx };
 }
 
-async function fire(handlers: Map<string, Array<(...args: unknown[]) => unknown>>, evt: string, event: unknown, ctx: unknown): Promise<void> {
+async function fire(
+	handlers: Map<string, Array<(...args: unknown[]) => unknown>>,
+	evt: string,
+	event: unknown,
+	ctx: unknown,
+): Promise<void> {
 	for (const h of handlers.get(evt) ?? []) await h(event, ctx);
 }
 
 async function tool(fake: Fake, name: string, params: Record<string, unknown>): Promise<string> {
 	const t = fake.tools.get(name);
 	if (!t) throw new Error(`tool ${name} not registered`);
-	const result = (await t.execute("id", params, undefined, undefined, fake.ctx)) as { content: Array<{ text: string }> };
+	const result = (await t.execute("id", params, undefined, undefined, fake.ctx)) as {
+		content: Array<{ text: string }>;
+	};
 	return result.content.map((c) => c.text).join("\n");
 }
 
@@ -53,9 +61,16 @@ describe("createPeersExtension", () => {
 	});
 
 	it("registers four tools when anchored", () => {
-		const fake = fakePi();
-		createPeersExtension({ root: "/srv/proj" })(fake.pi);
-		expect([...fake.tools.keys()].sort()).toEqual(["peers_inbox", "peers_intent", "peers_list", "peers_send"]);
+		const project = scratch();
+		const scope = scratch();
+		try {
+			const fake = fakePi();
+			createPeersExtension({ root: project, scope })(fake.pi);
+			expect([...fake.tools.keys()].sort()).toEqual(["peers_inbox", "peers_intent", "peers_list", "peers_send"]);
+		} finally {
+			rmSync(project, { recursive: true, force: true });
+			rmSync(scope, { recursive: true, force: true });
+		}
 	});
 
 	it("two anchored extensions coordinate: send, group chat, inbox, intent", async () => {
@@ -66,22 +81,35 @@ describe("createPeersExtension", () => {
 		const fakeA = fakePi();
 		const fakeB = fakePi();
 		const fakeC = fakePi();
+		const project = scratch();
 		try {
-			createPeersExtension({ root: "/srv/proj", homeDir: homeA, scope: s, uuid: () => `run-a-${uuidCounter++}`, now: () => NOW })(
-				fakeA.pi,
-			);
-			createPeersExtension({ root: "/srv/proj", homeDir: homeB, scope: s, uuid: () => `run-b-${uuidCounter++}`, now: () => NOW })(
-				fakeB.pi,
-			);
-			createPeersExtension({ root: "/srv/proj", homeDir: homeC, scope: s, uuid: () => `run-c-${uuidCounter++}`, now: () => NOW })(
-				fakeC.pi,
-			);
+			createPeersExtension({
+				root: project,
+				homeDir: homeA,
+				scope: s,
+				uuid: () => `run-a-${uuidCounter++}`,
+				now: () => NOW,
+			})(fakeA.pi);
+			createPeersExtension({
+				root: project,
+				homeDir: homeB,
+				scope: s,
+				uuid: () => `run-b-${uuidCounter++}`,
+				now: () => NOW,
+			})(fakeB.pi);
+			createPeersExtension({
+				root: project,
+				homeDir: homeC,
+				scope: s,
+				uuid: () => `run-c-${uuidCounter++}`,
+				now: () => NOW,
+			})(fakeC.pi);
 
 			const idB = resolveInstanceId(homeB).instanceId;
-			const idC = resolveInstanceId(homeC).instanceId;
 
 			// registration happens on session_start
-			for (const fake of [fakeA, fakeB, fakeC]) await fire(fake.handlers, "session_start", { reason: "startup" }, fake.ctx);
+			for (const fake of [fakeA, fakeB, fakeC])
+				await fire(fake.handlers, "session_start", { reason: "startup" }, fake.ctx);
 
 			const listText = await tool(fakeA, "peers_list", {});
 			expect(listText).toContain("active");
@@ -105,6 +133,7 @@ describe("createPeersExtension", () => {
 			rmSync(homeB, { recursive: true, force: true });
 			rmSync(homeC, { recursive: true, force: true });
 			rmSync(s, { recursive: true, force: true });
+			rmSync(project, { recursive: true, force: true });
 		}
 	});
 
@@ -114,13 +143,22 @@ describe("createPeersExtension", () => {
 		const s = scratch();
 		const fakeA = fakePi();
 		const fakeB = fakePi();
+		const project = scratch();
 		try {
-			createPeersExtension({ root: "/srv/proj", homeDir: homeA, scope: s, uuid: () => `run-a-${uuidCounter++}`, now: () => NOW })(
-				fakeA.pi,
-			);
-			createPeersExtension({ root: "/srv/proj", homeDir: homeB, scope: s, uuid: () => `run-b-${uuidCounter++}`, now: () => NOW })(
-				fakeB.pi,
-			);
+			createPeersExtension({
+				root: project,
+				homeDir: homeA,
+				scope: s,
+				uuid: () => `run-a-${uuidCounter++}`,
+				now: () => NOW,
+			})(fakeA.pi);
+			createPeersExtension({
+				root: project,
+				homeDir: homeB,
+				scope: s,
+				uuid: () => `run-b-${uuidCounter++}`,
+				now: () => NOW,
+			})(fakeB.pi);
 			await fire(fakeA.handlers, "session_start", { reason: "startup" }, fakeA.ctx);
 			await fire(fakeB.handlers, "session_start", { reason: "startup" }, fakeB.ctx);
 
@@ -138,15 +176,18 @@ describe("createPeersExtension", () => {
 			rmSync(homeA, { recursive: true, force: true });
 			rmSync(homeB, { recursive: true, force: true });
 			rmSync(s, { recursive: true, force: true });
+			rmSync(project, { recursive: true, force: true });
 		}
 	});
 
 	it("resolves scope from project root and home", () => {
+		const project = scratch();
 		const home = scratch();
 		try {
-			const resolved = resolvePeerScopeDir("/srv/proj", home);
+			const resolved = resolvePeerScopeDir(project, home);
 			expect(resolved).toMatch(new RegExp(`^${join(home, "peers")}/[0-9a-f]{12}$`));
 		} finally {
+			rmSync(project, { recursive: true, force: true });
 			rmSync(home, { recursive: true, force: true });
 		}
 	});

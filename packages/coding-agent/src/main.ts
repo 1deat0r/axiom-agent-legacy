@@ -29,6 +29,7 @@ import { handleGatewayCommand } from "./cli/gateway-command.js";
 import { buildInitialMessage } from "./cli/initial-message.js";
 import { listModels } from "./cli/list-models.js";
 import { installOwnedSessionRecoveryTracking, isOwnedSessionWorkerProcess } from "./cli/owned-session-worker.js";
+import { handlePeersCommand } from "./cli/peers-command.js";
 import { handleProfileCommand } from "./cli/profile-command.js";
 import { handleProjectsCommand } from "./cli/projects-command.js";
 import { handlePublicCommand } from "./cli/public-command.js";
@@ -1126,6 +1127,10 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	if (await handleSkillCaptureAutoCommand(args)) {
+		return;
+	}
+
+	if (await handlePeersCommand(args)) {
 		return;
 	}
 

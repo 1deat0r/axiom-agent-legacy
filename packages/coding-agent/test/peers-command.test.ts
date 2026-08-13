@@ -2,9 +2,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { resolveInstanceId } from "../src/core/peers/instance-id.js";
-import { inbox, registerRun, resolvePeerScopeDir } from "../src/core/peers/index.js";
 import { handlePeersCommand } from "../src/cli/peers-command.js";
+import { inbox, registerRun, resolvePeerScopeDir } from "../src/core/peers/index.js";
+import { resolveInstanceId } from "../src/core/peers/instance-id.js";
 import type { PeerIdentity } from "../src/core/peers/types.js";
 
 const NOW = 1_800_000_000_000;
@@ -49,9 +49,9 @@ describe("handlePeersCommand", () => {
 			const scopeDir = resolvePeerScopeDir(project, home);
 			registerRun(scopeDir, SELF, {}, { uuid: () => "run-x", pid: 1234 });
 			expect(await handlePeersCommand(["peers", "msg", SELF.instanceId, "note to self"])).toBe(true);
-			expect(inbox(scopeDir, SELF, { now: () => NOW }).messages.map((m) => m.text)).toEqual(["note to self"]);
+			expect(inbox(scopeDir, SELF).messages.map((m) => m.text)).toEqual(["note to self"]);
 			expect(await handlePeersCommand(["peers", "group", "all hands"])).toBe(true);
-			expect(inbox(scopeDir, SELF, { now: () => NOW }).messages.map((m) => m.text)).toEqual(["all hands"]);
+			expect(inbox(scopeDir, SELF).messages.map((m) => m.text)).toEqual(["all hands"]);
 		} finally {
 			log.mockRestore();
 			rmSync(project, { recursive: true, force: true });
@@ -81,7 +81,7 @@ describe("handlePeersCommand", () => {
 			expect(await handlePeersCommand(["peers", "group", "peek me"])).toBe(true);
 			expect(await handlePeersCommand(["peers", "inbox"])).toBe(true);
 			expect(log.mock.calls.flat().join(" ")).toContain("peek me");
-			expect(inbox(scopeDir, SELF, { now: () => NOW }).messages).toHaveLength(1);
+			expect(inbox(scopeDir, SELF).messages).toHaveLength(1);
 		} finally {
 			log.mockRestore();
 			rmSync(project, { recursive: true, force: true });

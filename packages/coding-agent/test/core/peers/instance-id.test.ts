@@ -26,7 +26,10 @@ describe("resolveInstanceId", () => {
 	it("reuses an existing valid ID", () => {
 		const home = scratch();
 		try {
-			writeFileSync(resolveInstanceIdFile(home), JSON.stringify({ instanceId: "abc12345-1234-1234-1234-123456789012" }));
+			writeFileSync(
+				resolveInstanceIdFile(home),
+				JSON.stringify({ instanceId: "abc12345-1234-1234-1234-123456789012" }),
+			);
 			expect(resolveInstanceId(home).instanceId).toBe("abc12345-1234-1234-1234-123456789012");
 		} finally {
 			rmSync(home, { recursive: true, force: true });
