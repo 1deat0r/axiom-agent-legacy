@@ -5,8 +5,9 @@
  * to hundreds of thousands of real tokens makes every answer take a minute or
  * more before the first word appears.
  *
- * The archive keeps the file searchable (renamed, still *.jsonl), so
- * cross-session recall (/search, /sessions) survives the reset.
+ * The archive keeps the file searchable: it is renamed to
+ * `<id>.jsonl.archived-<ts>`, and the search indexer accepts archived names,
+ * so cross-session recall (/search, /sessions) survives the reset.
  */
 import { existsSync, renameSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -38,7 +39,7 @@ export function sessionExceedsBudget(path: string): boolean {
 	}
 }
 
-/** Archive the session file in place (kept as *.jsonl so /search still indexes it). */
+/** Archive the session file in place (renamed to `<id>.jsonl.archived-<ts>`; the search indexer indexes archived names). */
 export function archiveSessionFile(path: string): void {
 	const archived = `${path}.archived-${Date.now()}`;
 	renameSync(path, archived);

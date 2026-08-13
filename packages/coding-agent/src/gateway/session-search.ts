@@ -19,7 +19,7 @@
  */
 
 import { mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 /** One indexable message from a session file. */
@@ -222,7 +222,15 @@ function defaultReaddir(dir: string): string[] {
 	}
 }
 
+/** Archived session names: `<id>.jsonl.archived-<epochMs>` (kept searchable). */
+const ARCHIVED_NAME_RE = /\.jsonl\.archived-(\d+)$/;
+
+function isArchivedName(name: string): boolean {
+	return ARCHIVED_NAME_RE.test(name);
+}
+
 /** Current .jsonl files in the sessions dir as {sessionId, size, mtime}. */
+
 function collectSessionFiles(
 	sessionsDir: string,
 	readdir?: (dir: string) => string[],
@@ -236,7 +244,7 @@ function collectSessionFiles(
 	}
 	const out: Array<{ file: string; size: number; mtime: number }> = [];
 	for (const n of names) {
-		if (!n.endsWith(".jsonl")) continue;
+		if (!n.endsWith(".jsonl") && !isArchivedName(n)) continue;
 		const file = join(sessionsDir, n);
 		try {
 			const st = statSync(file);
@@ -336,7 +344,16 @@ export function reconcileIndex(db: DatabaseSync, sessionsDir: string, readdir?: 
 		if (e && e.size === f.size && e.mtime === f.mtime) continue; // unchanged
 		if (e) removeSession(db, e.session_id);
 		const session = parseSessionFile(f.file);
-		if (session) insertSession(db, session, f.file, f.size, f.mtime);
+		if (session) {
+			// An archived file shares its header id with the live file that
+			// replaced it; index it under a derived id so both stay searchable.
+			const name = basename(f.file);
+			if (isArchivedName(name)) {
+				const ts = name.match(ARCHIVED_NAME_RE)?.[1] ?? "";
+				session.id = `${session.id}.archived-${ts}`;
+			}
+			insertSession(db, session, f.file, f.size, f.mtime);
+		}
 	}
 	for (const [filePath, e] of existingByPath) {
 		if (!currentPaths.has(filePath)) removeSession(db, e.session_id);

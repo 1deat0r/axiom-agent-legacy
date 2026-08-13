@@ -265,4 +265,64 @@ describe("session-search module", () => {
 		expect(projectLabelForCwd("/home/u/projects", "/home/u")).toBe("workspace");
 		expect(projectLabelForCwd("/home/u/projects/alpha", undefined)).toBe("workspace");
 	});
+
+	it("indexes archived session files so /search still finds them after a reset", () => {
+		const dir = mkdtempSync(join(tmpdir(), "axml-search-"));
+		try {
+			writeFileSync(
+				join(dir, "chan.jsonl.archived-1780000000000"),
+				sessionLines("11111111-aaaa", "/home/u/projects/alpha", [
+					["user", "2026-02-01T00:00:00.000Z", "the archived run still recalls the widget decision"],
+				]),
+			);
+			const result = searchSessions({
+				sessionsDir: dir,
+				indexPath: join(dir, "index.sqlite"),
+				query: "widget decision",
+				scope: "all",
+			});
+			expect(result.hits.length).toBe(1);
+			expect(result.hits[0]!.sessionId).toContain("11111111-aaaa");
+			expect(result.hits[0]!.sessionId).toContain(".archived-1780000000000");
+			expect(result.sessionsIndexed).toBe(1);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("indexes an archive alongside its live replacement without crashing or losing either", () => {
+		const dir = mkdtempSync(join(tmpdir(), "axml-search-"));
+		try {
+			writeFileSync(
+				join(dir, "chan.jsonl.archived-1780000000000"),
+				sessionLines("11111111-aaaa", "/home/u/projects/alpha", [
+					["user", "2026-02-01T00:00:00.000Z", "old phrasing about widgets"],
+				]),
+			);
+			writeFileSync(
+				join(dir, "chan.jsonl"),
+				sessionLines("11111111-aaaa", "/home/u/projects/alpha", [
+					["user", "2026-02-02T00:00:00.000Z", "fresh phrasing about gadgets"],
+				]),
+			);
+			const live = searchSessions({
+				sessionsDir: dir,
+				indexPath: join(dir, "index.sqlite"),
+				query: "gadgets",
+				scope: "all",
+			});
+			expect(live.hits.length).toBe(1);
+			expect(live.sessionsIndexed).toBe(2);
+			const old = searchSessions({
+				sessionsDir: dir,
+				indexPath: join(dir, "index.sqlite"),
+				query: "widgets",
+				scope: "all",
+			});
+			expect(old.hits.length).toBe(1);
+			expect(old.hits[0]!.snippet).toContain("widgets");
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
 });

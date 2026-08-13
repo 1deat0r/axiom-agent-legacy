@@ -333,7 +333,7 @@ export class Gateway {
 		// Session budget: a channel session that has grown past the soft cap
 		// makes every reply re-process a huge context (minute-scale latency
 		// before the first word). Archive it and let the next run start fresh;
-		// the archive stays *.jsonl so /search still finds it.
+		// the archive's .jsonl.archived-<ts> name is still indexed by /search.
 		let sessionWasReset = false;
 		if (this.sessionsDir) {
 			const path = sessionFilePath(this.sessionsDir, sessionKey);
