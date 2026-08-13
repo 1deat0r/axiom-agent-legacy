@@ -129,6 +129,12 @@ const CANONICAL_BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 		argumentHint: "[list|add <name>|rm <name>]",
 		takesArgument: true,
 	},
+	{
+		name: "connectors",
+		description: "Manage messaging connectors (signal/telegram/discord/slack) — opens a menu",
+		argumentHint: "[status|help <name>]",
+		takesArgument: true,
+	},
 	{ name: "system-prompt", description: "Show the exact system prompt sent to the model" },
 	{ name: "logs", description: "Show where daemon and client logs are saved" },
 	{

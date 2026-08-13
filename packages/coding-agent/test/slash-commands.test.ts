@@ -265,6 +265,18 @@ describe("session slash commands", () => {
 	});
 });
 
+describe("connectors terminal slash command", () => {
+	test("exposes /connectors as an argument command for the gateway transports", () => {
+		expect(BUILTIN_SLASH_COMMANDS.find((command) => command.name === "connectors")).toMatchObject({
+			description: expect.stringContaining("connectors"),
+			argumentHint: expect.stringContaining("status"),
+			takesArgument: true,
+		});
+		expect(isBuiltinSlashCommandName("connectors")).toBe(true);
+		expect(builtinSlashCommandTakesArgument("connectors")).toBe(true);
+	});
+});
+
 describe("profiles and projects terminal slash commands", () => {
 	test("exposes /profiles and /projects as argument commands", () => {
 		expect(BUILTIN_SLASH_COMMANDS.find((command) => command.name === "profiles")).toMatchObject({

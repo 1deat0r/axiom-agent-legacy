@@ -53,6 +53,15 @@ import {
 	launchDaemonUpdateRestartCoordinator,
 	resolveDaemonUpdateRestartSocketPath,
 } from "../../cli/daemon-update-restart.js";
+import {
+	defaultGatewayServiceDeps,
+	type GatewayServiceDeps,
+	readGatewayConnectorStatus,
+	readGatewayServiceState,
+	runConnectorsCommandArgs,
+	setConnectorToken,
+	switchGatewayTransport,
+} from "../../cli/gateway-service.js";
 import { handleProfileCommand, listProfileNames, profileBaseHome } from "../../cli/profile-command.js";
 import { handleProjectsCommand, listProjectNames } from "../../cli/projects-command.js";
 import {
@@ -133,6 +142,7 @@ import {
 } from "../../core/telemetry.js";
 import { type TruncationResult, truncateTail } from "../../core/tools/truncate.js";
 import { AXIOM_HOME_ENV, axiomHome, profileLabel } from "../../extensions/profile/registry.js";
+import { connectorById, connectorGuideLines, type GatewayConnector } from "../../gateway/connectors.js";
 import { AXIOM_LOGO } from "../../themes/axiom-logo.js";
 import { getChangelogPath, parseChangelog } from "../../utils/changelog.js";
 import { copyToClipboard } from "../../utils/clipboard.js";
@@ -189,6 +199,7 @@ import {
 } from "./components/compaction-outcome-message.js";
 import { CompactionSummaryMessageComponent } from "./components/compaction-summary-message.js";
 import { ConfigurationMenuComponent, type ConfigurationMenuTab } from "./components/configuration-menu.js";
+import { ConnectorTokenInputComponent } from "./components/connector-token-input.js";
 import { formatContextTree } from "./components/context-tree-format.js";
 import { isCompactAgentMessageNeighbor } from "./components/conversation-components.js";
 import { CountdownTimer } from "./components/countdown-timer.js";
@@ -230,6 +241,7 @@ import { UserMessageSelectorComponent } from "./components/user-message-selector
 import {
 	buildSwitchRelaunchArgs,
 	shouldOpenWorkspaceMenu,
+	type WorkspaceOption,
 	WorkspaceSelectorComponent,
 	type WorkspaceSelectorOptions,
 } from "./components/workspace-selector.js";
@@ -4760,6 +4772,12 @@ export class InteractiveMode {
 				if (commandName === "projects") {
 					this.echoLocalCommand(text);
 					await this.handleProjectsSlashCommand(commandArgs);
+					this.editor.setText("");
+					return;
+				}
+				if (commandName === "connectors") {
+					this.echoLocalCommand(text);
+					await this.handleConnectorsSlashCommand(commandArgs);
 					this.editor.setText("");
 					return;
 				}
@@ -9539,7 +9557,18 @@ export class InteractiveMode {
 	}
 
 	/** Show a boxed workspace menu on top of the chat; resolves on select or cancel. */
-	private openWorkspaceSelector(options: WorkspaceSelectorOptions): Promise<void> {
+	private async openWorkspaceSelector(options: WorkspaceSelectorOptions): Promise<void> {
+		const value = await this.openSelectorMenu(options);
+		if (value !== undefined) options.onSelect(value);
+	}
+
+	/**
+	 * Boxed single-choice menu: resolves the chosen value, or undefined when
+	 * the user cancels (Esc). Shared by /profiles, /projects, and /connectors.
+	 */
+	private openSelectorMenu(
+		options: Omit<WorkspaceSelectorOptions, "onSelect" | "onCancel">,
+	): Promise<string | undefined> {
 		return new Promise((resolve) => {
 			let handle: OverlayHandle | undefined;
 			let settled = false;
@@ -9550,19 +9579,114 @@ export class InteractiveMode {
 					settled = true;
 					handle?.hide();
 					this.ui.requestRender();
-					resolve();
-					options.onSelect(value);
+					resolve(value);
 				},
 				onCancel: () => {
 					if (settled) return;
 					settled = true;
 					handle?.hide();
 					this.ui.requestRender();
-					resolve();
+					resolve(undefined);
 				},
 			});
 			handle = this.showFullPaneOverlay(component, 60);
 		});
+	}
+
+	/**
+	 * Local /connectors slash command (ADR-0036): status/help print lines into
+	 * the chat; a bare /connectors opens the boxed connector menu. Never routed
+	 * to the model. The gateway service operations take injected deps so tests
+	 * drive the same flow against fakes.
+	 */
+	private async handleConnectorsSlashCommand(
+		args: string,
+		deps: GatewayServiceDeps = defaultGatewayServiceDeps(),
+	): Promise<void> {
+		const lines = await runConnectorsCommandArgs(args, deps);
+		if (lines !== undefined) {
+			this.printLocalLines(lines);
+			return;
+		}
+		await this.openConnectorsMenu(deps);
+	}
+
+	/** Two-level connector menu: pick a connector, then an action for it. */
+	private async openConnectorsMenu(deps: GatewayServiceDeps): Promise<void> {
+		const state = await readGatewayServiceState(deps);
+		const statuses = await readGatewayConnectorStatus(deps, state);
+		const connectorId = await this.openSelectorMenu({
+			title: "connectors",
+			hint: "↑/↓ choose · Enter configure · Esc close",
+			options: statuses.map((status) => ({
+				value: status.connector.id,
+				label: status.connector.label,
+				description: status.label,
+			})),
+		});
+		if (!connectorId) return;
+		const connector = connectorById(connectorId);
+		if (!connector) return;
+		const action = await this.openConnectorActionsMenu(connector);
+		if (!action) return;
+		if (action === "status") {
+			const status = statuses.find((candidate) => candidate.connector.id === connector.id);
+			this.printLocalLines([
+				...connectorGuideLines(connector),
+				`status: ${status?.label ?? "unknown"}`,
+				`gateway service: ${deps.serviceName} — ${state.activeState ?? "unit not found"}`,
+			]);
+			return;
+		}
+		if (action === "token") {
+			const token = await this.promptForConnectorToken(connector);
+			if (!token) return;
+			try {
+				this.printLocalLines((await setConnectorToken(connector, token, deps)).split("\n"));
+			} catch (error) {
+				this.showError(error instanceof Error ? error.message : String(error));
+			}
+			return;
+		}
+		this.printLocalLines((await switchGatewayTransport(connector, deps)).split("\n"));
+	}
+
+	/** The per-connector action menu (status guide / set token / switch). */
+	private openConnectorActionsMenu(connector: GatewayConnector): Promise<string | undefined> {
+		const options: WorkspaceOption[] = [{ value: "status", label: "Status & setup guide" }];
+		if (connector.kind === "token") {
+			options.push({ value: "token", label: "Set bot token (paste it in)" });
+		}
+		options.push({ value: "use", label: "Use now — restart the gateway as this connector" });
+		return this.openSelectorMenu({
+			title: `connectors · ${connector.label}`,
+			hint: "↑/↓ choose · Enter run · Esc back",
+			options,
+		});
+	}
+
+	/** Boxed paste field for a bot token; resolves undefined on cancel. */
+	private promptForConnectorToken(connector: GatewayConnector): Promise<string | undefined> {
+		return new Promise((resolve) => {
+			const component = new ConnectorTokenInputComponent(
+				`${connector.label} token`,
+				`${connector.credentialHint}; the token is stored in the gateway unit and env file, never echoed`,
+			);
+			const handle = this.showFullPaneOverlay(component, 72);
+			void component.waitForSubmit().then((value) => {
+				handle.hide();
+				this.ui.requestRender();
+				resolve(value);
+			});
+		});
+	}
+
+	/** Print local-command result lines into the chat transcript. */
+	private printLocalLines(lines: string[]): void {
+		if (lines.length === 0) return;
+		this.chatContainer.addChild(new Spacer(1));
+		this.chatContainer.addChild(new Text(lines.join("\n"), 1, 0));
+		this.ui.requestRender();
 	}
 
 	/**
@@ -9598,11 +9722,7 @@ export class InteractiveMode {
 		const lines: string[] = [];
 		const argv = [...head, ...(args ? (args.match(/\S+/g) ?? []) : [])];
 		const handled = await run(argv, { stdout: (text: string) => lines.push(text) });
-		if (handled && lines.length > 0) {
-			this.chatContainer.addChild(new Spacer(1));
-			this.chatContainer.addChild(new Text(lines.join("\n"), 1, 0));
-			this.ui.requestRender();
-		}
+		if (handled) this.printLocalLines(lines);
 	}
 
 	private async handleHeartbeatCommand(text: string): Promise<void> {

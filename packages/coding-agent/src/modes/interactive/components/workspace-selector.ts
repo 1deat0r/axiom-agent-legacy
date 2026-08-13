@@ -10,7 +10,7 @@
  * `--profile <name>` / `--project <name>` with a fresh session in that
  * workspace. `buildSwitchRelaunchArgs` derives the child argv.
  */
-import { Container, type SelectItem, SelectList, Text } from "@earendil-works/pi-tui";
+import { Container, type Focusable, type SelectItem, SelectList, Text } from "@earendil-works/pi-tui";
 import { getSelectListTheme } from "../theme/theme.js";
 import { DynamicBorder } from "./dynamic-border.js";
 
@@ -20,6 +20,8 @@ export interface WorkspaceOption {
 	label: string;
 	/** The workspace this session currently runs under (marked "(current)"). */
 	current?: boolean;
+	/** Optional one-line status shown right of the label (e.g. "active", "token set"). */
+	description?: string;
 }
 
 export interface WorkspaceSelectorOptions {
@@ -32,8 +34,10 @@ export interface WorkspaceSelectorOptions {
 }
 
 /** A bordered, centered list menu rendered on top of the chat. */
-export class WorkspaceSelectorComponent extends Container {
+export class WorkspaceSelectorComponent extends Container implements Focusable {
 	private readonly selectList: SelectList;
+	private _focused = false;
+
 	constructor(options: WorkspaceSelectorOptions) {
 		super();
 		this.addChild(new DynamicBorder());
@@ -41,13 +45,13 @@ export class WorkspaceSelectorComponent extends Container {
 		const items: SelectItem[] = options.options.map((option) => ({
 			value: option.value,
 			label: option.label,
-			description: option.current ? "(current)" : undefined,
+			description: option.description ?? (option.current ? "(current)" : undefined),
 		}));
 		this.selectList = new SelectList(items, 10, getSelectListTheme(), {
 			minPrimaryColumnWidth: 12,
 			maxPrimaryColumnWidth: 32,
 		});
-		const currentIndex = items.findIndex((item) => item.description === "(current)");
+		const currentIndex = options.options.findIndex((option) => option.current === true);
 		if (currentIndex !== -1) this.selectList.setSelectedIndex(currentIndex);
 		this.selectList.onSelect = (item) => options.onSelect(item.value);
 		this.selectList.onCancel = () => options.onCancel?.();
@@ -57,6 +61,20 @@ export class WorkspaceSelectorComponent extends Container {
 	}
 	getSelectList(): SelectList {
 		return this.selectList;
+	}
+
+	// Focusable: the overlay routes keypresses through the component, which
+	// forwards them to the select list (arrow keys, Enter, Escape).
+	get focused(): boolean {
+		return this._focused;
+	}
+
+	set focused(value: boolean) {
+		this._focused = value;
+	}
+
+	handleInput(data: string): void {
+		this.selectList.handleInput(data);
 	}
 }
 

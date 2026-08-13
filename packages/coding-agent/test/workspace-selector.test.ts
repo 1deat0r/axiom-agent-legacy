@@ -67,6 +67,43 @@ describe("WorkspaceSelectorComponent", () => {
 	});
 });
 
+test("forwards key input to the select list (overlay routing)", () => {
+	const { component, onSelect, onCancel } = makeComponent();
+	component.handleInput("\u001b[B");
+	expect(component.getSelectList().getSelectedItem()?.value).toBe("builder");
+	component.handleInput("\r");
+	expect(onSelect).toHaveBeenCalledWith("builder");
+	component.handleInput("\u001b");
+	expect(onCancel).toHaveBeenCalled();
+});
+
+test("renders an explicit status description instead of (current)", () => {
+	const { component } = makeComponent({
+		options: [
+			{ value: "telegram", label: "telegram", current: true, description: "active" },
+			{ value: "discord", label: "discord", description: "no token" },
+		],
+	});
+	const rendered = stripAnsi(component.render(60).join("\n"));
+	expect(rendered).toContain("telegram");
+	expect(rendered).toContain("active");
+	expect(rendered).toContain("no token");
+	expect(rendered).not.toContain("(current)");
+});
+
+test("still marks the current workspace when no description is given", () => {
+	const { component } = makeComponent();
+	const rendered = stripAnsi(component.render(60).join("\n"));
+	expect(rendered).toContain("(current)");
+});
+
+test("is focusable so the overlay can route input through it", () => {
+	const { component } = makeComponent();
+	expect(component.focused).toBe(false);
+	component.focused = true;
+	expect(component.focused).toBe(true);
+});
+
 describe("buildSwitchRelaunchArgs", () => {
 	test("appends the new profile and drops the old workspace/session flags", () => {
 		const out = buildSwitchRelaunchArgs(

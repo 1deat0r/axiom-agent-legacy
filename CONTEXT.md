@@ -168,3 +168,17 @@ empty ("keep the profile's provider"); `/model clear` reverts to the profile
 default. The CLI stays the model authority — availability is validated on the
 next completion, not by a gateway-side catalog.
 _Avoid_: Settings edit (the store is an override, not the profile's config)
+
+**Connectors**:
+The terminal `/connectors` command (ADR-0036): a boxed two-level menu that
+connects messaging platforms — signal (signal-cli), telegram, discord, slack
+(bot tokens) — to the gateway. Pick a connector (each labeled with its live
+status: active / token set / no token / signal-cli found), then an action:
+Status & setup guide, Set bot token (a boxed paste field; written to the
+gateway systemd unit's `Environment=` line and the env file, never echoed), or
+Use now (rewrite the unit's `--transport`, daemon-reload, restart — guarded
+against missing tokens and against restarting the service from inside its own
+cgroup). `/connectors status` and `/connectors help <name>` print the same
+state without a menu. The service name is `AXIOM_GATEWAY_SERVICE` (default
+`axiom-telegram-gateway.service`).
+_Avoid_: Transport flag (a connector is the transport plus its credential)
