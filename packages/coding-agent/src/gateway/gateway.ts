@@ -380,7 +380,21 @@ export class Gateway {
 					// back to one fresh message so the answer always lands.
 					editor.setTarget(finalText);
 					if (!(await editor.finish())) {
+						// The final in-place edit failed: one fresh send (ledgered
+						// by deliver) so the answer always lands.
 						await this.deliver(recipient, finalText);
+					} else {
+						// The streamed bubble IS the delivery: record it like any
+						// outbound delivery so /ledger stays complete (ADR-0022)
+						// and the reply carries a timestamp for latency forensics.
+						this.ledger?.record({
+							ts: Date.now(),
+							transport: this.transportName,
+							channel: msg.channelId,
+							recipient: msg.sender,
+							chars: finalText.length,
+							ok: true,
+						});
 					}
 				} finally {
 					stopTyping();
