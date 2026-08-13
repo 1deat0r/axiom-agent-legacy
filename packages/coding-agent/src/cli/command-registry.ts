@@ -191,17 +191,20 @@ export const COMMAND_SPECS: readonly CommandSpec[] = [
 		path: ["peers"],
 		usage: "peers <list|inbox|msg|group>",
 		summary: "Coordinate with co-anchored peer agents (ADR-0038)",
-		description: "Peers are Axiom instances anchored on the same project, sharing presence and a message board.",
+		description:
+			"Peers are Axiom instances anchored on the same project, sharing presence and a message board. " +
+			"Flags: --json (machine-readable list/inbox), --help. State lives under ~/.axiom/peers/<project-hash>/; " +
+			"nothing is written into the repo.",
 	},
 	{
 		path: ["peers", "list"],
-		usage: "peers list",
-		summary: "List co-anchored peers and their presence",
+		usage: "peers list [--json]",
+		summary: "List co-anchored peers and their presence (aligned table, relative times)",
 	},
 	{
 		path: ["peers", "inbox"],
-		usage: "peers inbox",
-		summary: "Peek at unread peer messages",
+		usage: "peers inbox [--json]",
+		summary: "Peek at unread peer messages (does not mark them read)",
 	},
 	{
 		path: ["peers", "msg"],
