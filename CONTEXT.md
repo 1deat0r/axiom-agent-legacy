@@ -64,6 +64,15 @@ A single agent conversation: its system prompt, message history, and any
 memory or skills context loaded for it. One channel maps to one session.
 _Avoid_: Thread, chat
 
+**Session budget**:
+The gateway's soft cap on how large a channel session file may grow
+(`GATEWAY_SESSION_BUDGET_BYTES`, 256KB of JSONL, ADR-0041): a session past
+the cap is archived in place (`<id>.jsonl.archived-<ts>`, still found by
+`/search`) and the next run starts fresh, so replies never re-process a
+runaway history. `/new` archives on demand.
+_Avoid_: Context window, auto-compaction (the budget is a file-size gate,
+not a token limit)
+
 **Cost ledger**:
 The pricing side of the agent: token usage priced per model (override rates
 from the axiom ledger file, else the cost the baseline recorded), accumulated
