@@ -1,75 +1,24 @@
-# Handoff — Gateway breadth: Discord + Slack transports + delivery ledger (feat/discord-gateway)
+# Handoff — board loop-closure (2026-08-13)
 
-Status: ready for merge review. Branch `feat/discord-gateway`, cut from
-`baseline/prime-v0.7.2` @ 01948fe39 (ADR-0017 hardened telegram in HEAD). Three
-slices of issue #3 ("Gateway breadth — more transports + continuity") landed in
-this isolated worktree: Discord (ADR-0020), Slack (ADR-0021), and the delivery
-ledger + fan-out continuity (ADR-0022).
+What was done: closed four shipped issues with comments citing what shipped
+and how it was verified — #5 (Telegram batch transport, ADR-0017), #6
+(Telegram streaming v2, 065d56c27, live under axiom-telegram-gateway.service),
+#14 (profiles/projects/anti-drift spine; skin was deferred past August by
+owner decision), #12 (v0.23 review record). Filed two follow-ups, both
+ready-for-agent: #17 root guard path confinement on bash/read/write (the one
+unshipped ADR-0014 ladder step) and #18 the six deferred v0.23 findings
+(verify against main, then fix or document). Deleted feat/connectors-menu
+locally and remotely.
 
-## What was done
-- `src/gateway/transports/discord.ts` — DiscordTransport, DiscordClient
-  (sendMessage/listChannels/getMessages), cursor stores, HttpDiscordClient
-  (Bot, REST), chunk reuse (2000), fatal-401 + per-channel isolation.
-- `src/gateway/transports/slack.ts` — SlackTransport, SlackClient
-  (postMessage/listChannels/history), cursor stores, HttpSlackClient (Bearer,
-  REST), chunk reuse (40k), ok:false fatal classification + inclusive-oldest
-  no-replay + per-channel isolation.
-- `src/gateway/delivery-ledger.ts` — Memory + File(JSONL) DeliveryLedger
-  (ADR-0022), capped + malformed-line tolerant.
-- `src/gateway/gateway.ts` — single `deliver()` path records every outbound
-  delivery; `deliverToAll()` fans one message to every configured `deliverTo`
-  channel.
-- `src/gateway/config.ts` — `deliverTo?: { channel }[]` (back-compat).
-- `src/gateway/commands/{announce,ledger}.ts` — `/announce <text>` +
-  `/ledger [n]`, wired into the registry and /help.
-- `src/cli/gateway-command.ts` — `--transport discord|slack`, tokens, help,
-  buildTransport; the CLI hoists ONE FileDeliveryLedger + transport name shared
-  by both the router and the cron manager.
-- `src/gateway/cron.ts` (+ CLI) — scheduled `/cron` run deliveries now record
-  into the same shared ledger (cron spine feeds the ledger).
-- `src/gateway/{gateway,types,config}.ts` + CLI — cross-transport fan-out
-  (ADR-0023): `deliverTo` entries may name a `transport`; the gateway holds
-  extra named send-only fan-out transports and `deliverToAll` routes each
-  target to the right platform (unknown names degrade to the active), ledger
-  labelled by the delivering transport. CLI builds sibling transports from
-  present tokens.
-- Tests: discord-transport (17), slack-transport (19), gateway-command (22),
-  gateway-discord (3), gateway-slack (3), delivery-ledger (5), gateway-ledger
-  (3), config deliverTo (+1). Full gateway dir 18 files / 143 tests.
-- Docs: `docs/adr/ADR-0020/21/22*.md`, `docs/discord-gateway/summary.html`,
-  this handoff.
+How it was verified: every closed issue was read in full before closing and
+its acceptance criteria mapped to merged, tested, deployed code or to a filed
+follow-up; nothing was closed blind. Branch deletion was gated on
+merge-base --is-ancestor (connectors-menu is an ancestor of main, empty
+both-ways diff) and confirmed by git ls-remote showing zero remote refs.
+The working tree was checked out on feat/connectors-menu at the same commit
+as main, so switching branches moved no files; the only untracked file
+(docs/hermes-improvements.html) is not from this session and was left
+untouched.
 
-## What was verified, and how
-- **Unit (injected fakes):** per transport — send + chunk, deliver identity
-  (channel + sender), per-channel cursor no-replay (incl. Slack's inclusive old-
-  est), transient recovers, per-channel isolation (throttled), fatal stops,
-  cursor-write failure warns+continues, disconnect aborts, skips blank. Ledger:
-  JSONL append + continuity across instances + malformed-line tolerance + cap.
-- **Mock (local node:http server, never live):** Http clients — right routes +
-  auth (Bot/Bearer) + bodies (create-message, chat.postMessage, history, con-
-  versations.list) + result parse + fatal surfaced.
-- **Router (in-memory):** every outbound delivery (reply + denial) is recorded;
-  deliverToAll fans out to each configured channel and records each; /ledger
-  lists entries; /announce dispatches to deliverToAll.
-- **CLI mock:** flag/env/missing-token resolution + buildTransport returns the
-  right transport.
-- **Floor:** biome check clean; root `tsgo --noEmit` clean; gateway dir 18
-  files / 143 tests pass.
-
-`./test.sh` reports 15 failures across 4451 tests — every one a pre-existing
-*sandbox/environment* baseline daemon/worker suite, none touched by this work
-(verified identical on a pristine baseline worktree: 4603 EXDEV +
-daemon-serialized-refine; 4685 was FORCE_COLOR stderr noise and passes scrubbed;
-kernel-heartbeat timing-flaky). Per AGENTS.md these are known-fails here
-("record as known-fail with reason, never mute").
-
-## Live (not done — operator-gated)
-Real Discord, Slack, or Telegram needs tokens + owner ids in the allowlist + a
-provider. Not fabricated; both transports are exercised by their test suites only.
-
-## Notes / follow-ups
-- Baseline is merged and current (e1f071cbd, cron-gateway included) — the branch
-  is no longer behind the baseline tip.
-- Issue #3 remaining scope: websocket / Socket Mode low-latency receive; the
-  roadmap's relay/mirror + TTS consumer; a live cross-platform pass (operator-
-  gated: needs tokens for more than one platform); and CI on this branch.
+Live state: no code changed, nothing redeployed. This run touched the issue
+tracker, branch refs, and this handoff only.
