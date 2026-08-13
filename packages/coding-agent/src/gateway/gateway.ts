@@ -317,10 +317,16 @@ export class Gateway {
 						: streamed.reply.length > 0
 							? streamed.reply
 							: "(no reply)";
-				try {
-					await streamer.editMessage(msg.channelId, messageId, finalText);
-				} catch {
-					await this.deliver(recipient, finalText);
+				// The streamed bubble already shows `lastText`. Only edit again when
+				// the final text differs; editing to unchanged text makes Telegram
+				// reject with "message is not modified", which would otherwise
+				// trip the batch fallback and send the answer twice.
+				if (lastText.trimEnd() !== finalText) {
+					try {
+						await streamer.editMessage(msg.channelId, messageId, finalText);
+					} catch {
+						await this.deliver(recipient, finalText);
+					}
 				}
 				return;
 			} catch {

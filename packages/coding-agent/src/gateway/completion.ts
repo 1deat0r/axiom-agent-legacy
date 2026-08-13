@@ -387,6 +387,20 @@ export function fakeCompletionRunner(): CompletionRunner & {
 
 			return { reply: `axiom reply to: ${input.prompt}`, sessionId: input.sessionId };
 		},
+		async streamCompletion(input, onDelta) {
+			this.calls.push({
+				sessionId: input.sessionId,
+				prompt: input.prompt,
+				model: input.model,
+				projectRoot: input.projectRoot,
+			});
+			const reply = `axiom reply to: ${input.prompt}`;
+			// Emit the whole reply as two deltas so the streamed bubble ends on the
+			// final text (exercises the no-duplicate path).
+			onDelta(reply.slice(0, Math.floor(reply.length / 2)));
+			onDelta(reply.slice(Math.floor(reply.length / 2)));
+			return { reply, sessionId: input.sessionId };
+		},
 	};
 	return runner;
 }

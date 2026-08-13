@@ -9,7 +9,48 @@ import { fakeCompletionRunner, sessionIdForChannel } from "../../src/gateway/com
 import { GatewayCron } from "../../src/gateway/cron.js";
 import { Gateway } from "../../src/gateway/gateway.js";
 import { InMemoryRestartNoticeStore } from "../../src/gateway/restart-notice.js";
-import type { GatewayMessage, GatewayTransport } from "../../src/gateway/types.js";
+import type { CompletionRunner, GatewayMessage, GatewayRecipient, GatewayTransport } from "../../src/gateway/types.js";
+
+/** A scriptable in-memory transport that also supports streaming edits. */
+function streamingTransport() {
+	const sent: Array<{ to: string; text: string }> = [];
+	const placed: Array<{ to: string; text: string }> = [];
+	const edits: Array<{ chatId: string; messageId: number; text: string }> = [];
+	let id = 0;
+	let handler: ((msg: GatewayMessage) => void) | undefined;
+	let failEdit = false;
+	const t: GatewayTransport & {
+		sendMessage(to: GatewayRecipient, text: string): Promise<number>;
+		editMessage(chatId: string, messageId: number, text: string): Promise<void>;
+	} = {
+		async connect() {},
+		async disconnect() {},
+		async send(to, text) {
+			sent.push({ to: to.recipient, text });
+		},
+		async sendMessage(to, text) {
+			placed.push({ to: to.recipient, text });
+			return ++id;
+		},
+		async editMessage(chatId, messageId, text) {
+			if (failEdit) throw new Error("edit failed");
+			edits.push({ chatId, messageId, text });
+		},
+		onMessage(h) {
+			handler = h;
+		},
+	};
+	return {
+		t,
+		sent,
+		placed,
+		edits,
+		push: (m: GatewayMessage) => handler?.(m),
+		setFailEdit(v: boolean) {
+			failEdit = v;
+		},
+	};
+}
 
 /** A scriptable in-memory transport. */
 function fakeTransport() {
@@ -675,6 +716,67 @@ describe("Gateway restart notice", () => {
 			await g.start();
 			await new Promise((r) => setTimeout(r, 20));
 			expect(sent.some((s) => s.text.includes("back online"))).toBe(false);
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("Gateway streaming replies", () => {
+	it("streams an agent run into one edited bubble without a duplicate batch send", async () => {
+		const dir = await home("axiom-gw-stream-");
+		try {
+			const s = streamingTransport();
+			const completion = fakeCompletionRunner();
+			const g = new Gateway({
+				transport: s.t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+			});
+			await g.start();
+			s.push({ channelId: "+1", sender: "+1", text: "hello", isCommand: false, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 30));
+			expect(s.placed).toHaveLength(1); // one placeholder bubble
+			expect(s.placed[0]!.text).toBe("…");
+			expect(s.edits.length).toBeGreaterThan(0);
+			expect(s.edits.at(-1)!.text).toBe("axiom reply to: hello");
+			expect(s.sent).toHaveLength(0); // no batch fallback => no duplicate
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("falls back to a batch send when the final edit fails", async () => {
+		const dir = await home("axiom-gw-stream-");
+		try {
+			const s = streamingTransport();
+			const completion: CompletionRunner = {
+				async runCompletion(input) {
+					return { reply: "batch", sessionId: input.sessionId };
+				},
+				async streamCompletion(input, onDelta) {
+					onDelta("partial"); // bubble ends at "partial"
+					return { reply: "final different", sessionId: input.sessionId }; // differs => final edit
+				},
+			};
+			s.setFailEdit(true);
+			const g = new Gateway({
+				transport: s.t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+			});
+			await g.start();
+			s.push({ channelId: "+1", sender: "+1", text: "hello", isCommand: false, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 30));
+			expect(s.sent.some((x) => x.text === "final different")).toBe(true);
 			await g.stop();
 		} finally {
 			await rm(dir, { recursive: true, force: true });
