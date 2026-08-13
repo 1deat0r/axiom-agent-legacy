@@ -8,10 +8,12 @@ import {
 	chunkTelegramText,
 	FileTelegramOffsetStore,
 	HttpTelegramClient,
+	TELEGRAM_HTTP_TIMEOUT_MS,
 	TELEGRAM_LONG_POLL_MAX_SECONDS,
 	type TelegramClient,
 	TelegramTransport,
 	type TelegramUpdate,
+	telegramRequestTimeoutMs,
 } from "../../src/gateway/transports/telegram.js";
 
 /** An in-memory Telegram client the transport polls (configuration via the returned object). */
@@ -347,6 +349,52 @@ describe("FileTelegramOffsetStore", () => {
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
+	});
+});
+
+describe("telegram HTTP timeout bounds", () => {
+	it("bounds mutations to the client timeout", () => {
+		expect(telegramRequestTimeoutMs("mutate", TELEGRAM_HTTP_TIMEOUT_MS, 50)).toBe(TELEGRAM_HTTP_TIMEOUT_MS);
+	});
+
+	it("bounds polls to at least the long-poll window plus grace", () => {
+		// 50s long-poll + 5s grace > the 15s mutation timeout, so polls get 55s.
+		expect(telegramRequestTimeoutMs("poll", TELEGRAM_HTTP_TIMEOUT_MS, 50)).toBe(55_000);
+		// A short long-poll still gets the mutation floor (15s).
+		expect(telegramRequestTimeoutMs("poll", TELEGRAM_HTTP_TIMEOUT_MS, 2)).toBe(TELEGRAM_HTTP_TIMEOUT_MS);
+	});
+
+	it("aborts a hung sendMessage when the timeout fires", async () => {
+		let observedSignal: AbortSignal | undefined;
+		const fetchFn: typeof fetch = (async (_input, init) => {
+			observedSignal = init?.signal ?? undefined;
+			await new Promise<void>((_resolve, reject) => {
+				observedSignal?.addEventListener("abort", () => {
+					reject(observedSignal?.reason ?? new Error("aborted"));
+				});
+			});
+			throw new Error("unreachable");
+		}) as typeof fetch;
+		const client = new HttpTelegramClient({ token: "T", timeoutMs: 40, fetchFn });
+		const started = Date.now();
+		await expect(client.sendMessage({ chatId: "1", text: "hi" })).rejects.toThrow();
+		const elapsed = Date.now() - started;
+		expect(elapsed).toBeGreaterThanOrEqual(30); // the signal actually fired
+		expect(elapsed).toBeLessThan(1_500); // and it did not wait for a network hang
+		expect(observedSignal?.aborted).toBe(true);
+	});
+
+	it("aborts a hung editMessageText and sendChatAction the same way", async () => {
+		const hang = async (signal: AbortSignal | undefined) => {
+			await new Promise<void>((_resolve, reject) => {
+				signal?.addEventListener("abort", () => reject(signal.reason ?? new Error("aborted")));
+			});
+			throw new Error("unreachable");
+		};
+		const fetchFn = (async (_input: unknown, init?: RequestInit) => hang(init?.signal ?? undefined)) as typeof fetch;
+		const client = new HttpTelegramClient({ token: "T", timeoutMs: 40, fetchFn });
+		await expect(client.editMessageText({ chatId: "1", messageId: 7, text: "x" })).rejects.toThrow();
+		await expect(client.sendChatAction({ chatId: "1", action: "typing" })).rejects.toThrow();
 	});
 });
 

@@ -8,6 +8,7 @@ import { MemoryActiveProjectStore } from "../../src/gateway/active-project.js";
 import { MemoryChannelIndex } from "../../src/gateway/channel-index.js";
 import { fakeCompletionRunner, sessionIdForChannel } from "../../src/gateway/completion.js";
 import { GatewayCron } from "../../src/gateway/cron.js";
+import { MemoryDeliveryLedger } from "../../src/gateway/delivery-ledger.js";
 import { Gateway } from "../../src/gateway/gateway.js";
 import { InMemoryRestartNoticeStore } from "../../src/gateway/restart-notice.js";
 import {
@@ -789,6 +790,77 @@ describe("Gateway streaming replies", () => {
 			s.push({ channelId: "+1", sender: "+1", text: "hello", isCommand: false, timestamp: 1 });
 			await new Promise((r) => setTimeout(r, 30));
 			expect(s.sent.some((x) => x.text === "final different")).toBe(true);
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("records a streamed reply in the delivery ledger exactly once", async () => {
+		const dir = await home("axiom-gw-stream-");
+		try {
+			const s = streamingTransport();
+			const completion: CompletionRunner = {
+				async runCompletion(input) {
+					return { reply: "x", sessionId: input.sessionId };
+				},
+				async streamCompletion(input, onDelta) {
+					onDelta("streamed");
+					return { reply: "streamed reply", sessionId: input.sessionId };
+				},
+			};
+			const ledger = new MemoryDeliveryLedger();
+			const g = new Gateway({
+				transport: s.t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+				ledger,
+			});
+			await g.start();
+			s.push({ channelId: "+1", sender: "+1", text: "hello", isCommand: false, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 30));
+			const entries = ledger.recent(10);
+			expect(entries).toHaveLength(1);
+			expect(entries[0]).toMatchObject({ transport: "transport", channel: "+1", ok: true, chars: 14 });
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("does not double-record when the final edit fails and falls back to a fresh send", async () => {
+		const dir = await home("axiom-gw-stream-");
+		try {
+			const s = streamingTransport();
+			const completion: CompletionRunner = {
+				async runCompletion(input) {
+					return { reply: "batch", sessionId: input.sessionId };
+				},
+				async streamCompletion(input, onDelta) {
+					onDelta("partial");
+					return { reply: "final different", sessionId: input.sessionId };
+				},
+			};
+			s.setFailEdit(true);
+			const ledger = new MemoryDeliveryLedger();
+			const g = new Gateway({
+				transport: s.t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+				ledger,
+			});
+			await g.start();
+			s.push({ channelId: "+1", sender: "+1", text: "hello", isCommand: false, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 30));
+			const entries = ledger.recent(10);
+			expect(entries).toHaveLength(1);
+			expect(entries[0]).toMatchObject({ ok: true, chars: "final different".length });
 			await g.stop();
 		} finally {
 			await rm(dir, { recursive: true, force: true });
