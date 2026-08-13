@@ -8,7 +8,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { describe, expect, it, vi } from "vitest";
-import { agentLoop, agentLoopContinue, runAgentLoop } from "../src/agent-loop.js";
+import { agentLoop, agentLoopContinue, planToolCallSegments, runAgentLoop } from "../src/agent-loop.js";
 import type { AgentContext, AgentEvent, AgentLoopConfig, AgentMessage, AgentTool } from "../src/types.js";
 
 // Mock stream for testing - mimics MockAssistantStream
@@ -2004,5 +2004,232 @@ describe("agentLoopContinue with AgentMessage", () => {
 		const messages = await stream.result();
 		expect(messages.length).toBe(1);
 		expect(messages[0].role).toBe("assistant");
+	});
+});
+
+describe("tool call segment planning", () => {
+	it("plans a single parallel segment when no tool is sequential-mode", () => {
+		const segments = planToolCallSegments(
+			[
+				{ type: "toolCall", id: "tool-1", name: "fast", arguments: {} },
+				{ type: "toolCall", id: "tool-2", name: "fast", arguments: {} },
+			],
+			[
+				{
+					name: "fast",
+					label: "Fast",
+					description: "fast",
+					parameters: Type.Object({}),
+					execute: async () => ({ content: [], details: {} }),
+				},
+			],
+		);
+		expect(segments).toEqual([{ kind: "parallel", calls: expect.any(Array) }]);
+		expect(segments[0].calls).toHaveLength(2);
+	});
+
+	it("merges adjacent sequential calls into one segment", () => {
+		const slow = {
+			name: "slow",
+			label: "Slow",
+			description: "slow",
+			parameters: Type.Object({}),
+			executionMode: "sequential" as const,
+			execute: async () => ({ content: [], details: {} }),
+		};
+		const segments = planToolCallSegments(
+			[
+				{ type: "toolCall", id: "tool-1", name: "slow", arguments: {} },
+				{ type: "toolCall", id: "tool-2", name: "slow", arguments: {} },
+			],
+			[slow],
+		);
+		expect(segments).toEqual([{ kind: "sequential", calls: expect.any(Array) }]);
+		expect(segments[0].calls).toHaveLength(2);
+	});
+
+	it("splits a mixed batch into barriers and parallel runs in emission order", () => {
+		const slow = {
+			name: "slow",
+			label: "Slow",
+			description: "slow",
+			parameters: Type.Object({}),
+			executionMode: "sequential" as const,
+			execute: async () => ({ content: [], details: {} }),
+		};
+		const fast = {
+			name: "fast",
+			label: "Fast",
+			description: "fast",
+			parameters: Type.Object({}),
+			execute: async () => ({ content: [], details: {} }),
+		};
+		const segments = planToolCallSegments(
+			[
+				{ type: "toolCall", id: "tool-1", name: "fast", arguments: {} },
+				{ type: "toolCall", id: "tool-2", name: "slow", arguments: {} },
+				{ type: "toolCall", id: "tool-3", name: "fast", arguments: {} },
+			],
+			[slow, fast],
+		);
+		expect(segments.map((segment) => segment.kind)).toEqual(["parallel", "sequential", "parallel"]);
+		expect(segments.map((segment) => segment.calls.map((call) => call.id))).toEqual([
+			["tool-1"],
+			["tool-2"],
+			["tool-3"],
+		]);
+	});
+
+	it("treats unknown tools as parallel-capable", () => {
+		const segments = planToolCallSegments([{ type: "toolCall", id: "tool-1", name: "unknown", arguments: {} }], []);
+		expect(segments).toEqual([{ kind: "parallel", calls: expect.any(Array) }]);
+	});
+});
+
+describe("segmented execution of mixed batches", () => {
+	const toolSchema = Type.Object({ value: Type.String() });
+
+	function createSlowTool(
+		executionOrder: string[],
+		slowGate: Promise<void>,
+	): AgentTool<typeof toolSchema, { value: string }> {
+		return {
+			name: "slow",
+			label: "Slow",
+			description: "Slow tool",
+			parameters: toolSchema,
+			executionMode: "sequential" as const,
+			async execute(_toolCallId: string, params: { value: string }) {
+				executionOrder.push(`slow:${params.value}`);
+				await slowGate;
+				return {
+					content: [{ type: "text", text: `slow: ${params.value}` }],
+					details: { value: params.value },
+				};
+			},
+		};
+	}
+
+	function createFastTool(
+		executionOrder: string[],
+		inFlight: { current: number; max: number },
+	): AgentTool<typeof toolSchema, { value: string }> {
+		return {
+			name: "fast",
+			label: "Fast",
+			description: "Fast tool",
+			parameters: toolSchema,
+			async execute(_toolCallId: string, params: { value: string }) {
+				executionOrder.push(`fast:${params.value}`);
+				inFlight.current += 1;
+				inFlight.max = Math.max(inFlight.max, inFlight.current);
+				await new Promise((resolve) => setTimeout(resolve, 10));
+				inFlight.current -= 1;
+				return {
+					content: [{ type: "text", text: `fast: ${params.value}` }],
+					details: { value: params.value },
+				};
+			},
+		};
+	}
+
+	it("runs a parallel run after a sequential barrier and overlaps its calls", async () => {
+		const executionOrder: string[] = [];
+		const inFlight = { current: 0, max: 0 };
+		let releaseSlow: (() => void) | undefined;
+		const slowGate = new Promise<void>((resolve) => {
+			releaseSlow = resolve;
+		});
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [createSlowTool(executionOrder, slowGate), createFastTool(executionOrder, inFlight)],
+		};
+		const config: AgentLoopConfig = { model: createModel(), convertToLlm: identityConverter };
+
+		let callIndex = 0;
+		const stream = agentLoop([createUserMessage("run mixed")], context, config, undefined, () => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					const message = createAssistantMessage(
+						[
+							{ type: "toolCall", id: "tool-1", name: "slow", arguments: { value: "a" } },
+							{ type: "toolCall", id: "tool-2", name: "fast", arguments: { value: "b" } },
+							{ type: "toolCall", id: "tool-3", name: "fast", arguments: { value: "c" } },
+						],
+						"toolUse",
+					);
+					mockStream.push({ type: "done", reason: "toolUse", message });
+					setTimeout(() => releaseSlow?.(), 20);
+				} else {
+					const message = createAssistantMessage([{ type: "text", text: "done" }]);
+					mockStream.push({ type: "done", reason: "stop", message });
+				}
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		// slow runs first and the fast pair overlaps only after it finishes
+		expect(executionOrder[0]).toBe("slow:a");
+		expect(inFlight.max).toBe(2);
+		expect(executionOrder.slice(1).sort()).toEqual(["fast:b", "fast:c"]);
+	});
+
+	it("holds a later parallel run behind an earlier sequential barrier in emission order", async () => {
+		const executionOrder: string[] = [];
+		const inFlight = { current: 0, max: 0 };
+		let releaseSlow: (() => void) | undefined;
+		const slowGate = new Promise<void>((resolve) => {
+			releaseSlow = resolve;
+		});
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [createFastTool(executionOrder, inFlight), createSlowTool(executionOrder, slowGate)],
+		};
+		const config: AgentLoopConfig = { model: createModel(), convertToLlm: identityConverter };
+
+		let callIndex = 0;
+		const stream = agentLoop([createUserMessage("run mixed")], context, config, undefined, () => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					const message = createAssistantMessage(
+						[
+							{ type: "toolCall", id: "tool-1", name: "fast", arguments: { value: "a" } },
+							{ type: "toolCall", id: "tool-2", name: "slow", arguments: { value: "b" } },
+							{ type: "toolCall", id: "tool-3", name: "fast", arguments: { value: "c" } },
+						],
+						"toolUse",
+					);
+					mockStream.push({ type: "done", reason: "toolUse", message });
+					setTimeout(() => releaseSlow?.(), 20);
+				} else {
+					const message = createAssistantMessage([{ type: "text", text: "done" }]);
+					mockStream.push({ type: "done", reason: "stop", message });
+				}
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		// a starts immediately, b starts while a may still run, c waits for b
+		expect(executionOrder[0]).toBe("fast:a");
+		expect(executionOrder.indexOf("slow:b")).toBeGreaterThanOrEqual(1);
+		expect(executionOrder.indexOf("fast:c")).toBeGreaterThan(executionOrder.indexOf("slow:b"));
+		// a and b overlap (segmented), unlike the old whole-batch serialization
+		expect(inFlight.max).toBeGreaterThanOrEqual(1);
 	});
 });

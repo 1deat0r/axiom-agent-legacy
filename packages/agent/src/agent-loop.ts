@@ -362,7 +362,7 @@ async function runLoop(
 			if (toolCalls.length > 0) {
 				const executedToolBatch = await executeToolCalls(currentContext, message, config, signal, emit);
 				toolResults.push(...executedToolBatch.messages);
-				hasMoreToolCalls = !executedToolBatch.terminate;
+				hasMoreToolCalls = !shouldTerminateToolBatch(executedToolBatch.finalizedCalls);
 
 				for (const result of toolResults) {
 					currentContext.messages.push(result);
@@ -605,6 +605,39 @@ async function streamAssistantResponse(
 /**
  * Execute tool calls from an assistant message.
  */
+type ToolCallSegment = {
+	kind: "parallel" | "sequential";
+	calls: AgentToolCall[];
+};
+
+/**
+ * Split a tool-call batch into maximal contiguous runs of parallel-capable
+ * calls separated by sequential-mode barriers, preserving emission order.
+ * A sequential-mode tool serializes only its own segment; the parallel runs
+ * around it still execute concurrently. Unknown tools are treated as
+ * parallel-capable (same as the previous all-or-nothing gate).
+ */
+export function planToolCallSegments(
+	toolCalls: AgentToolCall[],
+	tools: AgentTool<any>[] | undefined,
+): ToolCallSegment[] {
+	const segments: ToolCallSegment[] = [];
+	let current: ToolCallSegment | undefined;
+	for (const toolCall of toolCalls) {
+		const kind: ToolCallSegment["kind"] =
+			tools?.find((tool) => tool.name === toolCall.name)?.executionMode === "sequential" ? "sequential" : "parallel";
+		if (!current || current.kind !== kind) {
+			current = { kind, calls: [] };
+			segments.push(current);
+		}
+		current.calls.push(toolCall);
+	}
+	return segments;
+}
+
+/**
+ * Execute tool calls from an assistant message.
+ */
 async function executeToolCalls(
 	currentContext: AgentContext,
 	assistantMessage: AssistantMessage,
@@ -613,18 +646,29 @@ async function executeToolCalls(
 	emit: AgentEventSink,
 ): Promise<ExecutedToolCallBatch> {
 	const toolCalls = assistantMessage.content.filter((c) => c.type === "toolCall");
-	const hasSequentialToolCall = toolCalls.some(
-		(tc) => currentContext.tools?.find((t) => t.name === tc.name)?.executionMode === "sequential",
-	);
-	if (config.toolExecution === "sequential" || hasSequentialToolCall) {
+	if (config.toolExecution === "sequential") {
 		return executeToolCallsSequential(currentContext, assistantMessage, toolCalls, config, signal, emit);
 	}
-	return executeToolCallsParallel(currentContext, assistantMessage, toolCalls, config, signal, emit);
+	const segments = planToolCallSegments(toolCalls, currentContext.tools);
+	const finalizedCalls: FinalizedToolCallOutcome[] = [];
+	const messages: ToolResultMessage[] = [];
+	for (const segment of segments) {
+		if (signal?.aborted) {
+			break;
+		}
+		const batch =
+			segment.kind === "parallel"
+				? await executeToolCallsParallel(currentContext, assistantMessage, segment.calls, config, signal, emit)
+				: await executeToolCallsSequential(currentContext, assistantMessage, segment.calls, config, signal, emit);
+		finalizedCalls.push(...batch.finalizedCalls);
+		messages.push(...batch.messages);
+	}
+	return { messages, finalizedCalls };
 }
 
 type ExecutedToolCallBatch = {
 	messages: ToolResultMessage[];
-	terminate: boolean;
+	finalizedCalls: FinalizedToolCallOutcome[];
 };
 
 async function executeToolCallsSequential(
@@ -681,10 +725,7 @@ async function executeToolCallsSequential(
 		}
 	}
 
-	return {
-		messages,
-		terminate: shouldTerminateToolBatch(finalizedCalls),
-	};
+	return { messages, finalizedCalls };
 }
 
 async function executeToolCallsParallel(
@@ -742,10 +783,7 @@ async function executeToolCallsParallel(
 		messages.push(toolResultMessage);
 	}
 
-	return {
-		messages,
-		terminate: shouldTerminateToolBatch(orderedFinalizedCalls),
-	};
+	return { messages, finalizedCalls: orderedFinalizedCalls };
 }
 
 type PreparedToolCall = {
