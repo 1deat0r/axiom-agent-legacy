@@ -16,8 +16,18 @@
  * the real helper process via `createRpcClientBridge`.
  */
 
+import { join } from "node:path";
 import { type Static, Type } from "typebox";
+import { getAgentDir } from "../../config.js";
 import type { ExtensionAPI } from "../../core/extensions/types.js";
+import {
+	type BackgroundDelegateEntry,
+	BackgroundDelegateRegistry,
+	renderBackgroundBatchStarted,
+	renderBackgroundPending,
+	renderBackgroundStarted,
+	withTimeout,
+} from "./background.js";
 import { createRpcClientBridge, parseModelRef, type RpcDelegateBridge } from "./bridge.js";
 import {
 	DEFAULT_SUMMARY_MAX_CHARS,
@@ -42,6 +52,12 @@ const DelegateParamsSchema = Type.Object({
 	name: Type.Optional(Type.String()),
 	model: Type.Optional(Type.String()),
 	timeoutMs: Type.Optional(Type.Number()),
+	/** Non-blocking mode: return immediately with a handle; collect later. */
+	background: Type.Optional(Type.Boolean()),
+	/** Collect a background run (status, or the result block once settled). */
+	handle: Type.Optional(Type.String()),
+	/** Optional wait budget (ms) when collecting a running background run. */
+	waitMs: Type.Optional(Type.Number()),
 });
 
 type DelegateParams = Static<typeof DelegateParamsSchema>;
@@ -54,28 +70,16 @@ export interface DelegateDeps {
 	timeoutMs: number;
 	/** Summary cap for the compact block. */
 	summaryMaxChars: number;
+	/** Directory for background result files (default: <agentDir>/delegate-results). */
+	resultsDir: string;
+	/** Registry for background runs (injected for tests; defaults to a fresh one). */
+	registry?: BackgroundDelegateRegistry;
 }
 
 const DEFAULT_DEPS: Pick<DelegateDeps, "timeoutMs" | "summaryMaxChars"> = {
 	timeoutMs: DEFAULT_TIMEOUT_MS,
 	summaryMaxChars: DEFAULT_SUMMARY_MAX_CHARS,
 };
-
-function withTimeout<T>(promise: Promise<T>, ms: number, onTimeout: Error): Promise<T> {
-	return new Promise<T>((resolve, reject) => {
-		const timer = setTimeout(() => reject(onTimeout), ms);
-		promise.then(
-			(value) => {
-				clearTimeout(timer);
-				resolve(value);
-			},
-			(error) => {
-				clearTimeout(timer);
-				reject(error);
-			},
-		);
-	});
-}
 
 /**
  * Map `fn` over `items` with at most `limit` concurrent executions, preserving
@@ -142,9 +146,15 @@ export function createDelegateExtension(deps?: Partial<DelegateDeps>): (pi: Exte
 		bridge: deps?.bridge ?? ((model?: string) => createRpcClientBridge(parseModelRef(model))),
 		timeoutMs: deps?.timeoutMs ?? DEFAULT_DEPS.timeoutMs,
 		summaryMaxChars: deps?.summaryMaxChars ?? DEFAULT_DEPS.summaryMaxChars,
+		resultsDir: deps?.resultsDir ?? join(getAgentDir(), "delegate-results"),
 	};
+	const registry = deps?.registry ?? new BackgroundDelegateRegistry(resolved.resultsDir);
 
 	return (pi: ExtensionAPI) => {
+		// Reap background helpers when the session is torn down.
+		pi.on("session_shutdown", () => {
+			void registry.shutdown();
+		});
 		pi.registerTool({
 			name: "delegate",
 			label: "Delegate",
@@ -154,9 +164,40 @@ export function createDelegateExtension(deps?: Partial<DelegateDeps>): (pi: Exte
 				"carries out the task (its intermediate tool calls stay out of this session), and you " +
 				"receive a short summary plus honest token/cost accounting. To fan out independent work " +
 				"in parallel, pass tasks (a list) and receive one compact block per task. " +
-				"Parameters: task OR tasks (required), optional name, model, timeoutMs.",
+				"Parameters: task OR tasks (required), optional name, model, timeoutMs. " +
+				"Non-blocking mode: pass background=true to return immediately with a handle; the helper " +
+				"keeps working while you continue, and its compact result lands in a result file. " +
+				"Collect later with handle plus optional waitMs (waitMs blocks up to that budget).",
 			parameters: DelegateParamsSchema,
 			execute: async (_toolCallId, params: DelegateParams, _signal, _onUpdate, ctx) => {
+				// Collect path: no task required.
+				if (params.handle) {
+					const waitMs =
+						typeof params.waitMs === "number" && Number.isFinite(params.waitMs)
+							? Math.max(0, Math.min(params.waitMs, MAX_TIMEOUT_MS))
+							: undefined;
+					const entry: BackgroundDelegateEntry | undefined = await registry.collect(params.handle.trim(), waitMs);
+					if (!entry) {
+						throw new Error(`unknown delegate handle: ${params.handle}`);
+					}
+					if (entry.status === "running") {
+						return {
+							content: [{ type: "text", text: renderBackgroundPending(entry) }],
+							details: {
+								background: true,
+								handle: entry.handle,
+								status: entry.status,
+								resultFile: entry.resultFile,
+							},
+						};
+					}
+					const collected = entry.result!;
+					return {
+						content: [{ type: "text", text: renderDelegateResult(collected) }],
+						details: collected,
+					};
+				}
+
 				const singleTask = (params.task ?? "").trim();
 				const batchTasks = (params.tasks ?? []).map((t) => t.trim()).filter((t) => t.length > 0);
 				if (singleTask.length === 0 && batchTasks.length === 0) {
@@ -174,6 +215,44 @@ export function createDelegateExtension(deps?: Partial<DelegateDeps>): (pi: Exte
 				const viaParam = params.model?.trim() || undefined;
 				const viaParent = ctx?.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
 				const effectiveModel = viaParam ?? viaParent;
+
+				if (params.background === true) {
+					const startInput = {
+						bridge: resolved.bridge(effectiveModel),
+						task: singleTask,
+						timeoutMs,
+						name: params.name,
+						model: effectiveModel,
+						summaryMaxChars: resolved.summaryMaxChars,
+					};
+					if (batchTasks.length > 0) {
+						if (batchTasks.length > MAX_TASKS) {
+							throw new Error(`delegate batch exceeds MAX_TASKS (${MAX_TASKS}) — got ${batchTasks.length}`);
+						}
+						const entries = batchTasks.map((task) =>
+							registry.start({ ...startInput, bridge: resolved.bridge(effectiveModel), task }),
+						);
+						return {
+							content: [{ type: "text", text: renderBackgroundBatchStarted(entries) }],
+							details: {
+								background: true,
+								handles: entries.map((entry) => entry.handle),
+								resultFiles: entries.map((entry) => entry.resultFile),
+							},
+						};
+					}
+					const entry = registry.start(startInput);
+					return {
+						content: [{ type: "text", text: renderBackgroundStarted(entry) }],
+						details: {
+							background: true,
+							handle: entry.handle,
+							status: entry.status,
+							resultFile: entry.resultFile,
+							helper: { name: entry.name, model: entry.model },
+						},
+					};
+				}
 
 				if (batchTasks.length > 0) {
 					if (batchTasks.length > MAX_TASKS) {

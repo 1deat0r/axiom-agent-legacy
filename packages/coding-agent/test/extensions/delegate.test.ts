@@ -1,3 +1,5 @@
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -123,12 +125,29 @@ function fakePi() {
 		name: string;
 		execute?: (id: string, p: unknown, signal?: unknown, onUpdate?: unknown, ctx?: unknown) => Promise<unknown>;
 	}> = [];
+	const handlers: Array<{ event: string; handler: (event: unknown) => void }> = [];
 	const pi = {
 		registerTool: (tool: { name: string; execute: (id: string, p: unknown) => Promise<unknown> }) => {
 			tools.push(tool);
 		},
+		on: (event: string, handler: (event: unknown) => void) => {
+			handlers.push({ event, handler });
+		},
 	};
-	return { pi: pi as unknown as ExtensionAPI, tools };
+	return { pi: pi as unknown as ExtensionAPI, tools, handlers };
+}
+
+async function waitUntil(cond: () => unknown, timeoutMs = 2000): Promise<void> {
+	const startedAt = Date.now();
+	for (;;) {
+		if (cond()) {
+			return;
+		}
+		if (Date.now() - startedAt > timeoutMs) {
+			throw new Error("waitUntil timeout");
+		}
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	}
 }
 
 class StubBridge implements RpcDelegateBridge {
@@ -476,4 +495,149 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 			await bridge.stop();
 		}
 	}, 90_000);
+});
+
+describe("background delegate", () => {
+	function tmpResultsDir(): string {
+		return mkdtempSync(join(tmpdir(), "delegate-bg-"));
+	}
+
+	it("returns immediately with a handle and result file without awaiting the helper", async () => {
+		const { pi, tools } = fakePi();
+		const stub = new StubBridge();
+		stub.gateOn = true;
+		createDelegateExtension({ bridge: () => stub, resultsDir: tmpResultsDir() })(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		const out = (await tool.execute!("c1", { task: "long job", background: true })) as {
+			details: { background: boolean; handle: string; resultFile: string; status: string };
+		};
+		expect(stub.started).toBe(1);
+		expect(stub.runCalls).toHaveLength(1);
+		expect(stub.stopped).toBe(0);
+		expect(out.details.background).toBe(true);
+		expect(out.details.handle).toBeTruthy();
+		expect(out.details.resultFile).toContain("delegate-bg-");
+		expect(out.details.status).toBe("running");
+		stub.release();
+		await waitUntil(() => stub.stopped === 1);
+	});
+
+	it("writes the compact result file when the background helper finishes", async () => {
+		const { pi, tools } = fakePi();
+		const stub = new StubBridge();
+		createDelegateExtension({ bridge: () => stub, resultsDir: tmpResultsDir() })(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		const out = (await tool.execute!("c1", { task: "job", background: true })) as {
+			details: { resultFile: string };
+		};
+		await waitUntil(() => existsSync(out.details.resultFile));
+		const payload = JSON.parse(readFileSync(out.details.resultFile, "utf8"));
+		expect(payload.status).toBe("done");
+		expect(payload.result.ok).toBe(true);
+		expect(payload.result.summary).toBe("default summary");
+		expect(stub.stopped).toBe(1);
+	});
+
+	it("collects a finished background run by handle", async () => {
+		const { pi, tools } = fakePi();
+		const stub = new StubBridge();
+		createDelegateExtension({ bridge: () => stub, resultsDir: tmpResultsDir() })(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		const started = (await tool.execute!("c1", { task: "job", background: true })) as {
+			details: { handle: string };
+		};
+		await waitUntil(() => stub.stopped === 1);
+		const out = (await tool.execute!("c2", { handle: started.details.handle })) as {
+			content: Array<{ type: string; text: string }>;
+			details: { ok: boolean; summary: string };
+		};
+		expect(out.details.ok).toBe(true);
+		expect(out.details.summary).toBe("default summary");
+		expect(out.content[0]!.text).toContain("[delegate ok]");
+	});
+
+	it("reports a still-running run via handle without blocking", async () => {
+		const { pi, tools } = fakePi();
+		const stub = new StubBridge();
+		stub.gateOn = true;
+		createDelegateExtension({ bridge: () => stub, resultsDir: tmpResultsDir() })(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		const started = (await tool.execute!("c1", { task: "long", background: true })) as {
+			details: { handle: string };
+		};
+		const out = (await tool.execute!("c2", { handle: started.details.handle })) as {
+			details: { status: string };
+		};
+		expect(out.details.status).toBe("running");
+		stub.release();
+		await waitUntil(() => stub.stopped === 1);
+	});
+
+	it("waits up to waitMs when collecting a running run", async () => {
+		const { pi, tools } = fakePi();
+		const stub = new StubBridge();
+		stub.gateOn = true;
+		createDelegateExtension({ bridge: () => stub, resultsDir: tmpResultsDir() })(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		const started = (await tool.execute!("c1", { task: "long", background: true })) as {
+			details: { handle: string };
+		};
+		setTimeout(() => stub.release(), 20);
+		const out = (await tool.execute!("c2", { handle: started.details.handle, waitMs: 1000 })) as {
+			details: { ok: boolean };
+		};
+		expect(out.details.ok).toBe(true);
+	});
+
+	it("times out a background helper and writes an ok:false file (no orphan)", async () => {
+		const { pi, tools } = fakePi();
+		const stub = new StubBridge();
+		stub.hang = true;
+		createDelegateExtension({ bridge: () => stub, timeoutMs: 50, resultsDir: tmpResultsDir() })(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		const started = (await tool.execute!("c1", { task: "hang", background: true })) as {
+			details: { resultFile: string };
+		};
+		await waitUntil(() => existsSync(started.details.resultFile));
+		const payload = JSON.parse(readFileSync(started.details.resultFile, "utf8"));
+		expect(payload.status).toBe("timeout");
+		expect(payload.result.ok).toBe(false);
+		expect(payload.result.error).toContain("timed out");
+		expect(stub.stopped).toBe(1);
+	});
+
+	it("rejects an unknown handle", async () => {
+		const { pi, tools } = fakePi();
+		createDelegateExtension({ resultsDir: tmpResultsDir() })(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		await expect(tool.execute!("c1", { handle: "nope" })).rejects.toThrow("unknown delegate handle");
+	});
+
+	it("fans out a background batch into per-task handles", async () => {
+		const { pi, tools } = fakePi();
+		const stub = new StubBridge();
+		createDelegateExtension({ bridge: () => stub, resultsDir: tmpResultsDir() })(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		const out = (await tool.execute!("c1", { tasks: ["a", "b"], background: true })) as {
+			details: { background: boolean; handles: string[]; resultFiles: string[] };
+		};
+		expect(out.details.background).toBe(true);
+		expect(out.details.handles).toHaveLength(2);
+		expect(out.details.resultFiles).toHaveLength(2);
+		await waitUntil(() => stub.stopped === 2);
+	});
+
+	it("stops background helpers on session_shutdown", async () => {
+		const { pi, tools, handlers } = fakePi();
+		const stub = new StubBridge();
+		stub.gateOn = true;
+		createDelegateExtension({ bridge: () => stub, resultsDir: tmpResultsDir() })(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		await tool.execute!("c1", { task: "long", background: true });
+		expect(stub.stopped).toBe(0);
+		const shutdown = handlers.find((h) => h.event === "session_shutdown");
+		expect(shutdown).toBeDefined();
+		shutdown!.handler({ type: "session_shutdown", reason: "quit" });
+		await waitUntil(() => stub.stopped === 1);
+	});
 });

@@ -1,33 +1,32 @@
-# Handoff — 2026-08-13 (parallel tool-calling: P1 guidance + P2 segment planner)
+# Handoff — 2026-08-13 (parallel tool-calling: P1 guidance, P2 segments, P3 background delegate)
 
 ## Done
-1. **P1 prompt guidance (ADR-0042)** — `buildParallelToolCallGuidance()` in
-   `core/prompts/rlm.ts`, wired into `buildRlmPrompt` and the customPrompt
-   path of `buildSystemPrompt`; "iterating one step at a time" reworded.
-   10 red-first tests + snapshot update.
-2. **P2 segment planning (ADR-0043)** — `planToolCallSegments` +
-   segmented `executeToolCalls` in `packages/agent/src/agent-loop.ts`:
-   a sequential-mode tool (ipython) now serializes only its own segment;
-   parallel runs around it still execute concurrently, in emission order.
-   7 red-first tests (4 planner + 3 behavioral).
-3. **RpcClient default cliPath fix** — `resolveDefaultCliPath(cwd)`:
-   delegate spawns work from the monorepo root (4 red-first tests).
+1. **P1 (ADR-0042)** — "# Parallel tool calls" prompt guidance in
+   `buildRlmPrompt` + the customPrompt path; "one step at a time" reworded.
+2. **P2 (ADR-0043)** — `planToolCallSegments`: a sequential-mode tool
+   (ipython) serializes only its own segment; parallel runs around it still
+   execute concurrently, in emission order.
+3. **P3 (ADR-0044)** — non-blocking delegate: `background=true` returns a
+   handle + result file immediately; `BackgroundDelegateRegistry` reaps
+   helpers on success/error/timeout/session_shutdown; collect via
+   `delegate(handle=..., waitMs=...)` or by reading the result file.
+   Blocking path unchanged.
+4. **RpcClient default cliPath fix** — `resolveDefaultCliPath` (delegate
+   spawns work from the monorepo root).
 
 ## How it was verified
-- All feature tests red-first, then green (agent-loop 41/41 incl. the
-  pre-existing terminate/ordering/abort suites).
-- Full `./test.sh`: 4960 passed / 15 failed = 14 documented sandbox
-  known-fails (4603x4, 4685x9, daemon-serialized-refine x1) + 1
-  kernel-attach-image flake that passes standalone 9/9.
+- Every change red-first, then green: agent-loop 41/41, delegate 39/40
+  (1 live-gated skip), system-prompt 35/35, rpc cli-path 4/4.
+- Full `./test.sh`: 4970 passed / 14 failed = only documented sandbox
+  known-fails (4603x4, 4685x9, daemon-serialized-refine x1).
 - biome + tsgo clean. Dist rebuilt after each source change.
 
 ## Notes
-- The live gateway keeps its old in-memory module graph until it restarts;
-  fresh completion children pick up the rebuilt bundle on the next message.
-  The gitignored repo-root `dist/cli.js` symlink unblocks the old code;
-  remove after the next gateway restart.
-- Remaining latency plan: P3 non-blocking delegate (background subagents
-  whose results re-enter as agent messages), P4 fast mode on tool turns,
-  then an A/B probe measuring turns-per-task before/after.
-- Sub-agent fan-out proven again: 3 parallel read-only helpers produced
-  the P1 research (semantics audit, wording, red tests) in /tmp/p1-work/.
+- Live gateway still runs its old in-memory module graph; fresh completion
+  children pick up the rebuilt bundle next message. Remove the gitignored
+  repo-root `dist/cli.js` symlink after the next gateway restart.
+- Remaining: P4 fast mode / reduced thinking on tool turns, then an A/B
+  probe measuring turns-per-task on a fixed workload (before/after the P1-P3
+  changes).
+- Sub-agent fan-out pattern proven twice: read-only helpers, deliverables
+  in /tmp, parent integrates (P1 research in /tmp/p1-work/).

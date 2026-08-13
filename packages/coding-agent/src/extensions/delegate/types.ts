@@ -20,6 +20,12 @@ export interface DelegateParams {
 	model?: string;
 	/** Optional per-run budget in ms. Default 120_000; clamped to MAX_TIMEOUT_MS. */
 	timeoutMs?: number;
+	/** Non-blocking mode: return immediately with a handle; collect later. */
+	background?: boolean;
+	/** Collect a background run (status, or the result block once settled). */
+	handle?: string;
+	/** Optional wait budget (ms) when collecting a running background run. */
+	waitMs?: number;
 }
 
 /** Honest token accounting for the helper, from the session's recorded usage. */
