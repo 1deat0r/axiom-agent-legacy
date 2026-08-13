@@ -1,3 +1,4 @@
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +10,11 @@ import { fakeCompletionRunner, sessionIdForChannel } from "../../src/gateway/com
 import { GatewayCron } from "../../src/gateway/cron.js";
 import { Gateway } from "../../src/gateway/gateway.js";
 import { InMemoryRestartNoticeStore } from "../../src/gateway/restart-notice.js";
+import {
+	GATEWAY_SESSION_BUDGET_BYTES,
+	SESSION_RESET_NOTICE,
+	sessionFilePath,
+} from "../../src/gateway/session-reset.js";
 import { FileStreamJournal } from "../../src/gateway/stream-journal.js";
 import type { CompletionRunner, GatewayMessage, GatewayRecipient, GatewayTransport } from "../../src/gateway/types.js";
 
@@ -915,6 +921,75 @@ describe("Gateway streaming replies", () => {
 			await new Promise((r) => setTimeout(r, 30));
 			expect(journal.load()).toEqual([]);
 			expect(s.sent).toHaveLength(0); // streamed to the bubble, no fallback
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("archives an oversized session before a run and notes the reset in the bubble", async () => {
+		const dir = await home("axiom-gw-stream-");
+		try {
+			const s = streamingTransport();
+			const completion = fakeCompletionRunner();
+			const sessionsDir = join(dir, "sessions");
+			mkdirSync(sessionsDir, { recursive: true });
+			const sessionPath = sessionFilePath(sessionsDir, "+1");
+			writeFileSync(sessionPath, `${"x".repeat(GATEWAY_SESSION_BUDGET_BYTES + 1)}\n`, "utf8");
+			const g = new Gateway({
+				transport: s.t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+				sessionsDir,
+			});
+			await g.start();
+			s.push({ channelId: "+1", sender: "+1", text: "hello", isCommand: false, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 30));
+			expect(existsSync(sessionPath)).toBe(false); // archived away
+			const archived = readdirSync(sessionsDir).find((f) =>
+				f.startsWith(`${sessionIdForChannel("+1")}.jsonl.archived-`),
+			);
+			expect(archived).toBeDefined();
+			const shown = s.edits.map((e) => e.text).join("\n");
+			expect(shown).toContain(SESSION_RESET_NOTICE);
+			expect(s.edits.at(-1)!.text).toBe(`${SESSION_RESET_NOTICE}\n\naxiom reply to: hello`);
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("/new archives the channel session via the command surface", async () => {
+		const dir = await home("axiom-gw-stream-");
+		try {
+			const s = streamingTransport();
+			const completion = fakeCompletionRunner();
+			const sessionsDir = join(dir, "sessions");
+			mkdirSync(sessionsDir, { recursive: true });
+			const sessionPath = sessionFilePath(sessionsDir, "+1");
+			writeFileSync(sessionPath, '{"type":"session"}\n', "utf8");
+			const g = new Gateway({
+				transport: s.t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+				sessionsDir,
+			});
+			await g.start();
+			s.push({ channelId: "+1", sender: "+1", text: "/new", isCommand: true, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 30));
+			expect(existsSync(sessionPath)).toBe(false);
+			expect(readdirSync(sessionsDir).some((f) => f.includes(".archived-"))).toBe(true);
+			expect(s.sent.some((x) => x.text.includes("started a fresh session"))).toBe(true);
+			// second /new: nothing left to archive
+			s.push({ channelId: "+1", sender: "+1", text: "/new", isCommand: true, timestamp: 2 });
+			await new Promise((r) => setTimeout(r, 30));
+			expect(s.sent.some((x) => x.text.includes("no session to reset"))).toBe(true);
 			await g.stop();
 		} finally {
 			await rm(dir, { recursive: true, force: true });

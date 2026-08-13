@@ -120,6 +120,9 @@ export interface GatewayCommandContext {
 	/** Ask the gateway to drop every session mapping for a project (used by /projects rm). */
 	dropProjectSessions?(project: string): void;
 
+	/** Archive this channel's session so the next run starts fresh (/new). */
+	resetSession?: () => string;
+
 	/** Sessions archive directory for cross-session recall (/search). */
 	sessionsDir?: string;
 	/** Persistent sqlite FTS index file for cross-session recall. */
