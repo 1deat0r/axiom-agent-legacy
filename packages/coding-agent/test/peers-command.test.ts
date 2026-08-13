@@ -99,3 +99,25 @@ describe("handlePeersCommand", () => {
 		}
 	});
 });
+
+describe("main() dispatch", () => {
+	it("dispatches 'peers' and returns before the chat bootstrap", async () => {
+		const { project, home } = setup();
+		const log = vi.spyOn(console, "log").mockImplementation(() => {});
+		const err = vi.spyOn(console, "error").mockImplementation(() => {});
+		try {
+			const { main } = await import("../src/main.js");
+			await main(["peers"]);
+			// A broken dispatch falls through to the chat bootstrap, which
+			// resolves a model and process.exit(1)s with no API key. Reaching
+			// here with only peers output means dispatch worked.
+			const output = log.mock.calls.flat().join(" ");
+			expect(output).not.toContain("No API key");
+		} finally {
+			err.mockRestore();
+			log.mockRestore();
+			rmSync(project, { recursive: true, force: true });
+			rmSync(home, { recursive: true, force: true });
+		}
+	});
+});
