@@ -1136,3 +1136,156 @@ describe("Gateway streaming replies", () => {
 		}
 	});
 });
+
+describe("Gateway /new stale-project self-heal", () => {
+	it("/new after an out-of-band project delete clears the stale mapping and archives the current session", async () => {
+		const dir = await home("axiom-gw-new-stale-");
+		try {
+			const s = streamingTransport();
+			const completion = fakeCompletionRunner();
+			const sessionsDir = join(dir, "sessions");
+			mkdirSync(sessionsDir, { recursive: true });
+			// The channel's real current session: after the project dir vanished,
+			// the run path self-heals to the unanchored key, so this is the file
+			// the next run will resume.
+			const channelPath = sessionFilePath(sessionsDir, "+1");
+			writeFileSync(channelPath, '{"type":"session"}\n', "utf8");
+			// The dead composite session from before the deletion — /new must not
+			// archive this one (the run path only drops its index entry).
+			const stalePath = sessionFilePath(sessionsDir, "+1:alpha:0");
+			writeFileSync(stalePath, '{"type":"session"}\n', "utf8");
+			const index = new MemoryChannelIndex();
+			const store = new MemoryActiveProjectStore();
+			store.set("+1", "alpha"); // projects/alpha was deleted out-of-band
+			const g = new Gateway({
+				transport: s.t,
+				index,
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+				sessionsDir,
+				activeProjects: store,
+			});
+			await g.start();
+			s.push({ channelId: "+1", sender: "+1", text: "/new", isCommand: true, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 30));
+			expect(existsSync(channelPath)).toBe(false); // the current session is archived
+			expect(
+				readdirSync(sessionsDir).some((f) => f.startsWith(`${sessionIdForChannel("+1")}.jsonl.archived-`)),
+			).toBe(true);
+			expect(existsSync(stalePath)).toBe(true); // the dead composite file is left for /search, like the run path leaves it
+			expect(store.get("+1")).toBeUndefined(); // stale mapping cleared
+			expect(index.get("+1:alpha:0")).toBeNull(); // composite index entry dropped
+			expect(s.sent.some((x) => x.text.includes("started a fresh session"))).toBe(true);
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("/new with an invalid stored project name self-heals and archives the channel session", async () => {
+		const dir = await home("axiom-gw-new-invalid-");
+		try {
+			const s = streamingTransport();
+			const completion = fakeCompletionRunner();
+			const sessionsDir = join(dir, "sessions");
+			mkdirSync(sessionsDir, { recursive: true });
+			const channelPath = sessionFilePath(sessionsDir, "+1");
+			writeFileSync(channelPath, '{"type":"session"}\n', "utf8");
+			const index = new MemoryChannelIndex();
+			const store = new MemoryActiveProjectStore();
+			store.set("+1", ".."); // hand-edited store value /projects use rejects
+			const g = new Gateway({
+				transport: s.t,
+				index,
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+				sessionsDir,
+				activeProjects: store,
+			});
+			await g.start();
+			s.push({ channelId: "+1", sender: "+1", text: "/new", isCommand: true, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 30));
+			expect(existsSync(channelPath)).toBe(false);
+			expect(s.sent.some((x) => x.text.includes("started a fresh session"))).toBe(true);
+			expect(store.get("+1")).toBeUndefined();
+			expect(index.get("+1:..:0")).toBeNull();
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("/new with a stale mapping and no current session clears the mapping and reports nothing to reset", async () => {
+		const dir = await home("axiom-gw-new-none-");
+		try {
+			const s = streamingTransport();
+			const completion = fakeCompletionRunner();
+			const sessionsDir = join(dir, "sessions");
+			mkdirSync(sessionsDir, { recursive: true });
+			const index = new MemoryChannelIndex();
+			const store = new MemoryActiveProjectStore();
+			store.set("+1", "alpha"); // no projects/alpha on disk
+			const g = new Gateway({
+				transport: s.t,
+				index,
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+				sessionsDir,
+				activeProjects: store,
+			});
+			await g.start();
+			s.push({ channelId: "+1", sender: "+1", text: "/new", isCommand: true, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 30));
+			expect(s.sent.some((x) => x.text.includes("no session to reset"))).toBe(true);
+			expect(store.get("+1")).toBeUndefined(); // self-heal happens even with nothing to archive
+			expect(index.get("+1:alpha:0")).toBeNull();
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("/new archives the active project's composite session and keeps the mapping", async () => {
+		const dir = await home("axiom-gw-new-ok-");
+		try {
+			const s = streamingTransport();
+			const completion = fakeCompletionRunner();
+			const sessionsDir = join(dir, "sessions");
+			mkdirSync(sessionsDir, { recursive: true });
+			await import("node:fs/promises").then((fs) => fs.mkdir(join(dir, "projects", "alpha"), { recursive: true }));
+			const anchoredPath = sessionFilePath(sessionsDir, "+1:alpha:0");
+			writeFileSync(anchoredPath, '{"type":"session"}\n', "utf8");
+			const channelPath = sessionFilePath(sessionsDir, "+1");
+			writeFileSync(channelPath, '{"type":"session"}\n', "utf8");
+			const index = new MemoryChannelIndex();
+			const store = new MemoryActiveProjectStore();
+			store.set("+1", "alpha");
+			const g = new Gateway({
+				transport: s.t,
+				index,
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+				sessionsDir,
+				activeProjects: store,
+			});
+			await g.start();
+			s.push({ channelId: "+1", sender: "+1", text: "/new", isCommand: true, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 30));
+			expect(existsSync(anchoredPath)).toBe(false); // the anchored session is the one /new resets
+			expect(existsSync(channelPath)).toBe(true); // the unanchored session is untouched
+			expect(store.get("+1")).toBe("alpha"); // a healthy mapping survives /new
+			expect(s.sent.some((x) => x.text.includes("started a fresh session"))).toBe(true);
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+});
