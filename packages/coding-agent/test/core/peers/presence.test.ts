@@ -9,6 +9,7 @@ import {
 	listPresence,
 	presenceFile,
 	unregisterPresence,
+	updatePresence,
 	writePresence,
 } from "../../../src/core/peers/presence.js";
 import type { PresenceRecord } from "../../../src/core/peers/types.js";
@@ -49,6 +50,19 @@ describe("presence", () => {
 		const scope = mkdtempSync(join(tmpdir(), "peers-pres-"));
 		try {
 			expect(heartbeatPresence(scope, "missing-run", { now: () => NOW })).toBe(false);
+		} finally {
+			rmSync(scope, { recursive: true, force: true });
+		}
+	});
+
+	it("updatePresence patches a record's fields and is false for an unknown run", () => {
+		const scope = mkdtempSync(join(tmpdir(), "peers-pres-"));
+		try {
+			const r = record();
+			writePresence(scope, r);
+			expect(updatePresence(scope, r.runId, { intent: "edited" })).toBe(true);
+			expect(listPresence(scope)[0]?.intent).toBe("edited");
+			expect(updatePresence(scope, "missing-run", { intent: "x" })).toBe(false);
 		} finally {
 			rmSync(scope, { recursive: true, force: true });
 		}

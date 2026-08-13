@@ -6,8 +6,16 @@
 
 import { randomUUID } from "node:crypto";
 import { appendBoardEntry, readBoardSince, readCursor, writeCursor } from "./board.js";
-import { DEFAULT_STALE_MS, isPeerAlive, listPresence, unregisterPresence, writePresence } from "./presence.js";
-import type { BoardEntry, PeerIdentity, PeerSummary, PeersListResult, PresenceRecord } from "./types.js";
+import {
+	DEFAULT_STALE_MS,
+	heartbeatPresence,
+	isPeerAlive,
+	listPresence,
+	unregisterPresence,
+	updatePresence,
+	writePresence,
+} from "./presence.js";
+import type { BoardEntry, InboxResult, PeerIdentity, PeerSummary, PeersListResult, PresenceRecord } from "./types.js";
 
 export const MAX_MESSAGE_LENGTH = 4000;
 const TARGET_PATTERN = /^[A-Za-z0-9-]{1,64}$/;
@@ -60,19 +68,17 @@ export function registerRun(
 /** Update this run's intent so peers can see what it is doing. */
 export function setIntent(scope: string, runId: string, intent: string, deps: PeersDeps = {}): boolean {
 	const now = deps.now ?? Date.now;
-	const record = listPresence(scope).find((r) => r.runId === runId);
-	if (!record) return false;
-	writePresence(scope, { ...record, intent: intent.slice(0, 500), heartbeatAt: new Date(now()).toISOString() });
-	return true;
+	return updatePresence(
+		scope,
+		runId,
+		{ intent: intent.slice(0, 500), heartbeatAt: new Date(now()).toISOString() },
+		{ now: deps.now },
+	);
 }
 
 /** Bump this run's heartbeat; false when the presence record is gone. */
 export function heartbeatRun(scope: string, runId: string, deps: PeersDeps = {}): boolean {
-	const now = deps.now ?? Date.now;
-	const record = listPresence(scope).find((r) => r.runId === runId);
-	if (!record) return false;
-	writePresence(scope, { ...record, heartbeatAt: new Date(now()).toISOString() });
-	return true;
+	return heartbeatPresence(scope, runId, { now: deps.now });
 }
 
 /** Append a directed (to=<instanceId>) or group (to="*") message. */
@@ -104,7 +110,7 @@ export function sendPeerMessage(
 	appendBoardEntry(scope, entry);
 }
 
-function inboxMessages(scope: string, identity: PeerIdentity, markRead: boolean): { messages: BoardEntry[] } {
+function inboxMessages(scope: string, identity: PeerIdentity, markRead: boolean): InboxResult {
 	const cursor = readCursor(scope, identity.instanceId);
 	const { entries, nextCursor } = readBoardSince(scope, cursor);
 	const mine = entries.filter((e) => e.to === "*" || e.to === identity.instanceId);
@@ -113,12 +119,12 @@ function inboxMessages(scope: string, identity: PeerIdentity, markRead: boolean)
 }
 
 /** Read unread messages (group + directed at me) and mark them read. */
-export function inbox(scope: string, identity: PeerIdentity): { messages: BoardEntry[] } {
+export function inbox(scope: string, identity: PeerIdentity): InboxResult {
 	return inboxMessages(scope, identity, true);
 }
 
 /** Read unread messages without marking them read (CLI peek). */
-export function peekInbox(scope: string, identity: PeerIdentity): { messages: BoardEntry[] } {
+export function peekInbox(scope: string, identity: PeerIdentity): InboxResult {
 	return inboxMessages(scope, identity, false);
 }
 
