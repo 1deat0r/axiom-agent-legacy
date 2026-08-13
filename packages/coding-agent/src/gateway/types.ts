@@ -32,6 +32,15 @@ export interface GatewayTransport {
 	send(to: GatewayRecipient, text: string): Promise<void>;
 	onMessage(handler: (msg: GatewayMessage) => void): void;
 	/**
+	 * Polling transports (Telegram, ADR-0039): hold the receive loop while a
+	 * reply is being delivered. Some Bot APIs queue concurrent calls behind an
+	 * open long-poll, so outbound sends/edits must not race the poll — the
+	 * gateway pauses before delivering and resumes after. Optional: send-only
+	 * fan-out transports and Signal have no poll to hold.
+	 */
+	pausePolling?(): void;
+	resumePolling?(): void;
+	/**
 	 * Optional streaming support (ADR-0004/#6): place a bubble and edit it in
 	 * place as text arrives. Absent => batch-only delivery.
 	 */

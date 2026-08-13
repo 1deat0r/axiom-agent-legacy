@@ -174,6 +174,9 @@ export class TelegramTransport implements GatewayTransport {
 	private controller: AbortController | undefined;
 	private running = false;
 	private lastTransientLogged: string | undefined;
+	/** True while the gateway delivers a reply: the poll loop must hold. */
+	private paused = false;
+	private pollResumeWaiters: Array<() => void> = [];
 
 	constructor(client: TelegramClient, options: TelegramTransportOptions = {}) {
 		this.client = client;
@@ -196,6 +199,8 @@ export class TelegramTransport implements GatewayTransport {
 	disconnect(): Promise<void> {
 		this.stopped = true;
 		this.running = false;
+		// Wake a paused loop so it observes `stopped` and exits cleanly.
+		this.resumePolling();
 		this.controller?.abort();
 		this.controller = undefined;
 		return Promise.resolve();
@@ -208,6 +213,33 @@ export class TelegramTransport implements GatewayTransport {
 
 	onMessage(handler: (msg: GatewayMessage) => void): void {
 		this.handler = handler;
+	}
+
+	/**
+	 * Hold the poll loop while a reply is delivered (ADR-0039): Telegram
+	 * queues outbound calls behind an open getUpdates long-poll, so a
+	 * streamed edit can hang until the poll window expires (observed
+	 * 2026-08-13: every single-message reply took ~30s — exactly the poll
+	 * window — with edits timing out at 15s). Pausing aborts the in-flight
+	 * poll and keeps the loop idle until resume.
+	 */
+	pausePolling(): void {
+		if (this.paused) return;
+		this.paused = true;
+		this.controller?.abort();
+	}
+
+	resumePolling(): void {
+		if (!this.paused) return;
+		this.paused = false;
+		const waiters = this.pollResumeWaiters.splice(0);
+		for (const resolve of waiters) resolve();
+	}
+
+	private waitForPollResume(): Promise<void> {
+		return new Promise((resolve) => {
+			this.pollResumeWaiters.push(resolve);
+		});
 	}
 
 	/** Single-message send that returns the message id (for streaming edits). */
@@ -242,12 +274,17 @@ export class TelegramTransport implements GatewayTransport {
 
 	private async loop(): Promise<void> {
 		while (!this.stopped) {
+			if (this.paused) {
+				await this.waitForPollResume();
+				continue;
+			}
 			this.controller = new AbortController();
 			try {
 				await this.pollOnce(this.controller.signal);
 				if (this.stopped) break;
 			} catch (error) {
 				if (this.stopped) break;
+				if (this.paused) continue; // the pause aborted the in-flight poll — silent
 				if (isFatalTelegramError(error)) {
 					const message = error instanceof Error ? error.message : String(error);
 					this.logger(`telegram polling stopped (fatal): ${message}`);
