@@ -386,6 +386,17 @@ describe("profile, projects, and completion routing", () => {
 		expect(help).toContain("completion");
 	});
 
+	it("lists peers in the top-level menu", () => {
+		const help = formatTopLevelHelp();
+		expect(help).toContain("peers");
+	});
+
+	it("shows command help for peers", async () => {
+		await handlePublicCommand(["help", "peers"]);
+		expect(console.log).toHaveBeenCalledWith(expect.stringContaining("peers <list|inbox|msg|group>"));
+		expect(console.error).not.toHaveBeenCalled();
+	});
+
 	it("shows command help for profile and projects", async () => {
 		await handlePublicCommand(["help", "profile"]);
 		expect(console.log).toHaveBeenCalledWith(expect.stringContaining("profile <create|list|switch>"));
