@@ -47,6 +47,11 @@ export interface GatewayTransport {
 	sendMessage?(to: GatewayRecipient, text: string): Promise<number>;
 	editMessage?(chatId: string, messageId: number, text: string): Promise<void>;
 	/**
+	 * Max characters a streamed bubble may hold before it must roll over into a
+	 * new message (Telegram rejects edits beyond 4096). Absent => no rollover.
+	 */
+	textLimit?: number;
+	/**
 	 * Optional typing indicator (Telegram chatAction). The gateway pings it
 	 * while a run is "thinking" and stops once text flows. Absent => skipped.
 	 */

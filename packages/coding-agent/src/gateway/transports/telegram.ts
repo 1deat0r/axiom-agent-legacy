@@ -162,6 +162,9 @@ export function isFatalTelegramError(error: unknown): boolean {
 
 /** Polling GatewayTransport over the Telegram Bot API. */
 export class TelegramTransport implements GatewayTransport {
+	/** In-place edits are capped at the same 4096 as sends (stream rollover). */
+	readonly textLimit = TELEGRAM_TEXT_LIMIT;
+
 	private readonly client: TelegramClient;
 	private readonly timeoutMs: number;
 	private readonly intervalMs: number;
