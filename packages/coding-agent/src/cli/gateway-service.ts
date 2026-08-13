@@ -12,6 +12,7 @@ import { join } from "node:path";
 import {
 	connectorById,
 	connectorGuideLines,
+	GATEWAY_CONNECTORS,
 	type GatewayConnector,
 	type GatewayConnectorId,
 	isGatewayConnectorId,
@@ -229,13 +230,7 @@ export async function readGatewayConnectorStatus(
 	const signalCliFound = which.code === 0;
 	const serviceRunning = state.activeState === "active";
 	const out: ConnectorStatus[] = [];
-	for (const connector of [
-		connectorById("signal"),
-		connectorById("telegram"),
-		connectorById("discord"),
-		connectorById("slack"),
-	]) {
-		if (!connector) continue;
+	for (const connector of GATEWAY_CONNECTORS) {
 		const active = serviceRunning && state.transport === connector.id;
 		const configured = credentialConfigured(deps, state, connector, signalCliFound);
 		const label = active
@@ -280,7 +275,7 @@ export async function setConnectorToken(
 	connector: GatewayConnector,
 	token: string,
 	deps: GatewayServiceDeps,
-): Promise<string> {
+): Promise<string[]> {
 	if (connector.kind !== "token" || !connector.tokenEnvVar) {
 		throw new Error(`connector '${connector.id}' does not take a bot token`);
 	}
@@ -302,7 +297,7 @@ export async function setConnectorToken(
 	const note = state.fragmentPath
 		? "restart the gateway (Use now) for it to take effect"
 		: `no gateway unit found for ${deps.serviceName} — the env file will apply when a gateway is started`;
-	return `set ${envVar} in ${touched.join(" and ")} — ${note}`;
+	return [`set ${envVar} in ${touched.join(" and ")} — ${note}`];
 }
 
 /**
@@ -310,21 +305,27 @@ export async function setConnectorToken(
  * transport flag, daemon-reload, restart. Refuses when the token is missing,
  * when already on that transport, or when this process is inside the service.
  */
-export async function switchGatewayTransport(connector: GatewayConnector, deps: GatewayServiceDeps): Promise<string> {
+export async function switchGatewayTransport(connector: GatewayConnector, deps: GatewayServiceDeps): Promise<string[]> {
 	const state = await readGatewayServiceState(deps);
 	if (!state.fragmentPath) {
-		return `cannot switch: no gateway systemd unit found for ${deps.serviceName} — set AXIOM_GATEWAY_SERVICE or start the gateway manually`;
+		return [
+			`cannot switch: no gateway systemd unit found for ${deps.serviceName} — set AXIOM_GATEWAY_SERVICE or start the gateway manually`,
+		];
 	}
 	if (state.transport === connector.id) {
-		return `gateway already runs under ${connector.id} — no change`;
+		return [`gateway already runs under ${connector.id} — no change`];
 	}
 	if (connector.kind === "token") {
 		if (!credentialConfigured(deps, state, connector, false)) {
-			return `cannot switch to ${connector.id}: no ${connector.tokenEnvVar} token found — set it first (choose ${connector.label} in /connectors, then Set token)`;
+			return [
+				`cannot switch to ${connector.id}: no ${connector.tokenEnvVar} token found — set it first (choose ${connector.label} in /connectors, then Set token)`,
+			];
 		}
 	}
 	if (isProcessInServiceCgroup(deps)) {
-		return `cannot switch: this process runs inside ${deps.serviceName} — run /connectors from a standalone terminal so the restart does not kill the session`;
+		return [
+			`cannot switch: this process runs inside ${deps.serviceName} — run /connectors from a standalone terminal so the restart does not kill the session`,
+		];
 	}
 	const warnings: string[] = [];
 	if (connector.kind === "signal-cli") {
@@ -342,7 +343,7 @@ export async function switchGatewayTransport(connector: GatewayConnector, deps: 
 	const lines = [`switched the gateway to ${connector.id} and restarted ${deps.serviceName}`, ...warnings];
 	if (reload.code !== 0) lines.push(`daemon-reload failed: ${reload.stderr.trim()}`);
 	if (restart.code !== 0) lines.push(`restart failed: ${restart.stderr.trim()}`);
-	return lines.join("\n");
+	return lines;
 }
 
 /**

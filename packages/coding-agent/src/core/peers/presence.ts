@@ -40,13 +40,27 @@ export function writePresence(scope: string, record: PresenceRecord, deps: Prese
 	writeAtomic(scope, record, deps);
 }
 
-/** Bump a run's heartbeat. Returns false when the record is gone. */
-export function heartbeatPresence(scope: string, runId: string, deps: PresenceDeps = {}): boolean {
+/**
+ * Read-modify-write one run's presence record: find it, patch it, republish
+ * it atomically. Returns false when the run has no record (gone or never
+ * registered). The single shape behind heartbeat and intent updates.
+ */
+export function updatePresence(
+	scope: string,
+	runId: string,
+	patch: Partial<PresenceRecord>,
+	deps: PresenceDeps = {},
+): boolean {
 	const record = listPresence(scope, deps).find((r) => r.runId === runId);
 	if (!record) return false;
-	const now = deps.now ?? Date.now;
-	writeAtomic(scope, { ...record, heartbeatAt: new Date(now()).toISOString() }, deps);
+	writeAtomic(scope, { ...record, ...patch }, deps);
 	return true;
+}
+
+/** Bump a run's heartbeat. Returns false when the record is gone. */
+export function heartbeatPresence(scope: string, runId: string, deps: PresenceDeps = {}): boolean {
+	const now = deps.now ?? Date.now;
+	return updatePresence(scope, runId, { heartbeatAt: new Date(now()).toISOString() }, deps);
 }
 
 /** List all presence records; malformed files are skipped, never fatal. */

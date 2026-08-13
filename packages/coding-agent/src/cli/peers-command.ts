@@ -9,11 +9,17 @@
  * Returns true when the invocation was a peers command.
  */
 
-import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import { listPeers, peekInbox, resolveInstanceId, resolvePeerScopeDir, sendPeerMessage } from "../core/peers/index.js";
 import { detectStyle, renderInbox, renderPeersList } from "../core/peers/render.js";
 import { axiomHome } from "../extensions/profile/registry.js";
+
+/**
+ * The fromRun a terminal message carries. The CLI registers no presence
+ * record, so the ID is the process itself — stable for the whole invocation
+ * instead of a fresh fabricated UUID per message.
+ */
+const CLI_RUN_ID = `cli-${process.pid}`;
 
 export const PEERS_HELP = `axiom peers — see and talk to other axiom-agent instances in this directory
 
@@ -76,7 +82,7 @@ export async function handlePeersCommand(args: string[]): Promise<boolean> {
 					console.log(PEERS_HELP);
 					return true;
 				}
-				sendPeerMessage(scope, identity, `cli-${randomUUID()}`, to, text);
+				sendPeerMessage(scope, identity, CLI_RUN_ID, to, text);
 				console.log(to === "*" ? "✓ sent to all peers (group)" : `✓ sent to ${to.slice(0, 8)}`);
 				return true;
 			}
@@ -86,7 +92,7 @@ export async function handlePeersCommand(args: string[]): Promise<boolean> {
 					console.log(PEERS_HELP);
 					return true;
 				}
-				sendPeerMessage(scope, identity, `cli-${randomUUID()}`, "*", text);
+				sendPeerMessage(scope, identity, CLI_RUN_ID, "*", text);
 				console.log("✓ sent to all peers (group)");
 				return true;
 			}
