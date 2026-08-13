@@ -49,3 +49,17 @@ port per `docs/ports.md`. Both archives are seed corn, not working trunks.
   domain vocabulary in root `CONTEXT.md` + `docs/adr/`.
 - End autonomous runs with a `docs/handoff.md` that says what was done, what
   was verified, and how (unit / mock / live — never blurred).
+
+## Agent skills
+
+### Issue tracker
+
+GitHub issues via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default label vocabulary (five canonical roles). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout — root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
