@@ -41,6 +41,7 @@ import {
 import { handleSkillAuditCommand } from "./cli/skill-audit-command.js";
 import { handleSkillCaptureAutoCommand } from "./cli/skill-capture-auto-command.js";
 import { handleSkillCaptureCommand } from "./cli/skill-capture-command.js";
+import { handleSkillCheckCommand } from "./cli/skill-check-command.js";
 import { APP_NAME, ENV_AGENT_DIR, expandTildePath, getAgentDir, getSessionDirEnvOverride, VERSION } from "./config.js";
 import {
 	type AgentExecutionMode,
@@ -1126,6 +1127,10 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	if (await handleSkillCaptureAutoCommand(args)) {
+		return;
+	}
+
+	if (await handleSkillCheckCommand(args)) {
 		return;
 	}
 

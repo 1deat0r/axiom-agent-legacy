@@ -118,6 +118,21 @@ allowlisted by the operator. Surfaces as `auditSkill(dir)` and the
 _Avoid_: Skills (the refinement harness's `skill` entries, which are in-memory
 harness lineage, not on-disk skill directories)
 
+**Skill check**:
+The validation half of hand-written skills (ADR-0037): `runSkillCheck(dir)` and
+the `axiom skill-check [dir ...] [--json] [--strict]` CLI run a skill directory
+through the REAL loader path (explicit skill path, defaults disabled, so name
+collisions dedupe exactly as in a session) and report every file the loader
+would drop — missing or empty description, unparsable frontmatter, collision
+loser — plus warnings (e.g. name mismatches). The verdict is derived from the
+loader's own output, so the check cannot drift from loader semantics; exit
+code 1 means a written skill would be silently missing from the next session's
+prompt. No directory argument checks the default skill dirs. Motivated by a
+hand-written skill (`tui-pty-testing`) shipped without frontmatter and dropped
+with a "description is required" warning.
+_Avoid_: Skill audit (the security verdict, ADR-0025), Skill capture (the
+procedural-memory pipeline, ADR-0024)
+
 **Drift**:
 An agent acting outside its project's identity, context, or boundary — wrong
 files, wrong memory, wrong ledger. Prevented by the anti-drift ladder
