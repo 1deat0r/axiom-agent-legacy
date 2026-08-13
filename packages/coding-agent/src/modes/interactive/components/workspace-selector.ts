@@ -10,7 +10,11 @@
  * `--profile <name>` / `--project <name>` with a fresh session in that
  * workspace. `buildSwitchRelaunchArgs` derives the child argv.
  */
+import { spawnSync } from "node:child_process";
 import { Container, type Focusable, type SelectItem, SelectList, Text } from "@earendil-works/pi-tui";
+import { profileBaseHome } from "../../../cli/profile-command.js";
+import { APP_NAME } from "../../../config.js";
+import { AXIOM_HOME_ENV } from "../../../extensions/profile/registry.js";
 import { getSelectListTheme } from "../theme/theme.js";
 import { DynamicBorder } from "./dynamic-border.js";
 
@@ -119,4 +123,90 @@ export function buildSwitchRelaunchArgs(
 export function shouldOpenWorkspaceMenu(args: string): boolean {
 	const trimmed = args.trim();
 	return trimmed.length === 0 || trimmed.startsWith("-");
+}
+
+// =========================================================================
+// Workspace relaunch (boot-scoped switch)
+// =========================================================================
+
+/** The fields a relaunch needs from a blocking child spawn. */
+export interface WorkspaceRelaunchResult {
+	status: number | null;
+	signal?: string | null;
+	error?: Error;
+}
+
+/**
+ * Process deps for the workspace relaunch. `spawnSync` must BLOCK the parent
+ * until the child exits: the child inherits the parent's foreground process
+ * group, and if the parent exits first the shell reclaims the terminal and
+ * the kernel denies the orphaned child's tcsetattr/read with EIO (the
+ * /profiles relaunch crashed with exactly that).
+ */
+export interface WorkspaceRelaunchDeps {
+	spawnSync(
+		command: string,
+		args: readonly string[],
+		options: { stdio: "inherit"; env: NodeJS.ProcessEnv },
+	): WorkspaceRelaunchResult;
+	exit(code: number): never;
+}
+
+export const defaultWorkspaceRelaunchDeps: WorkspaceRelaunchDeps = {
+	spawnSync: (command, args, options) => {
+		const result = spawnSync(command, [...args], options);
+		return { status: result.status, signal: result.signal, error: result.error };
+	},
+	exit: (code) => process.exit(code),
+};
+
+export interface WorkspaceRelaunchOptions {
+	/** Child argv derived by buildSwitchRelaunchArgs. */
+	relaunchArgs: string[];
+	/** Environment for the relaunched client. */
+	env: NodeJS.ProcessEnv;
+}
+
+/**
+ * Relaunch the client under the switched workspace flags. Never returns: the
+ * blocking spawn holds the terminal's foreground process group for the child,
+ * then the parent exits with the child's status (the /update relaunch
+ * pattern). A fire-and-forget spawn would exit the parent immediately,
+ * orphan the child's process group, and the relaunched TUI would crash in
+ * setRawMode with EIO.
+ */
+export function relaunchWorkspace(
+	argv: readonly string[],
+	opts: WorkspaceRelaunchOptions,
+	deps: WorkspaceRelaunchDeps = defaultWorkspaceRelaunchDeps,
+): never {
+	const entrypoint = argv[1];
+	if (entrypoint === undefined) {
+		console.error(`Failed to relaunch ${APP_NAME}: cannot determine the CLI entrypoint`);
+		deps.exit(1);
+	}
+	const result = deps.spawnSync(process.execPath, [...process.execArgv, entrypoint, ...opts.relaunchArgs], {
+		stdio: "inherit",
+		env: opts.env,
+	});
+	if (result.error) {
+		console.error(`Failed to relaunch ${APP_NAME}: ${result.error.message}`);
+		deps.exit(1);
+	}
+	deps.exit(result.status ?? (result.signal ? 1 : 0));
+}
+
+/**
+ * Environment for the relaunched client. A profile switch pins AXIOM_HOME to
+ * the profile BASE home so the child resolves `--profile <name>` under the
+ * same base the parent used (dropping it would fall back to ~/.axiom and
+ * lose a custom AXIOM_HOME). A project switch changes no env.
+ */
+export function buildWorkspaceRelaunchEnv(
+	processEnv: NodeJS.ProcessEnv,
+	opts: { profile?: string; project?: string },
+	activeHome: string,
+): NodeJS.ProcessEnv {
+	if (opts.profile === undefined) return processEnv;
+	return { ...processEnv, [AXIOM_HOME_ENV]: profileBaseHome(activeHome) };
 }

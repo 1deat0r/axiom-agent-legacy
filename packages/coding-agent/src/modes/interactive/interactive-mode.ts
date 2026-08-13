@@ -141,7 +141,7 @@ import {
 	type TelemetryOnboardingOutcome,
 } from "../../core/telemetry.js";
 import { type TruncationResult, truncateTail } from "../../core/tools/truncate.js";
-import { AXIOM_HOME_ENV, axiomHome, profileLabel } from "../../extensions/profile/registry.js";
+import { axiomHome, profileLabel } from "../../extensions/profile/registry.js";
 import { connectorById, connectorGuideLines, type GatewayConnector } from "../../gateway/connectors.js";
 import { AXIOM_LOGO } from "../../themes/axiom-logo.js";
 import { getChangelogPath, parseChangelog } from "../../utils/changelog.js";
@@ -240,8 +240,12 @@ import { UserMessageComponent } from "./components/user-message.js";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.js";
 import {
 	buildSwitchRelaunchArgs,
+	buildWorkspaceRelaunchEnv,
+	defaultWorkspaceRelaunchDeps,
+	relaunchWorkspace,
 	shouldOpenWorkspaceMenu,
 	type WorkspaceOption,
+	type WorkspaceRelaunchDeps,
 	WorkspaceSelectorComponent,
 	type WorkspaceSelectorOptions,
 } from "./components/workspace-selector.js";
@@ -9692,11 +9696,20 @@ export class InteractiveMode {
 	/**
 	 * Switch workspace (profile and/or project): a boot-scoped change, so the
 	 * session tears down and relaunches the client under the new flags — the
-	 * same stop/dispose/spawn pattern the /update relaunch uses. A profile
-	 * switch also drops AXIOM_HOME so the child resolves its own home.
+	 * same stop/dispose/spawn pattern the /update relaunch uses. The relaunch
+	 * is a BLOCKING spawnSync: the child inherits this process's foreground
+	 * process group, and exiting first would let the shell reclaim the
+	 * terminal and strand the child in an orphaned background pgrp, which the
+	 * kernel then denies (EIO on setRawMode — the reported crash). A profile
+	 * switch also pins AXIOM_HOME to the profile base home so the child
+	 * resolves the same base this run used.
 	 */
-	private async switchWorkspace(opts: { profile?: string; project?: string }): Promise<void> {
+	private async switchWorkspace(
+		opts: { profile?: string; project?: string },
+		relaunchDeps: WorkspaceRelaunchDeps = defaultWorkspaceRelaunchDeps,
+	): Promise<void> {
 		const relaunchArgs = buildSwitchRelaunchArgs(process.argv.slice(2), opts);
+		await this.ui.terminal.drainInput(1000).catch(() => undefined);
 		this.stop();
 		await this.agentConnection.dispose().catch(() => undefined);
 		try {
@@ -9704,14 +9717,8 @@ export class InteractiveMode {
 		} catch {
 			// The workspace switch still proceeds on teardown failure.
 		}
-		const env = opts.profile ? { ...process.env } : process.env;
-		if (opts.profile) delete env[AXIOM_HOME_ENV];
-		const child = spawn(process.execPath, [...process.execArgv, process.argv[1]!, ...relaunchArgs], {
-			stdio: "inherit",
-			env,
-		});
-		child.unref();
-		process.exit(0);
+		const env = buildWorkspaceRelaunchEnv(process.env, opts, axiomHome());
+		relaunchWorkspace(process.argv, { relaunchArgs, env }, relaunchDeps);
 	}
 
 	private async runProfileSurfaceCommand(
