@@ -16,15 +16,21 @@ import {
 
 /** An in-memory Telegram client the transport polls (configuration via the returned object). */
 function fakeClient(initial: TelegramUpdate[] = []) {
-	const sent: Array<{ chatId: string; text: string }> = [];
+	const sent: Array<{ chatId: string; text: string; messageId?: number; edited?: boolean }> = [];
 	const offsets: number[] = [];
 	const timeouts: Array<number | undefined> = [];
 	const queue: TelegramUpdate[] = [...initial];
 	let failNext = 0;
 	let fatal: Error | undefined;
+	let nextId = 100;
 	const client: TelegramClient = {
 		async sendMessage(input) {
-			sent.push({ chatId: input.chatId, text: input.text });
+			const id = nextId++;
+			sent.push({ chatId: input.chatId, text: input.text, messageId: id });
+			return id;
+		},
+		async editMessageText(input) {
+			sent.push({ chatId: input.chatId, text: input.text, messageId: input.messageId, edited: true });
 		},
 		async getUpdates(input) {
 			if (input.offset !== undefined) offsets.push(input.offset);
@@ -97,7 +103,7 @@ describe("TelegramTransport", () => {
 		await t.send({ channelId: "123", recipient: "123" }, "hi");
 		const long = "w ".repeat(4000).trim(); // 7999 chars, well over one chunk
 		await t.send({ channelId: "123", recipient: "123" }, long);
-		expect(f.sent[0]).toEqual({ chatId: "123", text: "hi" });
+		expect(f.sent[0]).toMatchObject({ chatId: "123", text: "hi" });
 		const chunks = f.sent.slice(1);
 		expect(chunks.length).toBeGreaterThan(1);
 		expect(chunks.every((s) => s.text.length <= 4096)).toBe(true);
@@ -215,7 +221,8 @@ describe("TelegramTransport", () => {
 		const queue: TelegramUpdate[] = [];
 		let aborted = false;
 		const clientWithSignal: TelegramClient = {
-			sendMessage: async () => {},
+			sendMessage: async () => 1,
+			editMessageText: async () => {},
 			async getUpdates(input) {
 				if (input.signal) {
 					input.signal.addEventListener("abort", () => {
@@ -278,6 +285,7 @@ describe("TelegramTransport", () => {
 				sendCalls++;
 				if (sendCalls === 2) throw new Error("chat deactivated");
 				f.sent.push({ chatId: input.chatId, text: input.text });
+				return 1;
 			},
 		};
 		const logs: string[] = [];

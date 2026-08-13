@@ -285,23 +285,53 @@ export class Gateway {
 			sessionId = sessionIdForChannel(sessionKey);
 			this.index.set(sessionKey, sessionId);
 		}
-		const result = await this.completion.runCompletion({
+		const recipient = { channelId: msg.channelId, recipient: msg.sender };
+		const input = {
 			sessionId,
 			prompt: msg.text,
 			profile: { name: this.profile },
 			model: this.modelStore?.load(),
 			...(anchoredRoot ? { projectRoot: anchoredRoot } : {}),
-		});
+		};
+		// Streaming (ADR-0004/#6): when both the transport and the runner support
+		// it, send a placeholder bubble and edit it per text delta — the operator
+		// sees the answer arrive live. Any edit/send failure falls back to the
+		// batch guarantee below (single final message).
+		const streamer = this.transport as GatewayTransport & {
+			sendMessage?(to: GatewayRecipient, text: string): Promise<number>;
+			editMessage?(chatId: string, messageId: number, text: string): Promise<void>;
+		};
+		if (streamer.sendMessage && streamer.editMessage && this.completion.streamCompletion) {
+			try {
+				const messageId = await streamer.sendMessage(recipient, "…");
+				let lastText = "";
+				const streamed = await this.completion.streamCompletion(input, (delta) => {
+					lastText += delta;
+					void streamer.editMessage!(msg.channelId, messageId, lastText).catch(() => {
+						/* per-delta edits are best-effort; the final edit / fallback below recovers */
+					});
+				});
+				const finalText =
+					streamed.error !== undefined
+						? `could not run the agent: ${streamed.error}`
+						: streamed.reply.length > 0
+							? streamed.reply
+							: "(no reply)";
+				try {
+					await streamer.editMessage(msg.channelId, messageId, finalText);
+				} catch {
+					await this.deliver(recipient, finalText);
+				}
+				return;
+			} catch {
+				/* fall through to batch — the placeholder send itself failed */
+			}
+		}
+		const result = await this.completion.runCompletion(input);
 		if (result.error) {
-			await this.deliver(
-				{ channelId: msg.channelId, recipient: msg.sender },
-				`could not run the agent: ${result.error}`,
-			);
+			await this.deliver(recipient, `could not run the agent: ${result.error}`);
 			return;
 		}
-		await this.deliver(
-			{ channelId: msg.channelId, recipient: msg.sender },
-			result.reply.length > 0 ? result.reply : "(no reply)",
-		);
+		await this.deliver(recipient, result.reply.length > 0 ? result.reply : "(no reply)");
 	}
 }

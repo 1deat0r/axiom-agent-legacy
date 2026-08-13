@@ -53,6 +53,17 @@ export interface CompletionRunner {
 		sessionId: string;
 		error?: string;
 	}>;
+	/** Optional streaming variant: forwards text deltas; absent => batch-only. */
+	streamCompletion?(
+		input: {
+			sessionId: string;
+			prompt: string;
+			profile: GatewayProfile;
+			model?: { provider: string; model: string };
+			projectRoot?: string;
+		},
+		onDelta: (delta: string) => void,
+	): Promise<{ reply: string; sessionId: string; error?: string }>;
 }
 
 /** The cron surface the /cron command drives (list/add/remove). */

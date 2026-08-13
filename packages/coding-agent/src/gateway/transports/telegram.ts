@@ -36,7 +36,10 @@ export interface TelegramUpdate {
 
 /** The Telegram Bot API boundary (a real client talks HTTPS; tests fake this). */
 export interface TelegramClient {
-	sendMessage(input: { chatId: string; text: string }): Promise<void>;
+	/** Sends a message and returns its Telegram message_id (for later edits). */
+	sendMessage(input: { chatId: string; text: string }): Promise<number>;
+	/** Edits an existing message's text in place (streaming, ADR-0004/#6). */
+	editMessageText(input: { chatId: string; messageId: number; text: string }): Promise<void>;
 	/**
 	 * Long-poll getUpdates. `timeout` is in SECONDS (the Bot API parameter, max
 	 * 50) — the transport converts its ms option at this boundary.
@@ -175,6 +178,16 @@ export class TelegramTransport implements GatewayTransport {
 		this.handler = handler;
 	}
 
+	/** Single-message send that returns the message id (for streaming edits). */
+	async sendMessage(to: GatewayRecipient, text: string): Promise<number> {
+		return this.client.sendMessage({ chatId: to.channelId, text });
+	}
+
+	/** Edit a previously-sent message in place (throws on failure -> caller falls back). */
+	async editMessage(chatId: string, messageId: number, text: string): Promise<void> {
+		await this.client.editMessageText({ chatId, messageId, text });
+	}
+
 	async send(to: GatewayRecipient, text: string): Promise<void> {
 		const chunks = chunkTelegramText(text, TELEGRAM_TEXT_LIMIT);
 		for (const chunk of chunks) {
@@ -282,8 +295,18 @@ export class HttpTelegramClient implements TelegramClient {
 		return `${this.baseUrl}/bot${this.token}/${method}`;
 	}
 
-	async sendMessage(input: { chatId: string; text: string }): Promise<void> {
-		await this.post("sendMessage", { chat_id: input.chatId, text: input.text });
+	async sendMessage(input: { chatId: string; text: string }): Promise<number> {
+		const data = await this.post("sendMessage", { chat_id: input.chatId, text: input.text });
+		const result = data.result as { message_id?: number } | undefined;
+		return typeof result?.message_id === "number" ? result.message_id : 0;
+	}
+
+	async editMessageText(input: { chatId: string; messageId: number; text: string }): Promise<void> {
+		await this.post("editMessageText", {
+			chat_id: input.chatId,
+			message_id: input.messageId,
+			text: input.text,
+		});
 	}
 
 	async getUpdates(input: { offset?: number; timeout?: number; signal?: AbortSignal }): Promise<TelegramUpdate[]> {

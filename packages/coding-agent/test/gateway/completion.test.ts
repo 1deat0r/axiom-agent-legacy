@@ -325,3 +325,54 @@ describe("CliCompletionRunner per-call projectRoot override", () => {
 		}
 	});
 });
+
+describe("CliCompletionRunner.streamCompletion", () => {
+	it("parses text_delta JSON events, forwards deltas, and returns the accumulated reply", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-stream-"));
+		try {
+			const bin = join(dir, "axiom.mjs");
+			await writeFile(
+				bin,
+				"#!/usr/bin/env node\n" +
+					"const lines = [\n" +
+					"  JSON.stringify({ type: 'session_info_changed', name: 'x' }),\n" +
+					"  JSON.stringify({ type: 'text_delta', contentIndex: 0, delta: 'Hel', partial: {} }),\n" +
+					"  JSON.stringify({ type: 'text_delta', contentIndex: 0, delta: 'lo', partial: {} }),\n" +
+					"  JSON.stringify({ type: 'session_status', recap: 'done' }),\n" +
+					"];\n" +
+					"for (const l of lines) process.stdout.write(l + '\\n');\n",
+			);
+			await chmod(bin, 0o755);
+			const runner = new CliCompletionRunner({ bin, printFlag: "-p" });
+			const deltas: string[] = [];
+			const out = await runner.streamCompletion!(
+				{ sessionId: "gw-1", prompt: "hi", profile: { name: "default" } },
+				(d) => deltas.push(d),
+			);
+			expect(deltas).toEqual(["Hel", "lo"]);
+			expect(out.reply).toBe("Hello");
+			expect(out.error).toBeUndefined();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("passes --mode json (not -p) so the child streams events", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-stream-"));
+		try {
+			const outDir = join(dir, "out");
+			await mkdir(outDir, { recursive: true });
+			const bin = await writeShimAt(join(dir, "axiom.mjs"), "ok");
+			process.env.SHIM_ARGV = join(outDir, "argv.json");
+			const runner = new CliCompletionRunner({ bin, printFlag: "-p" });
+			await runner.streamCompletion!({ sessionId: "s", prompt: "hi", profile: { name: "p" } }, () => {});
+			const argv = JSON.parse(await readFile(join(outDir, "argv.json"), "utf8")) as string[];
+			expect(argv).toContain("--mode");
+			expect(argv[argv.indexOf("--mode") + 1]).toBe("json");
+			expect(argv).not.toContain("-p");
+		} finally {
+			delete process.env.SHIM_ARGV;
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+});

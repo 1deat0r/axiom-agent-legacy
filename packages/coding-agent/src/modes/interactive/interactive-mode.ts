@@ -9507,7 +9507,6 @@ export class InteractiveMode {
 				if (name !== current) void this.switchWorkspace({ profile: name });
 			},
 		});
-
 	}
 
 	private async handleProjectsSlashCommand(args: string): Promise<void> {

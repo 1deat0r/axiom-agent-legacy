@@ -112,13 +112,54 @@ export class CliCompletionRunner implements CompletionRunner {
 		this.projectRoot = options.projectRoot;
 		this.confinement = options.confinement;
 	}
+	/**
+	 * Resolve the spawn argv + env for a completion child, confining anchored
+	 * runs inside bubblewrap (ADR-0018 strict tier). Unanchored runs spawn
+	 * directly. Throws when an anchored run has no bwrap (fail closed).
+	 */
+	private buildSpawn(
+		args: string[],
+		root: string | undefined,
+	): { spawnargv: string[]; childEnv: NodeJS.ProcessEnv | undefined; confined: boolean } {
+		if (!root) return { spawnargv: [this.bin, ...args], childEnv: undefined, confined: false };
+		const bwrap = this.confinement?.bwrap ?? resolveBwrap(process.env);
+		if (!bwrap) {
+			throw new Error(
+				"Anchored run requires bubblewrap (bwrap) for OS-tier confinement, but it was not found. " +
+					"Install bubblewrap (or set AXIOM_BWRAP to its path), or run this gateway without " +
+					"--project. Refusing to spawn the completion unconfined.",
+			);
+		}
+		const home = homedir();
+		const stores = resolveConfinementPaths(home, process.env);
+		const axiomHome = this.confinement?.axiomHome ?? stores.axiomHome;
+		const agentHome = this.confinement?.agentHome ?? stores.agentHome;
+		try {
+			mkdirSync(axiomHome, { recursive: true });
+			mkdirSync(agentHome, { recursive: true });
+		} catch {
+			/* a missing store still fails closed at spawn (bind error) */
+		}
+		const mount = buildSandboxMountArgs({
+			home,
+			projectRoot: root,
+			axiomHome,
+			agentHome,
+			shadowDirs: this.confinement?.shadowDirs ?? defaultShadowDirs(home),
+		});
+		return {
+			spawnargv: assembleProgramArgv(bwrap, mount, this.bin, args),
+			childEnv: confinementEnv({ ...process.env, AXIOM_PROJECT_ROOT: root }),
+			confined: true,
+		};
+	}
+
 	async runCompletion(input: {
 		sessionId: string;
 		prompt: string;
 		profile: GatewayProfile;
 		model?: { provider: string; model: string };
 		projectRoot?: string;
-
 	}): Promise<{ reply: string; sessionId: string; error?: string }> {
 		// Per-call override wins over the boot-time anchor; BOTH thread through
 		// every anchoring point below (bwrap mount, cwd, AXIOM_PROJECT_ROOT,
@@ -144,48 +185,7 @@ export class CliCompletionRunner implements CompletionRunner {
 			args.push("--model", input.model.model);
 		}
 		try {
-			// An anchored run (projectRoot set) is OS-confined: the whole child
-			// spawns inside a bubblewrap sandbox (host read-only, project + the
-			// persistent stores writable, secret home dirs shadowed), so the
-			// freeform bash tool and the ipython kernel inherit the boundary.
-			// Bubblewrap absence FAILS CLOSED — never an unconfined anchored run.
-			let spawnargv: string[];
-			let childEnv: NodeJS.ProcessEnv | undefined;
-			let confined = false;
-			if (root) {
-				const bwrap = this.confinement?.bwrap ?? resolveBwrap(process.env);
-				if (!bwrap) {
-					throw new Error(
-						"Anchored run requires bubblewrap (bwrap) for OS-tier confinement, but it was not found. " +
-							"Install bubblewrap (or set AXIOM_BWRAP to its path), or run this gateway without " +
-							"--project. Refusing to spawn the completion unconfined.",
-					);
-				}
-				const home = homedir();
-				const stores = resolveConfinementPaths(home, process.env);
-				const axiomHome = this.confinement?.axiomHome ?? stores.axiomHome;
-				const agentHome = this.confinement?.agentHome ?? stores.agentHome;
-				// Writable store dirs must exist on the host to bind-mount.
-				try {
-					mkdirSync(axiomHome, { recursive: true });
-					mkdirSync(agentHome, { recursive: true });
-				} catch {
-					/* a missing store still fails closed at spawn (bind error) */
-				}
-				const mount = buildSandboxMountArgs({
-					home,
-					projectRoot: root,
-					axiomHome,
-					agentHome,
-					shadowDirs: this.confinement?.shadowDirs ?? defaultShadowDirs(home),
-				});
-				spawnargv = assembleProgramArgv(bwrap, mount, this.bin, args);
-				childEnv = confinementEnv({ ...process.env, AXIOM_PROJECT_ROOT: root });
-				confined = true;
-			} else {
-				spawnargv = [this.bin, ...args];
-				childEnv = undefined;
-			}
+			const { spawnargv, childEnv, confined } = this.buildSpawn(args, root);
 			const stdout = await new Promise<string>((resolve, reject) => {
 				// Spawn and collect stdout ourselves rather than execFile: the
 				// completion CLI writes its final answer to stdio, and execFile's
@@ -237,18 +237,153 @@ export class CliCompletionRunner implements CompletionRunner {
 			return { reply: "", sessionId: input.sessionId, error: message };
 		}
 	}
+
+	/**
+	 * Streaming completion (ADR-0004/#6): run the child with `--mode json`,
+	 * parse the JSON event lines, forward `text_delta` chunks to `onDelta`, and
+	 * return the accumulated reply. The CLI streams the provider's text deltas
+	 * as JSON events, so the gateway can edit a Telegram message in place.
+	 */
+	async streamCompletion(
+		input: {
+			sessionId: string;
+			prompt: string;
+			profile: GatewayProfile;
+			model?: { provider: string; model: string };
+			projectRoot?: string;
+		},
+		onDelta: (delta: string) => void,
+	): Promise<{ reply: string; sessionId: string; error?: string }> {
+		const root = input.projectRoot ?? this.projectRoot;
+		const args = [
+			...this.prefix,
+			"--mode",
+			"json",
+			input.prompt,
+			"--profile",
+			input.profile.name,
+			"--session-id",
+			input.sessionId,
+		];
+		if (input.model) {
+			if (input.model.provider) args.push("--provider", input.model.provider);
+			args.push("--model", input.model.model);
+		}
+		try {
+			const { spawnargv, childEnv, confined } = this.buildSpawn(args, root);
+			let full = "";
+			const collected = await new Promise<string>((resolve, reject) => {
+				const child = spawn(spawnargv[0], spawnargv.slice(1), {
+					stdio: ["ignore", "pipe", "pipe"],
+					cwd: root,
+					env: childEnv,
+				});
+				let buffer = "";
+				let settled = false;
+				child.stdout?.on("data", (d) => {
+					buffer += d.toString("utf8");
+					for (;;) {
+						const nl = buffer.indexOf("\n");
+						if (nl < 0) break;
+						const line = buffer.slice(0, nl).trim();
+						buffer = buffer.slice(nl + 1);
+						if (!line) continue;
+						let obj: unknown;
+						try {
+							obj = JSON.parse(line);
+						} catch {
+							continue;
+						}
+						if (
+							typeof obj === "object" &&
+							obj !== null &&
+							((obj as { type?: unknown }).type === "text_delta" ||
+								(typeof (obj as { assistantMessageEvent?: unknown }).assistantMessageEvent === "object" &&
+									(obj as { assistantMessageEvent?: { type?: unknown } }).assistantMessageEvent !== null &&
+									(obj as { assistantMessageEvent?: { type?: string } }).assistantMessageEvent?.type ===
+										"text_delta"))
+						) {
+							// v2 format: top-level {type:"text_delta", delta}; v3 format:
+							// {type:"message_update", assistantMessageEvent:{type:"text_delta", delta}}.
+							const delta =
+								(obj as { delta?: unknown }).delta ??
+								(
+									obj as {
+										assistantMessageEvent?: { delta?: unknown };
+									}
+								).assistantMessageEvent?.delta;
+							if (typeof delta === "string") {
+								full += delta;
+								onDelta(delta);
+							}
+						}
+					}
+				});
+				child.stderr?.on("data", () => {
+					/* drain stderr; deltas stream on stdout */
+				});
+				const timer = setTimeout(() => {
+					if (settled) return;
+					settled = true;
+					child.kill("SIGKILL");
+					reject(new Error(`completion timed out after ${this.timeoutMs}ms: ${[this.bin, ...args].join(" ")}`));
+				}, this.timeoutMs);
+				timer.unref?.();
+				child.on("error", (error) => {
+					if (settled) return;
+					settled = true;
+					clearTimeout(timer);
+					reject(error);
+				});
+				child.on("close", (code) => {
+					if (settled) return;
+					settled = true;
+					clearTimeout(timer);
+					if (code === 0) {
+						resolve(full);
+					} else {
+						reject(
+							new Error(
+								`completion exited with code ${String(code ?? "unknown")}: ${[this.bin, ...args].join(" ")}`,
+							),
+						);
+					}
+				});
+			});
+			const reply = confined ? `[sandbox-confined] ${collected.trimEnd()}` : collected.trimEnd();
+			return { reply, sessionId: input.sessionId };
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return { reply: "", sessionId: input.sessionId, error: message };
+		}
+	}
 }
 
 /** A canned, injectable completion runner for router/e2e tests. */
 export function fakeCompletionRunner(): CompletionRunner & {
-	calls: Array<{ sessionId: string; prompt: string; model: { provider: string; model: string } | undefined; projectRoot?: string }>;
+	calls: Array<{
+		sessionId: string;
+		prompt: string;
+		model: { provider: string; model: string } | undefined;
+		projectRoot?: string;
+	}>;
 } {
 	const runner: CompletionRunner & {
-		calls: Array<{ sessionId: string; prompt: string; model: { provider: string; model: string } | undefined; projectRoot?: string }>;
+		calls: Array<{
+			sessionId: string;
+			prompt: string;
+			model: { provider: string; model: string } | undefined;
+			projectRoot?: string;
+		}>;
 	} = {
 		calls: [],
 		async runCompletion(input) {
-			this.calls.push({ sessionId: input.sessionId, prompt: input.prompt, model: input.model, projectRoot: input.projectRoot });
+			this.calls.push({
+				sessionId: input.sessionId,
+				prompt: input.prompt,
+				model: input.model,
+				projectRoot: input.projectRoot,
+			});
 
 			return { reply: `axiom reply to: ${input.prompt}`, sessionId: input.sessionId };
 		},
