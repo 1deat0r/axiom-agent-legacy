@@ -12,6 +12,7 @@ import { GatewayCron } from "../../src/gateway/cron.js";
 import { MemoryDeliveryLedger } from "../../src/gateway/delivery-ledger.js";
 import { Gateway } from "../../src/gateway/gateway.js";
 import { InMemoryRestartNoticeStore } from "../../src/gateway/restart-notice.js";
+import type { UpdateShell } from "../../src/gateway/self-update.js";
 import {
 	GATEWAY_SESSION_BUDGET_BYTES,
 	SESSION_RESET_NOTICE,
@@ -1394,6 +1395,293 @@ describe("Gateway /new stale-project self-heal", () => {
 			expect(existsSync(channelPath)).toBe(true); // the unanchored session is untouched
 			expect(store.get("+1")).toBe("alpha"); // a healthy mapping survives /new
 			expect(s.sent.some((x) => x.text.includes("started a fresh session"))).toBe(true);
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("Gateway completion resilience (ADR-0050)", () => {
+	/** Scripted update shell: healthy fetch/merge/build behind-by-one. */
+	function healthyUpdateShell(): UpdateShell {
+		const responses: Record<string, { code: number; stdout?: string; stderr?: string }> = {
+			"git -C /repo rev-parse --abbrev-ref HEAD": { code: 0, stdout: "main\n" },
+			"git -C /repo status --porcelain": { code: 0, stdout: "" },
+			"git -C /repo fetch origin": { code: 0 },
+			"git -C /repo rev-parse HEAD": { code: 0, stdout: "aaa\n" },
+			"git -C /repo rev-parse origin/main": { code: 0, stdout: "bbb\n" },
+			"git -C /repo merge --ff-only origin/main": { code: 0 },
+			"npm run build": { code: 0 },
+		};
+		return {
+			async run(cmd) {
+				const r = responses[cmd.join(" ")];
+				if (!r) throw new Error(`no fake response for: ${cmd.join(" ")}`);
+				return { code: r.code, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+			},
+		};
+	}
+
+	it("retries an interrupted stream run once and drops compaction on the retry", async () => {
+		const dir = await home("axiom-gw-retry-");
+		try {
+			const s = streamingTransport();
+			const inputs: Array<{ compactBefore?: boolean }> = [];
+			let attempts = 0;
+			const completion: CompletionRunner = {
+				async runCompletion(input) {
+					return { reply: "", sessionId: input.sessionId };
+				},
+				async streamCompletion(input, onDelta) {
+					inputs.push(input);
+					attempts++;
+					if (attempts === 1) {
+						return {
+							reply: "",
+							sessionId: input.sessionId,
+							error: "completion exited with code 143: /opt/axiom/cli.js Yes --compact-before",
+						};
+					}
+					onDelta("recovered");
+					return { reply: "recovered", sessionId: input.sessionId };
+				},
+			};
+			const sessionsDir = join(dir, "sessions");
+			mkdirSync(sessionsDir, { recursive: true });
+			writeFileSync(sessionFilePath(sessionsDir, "+1"), `${"x".repeat(GATEWAY_SESSION_BUDGET_BYTES + 1)}\n`, "utf8");
+			const g = new Gateway({
+				transport: s.t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+				sessionsDir,
+				completionRetries: 1,
+				completionRetryDelayMs: 1,
+			});
+			await g.start();
+			s.push({ channelId: "+1", sender: "+1", text: "hello", isCommand: false, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 50));
+			expect(attempts).toBe(2);
+			expect(inputs[0]?.compactBefore).toBe(true);
+			expect(inputs[1]?.compactBefore).toBe(false);
+			expect(s.edits.at(-1)?.text).toBe("recovered");
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("retries a transient batch failure once, then delivers the recovered reply", async () => {
+		const dir = await home("axiom-gw-retry-");
+		try {
+			const { t, sent, push } = fakeTransport();
+			let attempts = 0;
+			const completion: CompletionRunner = {
+				async runCompletion(input) {
+					attempts++;
+					if (attempts === 1) {
+						return {
+							reply: "",
+							sessionId: input.sessionId,
+							error: "completion exited with code 143: /opt/axiom/cli.js hi",
+						};
+					}
+					return { reply: "recovered", sessionId: input.sessionId };
+				},
+				async streamCompletion(input, _onDelta) {
+					return { reply: "", sessionId: input.sessionId, error: "not used" };
+				},
+			};
+			const g = new Gateway({
+				transport: t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+				completionRetries: 1,
+				completionRetryDelayMs: 1,
+			});
+			await g.start();
+			push({ channelId: "+1", sender: "+1", text: "hello", isCommand: false, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 40));
+			expect(attempts).toBe(2);
+			expect(sent.some((s) => s.text === "recovered")).toBe(true);
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("retries once when the session is busy in another process", async () => {
+		const dir = await home("axiom-gw-retry-");
+		try {
+			const { t, sent, push } = fakeTransport();
+			let attempts = 0;
+			const completion: CompletionRunner = {
+				async runCompletion(input) {
+					attempts++;
+					if (attempts === 1) {
+						return {
+							reply: "",
+							sessionId: input.sessionId,
+							error: "completion exited with code 1: /opt/axiom/cli.js hi Error: Session is already active in owned-abc: /home/u/.axiom/agent/sessions/gw-x.jsonl",
+						};
+					}
+					return { reply: "recovered", sessionId: input.sessionId };
+				},
+				async streamCompletion(input, _onDelta) {
+					return { reply: "", sessionId: input.sessionId, error: "not used" };
+				},
+			};
+			const g = new Gateway({
+				transport: t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+				completionRetries: 1,
+				completionRetryDelayMs: 1,
+			});
+			await g.start();
+			push({ channelId: "+1", sender: "+1", text: "hello", isCommand: false, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 40));
+			expect(attempts).toBe(2);
+			expect(sent.some((s) => s.text === "recovered")).toBe(true);
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("does not retry a non-transient failure and never leaks the command line", async () => {
+		const dir = await home("axiom-gw-retry-");
+		try {
+			const { t, sent, push } = fakeTransport();
+			let attempts = 0;
+			const completion: CompletionRunner = {
+				async runCompletion(input) {
+					attempts++;
+					return {
+						reply: "",
+						sessionId: input.sessionId,
+						error: "completion exited with code 1: /opt/axiom/cli.js --session-id gw-secret --mode json Yes",
+					};
+				},
+				async streamCompletion(input, _onDelta) {
+					return { reply: "", sessionId: input.sessionId, error: "not used" };
+				},
+			};
+			const g = new Gateway({
+				transport: t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+				completionRetries: 1,
+				completionRetryDelayMs: 1,
+			});
+			await g.start();
+			push({ channelId: "+1", sender: "+1", text: "hello", isCommand: false, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 40));
+			expect(attempts).toBe(1);
+			const text = sent.find((s) => s.text.startsWith("could not run the agent"))?.text ?? "";
+			expect(text).toContain("failed");
+			expect(text).not.toContain("cli.js");
+			expect(text).not.toContain("gw-secret");
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("stops after the configured retries and reports the last failure gracefully", async () => {
+		const dir = await home("axiom-gw-retry-");
+		try {
+			const { t, sent, push } = fakeTransport();
+			let attempts = 0;
+			const completion: CompletionRunner = {
+				async runCompletion(input) {
+					attempts++;
+					return {
+						reply: "",
+						sessionId: input.sessionId,
+						error: "completion exited with code 143: /opt/axiom/cli.js Yes",
+					};
+				},
+				async streamCompletion(input, _onDelta) {
+					return { reply: "", sessionId: input.sessionId, error: "not used" };
+				},
+			};
+			const g = new Gateway({
+				transport: t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1"],
+				completionRetries: 1,
+				completionRetryDelayMs: 1,
+			});
+			await g.start();
+			push({ channelId: "+1", sender: "+1", text: "hello", isCommand: false, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 40));
+			expect(attempts).toBe(2);
+			const text = sent.find((s) => s.text.startsWith("could not run the agent"))?.text ?? "";
+			expect(text).toContain("interrupted");
+			expect(text).not.toContain("cli.js");
+			await g.stop();
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("defers the /update now restart until in-flight runs finish", async () => {
+		const dir = await home("axiom-gw-restart-");
+		try {
+			const { t, sent, push } = fakeTransport();
+			let release: (() => void) | undefined;
+			const completion: CompletionRunner = {
+				async runCompletion(input) {
+					await new Promise<void>((resolve) => {
+						release = resolve;
+					});
+					return { reply: "done", sessionId: input.sessionId };
+				},
+				async streamCompletion(input, _onDelta) {
+					return { reply: "x", sessionId: input.sessionId };
+				},
+			};
+			let restarts = 0;
+			const g = new Gateway({
+				transport: t,
+				index: new MemoryChannelIndex(),
+				completion,
+				axiomHomeDir: dir,
+				profile: "default",
+				senders: ["+1", "+2"],
+				update: { repoDir: "/repo" },
+				updateShell: healthyUpdateShell(),
+				restart: () => {
+					restarts++;
+				},
+				restartGraceMs: 5_000,
+			});
+			await g.start();
+			push({ channelId: "+1", sender: "+1", text: "long", isCommand: false, timestamp: 1 });
+			await new Promise((r) => setTimeout(r, 30)); // the +1 run is now in flight
+			push({ channelId: "+2", sender: "+2", text: "/update now", isCommand: true, timestamp: 2 });
+			await new Promise((r) => setTimeout(r, 100)); // update applied; restart deferred
+			expect(restarts).toBe(0);
+			release?.();
+			await new Promise((r) => setTimeout(r, 500)); // deferred restart fires after the run settles
+			expect(restarts).toBe(1);
+			expect(sent.some((s) => s.text === "done")).toBe(true);
 			await g.stop();
 		} finally {
 			await rm(dir, { recursive: true, force: true });

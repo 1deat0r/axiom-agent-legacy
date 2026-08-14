@@ -217,6 +217,14 @@ export interface TelegramTransportOptions {
 	offsetStore?: TelegramOffsetStore;
 	/** Stderr/observability sink; defaults to console.error. */
 	logger?: (line: string) => void;
+	/**
+	 * Delivery-dedup window in ms (ADR-0050): an update with the same chat,
+	 * text, and message date inside this window is a re-delivery and is
+	 * skipped before it can spawn a second run on the same session. The Bot
+	 * API date is second-precision, so two distinct human messages can never
+	 * collide. Defaults to 600000.
+	 */
+	dedupWindowMs?: number;
 }
 
 /** A fatal, non-transient getUpdates rejection (bad token / conflicting poll). */
@@ -236,6 +244,8 @@ export class TelegramTransport implements GatewayTransport {
 	private readonly backoffMs: number;
 	private readonly offsetStore: TelegramOffsetStore;
 	private readonly logger: (line: string) => void;
+	private readonly dedupWindowMs: number;
+	private readonly recentMessages = new Map<string, Array<{ text: string; date: number }>>();
 	private nextOffset = 0;
 	private handler: ((msg: GatewayMessage) => void) | undefined;
 	private stopped = false;
@@ -253,6 +263,7 @@ export class TelegramTransport implements GatewayTransport {
 		this.backoffMs = options.backoffMs ?? 1_000;
 		this.offsetStore = options.offsetStore ?? new NoopTelegramOffsetStore();
 		this.logger = options.logger ?? ((line) => console.error(line));
+		this.dedupWindowMs = Math.max(0, options.dedupWindowMs ?? 600_000);
 		this.nextOffset = this.offsetStore.load();
 	}
 
@@ -425,6 +436,35 @@ export class TelegramTransport implements GatewayTransport {
 		}
 	}
 
+	/**
+	 * True when (text, date) for this chat was already delivered inside the
+	 * dedup window — a re-delivered update, not a new human message.
+	 */
+	private wasRecentlyDelivered(channelId: string, text: string, date: number): boolean {
+		const recent = this.recentMessages.get(channelId);
+		if (!recent) return false;
+		const cutoff = Date.now() - this.dedupWindowMs;
+		for (const entry of recent) {
+			if (entry.date * 1000 < cutoff) continue;
+			if (entry.text === text && entry.date === date) return true;
+		}
+		return false;
+	}
+
+	/** Remember a delivered (text, date) per chat, pruned by window and cap. */
+	private rememberDelivery(channelId: string, text: string, date: number): void {
+		const recent = this.recentMessages.get(channelId) ?? [];
+		recent.push({ text, date });
+		const cutoff = Date.now() - this.dedupWindowMs;
+		while (recent.length > 0 && (recent[0]?.date ?? 0) * 1000 < cutoff) {
+			recent.shift();
+		}
+		if (recent.length > 64) {
+			recent.splice(0, recent.length - 64);
+		}
+		this.recentMessages.set(channelId, recent);
+	}
+
 	private deliver(u: TelegramUpdate): void {
 		if (!this.handler) return;
 		const msg = u.message;
@@ -433,6 +473,10 @@ export class TelegramTransport implements GatewayTransport {
 		const text = msg.text;
 		if (chatId === undefined || text === undefined || text === "") return;
 		const id = String(chatId);
+		if (msg.date !== undefined && this.wasRecentlyDelivered(id, text, msg.date)) {
+			return;
+		}
+		this.rememberDelivery(id, text, msg.date ?? 0);
 		this.handler(
 			toGatewayMessage({
 				channelId: id,

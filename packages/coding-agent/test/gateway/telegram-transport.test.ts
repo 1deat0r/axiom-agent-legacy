@@ -94,8 +94,8 @@ function fakeClient(initial: TelegramUpdate[] = []) {
 	};
 }
 
-function update(id: number, chatId: number, text: string): TelegramUpdate {
-	return { update_id: id, message: { message_id: id, chat: { id: chatId, type: "private" }, text } };
+function update(id: number, chatId: number, text: string, date?: number): TelegramUpdate {
+	return { update_id: id, message: { message_id: id, chat: { id: chatId, type: "private" }, text, date } };
 }
 
 async function settle(ms = 30) {
@@ -698,5 +698,72 @@ describe("HttpTelegramClient (local server boundary)", () => {
 		} finally {
 			if (server) server.close();
 		}
+	});
+});
+
+describe("TelegramTransport delivery dedup (ADR-0050)", () => {
+	it("skips a re-delivered update with the same text and message date", async () => {
+		const f = fakeClient();
+		const now = Math.floor(Date.now() / 1000);
+		f.queue.push(update(1, 555, "Yes", now));
+		const t = new TelegramTransport(f.client, { pollIntervalMs: 1 });
+		const handler = vi.fn();
+		t.onMessage(handler);
+		await t.connect();
+		await settle(30);
+		// Simulate a replay: the same (text, date) arrives again under a fresh
+		// update_id (the fake client drops ids below the acked offset, which a
+		// real replay would not hit, so the id is advanced for the test).
+		f.queue.push(update(2, 555, "Yes", now));
+		await settle(30);
+		expect(handler).toHaveBeenCalledTimes(1);
+		expect(f.offsets.at(-1)).toBe(3); // the replay is still acked
+		await t.disconnect();
+	});
+
+	it("delivers a distinct message with the same text sent one second later", async () => {
+		const f = fakeClient();
+		const now = Math.floor(Date.now() / 1000);
+		f.queue.push(update(1, 555, "Yes", now));
+		const t = new TelegramTransport(f.client, { pollIntervalMs: 1 });
+		const handler = vi.fn();
+		t.onMessage(handler);
+		await t.connect();
+		await settle(30);
+		f.queue.push(update(2, 555, "Yes", now + 1));
+		await settle(30);
+		expect(handler).toHaveBeenCalledTimes(2);
+		await t.disconnect();
+	});
+
+	it("delivers different text from the same chat immediately", async () => {
+		const f = fakeClient();
+		const now = Math.floor(Date.now() / 1000);
+		f.queue.push(update(1, 555, "a", now));
+		const t = new TelegramTransport(f.client, { pollIntervalMs: 1 });
+		const handler = vi.fn();
+		t.onMessage(handler);
+		await t.connect();
+		await settle(30);
+		f.queue.push(update(2, 555, "b", now));
+		await settle(30);
+		expect(handler).toHaveBeenCalledTimes(2);
+		await t.disconnect();
+	});
+
+	it("delivers again after the dedup window expires", async () => {
+		const f = fakeClient();
+		const now = Math.floor(Date.now() / 1000);
+		f.queue.push(update(1, 555, "Yes", now));
+		const t = new TelegramTransport(f.client, { pollIntervalMs: 1, dedupWindowMs: 60 });
+		const handler = vi.fn();
+		t.onMessage(handler);
+		await t.connect();
+		await settle(30);
+		await new Promise((r) => setTimeout(r, 90)); // window lapses
+		f.queue.push(update(2, 555, "Yes", now));
+		await settle(30);
+		expect(handler).toHaveBeenCalledTimes(2);
+		await t.disconnect();
 	});
 });
