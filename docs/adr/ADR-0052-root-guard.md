@@ -87,10 +87,14 @@ unverified.
 overrides), root-scoped by `sha256(realpath(root))[:12]` (the peers pattern):
 `pending/<id>.json`, `decisions/<id>.json`, `grants.jsonl`, `audit.jsonl`.
 
-**Edit completes the loop**: `decideEdit` gains an optional `allowPrefixes`
-(default none — ADR-0018 behaviour unchanged); the workspace extension reads
-the same allow env and the active grants, so an approved escape also unblocks
-the retried `edit`.
+**Edit completes the loop**: `decideEdit` gains optional `allowPrefixes` and
+`denyPrefixes` (both default none — ADR-0018 behaviour unchanged; deny wins
+first, even inside the root, so a sensitive subdir can be sealed). The
+workspace extension reads the same allow/deny env and the active grants, so
+an approved escape also unblocks the retried `edit`, and edit blocks and
+grant-uses are audited like the shell gate. The operator's own `user_bash`
+(`!`) commands are never guarded — the guard lives on the agent tool seam,
+not on the human (the git-guard precedent, ADR-0049).
 
 ## Honest boundary (recorded, not faked)
 

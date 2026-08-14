@@ -87,6 +87,33 @@ describe("axiom root-guard CLI", () => {
 		}
 	});
 
+	it("refuses to re-decide an already decided request", async () => {
+		const root = await makeRoot();
+		const state = await makeRoot();
+		try {
+			const scope = await resolveScopeDir(state, root);
+			const { id } = await fileRequest(scope, { paths: ["/srv/data"], reason: "need data" });
+			expect(await handleRootGuardCommand(["root-guard", "approve", id, "--root", root, "--state-dir", state])).toBe(
+				true,
+			);
+			const errors: string[] = [];
+			const prevErr = console.error;
+			console.error = (line: string) => errors.push(line);
+			try {
+				expect(
+					await handleRootGuardCommand(["root-guard", "approve", id, "--root", root, "--state-dir", state]),
+				).toBe(true);
+			} finally {
+				console.error = prevErr;
+			}
+			expect(errors.join("\n")).toMatch(/already decided/i);
+			expect(await listDecisions(scope)).toHaveLength(1);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+			await rm(state, { recursive: true, force: true });
+		}
+	});
+
 	it("rejects a pending request without a grant", async () => {
 		const root = await makeRoot();
 		const state = await makeRoot();

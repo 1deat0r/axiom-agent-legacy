@@ -288,3 +288,74 @@ describe("workspace guard approval escapes (ADR-0052)", () => {
 		}
 	});
 });
+
+describe("workspace guard deny and block audit (ADR-0052)", () => {
+	it("blocks an edit under a deny prefix even inside the root", async () => {
+		const root = await makeRoot();
+		try {
+			await writeFile(join(root, "a.ts"), "x");
+			const { pi, toolCall } = fakePi();
+			createWorkspaceGuard({ root, cwd: root, denyPrefixes: [join(root, ".secrets")] })(pi);
+			const res = fromAny<{ block: boolean; reason: string }, unknown>(
+				await toolCall({
+					type: "tool_call",
+					toolName: "edit",
+					toolCallId: "12",
+					input: { path: join(root, ".secrets", "x.ts"), edits: [] },
+				}),
+			);
+			expect(res.block).toBe(true);
+			expect(res.reason).toMatch(/denied/i);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it("deny beats an allow prefix for edits", async () => {
+		const root = await makeRoot();
+		const other = await makeRoot();
+		try {
+			const { pi, toolCall } = fakePi();
+			createWorkspaceGuard({ root, cwd: root, allowPrefixes: [other], denyPrefixes: [other] })(pi);
+			const res = fromAny<{ block: boolean }, unknown>(
+				await toolCall({
+					type: "tool_call",
+					toolName: "edit",
+					toolCallId: "13",
+					input: { path: join(other, "x.ts"), edits: [] },
+				}),
+			);
+			expect(res.block).toBe(true);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+			await rm(other, { recursive: true, force: true });
+		}
+	});
+
+	it("audits an edit block", async () => {
+		const root = await makeRoot();
+		const other = await makeRoot();
+		const state = await makeRoot();
+		const prev = process.env.AXIOM_ROOT_GUARD_STATE_DIR;
+		try {
+			process.env.AXIOM_ROOT_GUARD_STATE_DIR = state;
+			const scope = await resolveScopeDir(state, root);
+			const { pi, toolCall } = fakePi();
+			createWorkspaceGuard({ root, cwd: root })(pi);
+			await toolCall({
+				type: "tool_call",
+				toolName: "edit",
+				toolCallId: "14",
+				input: { path: join(other, "x.ts"), edits: [] },
+			});
+			const audit = await listAudit(scope);
+			expect(audit.some((e) => e.event === "block" && (e as { tool?: string }).tool === "edit")).toBe(true);
+		} finally {
+			if (prev === undefined) delete process.env.AXIOM_ROOT_GUARD_STATE_DIR;
+			else process.env.AXIOM_ROOT_GUARD_STATE_DIR = prev;
+			await rm(root, { recursive: true, force: true });
+			await rm(other, { recursive: true, force: true });
+			await rm(state, { recursive: true, force: true });
+		}
+	});
+});

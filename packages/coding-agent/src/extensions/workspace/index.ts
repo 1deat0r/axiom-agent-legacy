@@ -15,7 +15,6 @@
  * OS-sandbox strict tier, a separate follow-up. This rung pins the structured
  * write tool and anchors cwd.
  */
-import { join } from "node:path";
 import { envList } from "../../core/env-list.js";
 import type { ExtensionAPI } from "../../core/extensions/types.js";
 import { appendAudit, listGrantPrefixes, resolveScopeDir } from "../../core/root-guard/store.js";
@@ -31,6 +30,8 @@ export interface WorkspaceGuardOptions {
 	cwd?: string;
 	/** Extra allow prefixes (ADR-0052). Defaults to AXIOM_ROOT_GUARD_ALLOW plus active grants. */
 	allowPrefixes?: readonly string[];
+	/** Deny prefixes (win over allows, even inside the root). Defaults to AXIOM_ROOT_GUARD_DENY. */
+	denyPrefixes?: readonly string[];
 }
 
 /**
@@ -44,6 +45,7 @@ export function createWorkspaceGuard(options: WorkspaceGuardOptions = {}): (pi: 
 		if (!rawRoot) return; // inert unless a project root is anchored
 		const cwd = options.cwd ?? process.cwd();
 		const allowPrefixes = options.allowPrefixes ?? envList(process.env.AXIOM_ROOT_GUARD_ALLOW) ?? [];
+		const denyPrefixes = options.denyPrefixes ?? envList(process.env.AXIOM_ROOT_GUARD_DENY) ?? [];
 		let rootReal: string | undefined;
 		let scope: string | undefined;
 		pi.on("tool_call", async (event) => {
@@ -52,20 +54,36 @@ export function createWorkspaceGuard(options: WorkspaceGuardOptions = {}): (pi: 
 			if (typeof raw !== "string" || raw.length === 0) return undefined;
 			if (rootReal === undefined) rootReal = await realpathX(rawRoot);
 			// Static policy first; approved grants (ADR-0052) are the recorded escape.
-			const blocked = await decideEdit(rootReal, cwd, raw, { allowPrefixes });
+			const blocked = await decideEdit(rootReal, cwd, raw, { allowPrefixes, denyPrefixes });
 			if (!blocked) return undefined;
 			if (scope === undefined) {
-				const stateDir = process.env.AXIOM_ROOT_GUARD_STATE_DIR ?? join(axiomHome(), "root-guard");
+				const stateDir = process.env.AXIOM_ROOT_GUARD_STATE_DIR ?? axiomHome();
 				scope = await resolveScopeDir(stateDir, rawRoot);
 			}
 			const grants = await listGrantPrefixes(scope);
-			if (grants.length === 0) return blocked;
-			const withGrants = await decideEdit(rootReal, cwd, raw, {
-				allowPrefixes: [...allowPrefixes, ...grants],
-			});
+			const withGrants =
+				grants.length === 0
+					? blocked
+					: await decideEdit(rootReal, cwd, raw, {
+							allowPrefixes: [...allowPrefixes, ...grants],
+							denyPrefixes,
+						});
 			if (!withGrants) {
-				await appendAudit(scope, { event: "grant-use", tool: "edit", paths: [toAbsolute(raw, cwd)] });
+				// A failed use-audit must not turn an authorized call into a raw
+				// error: the grant itself is already recorded in grants.jsonl.
+				try {
+					await appendAudit(scope, { event: "grant-use", tool: "edit", paths: [toAbsolute(raw, cwd)] });
+				} catch {
+					/* audit degraded; the grant record is the source of truth */
+				}
 				return undefined;
+			}
+			// Edit blocks are audited like the shell gate; a failed block-audit
+			// must not replace the curated reason with a raw store error.
+			try {
+				await appendAudit(scope, { event: "block", tool: "edit", paths: [toAbsolute(raw, cwd)] });
+			} catch {
+				/* audit degraded; the block reason still reaches the model */
 			}
 			return blocked;
 		});

@@ -89,7 +89,10 @@ export interface RootGuardOptions {
 	 * invariant — the anchored root is.
 	 */
 	cwd?: string;
-	/** Approval state root (tests). Defaults to AXIOM_ROOT_GUARD_STATE_DIR or the axiom home. */
+	/**
+	 * Approval state root (tests). Defaults to AXIOM_ROOT_GUARD_STATE_DIR or
+	 * the axiom home; the store appends root-guard/<rootHash>/ below it.
+	 */
 	stateDir?: string;
 	/** Home used for `~` expansion. Defaults to the process home. */
 	home?: string;
@@ -153,7 +156,9 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 		if (!rawRoot) return; // inert unless a project root is anchored
 		const cwd = options.cwd ?? rawRoot;
 		const home = options.home ?? homedir();
-		const stateDir = options.stateDir ?? process.env.AXIOM_ROOT_GUARD_STATE_DIR ?? join(axiomHome(), "root-guard");
+		// resolveScopeDir appends the root-guard segment: the default state
+		// root is the axiom home, so the layout is <axiom home>/root-guard/<rootHash>/.
+		const stateDir = options.stateDir ?? process.env.AXIOM_ROOT_GUARD_STATE_DIR ?? axiomHome();
 		const allowPrefixes = options.allowPrefixes ?? envList(process.env.AXIOM_ROOT_GUARD_ALLOW) ?? [];
 		const denyPrefixes = options.denyPrefixes ?? envList(process.env.AXIOM_ROOT_GUARD_DENY) ?? [];
 		const envTimeout = Number.parseInt(process.env.AXIOM_ROOT_GUARD_APPROVAL_TIMEOUT_MS ?? "", 10);
@@ -237,7 +242,23 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 			],
 			parameters: RequestAccessSchema,
 			execute: async (_toolCallId, params: RequestAccessParams, signal, _onUpdate, _ctx) => {
-				const scope = await resolveScopeDir(stateDir, rawRoot);
+				let scope: string;
+				try {
+					scope = await resolveScopeDir(stateDir, rawRoot);
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					return {
+						content: [
+							{
+								type: "text",
+								text:
+									`Could not file the request because the root-guard store failed (${message}). ` +
+									"Fix AXIOM_ROOT_GUARD_STATE_DIR and call this tool again.",
+							},
+						],
+						details: null,
+					};
+				}
 				const rootAbs = resolve(rawRoot);
 				const outside = params.paths
 					.map((p) => resolve(toAbsolutePath(p, cwd, home)))

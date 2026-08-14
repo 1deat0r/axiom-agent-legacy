@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { appendFile, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -130,13 +130,11 @@ describe("root guard store (file-backed approval state)", () => {
 		try {
 			const scope = await resolveScopeDir(state, "/work/p");
 			await appendGrant(scope, { id: "rg-1", prefixes: ["/etc"], reason: "read hosts" });
-			await import("node:fs/promises").then(async ({ appendFile }) => {
-				await appendFile(join(scope, "grants.jsonl"), "{not json}\n");
-				await appendFile(
-					join(scope, "grants.jsonl"),
-					`${JSON.stringify({ id: "rg-2", prefixes: ["/var/log"], reason: "logs", grantedAt: Date.now() })}\n`,
-				);
-			});
+			await appendFile(join(scope, "grants.jsonl"), "{not json}\n");
+			await appendFile(
+				join(scope, "grants.jsonl"),
+				`${JSON.stringify({ id: "rg-2", prefixes: ["/var/log"], reason: "logs", grantedAt: Date.now() })}\n`,
+			);
 			expect((await listGrantPrefixes(scope)).sort()).toEqual(["/etc", "/var/log"]);
 		} finally {
 			await rm(state, { recursive: true, force: true });

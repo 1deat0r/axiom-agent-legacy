@@ -10,12 +10,12 @@
  * Returns true when the invocation was a root-guard command.
  */
 
-import { join } from "node:path";
 import {
 	appendAudit,
 	appendGrantIfMissing,
 	listDecisions,
 	listPending,
+	readDecision,
 	readPending,
 	resolveScopeDir,
 	writeDecision,
@@ -33,7 +33,7 @@ flags:
   --root <path>       project root the request belongs to
                       (default: AXIOM_PROJECT_ROOT, then the current directory)
   --state-dir <path>  approval state root (default: AXIOM_ROOT_GUARD_STATE_DIR
-                      or <axiom home>/root-guard)
+                      or the axiom home)
   --json              machine-readable output (list)
   --help              this help
 
@@ -68,8 +68,7 @@ export async function handleRootGuardCommand(args: string[]): Promise<boolean> {
 	const positional = rest.filter((a) => !a.startsWith("--"));
 	const sub = positional[0] ?? "list";
 	const root = valueAfter(rest, "--root") ?? process.env.AXIOM_PROJECT_ROOT ?? process.cwd();
-	const stateDir =
-		valueAfter(rest, "--state-dir") ?? process.env.AXIOM_ROOT_GUARD_STATE_DIR ?? join(axiomHome(), "root-guard");
+	const stateDir = valueAfter(rest, "--state-dir") ?? process.env.AXIOM_ROOT_GUARD_STATE_DIR ?? axiomHome();
 	const scope = await resolveScopeDir(stateDir, root);
 
 	switch (sub) {
@@ -102,6 +101,12 @@ export async function handleRootGuardCommand(args: string[]): Promise<boolean> {
 			const request = await readPending(scope, id);
 			if (!request) {
 				console.error(`No pending request '${id}' for root ${root}.`);
+				return true;
+			}
+			if (await readDecision(scope, id)) {
+				console.error(
+					`Request '${id}' was already decided. Decisions are final; file a new request for new paths.`,
+				);
 				return true;
 			}
 			const note = valueAfter(rest, "--note");

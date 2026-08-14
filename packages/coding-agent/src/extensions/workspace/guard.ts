@@ -54,6 +54,8 @@ export async function realpathX(path: string): Promise<string> {
 export interface DecideEditOptions {
 	/** Path prefixes that unblock an otherwise-outside edit (ADR-0052 approvals). */
 	allowPrefixes?: readonly string[];
+	/** Path prefixes denied everywhere, even inside the root (wins over allows). */
+	denyPrefixes?: readonly string[];
 }
 
 /** Expand a leading `~/` to the home directory (approval prefixes may use it). */
@@ -74,6 +76,17 @@ export async function decideEdit(
 ): Promise<{ block: true; reason: string } | undefined> {
 	const abs = toAbsolute(raw, cwd);
 	const target = await realpathX(abs);
+	for (const prefix of options.denyPrefixes ?? []) {
+		const norm = resolve(expandTilde(prefix));
+		if (isWithin(norm, abs) || isWithin(norm, target)) {
+			return {
+				block: true,
+				reason:
+					`Refusing edit of '${raw}' — the operator denied this path ` +
+					`(AXIOM_ROOT_GUARD_DENY; no approval can override a deny).`,
+			};
+		}
+	}
 	if (isWithin(rootReal, target)) return undefined;
 	for (const prefix of options.allowPrefixes ?? []) {
 		const norm = resolve(expandTilde(prefix));

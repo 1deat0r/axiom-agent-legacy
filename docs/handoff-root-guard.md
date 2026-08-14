@@ -31,7 +31,7 @@ gateway-resilience ADR-0051) at merge 6f50e9f3a.
 
 ## Verified
 
-- Unit + mock: 81 new/extended tests, red-first, green. Cover: path
+- Unit + mock: 86 new/extended tests, red-first, green. Cover: path
   extraction, scope classification, store round trips, approval tool
   (approve/reject/timeout/abort/deny-refusal), extension wiring
   (inert-unanchored, env parsing, grants, audit), workspace edit escapes,

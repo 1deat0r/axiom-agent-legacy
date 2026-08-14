@@ -27,9 +27,9 @@ ADR renumbered 0051 -> 0052 (main took 0050/0051).
 
 ## Verification
 
-- 81 new/extended tests, red-first, all green: extractor (14), scope (14),
-  store (9), extension + approval tool (23), CLI (6), workspace (15 total,
-  3 new escape tests).
+- 86 new/extended tests, red-first, all green: extractor (14), scope (14),
+  store (9), extension + approval tool (24), CLI (7), workspace (18 total,
+  6 new escape/deny/audit tests).
 - Floor: `./test.sh` from the worktree with `AXIOM_PROJECT_ROOT` unset —
   only the documented sandbox known-fails (4603 x4, 4685 x9 EXDEV,
   daemon-serialized-refine x1) plus two shard flakes that pass standalone

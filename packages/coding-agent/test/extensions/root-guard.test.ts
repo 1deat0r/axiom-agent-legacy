@@ -298,6 +298,31 @@ describe("root guard extension (tool_call gate)", () => {
 	});
 });
 
+describe("default state layout (single root-guard segment)", () => {
+	it("lays state out as <axiom home>/root-guard/<rootHash>/", async () => {
+		const root = await makeRoot();
+		const home = await makeRoot();
+		const prevHome = process.env.AXIOM_HOME;
+		try {
+			process.env.AXIOM_HOME = home;
+			const fake = fakePi();
+			createRootGuard({ root, cwd: root, home: HOME, approvalTimeoutMs: 5, pollMs: 5 })(fake.pi);
+			const tool = await approvalTool(fake);
+			const result = await runTool(tool, { paths: ["/srv/data"], reason: "layout" });
+			expect(textOf(result)).toMatch(/pending/i);
+			const hashDirs = await readdir(join(home, "root-guard"));
+			expect(hashDirs).toHaveLength(1);
+			const single = await pendingNames(join(home, "root-guard", hashDirs[0]));
+			expect(single).toHaveLength(1);
+		} finally {
+			if (prevHome === undefined) delete process.env.AXIOM_HOME;
+			else process.env.AXIOM_HOME = prevHome;
+			await rm(root, { recursive: true, force: true });
+			await rm(home, { recursive: true, force: true });
+		}
+	});
+});
+
 describe("request_root_access tool (approval loop)", () => {
 	it("rejects requests whose paths are already inside the root", async () => {
 		const root = await makeRoot();
