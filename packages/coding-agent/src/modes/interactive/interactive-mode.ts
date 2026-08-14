@@ -6019,7 +6019,7 @@ export class InteractiveMode {
 		}
 		if (!this.options.returnToAgentsView) {
 			this.focusEditor();
-			this.showStatus("The agents view needs the daemon; start without --no-daemon to browse sessions");
+			this.showStatus("The agents view needs the daemon; start without --no-session to browse sessions");
 			return;
 		}
 		await this.returnToAgentsView("scoped_agents_view");
@@ -6864,7 +6864,7 @@ export class InteractiveMode {
 			return;
 		}
 		if (!this.options.returnToAgentsView) {
-			this.showStatus("The agents view needs the daemon; start without --no-daemon to browse sessions");
+			this.showStatus("The agents view needs the daemon; start without --no-session to browse sessions");
 			return;
 		}
 		await this.returnToAgentsView();

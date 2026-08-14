@@ -154,7 +154,9 @@ describe("InteractiveMode startup hints", () => {
 
 		await Reflect.get(InteractiveMode.prototype, "requestAgentsView").call(mode);
 
-		expect(showStatus).toHaveBeenCalledWith(expect.stringContaining("needs the daemon"));
+		expect(showStatus).toHaveBeenCalledWith(
+			"The agents view needs the daemon; start without --no-session to browse sessions",
+		);
 		expect(shutdown).not.toHaveBeenCalled();
 	});
 
