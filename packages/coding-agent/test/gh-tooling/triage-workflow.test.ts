@@ -53,4 +53,8 @@ describe(".github/workflows/triage.yml", () => {
 	it("posts the role-conflict note on the conflict decision", () => {
 		expect(workflow).toContain("steps.decide.outputs.action == 'role-conflict'");
 	});
+	it("passes comments and state so the bot can dedupe and skip closed issues", () => {
+		expect(workflow).toContain("--json labels,comments,state");
+		expect(workflow).toContain("has_comment");
+	});
 });

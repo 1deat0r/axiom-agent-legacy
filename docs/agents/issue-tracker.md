@@ -97,8 +97,12 @@ skip it.
 The workflow `.github/workflows/triage.yml` is the safety net. It has two jobs:
 
 1. Open job. Fires on `opened`, `labeled`, and `unlabeled`. Zero role labels:
-   apply `needs-triage` and post the contract (on `unlabeled`, post only).
-   Two or more role labels: post a conflict note. One role label: no action.
+   apply `needs-triage` and post the contract (on `unlabeled`, post only; the
+   remind comment says the workflow does not re-apply). Two or more role
+   labels: post a conflict note. One role label: no action. The job never
+   comments on a closed issue and never reposts a comment the bot already
+   made. A form-created issue fires two runs (opened and labeled); the second
+   run posts nothing.
 2. Close job. Fires on `closed`. When the issue closes without an audit
    comment, post one reminder. The audit comment must carry `Commit:`, `ADR:`,
    and `Handoff:` in one comment. The reminder does not repeat.

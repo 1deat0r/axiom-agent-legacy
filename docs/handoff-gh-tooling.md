@@ -76,6 +76,21 @@ Reviewer 3 scored 8.5. The findings were narrow. All are fixed:
 
 45 tests green. Live proof stands on issues #13, #27, #28, #29.
 
+## Wave 5 (reviewer 4)
+
+Reviewer 4 scored 9.0. The last two gaps are closed:
+
+- The remind comment now tells the truth: the workflow does not re-apply
+  labels on removal. A test guards the wording.
+- The open job now reads comments and state too. It never reposts a comment
+  the bot already made (the echo-run race is guarded), and it never comments
+  on a closed issue.
+- The drift command uses --limit 1000 (the gh ceiling; gh issue list has no
+  --paginate in this gh version). The docs say so.
+- The five wayfinder labels carry their documented descriptions live.
+
+53 tests green. Live proof stands on issues #13, #27, #28, #29.
+
 ## What remains
 
 - Optional: the same treatment for PRs if the PR-triage flag flips to yes.

@@ -70,8 +70,35 @@ describe("classifyOpen", () => {
 		expect(decision.comment).toBeTruthy();
 	});
 
+	it("the remind comment never claims the workflow applied a label", () => {
+		const decision = classifyOpen([], "unlabeled");
+		expect(decision.comment).not.toContain("The workflow applied");
+		expect(decision.comment).toContain("does not re-apply");
+	});
+
 	it("returns skip on unlabeled when a role label remains", () => {
 		expect(classifyOpen(["ready-for-agent"], "unlabeled").action).toBe("skip");
+	});
+
+	it("suppresses the contract comment when the bot already posted it", () => {
+		const decision = classifyOpen([], "opened", ["The workflow applied `needs-triage`."]);
+		expect(decision.action).toBe("needs-triage");
+		expect(decision.label).toBe("needs-triage");
+		expect(decision.comment).toBeUndefined();
+	});
+
+	it("suppresses the remind comment when the bot already posted it", () => {
+		const decision = classifyOpen([], "unlabeled", ["The workflow does not re-apply labels on removal."]);
+		expect(decision.action).toBe("skip");
+	});
+
+	it("skips the open job on closed issues for label events", () => {
+		expect(classifyOpen(["needs-triage", "ready-for-agent"], "labeled", [], "CLOSED").action).toBe("skip");
+		expect(classifyOpen([], "unlabeled", [], "CLOSED").action).toBe("skip");
+	});
+
+	it("does not skip the open job on open issues", () => {
+		expect(classifyOpen(["needs-triage", "ready-for-agent"], "labeled", [], "OPEN").action).toBe("role-conflict");
 	});
 });
 
@@ -94,6 +121,18 @@ describe("decide", () => {
 	it("parses gh issue view --json labels output", () => {
 		const decision = decide('{"labels":[{"name":"needs-triage"}]}', "opened");
 		expect(decision.action).toBe("skip");
+	});
+
+	it("parses labels, comments, and state in one payload", () => {
+		const json = '{"labels":[],"comments":[{"body":"The workflow applied `needs-triage`."}],"state":"OPEN"}';
+		const decision = decide(json, "opened");
+		expect(decision.action).toBe("needs-triage");
+		expect(decision.comment).toBeUndefined();
+	});
+
+	it("skips label events on closed issues", () => {
+		const json = '{"labels":[],"comments":[],"state":"CLOSED"}';
+		expect(decide(json, "labeled").action).toBe("skip");
 	});
 
 	it("treats an empty labels array as unlabeled", () => {
