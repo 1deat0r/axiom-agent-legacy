@@ -97,24 +97,37 @@ describe("stripColorDescriptors code literal rule", () => {
 		assert.equal(stripColorDescriptors("~~~js ` x\n[x](#role:ok)\n~~~"), "~~~js ` x\n[x](#role:ok)\n~~~");
 	});
 
-	it("mirrors marked on a fence whose closing line ends with a tab", () => {
-		// marked v18 does not close a fence on a tab-terminated line, so the
-		// TUI renders the whole block literally - the strip keeps it too.
+	it("normalizes a tab on a closing fence line the way the TUI does", () => {
+		// The TUI lexes tabs as three spaces, which closes the fence; the
+		// strip normalizes identically, so [y] strips and the tab becomes
+		// spaces in the output.
 		assert.equal(
 			stripColorDescriptors("```\n[x](#role:ok)\n```\t\nthen [y](#role:warn)"),
-			"```\n[x](#role:ok)\n```\t\nthen [y](#role:warn)",
+			"```\n[x](#role:ok)\n```   \nthen y",
 		);
+	});
+
+	it("normalizes a leading tab so an indented-code lookalike stays a link", () => {
+		assert.equal(stripColorDescriptors("\t[x](#role:ok)"), "   x");
 	});
 
 	it("leaves an indented code block literal", () => {
 		assert.equal(stripColorDescriptors("    [x](#role:ok)"), "    [x](#role:ok)");
 	});
 
-	it("handles CRLF fences and links", () => {
+	it("handles CRLF fences and links with LF-normalized output", () => {
 		assert.equal(
 			stripColorDescriptors("```\r\n[x](#role:ok)\r\n```\r\n[y](#role:warn)"),
-			"```\r\n[x](#role:ok)\r\n```\r\ny",
+			"```\n[x](#role:ok)\n```\ny",
 		);
+	});
+
+	it("strips a CRLF soft break inside a link", () => {
+		assert.equal(stripColorDescriptors("[a\r\nb](#role:ok)"), "a\nb");
+	});
+
+	it("removes a CRLF-separated definition line", () => {
+		assert.equal(stripColorDescriptors("[x][ref]\r\n\r\n[ref]: #role:ok\r\nmore"), "x\n\nmore");
 	});
 });
 
@@ -197,14 +210,10 @@ describe("stripColorDescriptors reference parity", () => {
 	});
 
 	it("honors first-definition-wins for duplicate definitions", () => {
-		// marked resolves the reference to the first (URL) definition, keeps
-		// that def token, and drops the duplicate color definition from the
-		// token stream. The losing color def line therefore survives as text;
-		// nothing is mangled. Documented divergence in ADR-0050.
-		assert.equal(
-			stripColorDescriptors("[x][ref]\n\n[ref]: https://x.com\n[ref]: #role:ok"),
-			"[x][ref]\n\n[ref]: #role:ok",
-		);
+		// marked resolves the reference to the first (URL) definition, so the
+		// reference is not a color link and stays raw; both definition lines
+		// are removed the way the TUI hides them.
+		assert.equal(stripColorDescriptors("[x][ref]\n\n[ref]: https://x.com\n[ref]: #role:ok"), "[x][ref]\n\n");
 	});
 
 	it("collapses label whitespace the way marked does", () => {
@@ -216,5 +225,64 @@ describe("stripColorDescriptors reference parity", () => {
 			stripColorDescriptors("> ~~~\n> [x](#role:ok)\n> ~~~\n> [y](#role:warn)"),
 			"> ~~~\n> [x](#role:ok)\n> ~~~\n> y",
 		);
+	});
+});
+
+describe("stripColorDescriptors container parity", () => {
+	it("strips a color link inside a tight list item", () => {
+		assert.equal(stripColorDescriptors("- [x](#role:ok)\n- done"), "- x\n- done");
+	});
+
+	it("strips a color link inside an ordered list item", () => {
+		assert.equal(stripColorDescriptors("1. [x](#role:ok)"), "1. x");
+	});
+
+	it("strips a color link inside a task list item", () => {
+		assert.equal(stripColorDescriptors("- [ ] [x](#role:ok)"), "- [ ] x");
+	});
+
+	it("strips a color link inside a list nested in a blockquote", () => {
+		assert.equal(stripColorDescriptors("> - [x](#role:ok)"), "> - x");
+	});
+
+	it("strips a color link inside a loose list item", () => {
+		assert.equal(stripColorDescriptors("- [x](#role:ok)\n\n- done"), "- x\n\n- done");
+	});
+
+	it("strips a color link inside a table body cell", () => {
+		assert.equal(
+			stripColorDescriptors("| a | b |\n|---|---|\n| [x](#role:ok) | c |"),
+			"| a | b |\n|---|---|\n| x | c |",
+		);
+	});
+
+	it("strips a color link inside a table header cell", () => {
+		assert.equal(stripColorDescriptors("| [x](#role:ok) | b |\n|---|---|"), "| x | b |\n|---|---|");
+	});
+
+	it("strips a reference link inside a table cell and removes the definition", () => {
+		assert.equal(stripColorDescriptors("| [x][ref] | c |\n|---|---|\n\n[ref]: #role:ok"), "| x | c |\n|---|---|\n\n");
+	});
+
+	it("never mangles an earlier code span that quotes the same descriptor", () => {
+		assert.equal(stripColorDescriptors("see `[x](#role:ok)` and [x](#role:ok)"), "see `[x](#role:ok)` and x");
+	});
+
+	it("never mangles an earlier fence that quotes the same reference", () => {
+		assert.equal(
+			stripColorDescriptors("```\n[x][ref]\n```\n[x][ref]\n\n[ref]: #role:ok"),
+			"```\n[x][ref]\n```\nx\n\n",
+		);
+	});
+
+	it("never mangles a title that quotes the same descriptor", () => {
+		assert.equal(
+			stripColorDescriptors('see [a](https://x.com "[x](#role:ok)") and [x](#role:ok)'),
+			'see [a](https://x.com "[x](#role:ok)") and x',
+		);
+	});
+
+	it("never mangles an html block that quotes the same descriptor", () => {
+		assert.equal(stripColorDescriptors("<div>[x](#role:ok)</div>\n\n[x](#role:ok)"), "<div>[x](#role:ok)</div>\n\nx");
 	});
 });

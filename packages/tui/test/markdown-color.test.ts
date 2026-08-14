@@ -231,6 +231,16 @@ describe("Markdown hex literal ambient style and boundaries", () => {
 		assert.ok(lines.length > 0, "heading renders");
 	});
 
+	it("skips a query-URL fragment hex token", () => {
+		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
+		const { theme, calls } = makeCapturingTheme();
+		const markdown = new Markdown("see http://x.com/?#aabbcc", 0, 0, theme);
+
+		markdown.render(80);
+
+		assert.deepStrictEqual(calls.colored, []);
+	});
+
 	it("skips a URL fragment hex token", () => {
 		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
 		const { theme, calls } = makeCapturingTheme();

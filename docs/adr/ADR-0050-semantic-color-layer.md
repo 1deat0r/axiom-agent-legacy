@@ -49,21 +49,29 @@ The contract layer has three parts:
   from pi-tui) strips color pseudo-links to their inner text on every
   non-TUI surface: Telegram (before the markdown-to-HTML pass and before
   chunking, so a long link split across chunks cannot leak its descriptor),
-  Discord `send`, Slack `send`. The strip lexes the text with the exact
-  marked parser the TUI renderer uses and rewrites two token kinds: a link
-  whose href parses as a color descriptor reduces to its inner raw source,
-  and a link reference definition line is removed (the TUI renders
-  definitions as nothing). Everything else is byte-identical. Parity is by
+  Discord `send`, Slack `send`. The strip normalizes the text exactly like
+  the TUI renderer's lexing path (tabs to three spaces, CRLF to LF) and
+  lexes with the renderer's own marked parser. It walks the token tree
+  shape-aware (list items and table cells hold content in `items` /
+  `header`+`rows`, not `tokens`) and splices two token kinds into the
+  source in document order: a link whose href parses as a color descriptor
+  reduces to its inner raw text, and a link reference definition line is
+  removed (the TUI renders definitions as nothing). The splice cursor
+  always advances past each child, so an identical raw string quoted
+  earlier inside preserved content (a code span, a fence, an HTML block, a
+  link title) is never hit instead of the real link. Parity is by
   construction - inline and fenced code, reference resolution, escape
-  handling, blockquotes, lists, indented code, CRLF, and label whitespace
+  handling, blockquotes, lists, tables, indented code, and label whitespace
   collapse all follow the TUI because they are the TUI's parser. Known
   residual divergences, all out of the color grammar: non-color reference
   links keep their raw markdown on the gateway while the TUI shows them as
-  resolved links (pre-existing gateway markdown behavior); a duplicate
-  definition that marked drops from the token stream survives as a visible
-  line on the gateway while the TUI hides it. Internal records (delivery
-  ledger, stream journal, session files) keep the raw text — the strip is a
-  presentation rule, not a logging rule.
+  resolved links (pre-existing gateway markdown behavior); a hard break
+  inside a color link keeps its trailing spaces on the gateway while the
+  TUI collapses them (HTML rendering collapses them anyway); the TUI's
+  narrow-width table fallback can render a cell raw where the strip has
+  already reduced it. Internal records (delivery ledger, stream journal,
+  session files) keep the raw text — the strip is a presentation rule, not a
+  logging rule.
 - **ADR + term** — this document plus the CONTEXT.md `Semantic color` term.
 
 Unknown role names, uppercase roles, malformed hexes, and `#RGB` shorthand
