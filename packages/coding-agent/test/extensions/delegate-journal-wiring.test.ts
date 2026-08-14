@@ -120,6 +120,8 @@ describe("delegate journal wiring", () => {
 		);
 		expect(end).toMatchObject({ type: "end", status: "error", ok: false });
 		expect(end.error).toBe("provider refused");
+		// No tokens were recorded: the end record omits them instead of writing zeros.
+		expect(end.tokens).toBeUndefined();
 	});
 
 	it("an unwritable journal never fails the delegation", async () => {
@@ -203,5 +205,6 @@ describe("delegate journal wiring", () => {
 		);
 		expect(end).toMatchObject({ type: "end", status: "timeout", ok: false });
 		expect(end.error).toContain("timed out");
+		expect(end.tokens).toBeUndefined();
 	});
 });

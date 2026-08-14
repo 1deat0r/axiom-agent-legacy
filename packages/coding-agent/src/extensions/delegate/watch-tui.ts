@@ -11,6 +11,32 @@ import { renderDelegateWatchView } from "./watch-view.js";
 
 export const WATCH_POLL_INTERVAL_MS = 250;
 
+export type WatchKeyAction = "quit" | "scrollUp" | "scrollDown" | "jumpTop" | "jumpBottom" | null;
+
+/**
+ * Map one raw input sequence to a watch action. Pure and unit-tested so the
+ * key contract lives in the eval, not only in the PTY probe.
+ */
+export function translateWatchKey(data: string): WatchKeyAction {
+	switch (data) {
+		case "q":
+		case "\u0003":
+			return "quit";
+		case "\u001b[A":
+		case "k":
+			return "scrollUp";
+		case "\u001b[B":
+		case "j":
+			return "scrollDown";
+		case "g":
+			return "jumpTop";
+		case "G":
+			return "jumpBottom";
+		default:
+			return null;
+	}
+}
+
 export interface WatchTuiOptions {
 	pollMs?: number;
 }
@@ -63,29 +89,28 @@ export async function runDelegateWatchTui(journalPath: string, options: WatchTui
 
 		terminal.start(
 			(data) => {
-				if (data === "q" || data === "\u0003") {
-					stop();
-					return;
-				}
-				if (data === "\u001b[A" || data === "k") {
-					scrollOffset += 1;
-					paint();
-					return;
-				}
-				if (data === "\u001b[B" || data === "j") {
-					scrollOffset = Math.max(0, scrollOffset - 1);
-					paint();
-					return;
-				}
-				if (data === "g") {
-					scrollOffset = Number.MAX_SAFE_INTEGER;
-					paint();
-					return;
-				}
-				if (data === "G") {
-					scrollOffset = 0;
-					paint();
-					return;
+				switch (translateWatchKey(data)) {
+					case "quit":
+						stop();
+						return;
+					case "scrollUp":
+						scrollOffset += 1;
+						paint();
+						return;
+					case "scrollDown":
+						scrollOffset = Math.max(0, scrollOffset - 1);
+						paint();
+						return;
+					case "jumpTop":
+						scrollOffset = Number.MAX_SAFE_INTEGER;
+						paint();
+						return;
+					case "jumpBottom":
+						scrollOffset = 0;
+						paint();
+						return;
+					default:
+						return;
 				}
 			},
 			() => {

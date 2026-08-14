@@ -167,7 +167,8 @@ async function runDelegation(
 			ok: result.ok,
 			error: result.error,
 			summary: result.summary === "" ? undefined : result.summary,
-			tokens: result.tokens,
+			// A failed run records nothing: omit tokens instead of writing zeros.
+			tokens: result.ok ? result.tokens : undefined,
 		});
 	}
 	return result;

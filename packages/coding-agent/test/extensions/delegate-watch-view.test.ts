@@ -146,6 +146,7 @@ describe("renderDelegateWatchView", () => {
 			now: 1500,
 		});
 		expect(lines[1]).toContain("status: ERROR");
+		expect(lines[1]).not.toContain("tokens:");
 		expect(lines[3]).toBe("end · error · provider refused");
 		expect(lines[5]).toBe("finished · q quit · ↑/↓ scroll · g/G jump");
 	});
