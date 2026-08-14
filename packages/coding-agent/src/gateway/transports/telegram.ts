@@ -219,7 +219,7 @@ export interface TelegramTransportOptions {
 	/** Stderr/observability sink; defaults to console.error. */
 	logger?: (line: string) => void;
 	/**
-	 * Delivery-dedup window in ms (ADR-0050): an update with the same chat,
+	 * Delivery-dedup window in ms (ADR-0051): an update with the same chat,
 	 * text, and message date inside this window is a re-delivery and is
 	 * skipped before it can spawn a second run on the same session. The Bot
 	 * API date is second-precision, so two distinct human messages can never

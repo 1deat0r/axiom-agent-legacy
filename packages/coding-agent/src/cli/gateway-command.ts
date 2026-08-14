@@ -274,7 +274,7 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 		// The update path only fires on an explicit, successful /update now —
 		// systemd `Restart=always` brings the service back on the new bundle.
 		restart: () => process.exit(0),
-		// Completion resilience (ADR-0050): transient child failures retry
+		// Completion resilience (ADR-0051): transient child failures retry
 		// once (without compaction); a restart waits for in-flight runs.
 		completionRetries: envInt("GATEWAY_COMPLETION_RETRIES", 1),
 		completionRetryDelayMs: envInt("GATEWAY_COMPLETION_RETRY_DELAY_MS", 5_000),

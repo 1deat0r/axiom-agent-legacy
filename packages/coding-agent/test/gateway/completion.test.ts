@@ -482,7 +482,7 @@ describe("CliCompletionRunner.streamCompletion", () => {
 	});
 });
 
-describe("CliCompletionRunner compact timeout (ADR-0050)", () => {
+describe("CliCompletionRunner compact timeout (ADR-0051)", () => {
 	it("uses the compact timeout for compact-before runs and the plain timeout otherwise", async () => {
 		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-compact-to-"));
 		try {

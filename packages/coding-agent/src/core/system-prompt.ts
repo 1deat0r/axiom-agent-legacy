@@ -180,7 +180,7 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 	return prompt;
 }
 
-/** Model-facing markdown color contract (ADR-0050): TUI pseudo-link descriptors. */
+/** Model-facing markdown color contract (ADR-0068): TUI pseudo-link descriptors. */
 export function buildMarkdownColorGuidance(): string {
 	return [
 		"# Markdown color",

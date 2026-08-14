@@ -1402,7 +1402,7 @@ describe("Gateway /new stale-project self-heal", () => {
 	});
 });
 
-describe("Gateway completion resilience (ADR-0050)", () => {
+describe("Gateway completion resilience (ADR-0051)", () => {
 	/** Scripted update shell: healthy fetch/merge/build behind-by-one. */
 	function healthyUpdateShell(): UpdateShell {
 		const responses: Record<string, { code: number; stdout?: string; stderr?: string }> = {

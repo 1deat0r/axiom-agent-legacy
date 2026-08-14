@@ -203,7 +203,7 @@ export class Gateway {
 	}
 
 	/**
-	 * Run a completion with retries (ADR-0050). A transient child failure —
+	 * Run a completion with retries (ADR-0051). A transient child failure —
 	 * SIGTERM/SIGKILL from a competing run or a restart, a gateway timeout, a
 	 * busy session, a spawn error — is retried after a short delay. The retry
 	 * drops compaction so the second attempt is as light as possible. The raw
@@ -653,7 +653,7 @@ export class Gateway {
 							// later edit targets the newest bubble.
 							// The bubble starts empty; compaction (if requested) already
 							// summarized the session before the run began.
-							// Retry-aware streaming (ADR-0050): a transient child failure
+							// Retry-aware streaming (ADR-0051): a transient child failure
 							// retries inside the same bubble, and the retry drops
 							// compaction so the second attempt stays light.
 							let lastText = "";

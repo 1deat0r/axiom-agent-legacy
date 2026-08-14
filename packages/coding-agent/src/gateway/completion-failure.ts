@@ -1,5 +1,5 @@
 /**
- * Completion failure classification (gateway resilience, ADR-0050).
+ * Completion failure classification (gateway resilience, ADR-0051).
  *
  * A completion child can die in ways the user must never see raw: SIGTERM
  * from a competing run or a gateway restart (exit 143), SIGKILL (137), a

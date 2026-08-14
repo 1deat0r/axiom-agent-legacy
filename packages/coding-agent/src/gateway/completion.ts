@@ -101,7 +101,7 @@ export interface CliCompletionOptions {
 	 */
 	compactBefore?: boolean;
 	/**
-	 * Timeout for runs that compact first (ADR-0050). Compaction summarizes
+	 * Timeout for runs that compact first (ADR-0051). Compaction summarizes
 	 * the whole session with a model call, so it can take minutes on a large
 	 * session; such runs get this (larger) budget instead of `timeoutMs`.
 	 * Defaults to 600000.
