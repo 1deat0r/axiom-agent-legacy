@@ -19,6 +19,21 @@ The act of re-implementing an archived axiom capability on the baseline
 (ADR-0015), red-first, one tracker issue per port (`docs/ports.md`).
 _Avoid_: Migration, rewrite
 
+**Role label**:
+One of five labels on every issue. Set it in the create command; exactly one
+at all times (`docs/agents/triage-labels.md`).
+_Avoid_: Status, state
+
+**Readiness contract**:
+The five parts an issue body needs before `ready-for-agent`: goal, acceptance
+criteria, scope, ADR status, verification plan.
+_Avoid_: Spec, ready bar
+
+**Close ritual**:
+The audit comment (merge commit, ADR, handoff) that precedes every issue
+close (`docs/agents/issue-tracker.md`).
+_Avoid_: Done note
+
 **Axiom home**:
 The directory holding axiom-owned durable state (ledger config, memory store,
 profiles): `AXIOM_HOME`, default `~/.axiom`. Baseline-independent by design —

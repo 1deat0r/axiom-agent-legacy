@@ -46,7 +46,9 @@ port per `docs/ports.md`. Both archives are seed corn, not working trunks.
 - Decisions are ADRs in `docs/adr/` (0015 continues the series).
 - Issues and specs live as GitHub issues via `gh` — see
   `docs/agents/issue-tracker.md`; labels in `docs/agents/triage-labels.md`;
-  domain vocabulary in root `CONTEXT.md` + `docs/adr/`.
+  domain vocabulary in root `CONTEXT.md` + `docs/adr/`. Every issue gets a
+  role label at create and closes only after the audit comment that links the
+  merge commit, the ADR, and the handoff.
 - End autonomous runs with a `docs/handoff.md` that says what was done, what
   was verified, and how (unit / mock / live — never blurred).
 
