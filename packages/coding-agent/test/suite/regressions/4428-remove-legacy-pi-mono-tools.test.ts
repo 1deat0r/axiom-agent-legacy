@@ -27,9 +27,33 @@ describe("regression #4428: remove legacy pi-mono built-in tools", () => {
 		}
 	});
 
-	it("registers only ipython as a built-in tool", () => {
-		expect([...allToolNames]).toEqual(["ipython"]);
-		expect(Object.keys(createAllToolDefinitions(process.cwd()))).toEqual(["ipython"]);
+	it("registers ipython and read as built-in tools", () => {
+		expect([...allToolNames]).toEqual(["ipython", "read"]);
+		expect(Object.keys(createAllToolDefinitions(process.cwd()))).toEqual(["ipython", "read"]);
+	});
+
+	it("activates read alongside ipython by default", async () => {
+		const settingsManager = SettingsManager.create(tempDir, agentDir);
+		const sessionManager = SessionManager.inMemory(tempDir);
+		const resourceLoader = new DefaultResourceLoader({
+			cwd: tempDir,
+			agentDir,
+			settingsManager,
+		});
+		await resourceLoader.reload();
+
+		const { session } = await createAgentSession({
+			cwd: tempDir,
+			agentDir,
+			model: getModel("anthropic", "claude-sonnet-5")!,
+			settingsManager,
+			sessionManager,
+			resourceLoader,
+		});
+		await session.bindExtensions({});
+
+		expect(session.getActiveToolNames()).toEqual(["ipython", "read"]);
+		session.dispose();
 	});
 
 	it("keeps legacy names available for extension and custom tool allowlists", () => {

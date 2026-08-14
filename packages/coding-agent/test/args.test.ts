@@ -525,12 +525,18 @@ describe("parseArgs", () => {
 			expect(result.tools).toEqual(["ipython", "dynamic_tool"]);
 		});
 
+		test("accepts read as a built-in tool", () => {
+			const result = parseArgs(["--tools", "read,ipython"]);
+			expect(result.tools).toEqual(["read", "ipython"]);
+			expect(result.diagnostics).toEqual([]);
+		});
+
 		test("rejects removed built-in tools", () => {
-			const result = parseArgs(["--tools", "read,bash,edit"]);
-			expect(result.tools).toEqual(["read", "bash", "edit"]);
+			const result = parseArgs(["--tools", "grep,bash,edit"]);
+			expect(result.tools).toEqual(["grep", "bash", "edit"]);
 			expect(result.diagnostics).toContainEqual({
 				type: "error",
-				message: "Unknown built-in tool(s): read. Available built-in tools: ipython",
+				message: "Unknown built-in tool(s): grep. Available built-in tools: ipython, read",
 			});
 		});
 	});

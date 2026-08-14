@@ -175,6 +175,8 @@ export {
 	// Tool factories (for custom cwd)
 	createEditTool,
 	createIpythonTool,
+	createReadTool,
+	createReadToolDefinition,
 	type PromptTemplate,
 	type RlmSubagentRuntime,
 	type SubagentRuntimeHost,
