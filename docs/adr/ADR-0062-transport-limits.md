@@ -53,6 +53,23 @@ Discord/Slack/Signal paths are real.
    paper) and the files implementing it. The close ritual for any future
    transport change updates that doc.
 
+## Threat model
+
+Defends against: a hostile or compromised Socket Mode connection - forged
+events_api envelopes, forged event shapes, forged sender/channel identities,
+malformed frames, replay of an already-delivered message, oversized frames,
+app-token or ticket leakage into logs, forged socket URLs, and forged
+channel overrides. The receive path validates shape and origin before any
+dispatch and acks only envelopes it accepted. Fan-out broadcasts are
+ledger-labelled per delivering transport so a misrouted send is auditable.
+
+Deliberately not defended: TLS-level interception of the socket (delegated
+to the platform's TLS), a compromised Slack app credential itself (the
+attacker would be the platform), content-level prompt injection inside a
+legitimate Slack message (the agent's own injection defenses apply
+downstream), and live cross-platform fan-out verification (no second
+platform credential in this sandbox - operator follow-up).
+
 ## Consequences
 
 - `axiom gateway --transport slack` behavior is unchanged unless the
