@@ -1,0 +1,66 @@
+name: Live verification
+
+on:
+  workflow_dispatch:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  live-verification:
+    name: Live verification
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       startsWith(github.event.comment.body, '/run-live'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      AXIOM_TELEGRAM_BOT_TOKEN: ${{ secrets.AXIOM_TELEGRAM_BOT_TOKEN }}
+      AXIOM_DISCORD_BOT_TOKEN: ${{ secrets.AXIOM_DISCORD_BOT_TOKEN }}
+      AXIOM_SLACK_BOT_TOKEN: ${{ secrets.AXIOM_SLACK_BOT_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run live checks
+        id: run
+        run: |
+          node tools/live-verification/run.mjs --json > report.json
+          {
+            echo "ran=$(jq -r .ran report.json)"
+            echo "passed=$(jq -r .passed report.json)"
+            echo "failed=$(jq -r .failed report.json)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Show report in the run summary
+        run: |
+          jq -r '.results[] | "\(.outcome | ascii_upcase) \(.id): \(.detail)"' report.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Post report on the PR
+        if: github.event_name == 'issue_comment' && steps.run.outputs.ran != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          jq -r '.results[] | "\(.outcome | ascii_upcase) \(.id): \(.detail)"' report.json > report.txt
+          gh pr comment "${{ github.event.issue.number }}" --body-file report.txt
