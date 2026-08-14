@@ -144,6 +144,48 @@ describe("CliCompletionRunner", () => {
 		}
 	});
 
+	it("tags the child with the gateway channel and session so schedule tools work", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-tags-"));
+		try {
+			const outDir = join(dir, "out");
+			await mkdir(outDir, { recursive: true });
+			const bin = join(dir, "axiom.mjs");
+			await writeFile(
+				bin,
+				"#!/usr/bin/env node\n" +
+					'import {writeFileSync} from "node:fs";\n' +
+					"writeFileSync(process.env.SHIM_META, JSON.stringify({ channel: process.env.AXIOM_GATEWAY_CHANNEL_ID ?? null, session: process.env.AXIOM_GATEWAY_SESSION_ID ?? null }));\n",
+			);
+			await chmod(bin, 0o755);
+			process.env.SHIM_META = join(outDir, "meta.json");
+			const runner = new CliCompletionRunner({ bin, printFlag: "-p" });
+			await runner.runCompletion({
+				sessionId: "gw-abc",
+				prompt: "hi",
+				profile: { name: "builder" },
+				channelId: "+1",
+			});
+			const meta = fromPartial<{ channel: string | null; session: string | null }>(
+				JSON.parse(await readFile(join(outDir, "meta.json"), "utf8")),
+			);
+			expect(meta).toEqual({ channel: "+1", session: "gw-abc" });
+			// without a channel tag the child gets no schedule env at all, even
+			// when the gateway process environment carries a stale tag
+			const out2 = join(outDir, "meta2.json");
+			process.env.SHIM_META = out2;
+			process.env.AXIOM_GATEWAY_CHANNEL_ID = "+stale";
+			await runner.runCompletion({ sessionId: "gw-abc", prompt: "hi", profile: { name: "builder" } });
+			const meta2 = fromPartial<{ channel: string | null; session: string | null }>(
+				JSON.parse(await readFile(out2, "utf8")),
+			);
+			expect(meta2).toEqual({ channel: null, session: null });
+		} finally {
+			delete process.env.SHIM_META;
+			delete process.env.AXIOM_GATEWAY_CHANNEL_ID;
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
 	it("injects only --model when the override leaves provider empty", async () => {
 		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-model-"));
 		try {

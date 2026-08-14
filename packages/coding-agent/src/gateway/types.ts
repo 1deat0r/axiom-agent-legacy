@@ -75,6 +75,8 @@ export interface CompletionRunner {
 		projectRoot?: string;
 		/** Compact the session before the run (gateway session-budget path). */
 		compactBefore?: boolean;
+		/** The channel the run belongs to (tagged on the child so schedule tools work). */
+		channelId?: string;
 	}): Promise<{
 		reply: string;
 		sessionId: string;
@@ -89,6 +91,7 @@ export interface CompletionRunner {
 			model?: { provider: string; model: string };
 			projectRoot?: string;
 			compactBefore?: boolean;
+			channelId?: string;
 		},
 		onDelta: (delta: string) => void,
 	): Promise<{ reply: string; sessionId: string; error?: string }>;

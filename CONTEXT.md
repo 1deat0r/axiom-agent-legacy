@@ -241,6 +241,24 @@ compact-before runs get their own longer timeout. Env knobs:
 `GATEWAY_COMPLETION_RETRIES`, `GATEWAY_COMPLETION_RETRY_DELAY_MS`,
 `GATEWAY_RESTART_GRACE_MS`, `GATEWAY_MESSAGE_DEDUP_MS`.
 
+**Schedule tools**:
+The model-facing reminder tools (ADR-0053): `schedule_after` (positive
+delay), `schedule_at` (absolute ISO 8601 instant with an explicit zone), and
+`schedule_every` (fixed interval, five minutes minimum) store reminders that
+return later as ordinary message turns in the session they were scheduled
+from, delivered to the session's channel. The tools exist only on runs the
+gateway tagged (`AXIOM_GATEWAY_CHANNEL_ID` + `AXIOM_GATEWAY_SESSION_ID` env),
+so nothing promises a reminder it cannot deliver. Records live in an
+append-only JSONL store at `<AXIOM_HOME>/gateway/schedule.jsonl` (agent
+appends reminders, the gateway appends fire records; the fold replays the
+log). The gateway's `ScheduleManager` sweeps on boot (a reminder missed while
+down fires exactly once) and every `GATEWAY_SCHEDULE_POLL_MS` (default 10s),
+fires each due reminder once, and re-schedules recurring ones at their
+earliest future slot; each fire becomes a completion turn on the channel's
+serialization chain in the stored session. Reminders that cross sessions,
+operator cron changes, and delivery to other channels are out of scope.
+_Avoid_: Operator cron (the gateway /cron spine is separate and stays separate)
+
 **Self-update**:
 The gateway-local `/update` command (ADR-0034): fetch + report, or `/update
 now` to fast-forward the configured worktree (`AXIOM_UPDATE_REPO` /
