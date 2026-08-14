@@ -185,3 +185,26 @@ describe("Markdown standalone hex literals", () => {
 		]);
 	});
 });
+
+describe("Markdown color channel composition", () => {
+	afterEach(() => {
+		resetCapabilitiesCache();
+	});
+
+	it("composes bold inside a role colored link", () => {
+		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
+		const { theme, calls } = makeCapturingTheme();
+		const markdown = new Markdown("[**bold**](#role:ok)", 0, 0, theme);
+
+		const lines = markdown.render(80);
+		const plain = lines.map((line) => line.replace(/\x1b\[[0-9;]*m/g, "")).join("\n");
+
+		assert.equal(calls.colored.length, 1);
+		assert.equal(calls.colored[0]!.color.channel, "fg");
+		assert.equal(calls.colored[0]!.color.kind, "role");
+		assert.equal(calls.colored[0]!.color.value, "ok");
+		assert.ok(calls.colored[0]!.text.includes("bold"), "bold inner text is colored");
+		assert.deepStrictEqual(calls.backgrounded, []);
+		assert.ok(plain.includes("bold"), "inner text is rendered");
+	});
+});
