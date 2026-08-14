@@ -115,3 +115,52 @@ describe("stripColorDescriptors CommonMark parity", () => {
 		expect(stripColorDescriptors('[x](#section "title")')).toBe('[x](#section "title")');
 	});
 });
+
+describe("stripColorDescriptors reference and whitespace parity", () => {
+	it("strips a full reference link and removes its color definition line", () => {
+		expect(stripColorDescriptors("[x][ref]\n\n[ref]: #role:ok")).toBe("x\n\n");
+	});
+
+	it("strips a collapsed reference link and removes its color definition line", () => {
+		expect(stripColorDescriptors("[ref][]\n\n[ref]: #role:ok")).toBe("ref\n\n");
+	});
+
+	it("strips a shortcut reference link and removes its color definition line", () => {
+		expect(stripColorDescriptors("[ref]\n\n[ref]: #role:ok")).toBe("ref\n\n");
+	});
+
+	it("strips a reference with a hex descriptor destination", () => {
+		expect(stripColorDescriptors("[c][col]\n\n[col]: #hex:FF5555")).toBe("c\n\n");
+	});
+
+	it("keeps a reference whose definition is a normal url", () => {
+		expect(stripColorDescriptors("[x][ref]\n\n[ref]: https://x.com")).toBe("[x][ref]\n\n[ref]: https://x.com");
+	});
+
+	it("strips a parenthesized-title descriptor link", () => {
+		expect(stripColorDescriptors("[x](#role:ok (title))")).toBe("x");
+	});
+
+	it("strips descriptor links with whitespace inside the parens", () => {
+		expect(stripColorDescriptors("[x]( #role:ok)")).toBe("x");
+		expect(stripColorDescriptors('[x](#role:ok "title" )')).toBe("x");
+	});
+
+	it("keeps an escaped opening bracket literal", () => {
+		expect(stripColorDescriptors("\\[x](#role:ok)")).toBe("\\[x](#role:ok)");
+	});
+
+	it("leaves a backtick fence with a tilde info string literal", () => {
+		expect(stripColorDescriptors("```js ~ x\n[x](#role:ok)\n```")).toBe("```js ~ x\n[x](#role:ok)\n```");
+	});
+
+	it("leaves a tilde fence with a backtick info string literal", () => {
+		expect(stripColorDescriptors("~~~js ` x\n[x](#role:ok)\n~~~")).toBe("~~~js ` x\n[x](#role:ok)\n~~~");
+	});
+
+	it("closes a fence whose closing line ends with a tab", () => {
+		expect(stripColorDescriptors("```\n[x](#role:ok)\n```\t\nthen [y](#role:warn)")).toBe(
+			"```\n[x](#role:ok)\n```\t\nthen y",
+		);
+	});
+});

@@ -54,16 +54,24 @@ The contract layer has three parts:
   Inline code spans and fenced code blocks are left literal: a descriptor
   inside code is code, not a tag, and the TUI renders code literally too.
   Fences pair by run character and length (``` and ~~~, any run >= 3, closing
-  run >= opening run, unclosed fence runs to end of text); code spans pair by
-  equal backtick runs, and an unclosed run is literal text, so marked still
-  parses links after it. The strip's link recognition mirrors marked: inner
-  text may hold soft line breaks and one level of balanced brackets, hrefs
-  may be angle-bracketed, and a quoted title may follow. Known limit: an
-  unclosed "[" before a color link joins into that link's inner text (the TUI
-  renders the "[" as text) — a pathological model output, accepted for a
-  grammar-simple strip. Internal records (delivery ledger, stream journal,
-  session files) keep the raw text — the strip is a presentation rule, not a
-  logging rule.
+  run >= opening run, closing line may end in tabs, unclosed fence runs to
+  end of text; backtick-fence info strings may not contain backticks, tilde
+  info strings may contain anything); code spans pair by equal backtick runs,
+  and an unclosed run is literal text, so marked still parses links after it.
+  The strip's link recognition mirrors marked: inner text may hold soft line
+  breaks and one level of balanced brackets, hrefs may be angle-bracketed,
+  whitespace may surround the href, and a quoted or parenthesized title may
+  follow; an escaped opening bracket is a literal. Reference-style links
+  (full, collapsed, shortcut) whose definition is a color descriptor reduce
+  to their text and the definition line is removed. Known remaining
+  divergences, all pathological: an unclosed "[" before a color link joins
+  into that link's inner text (the TUI renders the "[" as text); the gateway
+  shows a backslash the TUI consumes on an escaped bracket; a shortcut
+  reference whose label equals a color link's inner text reduces where the
+  TUI colors; the mask sentinel assumes text holds no NUL; hex word
+  boundaries are ASCII-only. Internal records (delivery ledger, stream
+  journal, session files) keep the raw text — the strip is a presentation
+  rule, not a logging rule.
 - **ADR + term** — this document plus the CONTEXT.md `Semantic color` term.
 
 Unknown role names, uppercase roles, malformed hexes, and `#RGB` shorthand
