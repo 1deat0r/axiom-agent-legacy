@@ -35,12 +35,14 @@ export const DEFAULT_STREAM_STALL_MAX_ATTEMPTS = 2;
 
 /** Error thrown when a provider stream stalls on every allowed attempt. */
 export class StreamStallError extends Error {
+	/** Stable machine-readable code, persisted in the session turn-failure record. */
+	readonly code = "STREAM_STALL";
 	constructor(
 		public readonly stallTimeoutMs: number,
 		public readonly attempts: number,
 	) {
 		super(
-			`Model generation stalled: no response data for ${stallTimeoutMs}ms on every one of ${attempts} attempts. ` +
+			`[STREAM_STALL] Model generation stalled: no response data for ${stallTimeoutMs}ms on every one of ${attempts} attempts. ` +
 				"The turn failed instead of hanging; you can retry on the next message.",
 		);
 		this.name = "StreamStallError";
