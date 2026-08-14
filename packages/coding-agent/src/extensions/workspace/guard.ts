@@ -7,6 +7,10 @@
  * lives in index.ts.
  *
  * Resolution correctness matters more than speed here:
+ *  - The raw path is expanded EXACTLY like the edit tool itself
+ *    (resolveToCwd -> expandPath: `~`/`~/` -> the home dir; `@` prefix
+ *    stripped) BEFORE the checks, so a tilde escape the tool would honor
+ *    can never pass the guard (red-team B4).
  *  - Both the root and the target are realpath-normalized, so a symlinked
  *    root or a symlink whose target escapes is caught, not merely `startsWith`.
  *  - A not-yet-created target (a new file) is resolved to its nearest
@@ -56,16 +60,21 @@ export interface DecideEditOptions {
 	allowPrefixes?: readonly string[];
 	/** Path prefixes denied everywhere, even inside the root (wins over allows). */
 	denyPrefixes?: readonly string[];
+	/** Home used for `~` expansion (defaults to the process home). */
+	home?: string;
 }
 
-/** Expand `~` / `~/` / `~user` like the shell gate's scope.ts (~user -> /home/<user>). */
-function expandTilde(raw: string, home = homedir()): string {
-	const m = raw.match(/^~[A-Za-z0-9_.+-]*/);
-	if (!m) return raw;
-	const token = m[0];
-	if (token === "~") return raw === "~" ? home : join(home, raw.slice(1));
-	if (token === "~-") return raw; // OLDPWD — lexical best-effort, resolved against cwd
-	return `/home/${token.slice(1)}${raw.slice(token.length)}`;
+/**
+ * Expand a raw edit path exactly the way the edit tool does (path-utils
+ * expandPath): `~` and `~/` become the home dir, a leading `@` is stripped,
+ * everything else (including `~user` and `~+`, which the tool treats as
+ * literal names) stays as-is.
+ */
+export function expandToolPath(raw: string, home: string): string {
+	const at = raw.startsWith("@") ? raw.slice(1) : raw;
+	if (at === "~") return home;
+	if (at.startsWith("~/")) return join(home, at.slice(2));
+	return at;
 }
 
 /**
@@ -79,16 +88,22 @@ export async function decideEdit(
 	raw: string,
 	options: DecideEditOptions = {},
 ): Promise<{ block: true; reason: string } | undefined> {
-	const abs = toAbsolute(raw, cwd);
-	const target = await realpathX(abs);
 	// Prefixes resolve against the anchored cwd (not process.cwd(), which the
 	// ipython kernel can drift from): a deny like ".secrets" must mean
 	// "<project root>/.secrets" wherever the process happens to sit.
+	const home = options.home ?? homedir();
 	const normPrefix = (prefix: string): string => {
 		// `~+` is bash PWD; it may carry a suffix (`~+/sub`) — expand both forms.
-		const expanded = prefix.startsWith("~+") ? cwd + prefix.slice(2) : expandTilde(prefix);
+		// Everything else expands with the SAME rule as the edit path itself
+		// (B4: deny prefixes and the path must see the same tilde semantics).
+		const expanded = prefix.startsWith("~+") ? cwd + prefix.slice(2) : expandToolPath(prefix, home);
 		return resolve(toAbsolute(expanded, cwd));
 	};
+	// The edit tool expands `~`/`~/` (resolveToCwd -> expandPath) before it
+	// touches the filesystem — the guard must judge the SAME path the tool
+	// will use, so the raw path is expanded first (B4).
+	const abs = toAbsolute(expandToolPath(raw, home), cwd);
+	const target = await realpathX(abs);
 	for (const prefix of options.denyPrefixes ?? []) {
 		const norm = normPrefix(prefix);
 		if (isWithin(norm, abs) || isWithin(norm, target)) {

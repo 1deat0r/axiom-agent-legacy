@@ -137,16 +137,23 @@ _Avoid_: Reasoning level, intelligence slider
 The ADR-0014 rung-3 enforcement: axiom extensions, inert unless a run is
 anchored by AXIOM_PROJECT_ROOT, that confine the file-touching tools to the
 project root. The workspace guard (ADR-0018) blocks an `edit` whose resolved
-path leaves the root. The root guard (ADR-0052) scans `bash`/`ipython` for
-literal path tokens and blocks, by default, ANY outside path — strict
-block-by-default. The operator relaxes it with `AXIOM_ROOT_GUARD_ALLOW`
+path leaves the root (applying the same `~` expansion the edit tool does).
+The root guard (ADR-0052) scans `bash`/`ipython` for literal AND decoded path
+tokens (shell-escaped slashes, ANSI-C `$'...'`, `file://` URIs) and blocks,
+by default, ANY outside path — strict block-by-default; cells with
+obfuscation markers and no inside-root path fail closed, destructive
+coreutils with a bare-root operand block, and cd/chdir through variable
+targets block. The operator relaxes it with `AXIOM_ROOT_GUARD_ALLOW`
 (allow prefixes; the exported `INFRA_ALLOW_PREFIXES` list is the opt-in
 convenience set) and hardens it with `AXIOM_ROOT_GUARD_DENY` (wins
-everywhere). Escapes need plain-English approval: the model files a request
+everywhere, and the operator-owned store — default
+`/var/lib/axiom-root-guard` — is always denied). Escapes need plain-English
+approval: the model files a request
 with the `request_root_access` tool and waits; the operator decides with
 `axiom root-guard approve|reject <id>`. Every block, request, decision,
-grant, and grant-use lands in an append-only audit log
-(`<axiom home>/root-guard/<project-hash>/audit.jsonl`); a decided request
+grant, and grant-use lands in the audit log under the operator-owned state
+dir (`<stateDir>/root-guard/<project-hash>/audit.jsonl`; operator decisions
+and grants are HMAC-signed, the agent's events advisory); a decided request
 leaves the pending board. Honest boundary: freeform string extraction is
 best-effort, not confinement — the ADR-0019 OS sandbox remains the strict
 tier.

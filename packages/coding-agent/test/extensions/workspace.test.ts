@@ -101,7 +101,7 @@ describe("workspace guard tool_call handler", () => {
 		try {
 			await writeFile(join(root, "a.ts"), "x");
 			const { pi, toolCall } = fakePi();
-			createWorkspaceGuard({ root, cwd: root })(pi);
+			createWorkspaceGuard({ root, cwd: root, stateDir: await makeRoot() })(pi);
 			const res = fromAny<{ block: boolean; reason: string }, unknown>(
 				await toolCall({
 					type: "tool_call",
@@ -240,7 +240,12 @@ describe("workspace guard approval escapes (ADR-0052)", () => {
 		const other = await makeRoot();
 		try {
 			const { pi, toolCall } = fakePi();
-			createWorkspaceGuard({ root, cwd: root, allowPrefixes: [join(root, "elsewhere")] })(pi);
+			createWorkspaceGuard({
+				root,
+				cwd: root,
+				allowPrefixes: [join(root, "elsewhere")],
+				stateDir: await makeRoot(),
+			})(pi);
 			const res = fromAny<{ block: boolean; reason: string }, unknown>(
 				await toolCall({
 					type: "tool_call",

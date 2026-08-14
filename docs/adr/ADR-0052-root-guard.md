@@ -1,6 +1,6 @@
 # ADR-0052: Root guard v2 — freeform path confinement and plain-English approval
 
-**Status:** accepted
+**Status:** accepted (hardened 2026-08-14 — see "Hardening (2026-08-14)" below)
 **Date:** 2026-08-14
 **Extends:** ADR-0014 (anti-drift ladder, rung 3), ADR-0018 (workspace root guard),
 ADR-0028 (security fence seam), ADR-0019 (OS-tier confinement)
@@ -144,9 +144,104 @@ not on the human (the git-guard precedent, ADR-0049).
 ## Consequences
 
 - On an anchored run, `bash`/`ipython` calls that reference ANY path outside
-  the project root are blocked by default (criterion a, literally); escapes
-  require a plain-English request an operator approves or rejects, fully
-  audited.
+  the project root are blocked by default (criterion a); escapes require a
+  plain-English request an operator approves or rejects.
 - CONTEXT.md's Root guard term is updated to cover the full rung-3 gate.
 - Follow-ups stay recorded: gateway inline approval, a per-project escape
-  config file, obfuscation-hardening (never claimed as confinement).
+  config file (obfuscation-hardening landed in the hardening section below;
+  confinement was never claimed — the ADR-0019 OS sandbox is the strict tier).
+
+## Hardening (2026-08-14)
+
+An adversarial red-team pass (S-class threat corpus, review-rubric.md) found
+seven blocker families against the shipped gate. The hardening below closes
+every one that is closable on the tool seam and amends the honest boundary to
+match. Red-first corpus: `test/extensions/root-guard-attack-corpus.test.ts`
+(62 permanent cases, exact red-team inputs plus documented positive controls).
+
+**B1 self-approval — closed.** The store lived under the axiom home, inside
+the agent's reachable namespace: `%cd $HOME/.axiom` (the `$` gap) plus a
+relative-path write could forge grants and erase the audit. Now:
+
+- The default state dir is **operator-owned and outside the agent's reach**:
+  `/var/lib/axiom-root-guard` (`AXIOM_ROOT_GUARD_STATE_DIR` overrides; the
+  operator provisions the directory — `mkdir -m 700` — or points the env var
+  elsewhere; the agent's home is never the default). OS-level separation (a
+  different uid for the store) remains the strict tier.
+- **Grants and decisions are HMAC-signed.** The key (`<scopeDir>/.hmac-key`,
+  mode 0600) is created ONLY by the CLI (`loadOrCreateKey`); the guard never
+  creates or writes it. `listGrantPrefixes` and `readDecision` verify every
+  signature and treat unsigned/invalid entries as ABSENT, so an agent-written
+  forgery can never become an allow. The agent's polling loop no longer
+  writes grants at all — the CLI's approve command owns the signed grant.
+- **The store is hard-denied on every seam**: the state dir and the legacy
+  `<axiom home>/root-guard` location are implicit deny prefixes (lexical AND
+  realpath-resolved), winning over allow prefixes and grants, in both the
+  shell gate and the edit guard.
+- **cd/chdir drift is blocked**: a `cd`/`%cd`/`chdir` whose target is a
+  variable, environment reference, or substitution blocks outright, so the
+  kernel cwd cannot be moved outside the root without a literal, judgeable
+  path.
+- The audit file stays in the state dir with the same protection. Honest
+  split: the operator's decision/grant events are SIGNED (the authoritative
+  record); the agent's block/request/grant-use events are advisory
+  (`writer: "agent"`, unsigned) — the agent cannot forge an allow either way,
+  and the CLI flags unverified decision records.
+
+**B2 slash-spelling obfuscation — closed in two layers.** (a) DECODE before
+extraction: `\/` (always a shell-escaped slash) and ANSI-C `$'...'` hex/octal
+escapes are decoded, so those forms extract their real path and face the
+normal gate. (b) POSTURE FLIP for the residual: a cell carrying obfuscation
+markers (command substitution, ANSI-C quoting, `\xNN`/octal escapes,
+backslash-escaped path characters, `$VAR/`-prefixed paths, `chr(47)` and
+`chr()`/`codecs`/`__import__`/home-env tricks near path strings) and naming
+NO known-inside token is BLOCKED with a plain-English reason directing to
+`request_root_access`. Perfect parsing is impossible; the guard fails closed
+on ambiguity. The plain `$HOME`-prefixed read (`cat $HOME/.ssh/id_rsa`) is
+also closed by the `$VAR/` marker. False-positive cost (e.g. a standalone
+`$(...)` cell with no inside path) is recorded and intentional: the model
+rewords or requests approval.
+
+**B3 destructive bare-root with trailing operands — closed.** A destructive
+binary list (`rm`, `chmod`, `chown`, `cp`, `find`, `shred`, `dd`, `mv`,
+`chroot`) with a bare-root `/` operand blocks outright, trailing words or
+not, on the bash seam and on `%%bash`/`!` lines inside ipython cells. The
+arithmetic-division exemption is unchanged for the ipython seam. The root
+path can never be approved through `request_root_access`.
+
+**B4 edit-seam tilde escape — closed.** `decideEdit` expands `~`/`~/` (and
+strips a leading `@`) with the SAME rule the edit tool itself applies
+(`resolveToCwd` -> `expandPath`) before the realpath checks, and prefix
+matching uses the same expansion, so `~/.ssh/id_rsa` and `~/Documents/...`
+block exactly like the tool would resolve them.
+
+**B5 symlink chain and B6 `file://` URI — closed.** The symlink-target
+construction forms (`ln -s "$(printf '\x2fetc')"`, `ln -s $HOME/.ssh`) are
+caught by the B2 marker flip, and `file://` URIs are extracted as their path
+part (`file:///etc/passwd` -> `/etc/passwd` -> gate). Residual: a symlink
+created by the OPERATOR (or pre-existing in the root) is still lexically
+transparent — containment stays lexical, recorded below.
+
+**B7 request breadth — closed.** `request_root_access` refuses to file
+requests for `/`, the operator's home, or the axiom home (those are
+operator-CLI-only), and caps a request at 64 paths. The CLI `list` now shows
+active grants and flags unverified decision records.
+
+### Amended honest boundary (replaces the pre-hardening paragraph)
+
+- The gate blocks literal AND decoded path tokens and fails closed on
+  obfuscation-marked cells that name no inside path. It is still NOT
+  confinement: variable indirection without a slash suffix, `eval`-built
+  paths, rewording, and multi-step compositions are residual; the ADR-0019
+  OS sandbox is the strict tier.
+- Containment for the freeform tools stays lexical (no realpath chase), so a
+  symlink that exists inside the root can still point outside; the edit tool
+  keeps its realpath check. The persistent ipython kernel's cwd is anchored
+  by construction and cd-drift is blocked; a cwd moved by an UNGUARDED path
+  (operator's own terminal, pre-existing state) is residual.
+- The store is operator-owned and HMAC-signed; the agent cannot forge an
+  allow, but on a single-uid deployment it can still erase the audit
+  (advisory events) or remove the store (fail-closed DoS). A different uid
+  for the store, or the ADR-0019 sandbox, closes that residual.
+- Approval remains interactive through the relayed text plus the operator
+  CLI; inline approve buttons are still the gateway follow-up.
