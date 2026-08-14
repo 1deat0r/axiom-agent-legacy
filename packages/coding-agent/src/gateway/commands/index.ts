@@ -1,5 +1,6 @@
 import type { GatewayCommand, GatewayCommandContext } from "../types.js";
 import { announceCommand } from "./announce.js";
+import { costCommand } from "./cost.js";
 import { cronCommand } from "./cron.js";
 import { helpCommand } from "./help.js";
 import { ledgerCommand } from "./ledger.js";
@@ -23,6 +24,7 @@ export const gatewayCommands: GatewayCommand[] = [
 	soulCommand,
 	announceCommand,
 	ledgerCommand,
+	costCommand,
 	modelCommand,
 	updateCommand,
 	newCommand,

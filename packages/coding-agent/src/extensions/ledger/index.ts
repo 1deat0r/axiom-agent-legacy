@@ -48,7 +48,7 @@ function defaultOverridesPath(): string {
 }
 
 /** Narrow a session file's entries to session entries (drop the header). */
-function loadSessionEntries(path: string): SessionEntry[] {
+export function loadSessionEntries(path: string): SessionEntry[] {
 	return loadEntriesFromFile(path).filter((e): e is SessionEntry => e.type !== "session");
 }
 
