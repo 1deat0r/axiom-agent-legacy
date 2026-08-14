@@ -17,6 +17,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { RpcDelegateBridge } from "./bridge.js";
 import { parseDelegateHandoff } from "./handoff.js";
+import { createDelegateJournalWriter, mapAgentEventToJournalRecord } from "./journal.js";
 import { DEFAULT_SUMMARY_MAX_CHARS, emptyAccounting, toDelegateResult } from "./result.js";
 import type { DelegateResult } from "./types.js";
 
@@ -55,6 +56,8 @@ export interface BackgroundDelegateEntry {
 	startedAt: number;
 	completedAt?: number;
 	resultFile: string;
+	/** Activity journal the run appends to (watched by `axiom delegate watch`). */
+	journalFile: string;
 	result?: DelegateResult;
 }
 
@@ -78,6 +81,7 @@ export class BackgroundDelegateRegistry {
 			model: input.model,
 			startedAt: Date.now(),
 			resultFile: join(this.resultsDir, `${handle}.json`),
+			journalFile: join(this.resultsDir, `${handle}.journal.jsonl`),
 		};
 		this.entries.set(handle, entry);
 		this.bridges.set(handle, input.bridge);
@@ -126,6 +130,23 @@ export class BackgroundDelegateRegistry {
 	): Promise<void> {
 		const { bridge, task, timeoutMs } = input;
 		const summaryMaxChars = input.summaryMaxChars ?? DEFAULT_SUMMARY_MAX_CHARS;
+		// Activity journal (best-effort): a human can watch the run live from the
+		// terminal. Journal failures never fail the delegation.
+		const writer = createDelegateJournalWriter(entry.journalFile);
+		bridge.onEvent = (event) => {
+			const record = mapAgentEventToJournalRecord(event);
+			if (record) {
+				writer.write(record);
+			}
+		};
+		writer.write({
+			t: Date.now(),
+			type: "start",
+			task,
+			model: input.model,
+			name: input.name,
+			resultFile: entry.resultFile,
+		});
 		let result: DelegateResult;
 		try {
 			await bridge.start();
@@ -161,6 +182,15 @@ export class BackgroundDelegateRegistry {
 		}
 		entry.result = result;
 		entry.completedAt = Date.now();
+		writer.write({
+			t: Date.now(),
+			type: "end",
+			status: entry.status,
+			ok: result.ok,
+			error: result.error,
+			summary: result.summary === "" ? undefined : result.summary,
+			tokens: result.tokens,
+		});
 		this._writeResultFile(entry, result);
 		settle();
 	}
@@ -193,6 +223,7 @@ export function renderBackgroundStarted(entry: BackgroundDelegateEntry): string 
 	return [
 		`[delegate background] started ${entry.handle}${entry.name ? ` (${entry.name})` : ""} — "${entry.task}"`,
 		`Result file: ${entry.resultFile}`,
+		`Watch live: axiom delegate watch ${entry.handle}`,
 		`Collect later with delegate(handle="${entry.handle}") or read the result file when it exists.`,
 	].join("\n");
 }
@@ -206,6 +237,7 @@ export function renderBackgroundBatchStarted(entries: BackgroundDelegateEntry[])
 	lines.push(
 		`Result files under ${entries[0]?.resultFile.slice(0, entries[0].resultFile.lastIndexOf("/")) ?? "?"}; collect each with delegate(handle="<handle>").`,
 	);
+	lines.push(`Watch live: axiom delegate watch <handle> (one terminal per handle).`);
 	return lines.join("\n");
 }
 
@@ -215,6 +247,7 @@ export function renderBackgroundPending(entry: BackgroundDelegateEntry): string 
 	return [
 		`[delegate running] ${entry.handle} — "${entry.task}" (started ${elapsedSeconds}s ago)`,
 		`Result file: ${entry.resultFile}`,
+		`Watch live: axiom delegate watch ${entry.handle}`,
 		`Call delegate(handle="${entry.handle}", waitMs=...) to wait, or read the file when it exists.`,
 	].join("\n");
 }

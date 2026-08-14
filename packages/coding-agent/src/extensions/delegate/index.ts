@@ -18,6 +18,7 @@
  * the real helper process via `createRpcClientBridge`.
  */
 
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { type Static, Type } from "typebox";
 import { getAgentDir } from "../../config.js";
@@ -32,6 +33,7 @@ import {
 } from "./background.js";
 import { createRpcClientBridge, parseModelRef, type RpcDelegateBridge } from "./bridge.js";
 import { parseDelegateHandoff } from "./handoff.js";
+import { createDelegateJournalWriter, mapAgentEventToJournalRecord } from "./journal.js";
 import {
 	DEFAULT_SUMMARY_MAX_CHARS,
 	emptyAccounting,
@@ -116,7 +118,21 @@ async function runDelegation(
 	name: string | undefined,
 	model: string | undefined,
 	summaryMaxChars: number,
+	journalPath?: string,
 ): Promise<DelegateResult> {
+	// Activity journal (best-effort): project helper events into a bounded JSONL
+	// file a human can watch from the terminal. Journal failures never fail the
+	// delegation.
+	const writer = journalPath ? createDelegateJournalWriter(journalPath) : undefined;
+	if (writer) {
+		bridge.onEvent = (event) => {
+			const record = mapAgentEventToJournalRecord(event);
+			if (record) {
+				writer.write(record);
+			}
+		};
+		writer.write({ t: Date.now(), type: "start", task, model, name });
+	}
 	let result: DelegateResult;
 	try {
 		await bridge.start();
@@ -142,7 +158,24 @@ async function runDelegation(
 		// Always reap the helper — no orphan processes on error/timeout.
 		await bridge.stop().catch(() => undefined);
 	}
+	if (writer) {
+		const isTimeout = result.error?.startsWith("delegate timed out") === true;
+		writer.write({
+			t: Date.now(),
+			type: "end",
+			status: !result.ok ? (isTimeout ? "timeout" : "error") : "done",
+			ok: result.ok,
+			error: result.error,
+			summary: result.summary === "" ? undefined : result.summary,
+			tokens: result.tokens,
+		});
+	}
 	return result;
+}
+
+/** One run id per foreground delegation (journals are the only artifact). */
+function newRunId(): string {
+	return `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
 }
 
 export function createDelegateExtension(deps?: Partial<DelegateDeps>): (pi: ExtensionAPI) => void {
@@ -171,7 +204,9 @@ export function createDelegateExtension(deps?: Partial<DelegateDeps>): (pi: Exte
 				"Parameters: task OR tasks (required), optional name, model, timeoutMs. " +
 				"Non-blocking mode: pass background=true to return immediately with a handle; the helper " +
 				"keeps working while you continue, and its compact result lands in a result file. " +
-				"Collect later with handle plus optional waitMs (waitMs blocks up to that budget).",
+				"Collect later with handle plus optional waitMs (waitMs blocks up to that budget). " +
+				"Every run also writes an activity journal under <agent-dir>/delegate-results; a human can " +
+				"watch it live with `axiom delegate watch <handle-or-run-id>` (background runs use the handle).",
 			parameters: DelegateParamsSchema,
 			execute: async (_toolCallId, params: DelegateParams, _signal, _onUpdate, ctx) => {
 				// Collect path: no task required.
@@ -242,6 +277,7 @@ export function createDelegateExtension(deps?: Partial<DelegateDeps>): (pi: Exte
 								background: true,
 								handles: entries.map((entry) => entry.handle),
 								resultFiles: entries.map((entry) => entry.resultFile),
+								journalFiles: entries.map((entry) => entry.journalFile),
 							},
 						};
 					}
@@ -253,6 +289,7 @@ export function createDelegateExtension(deps?: Partial<DelegateDeps>): (pi: Exte
 							handle: entry.handle,
 							status: entry.status,
 							resultFile: entry.resultFile,
+							journalFile: entry.journalFile,
 							helper: { name: entry.name, model: entry.model },
 						},
 					};
@@ -266,23 +303,28 @@ export function createDelegateExtension(deps?: Partial<DelegateDeps>): (pi: Exte
 					// fixed concurrency pool (BATCH_CONCURRENCY). Each delegation reaps
 					// its own bridge; a failing task does not abort its siblings
 					// (partial failure -> ok:false but results kept).
-					const delegations = await mapWithConcurrency(batchTasks, BATCH_CONCURRENCY, (task) =>
-						runDelegation(
+					const journalFiles: string[] = [];
+					const delegations = await mapWithConcurrency(batchTasks, BATCH_CONCURRENCY, (task) => {
+						const journalFile = join(resolved.resultsDir, `${newRunId()}.journal.jsonl`);
+						journalFiles.push(journalFile);
+						return runDelegation(
 							resolved.bridge(effectiveModel),
 							task,
 							timeoutMs,
 							params.name,
 							effectiveModel,
 							resolved.summaryMaxChars,
-						),
-					);
+							journalFile,
+						);
+					});
 					const batch: DelegateBatchResult = toBatchResult(delegations);
 					return {
 						content: [{ type: "text", text: renderBatchResult(batch) }],
-						details: batch,
+						details: { ...batch, journalFiles },
 					};
 				}
 
+				const journalFile = join(resolved.resultsDir, `${newRunId()}.journal.jsonl`);
 				const result = await runDelegation(
 					resolved.bridge(effectiveModel),
 					singleTask,
@@ -290,10 +332,11 @@ export function createDelegateExtension(deps?: Partial<DelegateDeps>): (pi: Exte
 					params.name,
 					effectiveModel,
 					resolved.summaryMaxChars,
+					journalFile,
 				);
 				return {
 					content: [{ type: "text", text: renderDelegateResult(result) }],
-					details: result,
+					details: { ...result, journalFile },
 				};
 			},
 		});

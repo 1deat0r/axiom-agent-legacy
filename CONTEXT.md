@@ -441,6 +441,16 @@ omit it still return the old compact result. Field caps (status 100, summary
 _Avoid_: Transcript, full log, raw summary (the handoff is the structured,
 capped projection; the summary field stays the raw capped closing text)
 
+**Delegate journal**:
+The append-only activity log every delegate run writes (ADR-0072): bounded
+JSONL records (start, assistant text, tool call, tool result, turn, end) at
+`<agent-dir>/delegate-results/<handle>.journal.jsonl`. It is the data source
+for `axiom delegate list` and `axiom delegate watch`, the live TUI a human
+uses to see what a helper does. The journal is best-effort: a failed write
+never fails the delegation.
+_Avoid_: Helper transcripts in the parent context (the journal stays on disk;
+the compact result block stays the only model-facing artifact).
+
 **Runtime GC**:
 Garbage collection for the persistent Python kernel (ADR-0059). The runtime
 module `rlm.gc` measures pressure (cheap per-generation counters; detailed
