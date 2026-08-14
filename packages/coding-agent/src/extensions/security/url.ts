@@ -1,5 +1,6 @@
 /**
- * URL-safe fetch gate — pure URL safety (ADR-0028, security fence).
+ * URL-safe fetch gate — URL safety with DNS-aware SSRF protection
+ * (ADR-0028, ADR-0057; security fence).
  *
  * The egress half of the security fence: any tool call that carries a `url`
  * argument (a fetch channel) is poked through `checkUrlSafety` before it runs
@@ -9,24 +10,87 @@
  *  - non-http(s) schemes (file:, data:, javascript:, ftp:, gopher:, ...),
  *  - URLs embedding credentials (SSRF/credential-leak vector),
  *  - SSRF-prone host literals: loopback / private / link-local / ULA / v4-mapped
- *    IPv4+IPv6, and loopback-patterned hostnames (localhost, *.localhost, *.local).
+ *    IPv4+IPv6, and loopback-patterned hostnames (localhost, *.localhost, *.local),
+ *  - named http(s) hosts whose resolved A/AAAA addresses are SSRF-prone
+ *    (ADR-0057), and named http(s) hosts whose resolution FAILS — fail closed.
  *
- * Honest boundary (recorded, not faked): arbitrary NAMED hostnames are allowed —
- * proving a name resolves to a private address requires DNS, which this pure,
- * sync, unit-testable module deliberately does not perform. DNS resolution is a
- * documented follow-up. Host literals and loopback-patterned names are caught
- * here without any network.
+ * DNS boundary (ADR-0057): resolution runs only for named hosts on http(s)
+ * schemes that pass the literal checks; IP literals and loopback-patterned
+ * hostnames are classified without DNS, and allowlisted hosts skip resolution.
+ * Resolution is a pure injectable seam (`resolver`) so unit tests stay offline;
+ * the default resolver uses node:dns lookup raced against a timeout. DNS
+ * rebinding and result caching are out of scope (recorded follow-ups).
  */
+import type { LookupAddress } from "node:dns";
+import { lookup as dnsLookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import { setTimeout as sleep } from "node:timers/promises";
 
 export interface UrlSafetyOptions {
 	/** Extra schemes allowed beyond http/https (default: none). */
 	allowedSchemes?: string[];
 	/** Hosts (hostname or IP literal, brackets stripped) always allowed even if private/loopback. */
 	allowHosts?: string[];
+	/** Resolver seam for named http(s) hosts (ADR-0057). Default: node:dns lookup. */
+	resolver?: HostnameResolver;
+	/** Timeout (ms) for the default resolver. Ignored when `resolver` is injected. */
+	dnsTimeoutMs?: number;
 }
 
 export type UrlSafeDecision = { block: true; reason: string } | undefined;
+
+/** One resolved address: the address string plus its IP family. */
+export interface ResolvedAddress {
+	address: string;
+	/** 4 (IPv4) or 6 (IPv6). */
+	family: 4 | 6;
+}
+
+/**
+ * Resolver seam (ADR-0057): resolves a hostname to its A/AAAA addresses.
+ * Rejecting is a resolution failure (NXDOMAIN, timeout, resolver error) and the
+ * gate fails closed. Returning an empty list also fails closed.
+ */
+export type HostnameResolver = (hostname: string) => Promise<ResolvedAddress[]>;
+
+/** Lookup seam for the default resolver (injectable in tests). */
+export type LookupFn = (hostname: string) => Promise<LookupAddress[]>;
+
+/** Default DNS timeout for the built-in resolver (ms). */
+export const DEFAULT_DNS_TIMEOUT_MS = 2000;
+
+function dnsTimeoutError(hostname: string, timeoutMs: number): Error {
+	const err = new Error(`DNS lookup of '${hostname}' timed out after ${timeoutMs}ms`) as NodeJS.ErrnoException;
+	err.code = "ETIMEDOUT";
+	return err;
+}
+
+function unclassifiableFamilyError(hostname: string): Error {
+	return new Error(`DNS lookup of '${hostname}' returned an unclassifiable address family`);
+}
+
+/**
+ * Default resolver: node:dns `lookup` (getaddrinfo, A + AAAA records) raced
+ * against a timeout so a hung resolver fails closed. Rejects on lookup error,
+ * timeout, or an unclassifiable address family.
+ */
+export function makeDefaultResolver(
+	timeoutMs: number = DEFAULT_DNS_TIMEOUT_MS,
+	lookupFn: LookupFn = (hostname) => dnsLookup(hostname, { all: true }),
+): HostnameResolver {
+	return async (hostname) => {
+		const result = await Promise.race([
+			lookupFn(hostname),
+			sleep(timeoutMs).then(() => {
+				throw dnsTimeoutError(hostname, timeoutMs);
+			}),
+		]);
+		return result.map((r) => {
+			if (r.family !== 4 && r.family !== 6) throw unclassifiableFamilyError(hostname);
+			return { address: r.address, family: r.family };
+		});
+	};
+}
 
 /** True iff `host` (lowercased, bracket-stripped) is explicitly allowlisted. */
 function isAllowedHost(host: string, allowHosts?: string[]): boolean {
@@ -112,8 +176,17 @@ function isLoopbackHostname(host: string): boolean {
 	return host.endsWith(".localhost") || host.endsWith(".local");
 }
 
+/** Render a resolver error for the block reason (code + message when known). */
+function describeDnsError(error: unknown): string {
+	if (error instanceof Error) {
+		const code = (error as NodeJS.ErrnoException).code;
+		return code ? `${code}: ${error.message}` : error.message;
+	}
+	return String(error);
+}
+
 /** Decision for one fetch URL: `undefined` to allow, or a block with a reason. */
-export function checkUrlSafety(rawUrl: string, options: UrlSafetyOptions = {}): UrlSafeDecision {
+export async function checkUrlSafety(rawUrl: string, options: UrlSafetyOptions = {}): Promise<UrlSafeDecision> {
 	const allowed = new Set(["http", "https", ...(options.allowedSchemes ?? [])]);
 
 	let url: URL;
@@ -147,30 +220,74 @@ export function checkUrlSafety(rawUrl: string, options: UrlSafetyOptions = {}): 
 	if (isAllowedHost(host, options.allowHosts)) return undefined;
 
 	const ip = isIP(host);
-	let bad = false;
-	let danger: string;
-	switch (ip) {
-		case 4:
-			bad = isPrivateIPv4(host);
-			danger = "private/reserved IPv4 address";
-			break;
-		case 6:
-			bad = isPrivateIPv6(host);
-			danger = "private/reserved IPv6 address";
-			break;
-		default:
-			bad = isLoopbackHostname(host);
-			danger = "loopback/mDNS hostname";
-			break;
+	if (ip === 4) {
+		if (isPrivateIPv4(host)) {
+			return {
+				block: true,
+				reason:
+					`Refusing fetch of '${rawUrl}' — the target host '${host}' is a private/reserved IPv4 address, which is unreachable or may be a local service; ` +
+					`this is a common SSRF vector. If this host is genuinely required, allowlist it explicitly.`,
+			};
+		}
+		return undefined; // public literal: the address is known, no DNS needed
+	}
+	if (ip === 6) {
+		if (isPrivateIPv6(host)) {
+			return {
+				block: true,
+				reason:
+					`Refusing fetch of '${rawUrl}' — the target host '${host}' is a private/reserved IPv6 address, which is unreachable or may be a local service; ` +
+					`this is a common SSRF vector. If this host is genuinely required, allowlist it explicitly.`,
+			};
+		}
+		return undefined; // public literal: the address is known, no DNS needed
 	}
 
-	if (bad) {
+	// Named hostname.
+	if (isLoopbackHostname(host)) {
 		return {
 			block: true,
 			reason:
-				`Refusing fetch of '${rawUrl}' — the target host '${host}' is a ${danger}, which is unreachable or may be a local service; ` +
+				`Refusing fetch of '${rawUrl}' — the target host '${host}' is a loopback/mDNS hostname, which is unreachable or may be a local service; ` +
 				`this is a common SSRF vector. If this host is genuinely required, allowlist it explicitly.`,
 		};
+	}
+
+	// ADR-0057: resolve named http(s) hosts and classify the resolved addresses.
+	// Other allowed schemes (operator opt-in) keep the literal checks only.
+	if (scheme !== "http" && scheme !== "https") return undefined;
+
+	const resolver = options.resolver ?? makeDefaultResolver(options.dnsTimeoutMs);
+	let addresses: ResolvedAddress[];
+	try {
+		addresses = await resolver(host);
+	} catch (error) {
+		return {
+			block: true,
+			reason:
+				`Refusing fetch of '${rawUrl}' — DNS resolution failed for '${host}' (${describeDnsError(error)}); ` +
+				`failing closed rather than fetching a host that may not exist or may rebind. If this host is genuinely required, allowlist it explicitly.`,
+		};
+	}
+	if (addresses.length === 0) {
+		return {
+			block: true,
+			reason:
+				`Refusing fetch of '${rawUrl}' — DNS resolution failed for '${host}' (the resolver returned no addresses); ` +
+				`failing closed rather than fetching a host that may not exist or may rebind. If this host is genuinely required, allowlist it explicitly.`,
+		};
+	}
+	for (const { address, family } of addresses) {
+		const bad = family === 4 ? isPrivateIPv4(address) : isPrivateIPv6(address);
+		if (bad) {
+			return {
+				block: true,
+				reason:
+					`Refusing fetch of '${rawUrl}' — the target host '${host}' resolves to '${address}', a private/reserved ` +
+					`${family === 4 ? "IPv4" : "IPv6"} address, which is unreachable or may be a local service; ` +
+					`this is a common SSRF vector. If this host is genuinely required, allowlist it explicitly.`,
+			};
+		}
 	}
 	return undefined;
 }

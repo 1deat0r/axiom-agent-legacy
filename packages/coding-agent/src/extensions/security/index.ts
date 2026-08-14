@@ -6,7 +6,9 @@
  * is anchored by AXIOM_PROJECT_ROOT (or an explicit deps.root), so ordinary
  * `axiom` runs are unaffected. When anchored:
  *  - any tool call carrying a `url` argument is poked through the URL-safe
- *    fetch gate (scheme / credentials / SSRF hosts);
+ *    fetch gate (scheme / credentials / SSRF hosts; named http(s) hosts are
+ *    DNS-resolved and classified per ADR-0057, failing closed on resolution
+ *    errors);
  *  - any tool in the configured `sensitiveTools` set is blocked unless approved.
  *
  * Configuration is via the options object (tests) or env for real runs:
@@ -43,6 +45,8 @@ export function createSecurityFence(options: SecurityFenceOptions = {}): (pi: Ex
 		const approvedTools = options.approvedTools ?? envList(process.env.AXIOM_FENCE_ALLOW) ?? [];
 		const allowHosts = options.allowHosts ?? envList(process.env.AXIOM_FENCE_ALLOW_HOSTS) ?? [];
 		const allowedSchemes = options.allowedSchemes;
+		const resolver = options.resolver;
+		const dnsTimeoutMs = options.dnsTimeoutMs;
 		pi.on("tool_call", async (event) => {
 			// Fast path: nothing to gate when there's no URL field and the tool
 			// isn't in the sensitive set.
@@ -54,6 +58,8 @@ export function createSecurityFence(options: SecurityFenceOptions = {}): (pi: Ex
 				approvedTools,
 				allowHosts,
 				allowedSchemes,
+				resolver,
+				dnsTimeoutMs,
 			});
 		});
 	};
@@ -64,4 +70,13 @@ export default function axiomSecurityExtension(pi: ExtensionAPI): void {
 }
 
 export { checkSensitiveTool, extractUrlField } from "./fence.js";
-export { checkUrlSafety, isPrivateIPv4, isPrivateIPv6 } from "./url.js";
+export {
+	checkUrlSafety,
+	DEFAULT_DNS_TIMEOUT_MS,
+	type HostnameResolver,
+	isPrivateIPv4,
+	isPrivateIPv6,
+	type LookupFn,
+	makeDefaultResolver,
+	type ResolvedAddress,
+} from "./url.js";

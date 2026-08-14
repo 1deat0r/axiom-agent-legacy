@@ -6,7 +6,9 @@
  * rules:
  *
  *  1. Egress / URL gate: any tool carrying a `url` argument (a fetch channel)
- *     is poked through `checkUrlSafety`. This is the "URL-safe fetch" half.
+ *     is poked through `checkUrlSafety` (async since ADR-0057: named http(s)
+ *     hosts are DNS-resolved and classified). This is the "URL-safe fetch"
+ *     half.
  *  2. Approved-tool ladder: if the tool name is in the configured
  *     `sensitiveTools` set and not in `approvedTools`, it is blocked. The
  *     built-in sensitive set is deliberately EMPTY (opt-in) — we do not pretend
@@ -33,14 +35,14 @@ export function extractUrlField(input: unknown): string | undefined {
 }
 
 /** Decision for one tool call: `undefined` to allow, or a block with a reason. */
-export function checkSensitiveTool(
+export async function checkSensitiveTool(
 	toolName: string,
 	input: unknown,
 	options: SensitiveToolFenceOptions = {},
-): FenceDecision {
+): Promise<FenceDecision> {
 	const url = extractUrlField(input);
 	if (url !== undefined) {
-		const d = checkUrlSafety(url, options);
+		const d = await checkUrlSafety(url, options);
 		if (d) return d;
 	}
 	const approved = new Set(options.approvedTools ?? []);
