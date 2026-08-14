@@ -1,4 +1,9 @@
-# ADR-0052: Gateway session token meter (measure the model-facing surface, trigger compaction on token pressure)
+
+> Numbering note: originally written as ADR-0052; renumbered to ADR-0055
+> at merge time because feat/root-guard claimed 0052 and ADR-0054 was taken by
+> the delegate Ralph handoff (issue #33). Recorded 2026-08-14.
+
+# ADR-0055: Gateway session token meter (measure the model-facing surface, trigger compaction on token pressure)
 
 **Status:** accepted
 **Date:** 2026-08-14

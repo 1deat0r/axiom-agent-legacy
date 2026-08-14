@@ -1,7 +1,7 @@
 # Handoff: gateway session token meter (issue #31)
 
 Branch `feat/token-meter` (isolated worktree `.worktrees/issue-31-token-meter`,
-cut from origin/main = a384f4ed9). ADR-0052.
+cut from origin/main = a384f4ed9). ADR-0055.
 
 ## What was done
 
@@ -61,7 +61,7 @@ primary compaction trigger while the byte budget stays as the safety limit.
   inside the floor (20 tests, 124ms).
 - `npx biome check .` clean, `npx tsgo --noEmit` clean (packages/coding-agent).
 
-## Honest limits (recorded follow-ups in ADR-0052)
+## Honest limits (recorded follow-ups in ADR-0055)
 
 - The meter prices only the session message surface; the system-prompt
   envelope is not visible to the gateway and stays unpriced.
