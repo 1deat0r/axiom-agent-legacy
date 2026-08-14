@@ -110,28 +110,31 @@ async function readJsonLines<T>(file: string): Promise<T[]> {
 }
 
 /**
- * Remove `pending/*.tmp` debris older than the threshold. Atomic writes
- * (tmp + rename) can leave a `.tmp` file behind on a crash; readers filter
- * `.json` so the debris is invisible but accumulates. Swept on board reads
- * and before filing — the operator-facing surfaces, not every gate call.
+ * Remove `*.tmp` debris older than the threshold from `pending/` and
+ * `decisions/`. Atomic writes (tmp + rename) can leave a `.tmp` file behind
+ * on a crash; readers filter `.json` so the debris is invisible but
+ * accumulates. Swept on board reads and before filing — the
+ * operator-facing surfaces, not every gate call.
  */
 export async function sweepStaleTmp(scopeDir: string, maxAgeMs = 3_600_000): Promise<void> {
-	const dir = join(scopeDir, "pending");
-	let names: string[] = [];
-	try {
-		names = await readdir(dir);
-	} catch {
-		return;
-	}
 	const cutoff = Date.now() - maxAgeMs;
-	for (const name of names) {
-		if (!name.endsWith(".tmp")) continue;
-		const file = join(dir, name);
+	for (const sub of ["pending", "decisions"]) {
+		const dir = join(scopeDir, sub);
+		let names: string[] = [];
 		try {
-			const st = await statFile(file);
-			if (st.mtimeMs < cutoff) await unlink(file);
+			names = await readdir(dir);
 		} catch {
-			/* raced with another writer — leave it */
+			continue;
+		}
+		for (const name of names) {
+			if (!name.endsWith(".tmp")) continue;
+			const file = join(dir, name);
+			try {
+				const st = await statFile(file);
+				if (st.mtimeMs < cutoff) await unlink(file);
+			} catch {
+				/* raced with another writer — leave it */
+			}
 		}
 	}
 }
@@ -217,6 +220,7 @@ export async function readDecision(scopeDir: string, id: string): Promise<Decisi
 
 /** All decisions, newest first. */
 export async function listDecisions(scopeDir: string): Promise<DecisionRecord[]> {
+	await sweepStaleTmp(scopeDir);
 	const dir = join(scopeDir, "decisions");
 	let names: string[] = [];
 	try {

@@ -20,6 +20,9 @@ ADR renumbered 0051 -> 0052 (main took 0050/0051).
   escapes also unblock `edit`; its block reason names the approval tool.
 - CLI `axiom root-guard list|approve <id>|reject <id>` with `--root`,
   `--state-dir`, `--json`, `--note`; registered in the command roster.
+- Static policy checked before the approval store: policy-allowed and
+  inside-root calls never touch the store, so a broken store cannot block
+  them; blocked calls fail closed with the curated store reason.
 - Strict block-by-default; `INFRA_ALLOW_PREFIXES` (OS read surface, /tmp,
   axiom home, ~/.local, ~/.config, ~/.cache) is opt-in via
   `AXIOM_ROOT_GUARD_ALLOW`. Knobs: `AXIOM_ROOT_GUARD_ALLOW` / `_DENY` /
@@ -27,9 +30,9 @@ ADR renumbered 0051 -> 0052 (main took 0050/0051).
 
 ## Verification
 
-- 91 new/extended tests, red-first, all green: extractor (14), scope (14),
-  store (9), extension + approval tool (26), CLI (7), workspace (21 total,
-  9 new escape/deny/audit/env tests).
+- 96 new/extended tests, red-first, all green: extractor (14), scope (14),
+  store (10), extension + approval tool (28), CLI (8), workspace (22 total,
+  10 new escape/deny/audit/env tests).
 - Floor: `./test.sh` from the worktree with `AXIOM_PROJECT_ROOT` unset —
   only the documented sandbox known-fails (4603 x4, 4685 x9 EXDEV,
   daemon-serialized-refine x1); the floor has varied with machine load

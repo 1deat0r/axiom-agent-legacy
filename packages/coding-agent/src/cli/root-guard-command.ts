@@ -69,8 +69,12 @@ export async function handleRootGuardCommand(args: string[]): Promise<boolean> {
 	// never be misread as the positional request id ("approve --note ok <id>").
 	const consumed = new Set<number>();
 	for (const flag of ["--root", "--state-dir", "--note"]) {
-		const i = rest.indexOf(flag);
-		if (i !== -1 && i + 1 < rest.length && !rest[i + 1].startsWith("--")) consumed.add(i + 1);
+		for (let i = 0; i < rest.length; i++) {
+			if (rest[i] === flag && i + 1 < rest.length && !rest[i + 1].startsWith("--")) {
+				consumed.add(i + 1);
+				i++; // skip the consumed value; the next flag occurrence still parses
+			}
+		}
 	}
 	const positional = rest.filter((a, index) => !a.startsWith("--") && !consumed.has(index));
 	const sub = positional[0] ?? "list";

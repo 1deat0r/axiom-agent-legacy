@@ -618,3 +618,40 @@ describe("request tool deny handling and curated store failures (round 4)", () =
 		}
 	});
 });
+
+describe("rejected mixed request names the dropped denied paths (round 7 MINOR-1)", () => {
+	it("appends the denial note to the rejected outcome", async () => {
+		const root = await makeRoot();
+		const state = await makeRoot();
+		try {
+			const scope = await resolveScopeDir(state, root);
+			const fake = fakePi();
+			createRootGuard({
+				root,
+				cwd: root,
+				stateDir: state,
+				home: HOME,
+				denyPrefixes: ["/srv"],
+				approvalTimeoutMs: 5000,
+				pollMs: 10,
+			})(fake.pi);
+			const tool = await approvalTool(fake);
+			const running = runTool(tool, { paths: ["/srv/data", "/mnt/x"], reason: "mixed" });
+			for (let i = 0; i < 200; i++) {
+				const names = await pendingNames(scope);
+				if (names.length > 0) {
+					await writeDecision(scope, names[0].replace(/\.json$/, ""), { approved: false });
+					break;
+				}
+				await new Promise((r) => setTimeout(r, 10));
+			}
+			const text = textOf(await running);
+			expect(text).toMatch(/rejected/i);
+			expect(text).toMatch(/permanently denied/);
+			expect(text).toMatch(/\/srv\/data/);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+			await rm(state, { recursive: true, force: true });
+		}
+	});
+});
