@@ -1,18 +1,15 @@
 /**
  * Real-process daemon-backed test for serializedRefine propagation.
  *
- * KNOWN-SKIP (fork, 2026-08-15): this test asserts the daemon socket exists
- * while its setup passes --extension flags, and the runtime deliberately
- * refuses the daemon path when process-local extension factories are present
- * (shouldUseDaemonClientRuntime: "Programmatic factories are process-local
- * functions and cannot be serialized to a daemon worker"). The premise is
- * impossible in this fork: the socket can never exist with these args, so
- * the test failed everywhere (sandbox known-fail, GitHub CI process-smoke
- * job, and the upstream repo's own gate). Upstream carries the same
- * contradiction (ebb7fd5f6 has the decision, the test has the flags).
- * Tracked in issue #47 (make the daemon host --extension files via the
- * daemon catalog); the skip keeps the gate green with the reason recorded,
- * per the repo's known-fail-with-reason policy — never a silent mute.
+ * HISTORY (fork, 2026-08-15): this suite was once a documented skip. The
+ * fork's port folded the built-in extensions into the same extensionFactories
+ * list that computes hasProcessLocalExtensionFactories, so the daemon-client
+ * decision was always false and the socket this test asserts could never
+ * exist. Fixed 2026-08-15 (f38a71718, 2f3043598) to count only programmatic
+ * factories (upstream semantics): the built-ins are static imports the
+ * daemon worker loads on its own, and --extension files ride the runtime
+ * config (additionalExtensionPaths). The suite now runs for real and is
+ * green; see issue #47.
  *
  * Spawns the actual CLI (`pi --mode json`) which goes through:
  * client -> unix socket -> daemon supervisor -> owned worker -> AgentSession.
