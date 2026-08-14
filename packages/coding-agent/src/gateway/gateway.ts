@@ -31,6 +31,7 @@ import type { RestartNoticeStore } from "./restart-notice.js";
 import type { UpdateConfig, UpdateShell } from "./self-update.js";
 import { applyUpdate, CliUpdateShell, checkUpdate } from "./self-update.js";
 import { archiveSessionFile, sessionExceedsBudget, sessionFilePath } from "./session-reset.js";
+import { sessionExceedsTokenBudget } from "./session-token-meter.js";
 import { STREAM_EDIT_MIN_INTERVAL_MS, StreamEditor } from "./stream-editor.js";
 import type { StreamJournal } from "./stream-journal.js";
 import type {
@@ -458,16 +459,19 @@ export class Gateway {
 			sessionId = sessionIdForChannel(sessionKey);
 			this.index.set(sessionKey, sessionId);
 		}
-		// Session budget: a channel session that has grown past the soft cap
-		// makes every reply re-process a huge context (minute-scale latency
-		// before the first word). Instead of archiving (which wipes the
-		// conversation's memory), request a pre-run compaction: the completion
-		// child summarizes the existing context, so the reply resumes on a
-		// small session while /search still indexes the full history.
+		// Session pressure: a channel session whose model-facing surface has
+		// grown past the token budget makes every reply re-process a huge
+		// context (minute-scale latency before the first word). Instead of
+		// archiving (which wipes the conversation's memory), request a
+		// pre-run compaction: the completion child summarizes the existing
+		// context, so the reply resumes on a small session while /search
+		// still indexes the full history. Token pressure (ADR-0052) is the
+		// primary trigger; the byte budget (ADR-0041) stays as the safety
+		// limit for sessions the heuristic prices low.
 		let compactBefore = false;
 		if (this.sessionsDir) {
 			const path = sessionFilePath(this.sessionsDir, sessionKey);
-			if (sessionExceedsBudget(path)) {
+			if (sessionExceedsTokenBudget(path) || sessionExceedsBudget(path)) {
 				compactBefore = true;
 			}
 		}
