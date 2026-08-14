@@ -319,6 +319,19 @@ omit it still return the old compact result. Field caps (status 100, summary
 _Avoid_: Transcript, full log, raw summary (the handoff is the structured,
 capped projection; the summary field stays the raw capped closing text)
 
+**Runtime GC**:
+Garbage collection for the persistent Python kernel (ADR-0059). The runtime
+module `rlm.gc` measures pressure (cheap per-generation counters; detailed
+adds tracked-object counts, estimated bytes, and the user-namespace reachable
+closure) and runs full cyclic passes; the rlm bootstrap cell installs a
+`post_execute` hook that collects once uncollected objects cross
+`AXIOM_GC_MAX_UNCOLLECTED_OBJECTS` (env-tunable thresholds). The host can
+force passes (`KernelManager.gcPressure` / `collectGarbage`) and, opt-in via
+`AXIOM_GC_CHECK_EVERY_N_CELLS` (or `KernelGcOptions.checkEveryNCells`),
+attaches per-cell `gc: {pressure, collect?}` metadata to user cell results.
+Off by default; cell execution is unchanged without opt-in.
+_Avoid_: RSS profiling, memory mapping, object-level deep copies (out of scope)
+
 **Shutdown worker reaping**:
 The daemon supervisor's last-resort step at shutdown (ADR-0056). A worker that
 survives its stop attempt during shutdown would otherwise leak forever — the

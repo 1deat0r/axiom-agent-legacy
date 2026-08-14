@@ -11,6 +11,17 @@ import { Dealer, Subscriber } from "zeromq";
 import { ensureKernelPython, type KernelBootstrapProgressHandler, type KernelPythonSkill } from "./bootstrap.js";
 import { ForkServerUnavailable, forkKernel, isForkServerEnabled } from "./fork-server.js";
 import {
+	buildGcCollectCode,
+	buildGcPressureCode,
+	DEFAULT_GC_MAX_UNCOLLECTED_OBJECTS,
+	type GcCollectResult,
+	type GcPressure,
+	type KernelGcOptions,
+	parseGcCollectResult,
+	parseGcPressureResult,
+	resolveGcOptionsFromEnv,
+} from "./kernel-gc.js";
+import {
 	buildListNamesCode,
 	buildRestoreCode,
 	buildSnapshotCode,
@@ -86,6 +97,8 @@ export interface KernelManagerOptions {
 	pythonSkills?: readonly KernelPythonSkill[];
 	/** Persist/revive the user namespace across kernel restarts and session resume. */
 	snapshot?: KernelSnapshotConfig;
+	/** Opt-in GC pressure metadata on user cell results (see kernel-gc.ts). Default: off. */
+	gc?: KernelGcOptions;
 	/** Default: "axiom". */
 	username?: string;
 }
@@ -167,6 +180,9 @@ export interface ExecuteResult {
 	status: "ok" | "error" | "aborted";
 	error?: { ename: string; evalue: string; traceback: string[] };
 	durationMs: number;
+	/** GC pressure snapshot (plus a collect pass when pressure crossed the threshold),
+	 * attached only when per-N-cell checks are enabled (see {@link KernelGcOptions}). */
+	gc?: { pressure: GcPressure; collect?: GcCollectResult };
 }
 
 /** Parse a {@link DIFF_DISPLAY_MIME} payload, tolerating malformed input. */
@@ -511,7 +527,7 @@ function installSignalHandlersOnce(): void {
 export class KernelManager {
 	private readonly options: Pick<
 		KernelManagerOptions,
-		"python" | "cwd" | "env" | "sessionId" | "hostHandlers" | "pythonSkills" | "snapshot"
+		"python" | "cwd" | "env" | "sessionId" | "hostHandlers" | "pythonSkills" | "snapshot" | "gc"
 	> &
 		Required<Pick<KernelManagerOptions, "username">>;
 	private readonly session = uuid();
@@ -545,6 +561,8 @@ export class KernelManager {
 	private startPromise?: Promise<void>;
 	/** Pending debounced auto-snapshot, if one has been scheduled. */
 	private snapshotTimer?: ReturnType<typeof globalThis.setTimeout>;
+	/** Successful non-internal cells since start; drives the opt-in per-N-cell GC check. */
+	private userCellCount = 0;
 
 	constructor(options: KernelManagerOptions) {
 		this.options = {
@@ -555,6 +573,8 @@ export class KernelManager {
 			hostHandlers: options.hostHandlers,
 			pythonSkills: options.pythonSkills,
 			snapshot: options.snapshot,
+			// Explicit options win; otherwise honor the shared env knobs (off by default).
+			gc: options.gc ?? resolveGcOptionsFromEnv(),
 			username: options.username ?? "axiom",
 		};
 	}
@@ -806,8 +826,88 @@ export class KernelManager {
 		// crash before graceful shutdown) revives the most recent namespace.
 		if (result.status === "ok") {
 			this.scheduleSnapshot();
+			// Opt-in GC metadata runs after the queue slot is released so its
+			// synthetic cells can enqueue without self-deadlocking (see enqueueExecute).
+			if (!opts.internal) {
+				const gc = await this.checkGcAfterUserCell();
+				if (gc) {
+					result.gc = gc;
+				}
+			}
 		}
 		return result;
+	}
+
+	/**
+	 * Opt-in per-N-cell GC check: after every {@link KernelGcOptions.checkEveryNCells}
+	 * successful user cells, measure pressure and, when it crosses the threshold, run
+	 * a collect pass. Never throws — GC metadata is best-effort and must not fail a cell.
+	 */
+	private async checkGcAfterUserCell(): Promise<ExecuteResult["gc"] | undefined> {
+		const opt = this.options.gc;
+		if (!opt?.checkEveryNCells) {
+			return undefined;
+		}
+		this.userCellCount += 1;
+		if (this.userCellCount % opt.checkEveryNCells !== 0) {
+			return undefined;
+		}
+		const pressure = await this.gcPressure();
+		if (!pressure) {
+			return undefined;
+		}
+		const maxUncollected = opt.maxUncollectedObjects ?? DEFAULT_GC_MAX_UNCOLLECTED_OBJECTS;
+		if (pressure.uncollectedObjects < maxUncollected) {
+			return { pressure };
+		}
+		const collect = await this.collectGarbage();
+		return { pressure, collect: collect ?? undefined };
+	}
+
+	/**
+	 * Measure kernel GC pressure. Cheap by default (generation counters only);
+	 * detailed adds tracked-object counts, estimated bytes, and the user-namespace
+	 * closure and costs a full object scan in the kernel. Never throws.
+	 */
+	async gcPressure(detailed = false): Promise<GcPressure | null> {
+		if (!this.isRunning) {
+			return null;
+		}
+		try {
+			const r = await this.enqueueExecute(buildGcPressureCode(detailed), {
+				maxOutputChars: SNAPSHOT_MAX_OUTPUT_CHARS,
+				internal: true,
+			});
+			if (r.status !== "ok") {
+				this.appendKernelDiagnostic(`gc pressure failed: ${r.error?.evalue ?? r.stderr}`);
+				return null;
+			}
+			return parseGcPressureResult(r.stdout);
+		} catch (error) {
+			this.appendKernelDiagnostic(`gc pressure error: ${errorMessage(error)}`);
+			return null;
+		}
+	}
+
+	/** Run an explicit full GC pass in the kernel, reporting what it freed. Never throws. */
+	async collectGarbage(): Promise<GcCollectResult | null> {
+		if (!this.isRunning) {
+			return null;
+		}
+		try {
+			const r = await this.enqueueExecute(buildGcCollectCode(), {
+				maxOutputChars: SNAPSHOT_MAX_OUTPUT_CHARS,
+				internal: true,
+			});
+			if (r.status !== "ok") {
+				this.appendKernelDiagnostic(`gc collect failed: ${r.error?.evalue ?? r.stderr}`);
+				return null;
+			}
+			return parseGcCollectResult(r.stdout);
+		} catch (error) {
+			this.appendKernelDiagnostic(`gc collect error: ${errorMessage(error)}`);
+			return null;
+		}
 	}
 
 	/** Queue and run a cell, serializing against all other executions. */

@@ -325,6 +325,7 @@ __all__ = [
     "RefinementEvent",
     "delete_subagent",
     "find_models",
+    "gc",
     "get_harness_state",
     "harness",
     "host_request",
@@ -333,9 +334,11 @@ __all__ = [
     "run",
 ]
 
-# Lazily re-export the MCP base class. Kept lazy so `import rlm` never requires
-# the optional `mcp` SDK — only integration packages that subclass it do.
+# Lazily re-export the MCP base class and the GC module. Kept lazy so `import rlm`
+# never requires the optional `mcp` SDK (only integration packages that subclass
+# it do) and never imports gc module machinery until it is actually used.
 _LAZY_MCP = {"McpIntegration", "McpToolError", "NotEnabled"}
+_LAZY_GC = {"gc"}
 
 
 def __getattr__(name: str) -> Any:  # noqa: D401 - module-level lazy attr hook
@@ -343,4 +346,10 @@ def __getattr__(name: str) -> Any:  # noqa: D401 - module-level lazy attr hook
         from . import mcp_base
 
         return getattr(mcp_base, name)
+    if name in _LAZY_GC:
+        # importlib (not `from . import gc`) — a package-relative import here
+        # re-enters this __getattr__ for the same name and recurses.
+        import importlib
+
+        return importlib.import_module(f"{__name__}.gc")
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
