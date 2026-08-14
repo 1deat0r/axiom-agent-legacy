@@ -53,3 +53,28 @@ This ADR documents the chosen strategy and the alternatives weighed.
 - **Per-session persistent cost in a separate store.** Session `meta`
   already persists through the existing store interface and survives
   restarts; a second store would split one concept across two files.
+
+## Adapted for the prime baseline (ADR-0015, 2026-08-14)
+
+The ADR-0015 restart moved the ledger onto the prime v0.7.2 baseline
+(port #1, `packages/coding-agent/src/extensions/ledger/`). The adaptation
+supersedes parts of the decision text above:
+
+- **There is no catalog pricing stack on this baseline.** The `costOf` /
+  `ratesFor` / `CATALOG_RATES` / `DEFAULT_RATES` / `CostRates` surface
+  described above exists only in the from-scratch fork (archived at
+  `archive/from-scratch-v0.23`). The ported ledger reprices with
+  `priceUsage` against `~/.axiom/ledger.json` overrides only; where no
+  override exists, the cost the provider recorded (`Usage.cost`) stands.
+  `formatUsd` is extension-internal and `src/index.ts` exports no ledger
+  API (review finding #12-5, issue #18: no public API creep here).
+- **There is no `costUsd` run-result field or `session.meta` channel here.**
+  The run result carries pi's `Usage.cost`; the extension derives session
+  and lifetime totals from the persisted session entries (`aggregateUsage`
+  + `computeLifetime`) and renders them through `/cost`. Usage-less runs
+  render an honest `$0.0000` — the ledger never invents spend (issue #18
+  item 4: the original "omit vs 0" drift cannot occur; the omit-wording
+  above describes the from-scratch `ChatResult`).
+- **The spend cap rides the extension hooks.** `turn_start` aborts the run
+  via `shouldBlockRun` (ADR-0011) instead of a loop-integrated
+  `finishReason: 'cost_limit'` field.
