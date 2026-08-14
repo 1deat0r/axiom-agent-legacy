@@ -71,12 +71,26 @@ export default function axiomSecurityExtension(pi: ExtensionAPI): void {
 
 export { checkSensitiveTool, extractUrlField } from "./fence.js";
 export {
+	buildPinnedRequestOptions,
+	DEFAULT_MAX_REDIRECTS,
+	defaultPinnedFetcher,
+	type FetchPinnedOptions,
+	fetchPinned,
+	makePinningLookup,
+	type PinnedFetcher,
+	type PinnedRequestOptions,
+	UrlGateBlockError,
+} from "./fetch-pinned.js";
+export {
 	checkUrlSafety,
+	checkUrlSafetyPinned,
 	DEFAULT_DNS_TIMEOUT_MS,
 	type HostnameResolver,
 	isPrivateIPv4,
 	isPrivateIPv6,
 	type LookupFn,
 	makeDefaultResolver,
+	type PinnedResolution,
 	type ResolvedAddress,
+	type UrlGateVerdict,
 } from "./url.js";

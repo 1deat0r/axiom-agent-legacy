@@ -99,3 +99,9 @@ blast radius small.
   pinning) stays a documented exposure and is now issue #43 (ADR-0066); one
   corpus case asserts the current single-resolution behavior and must be
   updated when #43 ships.
+
+- Closed by ADR-0066 (2026-08-15): the gate re-resolves named http(s) hosts
+  at connect time and re-checks before allowing, and the gate-owned pinned
+  fetch (`fetchPinned`) connects to the checked addresses with the original
+  Host header (re-gating every redirect hop). The corpus exposure case that
+  asserted the old single-resolution behavior now asserts the block.
