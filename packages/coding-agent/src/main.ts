@@ -34,6 +34,7 @@ import { handlePeersCommand } from "./cli/peers-command.js";
 import { handleProfileCommand } from "./cli/profile-command.js";
 import { handleProjectsCommand } from "./cli/projects-command.js";
 import { handlePublicCommand } from "./cli/public-command.js";
+import { handleRootGuardCommand } from "./cli/root-guard-command.js";
 import {
 	looksLikeSessionPath,
 	resolveSessionPath,
@@ -1141,6 +1142,9 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	if (await handlePeersCommand(args)) {
+		return;
+	}
+	if (await handleRootGuardCommand(args)) {
 		return;
 	}
 

@@ -14,7 +14,8 @@
  *    are allowed while new files outside it are still blocked.
  */
 import { realpath } from "node:fs/promises";
-import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
+import { homedir } from "node:os";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 /** Resolve a possibly-relative path against a cwd to an absolute path. */
 export function toAbsolute(raw: string, cwd: string): string {
@@ -50,19 +51,39 @@ export async function realpathX(path: string): Promise<string> {
 	}
 }
 
-/** Decision for one edit path: `undefined` to allow, or a block with a reason. */
+export interface DecideEditOptions {
+	/** Path prefixes that unblock an otherwise-outside edit (ADR-0051 approvals). */
+	allowPrefixes?: readonly string[];
+}
+
+/** Expand a leading `~/` to the home directory (approval prefixes may use it). */
+export function expandTilde(raw: string, home = homedir()): string {
+	return raw === "~" ? home : raw.startsWith("~/") ? join(home, raw.slice(2)) : raw;
+}
+
+/**
+ * Decision for one edit path: `undefined` to allow, or a block with a reason.
+ * An escape is allowed when the lexical path or its resolved target sits
+ * under an allow prefix (operator config or an approved grant).
+ */
 export async function decideEdit(
 	rootReal: string,
 	cwd: string,
 	raw: string,
+	options: DecideEditOptions = {},
 ): Promise<{ block: true; reason: string } | undefined> {
 	const abs = toAbsolute(raw, cwd);
 	const target = await realpathX(abs);
 	if (isWithin(rootReal, target)) return undefined;
+	for (const prefix of options.allowPrefixes ?? []) {
+		const norm = resolve(expandTilde(prefix));
+		if (isWithin(norm, abs) || isWithin(norm, target)) return undefined;
+	}
 	return {
 		block: true,
 		reason:
 			`Refusing edit of '${raw}' — it resolves outside this project's workspace root ` +
-			`(${rootReal}). Keep all file changes inside your project root.`,
+			`(${rootReal}). Keep all file changes inside your project root, or request an escape ` +
+			`with the request_root_access tool (plain-English reason; the operator approves or rejects).`,
 	};
 }

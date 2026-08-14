@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import type { ExtensionAPI } from "../../src/core/extensions/types.js";
+import { appendGrant, resolveScopeDir } from "../../src/core/root-guard/store.js";
 import { createWorkspaceGuard, isWithin, realpathX } from "../../src/extensions/workspace/index.js";
 
 /** Minimal fake ExtensionAPI that captures handlers so a test can invoke them. */
@@ -209,6 +210,78 @@ describe("workspace guard tool_call handler", () => {
 			if (prev === undefined) delete process.env.AXIOM_PROJECT_ROOT;
 			else process.env.AXIOM_PROJECT_ROOT = prev;
 			await rm(root, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("workspace guard approval escapes (ADR-0051)", () => {
+	it("allows an outside edit when the path matches an allow prefix", async () => {
+		const root = await makeRoot();
+		const other = await makeRoot();
+		try {
+			const { pi, toolCall } = fakePi();
+			createWorkspaceGuard({ root, cwd: root, allowPrefixes: [other] })(pi);
+			expect(
+				await toolCall({
+					type: "tool_call",
+					toolName: "edit",
+					toolCallId: "9",
+					input: { path: join(other, "x.ts"), edits: [] },
+				}),
+			).toBeUndefined();
+		} finally {
+			await rm(root, { recursive: true, force: true });
+			await rm(other, { recursive: true, force: true });
+		}
+	});
+
+	it("still blocks an outside edit when no prefix matches", async () => {
+		const root = await makeRoot();
+		const other = await makeRoot();
+		try {
+			const { pi, toolCall } = fakePi();
+			createWorkspaceGuard({ root, cwd: root, allowPrefixes: [join(root, "elsewhere")] })(pi);
+			const res = fromAny<{ block: boolean; reason: string }, unknown>(
+				await toolCall({
+					type: "tool_call",
+					toolName: "edit",
+					toolCallId: "10",
+					input: { path: join(other, "x.ts"), edits: [] },
+				}),
+			);
+			expect(res.block).toBe(true);
+			expect(res.reason).toMatch(/request_root_access/);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+			await rm(other, { recursive: true, force: true });
+		}
+	});
+
+	it("honors an operator-approved grant from the shared store", async () => {
+		const root = await makeRoot();
+		const other = await makeRoot();
+		const state = await makeRoot();
+		const prev = process.env.AXIOM_ROOT_GUARD_STATE_DIR;
+		try {
+			process.env.AXIOM_ROOT_GUARD_STATE_DIR = state;
+			const scope = await resolveScopeDir(state, root);
+			await appendGrant(scope, { id: "rg-1", prefixes: [other], reason: "approved" });
+			const { pi, toolCall } = fakePi();
+			createWorkspaceGuard({ root, cwd: root })(pi);
+			expect(
+				await toolCall({
+					type: "tool_call",
+					toolName: "edit",
+					toolCallId: "11",
+					input: { path: join(other, "x.ts"), edits: [] },
+				}),
+			).toBeUndefined();
+		} finally {
+			if (prev === undefined) delete process.env.AXIOM_ROOT_GUARD_STATE_DIR;
+			else process.env.AXIOM_ROOT_GUARD_STATE_DIR = prev;
+			await rm(root, { recursive: true, force: true });
+			await rm(other, { recursive: true, force: true });
+			await rm(state, { recursive: true, force: true });
 		}
 	});
 });

@@ -15,16 +15,30 @@
  * OS-sandbox strict tier, a separate follow-up. This rung pins the structured
  * write tool and anchors cwd.
  */
+import { join } from "node:path";
 import type { ExtensionAPI } from "../../core/extensions/types.js";
+import { listGrantPrefixes, resolveScopeDir } from "../../core/root-guard/store.js";
+import { axiomHome } from "../profile/registry.js";
 import { decideEdit, realpathX } from "./guard.js";
 
-export { decideEdit, isWithin, realpathX, toAbsolute } from "./guard.js";
+export { decideEdit, expandTilde, isWithin, realpathX, toAbsolute } from "./guard.js";
+
+/** Parse a comma-separated env list, trimming empties; undefined when unset. */
+function envList(value: string | undefined): string[] | undefined {
+	if (!value || value.length === 0) return undefined;
+	return value
+		.split(",")
+		.map((s) => s.trim())
+		.filter((s) => s.length > 0);
+}
 
 export interface WorkspaceGuardOptions {
 	/** Explicit project root (tests). Defaults to process.env.AXIOM_PROJECT_ROOT. */
 	root?: string;
 	/** Base for resolving relative paths (tests). Defaults to process.cwd(). */
 	cwd?: string;
+	/** Extra allow prefixes (ADR-0051). Defaults to AXIOM_ROOT_GUARD_ALLOW plus active grants. */
+	allowPrefixes?: readonly string[];
 }
 
 /**
@@ -37,13 +51,21 @@ export function createWorkspaceGuard(options: WorkspaceGuardOptions = {}): (pi: 
 		const rawRoot = options.root ?? process.env.AXIOM_PROJECT_ROOT;
 		if (!rawRoot) return; // inert unless a project root is anchored
 		const cwd = options.cwd ?? process.cwd();
+		const allowPrefixes = options.allowPrefixes ?? envList(process.env.AXIOM_ROOT_GUARD_ALLOW) ?? [];
 		let rootReal: string | undefined;
+		let scope: string | undefined;
 		pi.on("tool_call", async (event) => {
 			if (event.toolName !== "edit") return undefined;
 			const raw = (event.input as { path?: unknown }).path;
 			if (typeof raw !== "string" || raw.length === 0) return undefined;
 			if (rootReal === undefined) rootReal = await realpathX(rawRoot);
-			return await decideEdit(rootReal, cwd, raw);
+			// Approved grants (ADR-0051) ride the same escape path as the env allowlist.
+			if (scope === undefined) {
+				const stateDir = process.env.AXIOM_ROOT_GUARD_STATE_DIR ?? join(axiomHome(), "root-guard");
+				scope = await resolveScopeDir(stateDir, rawRoot);
+			}
+			const grants = await listGrantPrefixes(scope);
+			return await decideEdit(rootReal, cwd, raw, { allowPrefixes: [...allowPrefixes, ...grants] });
 		});
 	};
 }

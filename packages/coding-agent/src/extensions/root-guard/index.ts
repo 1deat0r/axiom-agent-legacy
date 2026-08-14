@@ -1,0 +1,335 @@
+/**
+ * Root guard extension (ADR-0051) — freeform path confinement + approval.
+ *
+ * Ships the rung-3 gate over the freeform file-touching tools on the
+ * `tool_call` seam, gated exactly like the security fence and the git guard:
+ * INERT unless a run is anchored by AXIOM_PROJECT_ROOT (or an explicit
+ * deps.root), so ordinary `axiom` runs are unaffected. When anchored:
+ *
+ *  - `bash` (input.command) and `ipython` (input.code) are scanned for
+ *    literal path tokens; tokens outside the project root block the call
+ *    with a plain-English reason, unless they match the default infra
+ *    allowlist, an operator allow prefix, or an approved grant.
+ *  - `request_root_access` is registered: the model files a plain-English
+ *    request for outside paths and WAITS (polling, abortable) for the
+ *    operator's decision via `axiom root-guard approve|reject <id>`. An
+ *    approval records a grant that unblocks later calls to those paths.
+ *  - Every block, request, decision, grant, and grant-use is audited to an
+ *    append-only JSONL — an outside path is never silently allowed.
+ *
+ * The `edit` tool stays with the workspace guard (ADR-0018), which gains the
+ * same allow prefixes and grants so an approved escape also unblocks edits.
+ *
+ * Configuration:
+ *  - AXIOM_ROOT_GUARD_ALLOW            comma-separated extra allow prefixes
+ *  - AXIOM_ROOT_GUARD_DENY             comma-separated deny prefixes (win)
+ *  - AXIOM_ROOT_GUARD_STRICT=1         drop the default infra allowlist
+ *  - AXIOM_ROOT_GUARD_STATE_DIR        approval state root (default axiom home)
+ *  - AXIOM_ROOT_GUARD_APPROVAL_TIMEOUT_MS  approval wait budget (default 5 min)
+ */
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
+import { type Static, Type } from "typebox";
+import type { ExtensionAPI } from "../../core/extensions/types.js";
+import { extractCandidatePaths } from "../../core/root-guard/paths.js";
+import { checkPathScope, isWithinPath, toAbsolutePath } from "../../core/root-guard/scope.js";
+import {
+	type AuditEvent,
+	appendAudit,
+	appendGrant,
+	fileRequest,
+	listGrantPrefixes,
+	readDecision,
+	resolveScopeDir,
+} from "../../core/root-guard/store.js";
+import { axiomHome } from "../profile/registry.js";
+
+/** Parse a comma-separated env list, trimming empties; undefined when unset. */
+function envList(value: string | undefined): string[] | undefined {
+	if (!value || value.length === 0) return undefined;
+	return value
+		.split(",")
+		.map((s) => s.trim())
+		.filter((s) => s.length > 0);
+}
+
+/**
+ * The default infra allowlist: OS read surfaces, scratch, and the agent's own
+ * homes — the same surfaces ADR-0019 keeps visible. Deliberately NOT home
+ * data (Documents, other projects, .ssh/.aws/.gnupg/.netrc, dotfiles), /var,
+ * /mnt, /media, /srv, or other users' homes. This is a drift guard, not a
+ * sandbox: AXIOM_ROOT_GUARD_STRICT=1 drops this set for pure block-by-default.
+ */
+export function DEFAULT_ALLOW_PREFIXES(home: string, axiomHomeDir: string): string[] {
+	return [
+		"/proc",
+		"/sys",
+		"/dev",
+		"/run",
+		"/tmp",
+		"/usr",
+		"/bin",
+		"/lib",
+		"/lib64",
+		"/etc",
+		"/opt",
+		"/sbin",
+		axiomHomeDir,
+		join(home, ".local"),
+		join(home, ".config"),
+		join(home, ".cache"),
+	];
+}
+
+export interface RootGuardOptions {
+	/** Explicit project root (tests). Defaults to process.env.AXIOM_PROJECT_ROOT. */
+	root?: string;
+	/**
+	 * Base for resolving relative paths (tests). Defaults to the project root:
+	 * the ipython kernel can `%cd` elsewhere, so process.cwd() is not the
+	 * invariant — the anchored root is.
+	 */
+	cwd?: string;
+	/** Approval state root (tests). Defaults to AXIOM_ROOT_GUARD_STATE_DIR or the axiom home. */
+	stateDir?: string;
+	/** Home used for `~` expansion and the default allowlist. Defaults to the process home. */
+	home?: string;
+	/** Extra allow prefixes. Defaults to AXIOM_ROOT_GUARD_ALLOW plus the infra set. */
+	allowPrefixes?: readonly string[];
+	/** Deny prefixes (win over allows, even inside the root). Defaults to AXIOM_ROOT_GUARD_DENY. */
+	denyPrefixes?: readonly string[];
+	/** Include the default infra allowlist (default true; false = strict mode). */
+	includeDefaults?: boolean;
+	/** Approval wait budget in ms (default 300000). */
+	approvalTimeoutMs?: number;
+	/** Approval poll interval in ms (default 500). */
+	pollMs?: number;
+}
+
+/** Shell text from a tool-call input, or undefined for non-shell tools. */
+function shellText(toolName: string, input: unknown): string | undefined {
+	if (typeof input !== "object" || input === null) return undefined;
+	const record = input as Record<string, unknown>;
+	if (toolName === "bash") {
+		const command = record.command;
+		return typeof command === "string" ? command : undefined;
+	}
+	if (toolName === "ipython") {
+		const code = record.code;
+		return typeof code === "string" ? code : undefined;
+	}
+	return undefined;
+}
+
+function sleepMs(ms: number, signal: AbortSignal | undefined): Promise<void> {
+	return new Promise((done) => {
+		if (signal?.aborted) {
+			done();
+			return;
+		}
+		const timer = setTimeout(done, ms);
+		signal?.addEventListener(
+			"abort",
+			() => {
+				clearTimeout(timer);
+				done();
+			},
+			{ once: true },
+		);
+	});
+}
+
+const RequestAccessSchema = Type.Object({
+	paths: Type.Array(Type.String(), { minItems: 1 }),
+	reason: Type.String(),
+});
+type RequestAccessParams = Static<typeof RequestAccessSchema>;
+
+/**
+ * Build the root-guard extension. Returns a factory `(pi) => void`; when no
+ * project root is configured the factory is a no-op (inert), keeping the
+ * blast radius to anchored gateway/project runs.
+ */
+export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionAPI) => void {
+	return (pi) => {
+		const rawRoot = options.root ?? process.env.AXIOM_PROJECT_ROOT;
+		if (!rawRoot) return; // inert unless a project root is anchored
+		const cwd = options.cwd ?? rawRoot;
+		const home = options.home ?? homedir();
+		const stateDir = options.stateDir ?? process.env.AXIOM_ROOT_GUARD_STATE_DIR ?? join(axiomHome(), "root-guard");
+		const includeDefaults = options.includeDefaults ?? process.env.AXIOM_ROOT_GUARD_STRICT !== "1";
+		const allowPrefixes = options.allowPrefixes ?? [
+			...(envList(process.env.AXIOM_ROOT_GUARD_ALLOW) ?? []),
+			...(includeDefaults ? DEFAULT_ALLOW_PREFIXES(home, axiomHome()) : []),
+		];
+		const denyPrefixes = options.denyPrefixes ?? envList(process.env.AXIOM_ROOT_GUARD_DENY) ?? [];
+		const envTimeout = Number.parseInt(process.env.AXIOM_ROOT_GUARD_APPROVAL_TIMEOUT_MS ?? "", 10);
+		const timeoutMs =
+			options.approvalTimeoutMs ?? (Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : 300000);
+		const pollMs = options.pollMs ?? 500;
+
+		pi.on("tool_call", async (event) => {
+			const text = shellText(event.toolName, event.input);
+			if (text === undefined) return undefined;
+			const tokens = extractCandidatePaths(text);
+			if (tokens.length === 0) return undefined;
+			const scope = await resolveScopeDir(stateDir, rawRoot);
+			const grants = await listGrantPrefixes(scope);
+			// Static policy first; when it blocks, grants are the recorded escape.
+			const decision = checkPathScope({
+				root: rawRoot,
+				cwd,
+				home,
+				paths: tokens,
+				allowPrefixes,
+				denyPrefixes,
+			});
+			if (!decision) return undefined;
+			const withGrants = checkPathScope({
+				root: rawRoot,
+				cwd,
+				home,
+				paths: tokens,
+				allowPrefixes: [...allowPrefixes, ...grants],
+				denyPrefixes,
+			});
+			if (!withGrants) {
+				await appendAudit(scope, { event: "grant-use", tool: event.toolName, paths: decision.paths });
+				return undefined;
+			}
+			await appendAudit(scope, { event: "block", tool: event.toolName, paths: decision.paths });
+			return { block: true, reason: decision.reason };
+		});
+
+		pi.registerTool({
+			name: "request_root_access",
+			label: "Request root access",
+			description:
+				"Request operator approval to touch paths outside this project's root. The root guard " +
+				"blocks outside paths by default; when a bash or ipython call is blocked, call this tool " +
+				"with the blocked paths and a short plain-English reason. The operator approves or " +
+				"rejects with 'axiom root-guard approve <id>' / 'axiom root-guard reject <id>'. This tool " +
+				"waits for the decision (up to a few minutes) and reports the outcome. An approval " +
+				"applies to later calls automatically — retry the blocked call afterwards.",
+			promptGuidelines: [
+				"When a bash or ipython call is blocked by the root guard, do not reword around the " +
+					"block. Call request_root_access with the exact blocked paths and a plain-English " +
+					"reason, and relay the request id to the operator if the wait times out.",
+			],
+			parameters: RequestAccessSchema,
+			execute: async (_toolCallId, params: RequestAccessParams, signal, _onUpdate, _ctx) => {
+				const scope = await resolveScopeDir(stateDir, rawRoot);
+				const rootAbs = resolve(rawRoot);
+				const outside = params.paths
+					.map((p) => resolve(toAbsolutePath(p, cwd, home)))
+					.filter((p) => !isWithinPath(rootAbs, p));
+				if (outside.length === 0) {
+					return {
+						content: [
+							{
+								type: "text",
+								text:
+									"All requested paths are already inside the project root — no approval is " +
+									"needed. Just run the command.",
+							},
+						],
+						details: null,
+					};
+				}
+				// A deny prefix can never be overridden by a grant: refuse those
+				// paths outright instead of filing a request the guard would ignore.
+				const deniedByOperator = outside.filter((p) =>
+					denyPrefixes.some((d) => {
+						const norm = resolve(toAbsolutePath(d, cwd, home));
+						return norm === p || isWithinPath(norm, p);
+					}),
+				);
+				const requestable = outside.filter((p) => !deniedByOperator.includes(p));
+				if (requestable.length === 0) {
+					return {
+						content: [
+							{
+								type: "text",
+								text:
+									"The operator permanently denied these paths (AXIOM_ROOT_GUARD_DENY): " +
+									`${outside.join(", ")}. Do not request them again — find another way.`,
+							},
+						],
+						details: null,
+					};
+				}
+				const { id } = await fileRequest(scope, { paths: requestable, reason: params.reason });
+				await appendAudit(scope, { event: "request", id, paths: requestable, reason: params.reason });
+				const deadline = Date.now() + timeoutMs;
+				for (;;) {
+					const decision = await readDecision(scope, id);
+					if (decision) {
+						if (decision.approved) {
+							await appendGrant(scope, { id, prefixes: requestable, reason: params.reason });
+							await appendAudit(scope, { event: "grant", id, prefixes: requestable });
+							return {
+								content: [
+									{
+										type: "text",
+										text:
+											`The operator approved request ${id} for: ${requestable.join(", ")}. ` +
+											"Retry the blocked call now — the guard allows these paths.",
+									},
+								],
+								details: null,
+							};
+						}
+						await appendAudit(scope, { event: "decision", id, approved: false });
+						return {
+							content: [
+								{
+									type: "text",
+									text:
+										`The operator rejected request ${id}. Do not touch these paths: ` +
+										`${requestable.join(", ")}. Find another way or stop.`,
+								},
+							],
+							details: null,
+						};
+					}
+					if (signal?.aborted) {
+						return {
+							content: [
+								{
+									type: "text",
+									text:
+										`Request ${id} is still pending (the run was interrupted). The operator can ` +
+										`still decide with 'axiom root-guard approve ${id}' or ` +
+										`'axiom root-guard reject ${id}'; an approval applies to later calls.`,
+								},
+							],
+							details: null,
+						};
+					}
+					if (Date.now() >= deadline) {
+						return {
+							content: [
+								{
+									type: "text",
+									text:
+										`Request ${id} is still pending after ${timeoutMs}ms. Tell the operator: ` +
+										`'axiom root-guard approve ${id}' to allow these paths (${requestable.join(", ")}) ` +
+										"or 'axiom root-guard reject <id>' to deny. An approval applies to later " +
+										"calls automatically — retry the blocked call after it.",
+								},
+							],
+							details: null,
+						};
+					}
+					await sleepMs(pollMs, signal);
+				}
+			},
+		});
+	};
+}
+
+export default function axiomRootGuardExtension(pi: ExtensionAPI): void {
+	createRootGuard()(pi);
+}
+
+export type { AuditEvent };
