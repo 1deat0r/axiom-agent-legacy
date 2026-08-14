@@ -1239,8 +1239,13 @@ export async function main(args: string[], options?: MainOptions) {
 		console.error(chalk.red("Error: PI_STARTUP_BENCHMARK only supports interactive mode"));
 		process.exit(1);
 	}
-	// Programmatic factories are process-local functions and cannot be serialized to a daemon worker.
-	const hasProcessLocalExtensionFactories = extensionFactories.length > 0;
+	// Programmatic factories are process-local functions and cannot be
+	// serialized to a daemon worker. The BUILT-IN extensions are not counted:
+	// they are static imports the daemon worker loads on its own, so folding
+	// them in here (the fork's original port) made the daemon path
+	// unreachable for every CLI run (hasProcessLocalExtensionFactories was
+	// always true) and silently ran everything in-process.
+	const hasProcessLocalExtensionFactories = (options?.extensionFactories?.length ?? 0) > 0;
 	const useDaemonClient = shouldUseDaemonClientRuntime({
 		appMode,
 		startupBenchmark,

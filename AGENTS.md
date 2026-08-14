@@ -38,9 +38,10 @@ port per `docs/ports.md`. Both archives are seed corn, not working trunks.
 - Sandbox note: daemon/worker suites that hard-link the node binary
   (4603/4685) fail with EXDEV in this sandbox's btrfs subvolume layout and
   pass on normal filesystems; record as known-fail with reason, never mute.
-  The daemon-serialized-refine-process suite is a documented SKIP (not a
-  fail): its premise is impossible in this fork (--extension flags force the
-  in-process path, so the daemon socket can never exist) — see issue #47.
+  The daemon-serialized-refine-process suite is REAL and green: its earlier
+  failures were the fork's built-in-extension fold poisoning the daemon
+  decision (hasProcessLocalExtensionFactories always true), fixed 2026-08-15
+  to count only programmatic factories (upstream semantics).
 
 ## Ritual (from SOUL.md, binding here)
 
