@@ -1,4 +1,5 @@
 import { rgbTo256 } from "@earendil-works/pi-tui";
+import chalk from "chalk";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	getMarkdownTheme,
@@ -12,6 +13,17 @@ const DARK_THEME_PATH = new URL("../src/modes/interactive/theme/dark.json", impo
 function useThemeMode(mode: "truecolor" | "256color"): void {
 	setThemeInstance(loadThemeFromPath(DARK_THEME_PATH, mode));
 }
+
+// The theme's bold/italic/underline go through chalk, which is env-gated:
+// on CI (no TTY, no FORCE_COLOR) chalk.level is 0 and every style is a
+// no-op, so SGR-composition assertions would fail despite correct code.
+const PREVIOUS_CHALK_LEVEL = chalk.level;
+beforeEach(() => {
+	chalk.level = 3;
+});
+afterEach(() => {
+	chalk.level = PREVIOUS_CHALK_LEVEL;
+});
 
 describe("roleHex", () => {
 	it("returns the exact hex for each role", () => {
