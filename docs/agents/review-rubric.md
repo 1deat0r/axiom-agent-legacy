@@ -1,50 +1,46 @@
-# Review rubric
+# Merge gates (eval-first)
 
-This file is the single source of truth for merge-gate reviews. The old
-numeric rubric (Spec 4 / Quality 3 / Verification honesty 2 / Discipline 1,
-approve >= 9.5) is retired: it rewarded spec compliance over spec quality,
-rewarded honest disclosure of untested paths instead of closing them, and
-its scores inflated. Reviews now use risk classes and hard gates.
+This file is the single source of truth for merge-gate reviews. It
+replaces the numeric rubric (retired 2026-08-14) and the risk-classed
+rubric (same day, superseded by this file).
+
+Sources: OWASP AI Agent Security Cheat Sheet (2026), Anthropic
+"Demystifying evals for AI agents" (Jan 2026), LLM-as-judge research
+(CodeJudgeBench and the LLM-as-a-judge survey).
+
+## Principles
+
+1. Evals are the gate. Every issue ships an executable eval: test files
+   whose assertions encode the acceptance criteria and FAIL on the code
+   before the change. The agent develops red-first against the eval.
+   Merge requires: the eval green, the full ./test.sh floor clean except
+   the documented sandbox known-fail allowlist, biome clean, tsgo clean.
+2. LLM review is advisory. A reviewer may be asked for spec-quality
+   critique, cross-cutting concerns, and claim spot-checks. It never
+   issues a score and its verdict is never the authority for merging.
+3. S-class changes ship a threat corpus. The issue must name at least
+   five attack cases that fail on the old code (bypasses, forgeries,
+   races). Red-team runs exist to add cases to the corpus; their
+   findings become permanent tests. A one-off red-team report gates
+   nothing by itself.
+4. Multi-agent fan-out is isolated. Each child agent gets its own agent
+   dir, its own kernel venv, no shared mutable auth files, and a budget
+   cap. OWASP names cascading failures and denial-of-wallet as top agent
+   risks; shared auth.json and shared venvs are how they happen here.
+5. Humans gate high-impact actions only. Live wiring, security-posture
+   changes, and irreversible actions need operator sign-off. This is the
+   OWASP human-in-the-loop rule, not a review step.
 
 ## Risk classes
 
-Assign one class per change, stated in the review brief:
+- S — security surface: path confinement, URL/DNS gates, sandboxing,
+  transport receive, credential handling. Needs the threat corpus.
+- A — core correctness: runtime, token accounting, cost ledger, session
+  state. Needs a real-environment run of the core path in the eval.
+- B — docs and tooling: audits, issue tooling, workflows.
 
-- **S — security surface.** Path confinement, URL/DNS gates, sandboxing,
-  transport receive, credential handling, anything on the tool-call seam.
-- **A — core correctness.** Persistent runtime, token accounting, cost
-  ledger, session state, gateway completion.
-- **B — docs and tooling.** Audits, issue tooling, workflows, docs.
+## Close ritual (unchanged)
 
-## Axes (PASS/FAIL each, no aggregate score)
-
-1. Spec quality. The issue's acceptance criteria must be sufficient for the
-   risk class. The reviewer challenges the spec itself; a spec gap is a
-   finding even when the code matches.
-2. Implementation. Purity, error handling, repo conventions (AGENTS.md),
-   no `any`, erasable TS, `.js` specifiers.
-3. Adversarial verification. The reviewer attacks the change: S-class gets
-   bypass and forgery attempts (path escapes, marker forgery, allowlist
-   holes, timeout races), A-class gets mutation and injection cases. The
-   reviewer runs the attacks, not just reads the code. Mock-only
-   verification of the core mechanism = BLOCK for S, and for A it must be
-   compensated by a real-environment run of the core path.
-4. Evidence honesty. Every claim in the agent report must be reproducible.
-   An overclaim is a blocker, not a nit.
-5. Discipline. Red-first tests, one ADR, one handoff, issue rituals,
-   no stray files.
-
-## Merge gates
-
-- Zero blockers, every axis PASS.
-- S-class extra gate: the ADR carries a threat-model paragraph naming what
-  the change defends against and what it deliberately does not defend.
-- S-class extra gate: live wiring or operator sign-off stays with the
-  operator; no reviewer can substitute for it.
-- Any S-class change that merged under the old rubric gets an adversarial
-  re-pass at the next opportunity; findings become follow-up fixes.
-
-## Reviewer rules
-
-Reviewers stay read-only. They run the suites and their own attack cases.
-The verdict file is the only channel back to the parent.
+One capability, one ADR, one handoff. The audit comment on issue close
+links the merge commit, the ADR, and the handoff, and states what was
+verified and how (unit / real-environment / operator).
