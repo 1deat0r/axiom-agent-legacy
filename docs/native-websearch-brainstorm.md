@@ -1,6 +1,6 @@
 # Native web search core tool - brainstorm
 
-Status: round 1 open. Date: 2026-08-15.
+Status: round 2 open. Date: 2026-08-15.
 Worktree: /tmp/axiom-worktrees/native-websearch. Branch: feat/native-websearch.
 
 ## Facts found by the agent
@@ -21,6 +21,17 @@ Worktree: /tmp/axiom-worktrees/native-websearch. Branch: feat/native-websearch.
   key bundledSkills.websearch (default true).
 - Core tools use a factory pattern: createXTool plus createXToolDefinition,
   typed as AgentTool. Location: packages/coding-agent/src/core/tools/.
+  The sdk wires them (sdk.ts exports createReadTool, createWriteTool).
+- Settings already carry enabledTools and disabledTools lists. These control
+  tool availability.
+- The security fence lives in packages/coding-agent/src/extensions/security/
+  url.ts (ADR-0028, ADR-0057, ADR-0066). checkUrlSafetyPinned(url, options)
+  returns a block verdict or an allow verdict with a pinned DNS resolution.
+  A gate-owned fetchPinned connects to the pinned addresses with the original
+  Host header. Private, loopback, and link-local addresses block by default.
+- The MCP client lives in packages/coding-agent/src/core/mcp/mcp-manager.ts.
+  It is the natural seam for the Obscura fallback hop.
+- Precedent for direct node fetch exists in core/model-registry.ts.
 - ADR allocation rule (ADR-0071): reserve the lowest free number in the issue
   title at create time. Verify at merge. Open issues #48 and #49 hold
   ADR-0072 and ADR-0073. Next free number: ADR-0074.
@@ -37,58 +48,80 @@ Worktree: /tmp/axiom-worktrees/native-websearch. Branch: feat/native-websearch.
 Root decision: do we build a native, keyless web search core tool that beats
 the Obscura path on every metric?
 
-Round 1 (frontier, open):
-- Q1 premise: confirm the goal and the reading of meta-free.
-- Q2 metric order: strict all-metrics bar, or a ranked order.
-- Q3 scope: search only, search plus fetch, or search plus fetch plus browse.
-- Q4 replacement policy: what happens to the Obscura and Serper skills.
-- Q5 search backend: direct scrape, self-hosted SearXNG, or the Obscura API.
+Round 1 (settled, user approved all recommendations):
+- Q1 premise: yes. Native core tool. Keyless. Self-contained.
+- Q2 metric order: ranked. Latency and token cost lead. Quality and
+  freshness must equal Obscura. Keyless and testable stay hard.
+- Q3 scope: (b) search and fetch. Two tools: web_search and web_fetch.
+  Browser control stays in Obscura.
+- Q4 replacement: (a) native first. Obscura keeps browser control and acts
+  as the fetch fallback for hard pages. Serper stays optional.
+- Q5 search backend: (a) direct scrape of DuckDuckGo HTML and Bing. Fall
+  back to Obscura when a page yields no results.
 
-Round 2 (after round 1): tool shape and location (core tool vs extension,
-one tool vs two, result schema), fetch backend, safety (reuse of the SSRF
-guard, egress allowlist), config surface (settings keys, env vars), caching,
-rate limits, polite crawl behavior.
+Round 2 (frontier, open):
+- Q6 location and names: core tool registry vs built-in extension.
+- Q7 result schema: compact blocks, caps, date field.
+- Q8 safety: gate every fetch through checkUrlSafetyPinned plus fetchPinned.
+- Q9 config surface: settings keys and env vars, no collision with Serper.
+- Q10 cache and rate limits: in-run cache, per-engine spacing, user agent.
+- Q11 fallback chain: DuckDuckGo, Bing, Obscura MCP, error with reason.
 
 Round 3 (after round 2): verification. Recorded fixtures vs live tests.
 S-class threat corpus. ADR plus CONTEXT.md term plus issue with readiness
 contract.
 
-## Round 1 questions
+## Round 2 questions
 
-Q1 Premise.
-Build a native web search tool in the Axiom core. It must beat the Obscura
-path on every metric: latency, result quality, freshness, token cost,
-reliability, and testability. Reading of meta-free: no API key, no service we
-host or pay for, no separate binary. The tool is self-contained in the core.
-Recommend: yes. Native core tool. Keyless. Self-contained.
+Q6 Location and names.
+Put the two tools in the core tool registry at
+packages/coding-agent/src/core/tools/ (web-search.ts, web-fetch.ts) with the
+same factory pattern as read and write: createWebSearchTool plus
+createWebSearchToolDefinition, createWebFetchTool plus
+createWebFetchToolDefinition. Wire them in sdk.ts. The existing settings
+lists enabledTools and disabledTools then control them. The other option is
+a built-in extension (src/extensions/web) like peers and git-guard.
+Recommend: core tools. Web access is a first-class agent capability, same
+class as read and write. Extensions are for opt-in or anchored features.
 
-Q2 Metric order.
-The strict bar is every metric. If strict, all six metrics are hard
-requirements and the design must prove each one. If ranked, latency and token
-cost lead. Quality and freshness must at least equal Obscura. Keyless and
-testable stay hard requirements.
-Recommend: ranked. Latency and token cost lead. Parity for quality and
-freshness. Keyless and testable stay hard.
+Q7 Result schema.
+web_search returns one compact JSON block: [{rank, title, url, snippet,
+date}]. Caps: snippet 200 chars, results 10 max, default 5. web_fetch
+returns {url, title, content}. Content is markdown. Default cap 20000 chars.
+Both tools truncate hard. They never dump raw HTML. The date field appears
+only when the engine provides one.
+Recommend: yes, those caps. The caps are the token-cost win.
 
-Q3 Scope.
-(a) search only. (b) search and fetch. (c) search, fetch, and full browser
-control. Option (c) keeps a browser role for Obscura.
-Recommend: (b). Two tools: web_search and web_fetch. Browser control stays in
-Obscura.
+Q8 Safety.
+web_fetch pushes every URL through checkUrlSafetyPinned from
+extensions/security/url.ts and connects with the gate-owned fetchPinned.
+That keeps the ADR-0057 DNS checks and the ADR-0066 rebind pinning. Private
+and loopback addresses stay blocked by default, same as Obscura. web_search
+fetches only the fixed engine hosts, also through the gate. No domain
+allowlist in v1. The open web is the point.
+Recommend: yes. Gate every fetch, search included.
 
-Q4 Replacement policy.
-(a) native first. Obscura keeps browser control and acts as the fetch
-fallback for hard pages. Serper stays optional. (b) native replaces Obscura
-search fully and Serper is removed. (c) coexist with no priority change.
-Recommend: (a). The native tool becomes the first choice for search and plain
-fetch. Obscura stays for browser automation and hard-page fetch. Serper stays
-optional for users who hold a key.
+Q9 Config surface.
+Settings plus env vars. The names AXIOM_WEBSEARCH_TIMEOUT and
+AXIOM_WEBSEARCH_NUM_RESULTS already belong to the Serper skill. The native
+tool must not reuse them. New names: AXIOM_WEBSEARCH_TIMEOUT_MS,
+AXIOM_WEBSEARCH_MAX_RESULTS, AXIOM_WEBFETCH_MAX_CHARS. Timeout defaults:
+search 8 seconds, fetch 15 seconds. Settings keys mirror them under
+webSearch and webFetch.
+Recommend: yes, new names. Serper keeps its legacy pair. The ADR documents
+the split.
 
-Q5 Search backend.
-(a) direct scrape of DuckDuckGo HTML and Bing with native HTTP. No key. No
-binary. Fastest. Engine markup changes can break it. (b) self-hosted
-SearXNG. Stable JSON. Aggregates many engines. Needs a host we run and
-maintain. (c) call the local Obscura MCP search from the core tool. Stable.
-Still depends on the Obscura binary, so it is not truly native.
-Recommend: (a). Scrape first. Fall back to Obscura when a page yields no
-results. The fallback path covers the markup risk.
+Q10 Cache and rate limits.
+Cache in-run only. The same query in one turn returns the cached result. No
+disk cache in v1. Per-engine spacing: at least one second between requests
+to the same engine host. Honest user agent: Axiom/<version>. robots.txt for
+web_fetch: defer to a follow-up issue.
+Recommend: yes.
+
+Q11 Fallback chain.
+web_search scrapes DuckDuckGo html first, then Bing, then calls the local
+Obscura MCP search through core/mcp/mcp-manager.ts when both yield no
+results. web_fetch uses the native parser first and falls back to Obscura
+only for pages the parser cannot read (JS-only pages). When all hops fail,
+the tool returns an error with the reason.
+Recommend: yes.
