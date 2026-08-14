@@ -1,4 +1,5 @@
 import { Marked, type Token, Tokenizer, type TokenizerExtension, type Tokens } from "marked";
+import type { ColorDescriptor } from "../color-descriptor.js";
 import { latexToUnicode } from "../latex.js";
 import {
 	extractTableCellSelectionRegions,
@@ -165,6 +166,10 @@ export interface MarkdownTheme {
 	italic: (text: string) => string;
 	strikethrough: (text: string) => string;
 	underline: (text: string) => string;
+	/** Color a span foreground from a model color descriptor. */
+	colored?: (text: string, color: ColorDescriptor) => string;
+	/** Color a span background from a model color descriptor. */
+	backgrounded?: (text: string, color: ColorDescriptor) => string;
 	highlightCode?: (code: string, lang?: string) => string[];
 	/** Prefix applied to each rendered code block line (default: "  ") */
 	codeBlockIndent?: string;

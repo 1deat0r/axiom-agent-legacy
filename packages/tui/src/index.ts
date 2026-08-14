@@ -27,6 +27,14 @@ export { type SettingItem, SettingsList, type SettingsListTheme } from "./compon
 export { Spacer } from "./components/spacer.js";
 export { Text } from "./components/text.js";
 export { TruncatedText } from "./components/truncated-text.js";
+// Model-facing color descriptors (markdown pseudo-link extension)
+export {
+	type ColorDescriptor,
+	parseColorDescriptor,
+	parseHexLiteral,
+	ROLE_NAMES,
+	type RoleName,
+} from "./color-descriptor.js";
 // Editor component interface (for custom editors)
 export type { EditorComponent, EditorPasteSnapshot } from "./editor-component.js";
 // Fullscreen (alternate-screen) viewport
