@@ -237,12 +237,16 @@ guard and inert unless anchored: a URL-safe fetch gate (blocks malformed,
 non-http(s), credential-bearing, and SSRF-prone URLs — loopback/private/link-
 local/ULA/v4-mapped/IPv4-compatible host literals, loopback-patterned hostnames, and, since
 ADR-0057, named http(s) hosts whose resolved A/AAAA addresses are private;
-resolution failures fail closed) plus a sensitive-tool fence (a configurable
-approved-tool ladder, opt-in, escaped via `AXIOM_FENCE_ALLOW`/
-`AXIOM_FENCE_ALLOW_HOSTS`; allowlisted hosts skip DNS). Freeform `bash`/`ipython`
-stay the ADR-0019 OS-sandbox tier, never string-fenced.
+resolution failures fail closed; since ADR-0066 the gate re-resolves at
+connect time and re-checks, and the gate-owned `fetchPinned` connects to the
+checked addresses with the original Host header, re-gating every redirect
+hop) plus a sensitive-tool fence (a configurable approved-tool ladder,
+opt-in, escaped via `AXIOM_FENCE_ALLOW`/`AXIOM_FENCE_ALLOW_HOSTS`;
+allowlisted hosts skip DNS). Freeform `bash`/`ipython` stay the ADR-0019
+OS-sandbox tier, never string-fenced.
 _Avoid_: Firewall (a wall, not a fence — the fence is one rung of the ladder);
-DNS rebinding (point-in-time resolution is not rebinding defense)
+DNS rebinding outside the pinned path (a plain fetch elsewhere still resolves
+on its own)
 
 **Git guard**:
 The ADR-0049 rung-3 addition, on the same `tool_call` seam and inert unless
