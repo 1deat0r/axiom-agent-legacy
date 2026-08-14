@@ -11,16 +11,18 @@
  */
 
 import {
-	appendAudit,
 	appendGrantIfMissing,
+	appendSignedAudit,
+	defaultRootGuardStateDir,
 	listDecisions,
+	listGrantPrefixes,
 	listPending,
+	loadOrCreateKey,
 	readDecision,
 	readPending,
 	resolveScopeDir,
 	writeDecision,
 } from "../core/root-guard/store.js";
-import { axiomHome } from "../extensions/profile/registry.js";
 
 export const ROOT_GUARD_HELP = `axiom root-guard — approve or reject root-guard escape requests (ADR-0052)
 
@@ -33,12 +35,15 @@ flags:
   --root <path>       project root the request belongs to
                       (default: AXIOM_PROJECT_ROOT, then the current directory)
   --state-dir <path>  approval state root (default: AXIOM_ROOT_GUARD_STATE_DIR
-                      or the axiom home)
+                      or /var/lib/axiom-root-guard — operator-provisioned,
+                      never the axiom home)
   --json              machine-readable output (list)
   --help              this help
 
 State lives under <state-dir>/root-guard/<project-hash>/; nothing is written
-into the repo. Every decision lands in the append-only audit log.`;
+into the repo. Grants and decisions are HMAC-signed with a key the agent
+cannot reach (mode 0600 inside the scope dir); unsigned entries are ignored.
+Every decision lands in the signed audit log.`;
 
 /** Short age label for a millisecond timestamp. */
 function age(ts: number): string {
@@ -79,15 +84,20 @@ export async function handleRootGuardCommand(args: string[]): Promise<boolean> {
 	const positional = rest.filter((a, index) => !a.startsWith("--") && !consumed.has(index));
 	const sub = positional[0] ?? "list";
 	const root = valueAfter(rest, "--root") ?? process.env.AXIOM_PROJECT_ROOT ?? process.cwd();
-	const stateDir = valueAfter(rest, "--state-dir") ?? process.env.AXIOM_ROOT_GUARD_STATE_DIR ?? axiomHome();
+	const stateDir =
+		valueAfter(rest, "--state-dir") ?? process.env.AXIOM_ROOT_GUARD_STATE_DIR ?? defaultRootGuardStateDir();
 	const scope = await resolveScopeDir(stateDir, root);
+	// The CLI owns the signing key: it creates the key on first use (the
+	// guard never does), then signs every decision and grant it writes.
+	await loadOrCreateKey(scope);
 
 	switch (sub) {
 		case "list": {
 			const pending = await listPending(scope);
 			const decisions = await listDecisions(scope);
+			const grants = await listGrantPrefixes(scope);
 			if (json) {
-				console.log(JSON.stringify({ root, pending, decisions }, null, 2));
+				console.log(JSON.stringify({ root, pending, decisions, grants }, null, 2));
 				return true;
 			}
 			console.log(`root guard board — ${root}`);
@@ -97,9 +107,11 @@ export async function handleRootGuardCommand(args: string[]): Promise<boolean> {
 			}
 			for (const d of decisions.slice(0, 10)) {
 				console.log(
-					`${d.approved ? "APPROVED" : "REJECTED"}  ${d.id}  ${d.note ? `(${d.note}) ` : ""}(${age(d.decidedAt)})`,
+					`${d.verified ? "" : "UNVERIFIED "}${d.approved ? "APPROVED" : "REJECTED"}  ${d.id}  ` +
+						`${d.note ? `(${d.note}) ` : ""}(${age(d.decidedAt)})`,
 				);
 			}
+			if (grants.length > 0) console.log(`active grants: ${grants.join(", ")}`);
 			return true;
 		}
 		case "approve":
@@ -129,7 +141,7 @@ export async function handleRootGuardCommand(args: string[]): Promise<boolean> {
 				await appendGrantIfMissing(scope, { id, prefixes: request.paths, reason: request.reason });
 				console.log(`Approved ${id}: ${request.paths.join(", ")} — the guard now allows these paths.`);
 			} else {
-				await appendAudit(scope, { event: "decision", id, approved: false });
+				await appendSignedAudit(scope, { event: "decision", id, approved: false });
 				console.log(`Rejected ${id}.${note ? ` Note: ${note}` : ""}`);
 			}
 			return true;

@@ -62,6 +62,13 @@ const PATTERNS: readonly RegExp[] = [
 	new RegExp(BARE_DOTDOT, "g"),
 ];
 
+/**
+ * `file://` URIs name local files (curl prints them like any path). The
+ * scheme prefix swallows the absolute path from the ordinary patterns, so
+ * the path part is recovered here as a first-class token (red-team B6).
+ */
+const FILE_URI = /file:\/\/(\/[^\s'"`;|&<>()=,{}]+)/g;
+
 const LEADING_BOUNDARY = new RegExp(`^${BOUNDARY}`);
 
 /**
@@ -73,6 +80,13 @@ export function extractCandidatePaths(text: string): string[] {
 	const src = stripComments(text);
 	const out: string[] = [];
 	const seen = new Set<string>();
+	for (const m of src.matchAll(FILE_URI)) {
+		const token = m[1];
+		if (!seen.has(token)) {
+			seen.add(token);
+			out.push(token);
+		}
+	}
 	for (const pattern of PATTERNS) {
 		for (const m of src.matchAll(pattern)) {
 			const raw = m[0];

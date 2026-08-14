@@ -7,8 +7,10 @@ import { handleRootGuardCommand } from "../../src/cli/root-guard-command.js";
 import type { ExtensionAPI, ToolDefinition } from "../../src/core/extensions/types.js";
 import {
 	appendGrant,
+	defaultRootGuardStateDir,
 	listAudit,
 	listGrantPrefixes,
+	readDecision,
 	resolveScopeDir,
 	writeDecision,
 } from "../../src/core/root-guard/store.js";
@@ -314,27 +316,31 @@ describe("root guard extension (tool_call gate)", () => {
 });
 
 describe("default state layout (single root-guard segment)", () => {
-	it("lays state out as <axiom home>/root-guard/<rootHash>/", async () => {
+	it("lays state out as <stateDir>/root-guard/<rootHash>/", async () => {
 		const root = await makeRoot();
-		const home = await makeRoot();
-		const prevHome = process.env.AXIOM_HOME;
+		const state = await makeRoot();
 		try {
-			process.env.AXIOM_HOME = home;
 			const fake = fakePi();
-			createRootGuard({ root, cwd: root, home: HOME, approvalTimeoutMs: 5, pollMs: 5 })(fake.pi);
+			createRootGuard({ root, cwd: root, stateDir: state, home: HOME, approvalTimeoutMs: 5, pollMs: 5 })(fake.pi);
 			const tool = await approvalTool(fake);
 			const result = await runTool(tool, { paths: ["/srv/data"], reason: "layout" });
 			expect(textOf(result)).toMatch(/pending/i);
-			const hashDirs = await readdir(join(home, "root-guard"));
+			const hashDirs = await readdir(join(state, "root-guard"));
 			expect(hashDirs).toHaveLength(1);
-			const single = await pendingNames(join(home, "root-guard", hashDirs[0]));
+			const single = await pendingNames(join(state, "root-guard", hashDirs[0]));
 			expect(single).toHaveLength(1);
 		} finally {
-			if (prevHome === undefined) delete process.env.AXIOM_HOME;
-			else process.env.AXIOM_HOME = prevHome;
 			await rm(root, { recursive: true, force: true });
-			await rm(home, { recursive: true, force: true });
+			await rm(state, { recursive: true, force: true });
 		}
+	});
+
+	it("defaults the state dir OUTSIDE the operator's home (operator-owned)", () => {
+		// ADR-0052 hardening: the old default (the axiom home) was reachable
+		// through the guard's own seam (red-team B1). The new default is the
+		// operator-provisioned /var/lib/axiom-root-guard, never the axiom home.
+		expect(defaultRootGuardStateDir()).toBe("/var/lib/axiom-root-guard");
+		expect(defaultRootGuardStateDir()).not.toContain(HOME);
 	});
 });
 
@@ -438,7 +444,7 @@ describe("request_root_access tool (approval loop)", () => {
 		}
 	});
 
-	it("returns approved when the operator decides while the wait runs, and records the grant", async () => {
+	it("a signed decision alone grants nothing — the CLI owns the grant write", async () => {
 		const root = await makeRoot();
 		const state = await makeRoot();
 		try {
@@ -450,18 +456,24 @@ describe("request_root_access tool (approval loop)", () => {
 			const tool = await approvalTool(fake);
 			const running = runTool(tool, { paths: ["/srv/data"], reason: "need data" });
 			// approve as soon as the request file exists
+			let approvedId = "";
 			for (let i = 0; i < 200; i++) {
 				const names = await pendingNames(scope);
 				if (names.length > 0) {
-					const id = names[0].replace(/\.json$/, "");
-					await writeDecision(scope, id, { approved: true, note: "ok" });
+					approvedId = names[0].replace(/\.json$/, "");
+					await writeDecision(scope, approvedId, { approved: true, note: "ok" });
 					break;
 				}
 				await new Promise((r) => setTimeout(r, 10));
 			}
 			const text = textOf(await running);
 			expect(text).toMatch(/approved/i);
-			expect(await listGrantPrefixes(scope)).toEqual(["/srv/data"]);
+			// Hardening invariant: the decision is VERIFIED (signed by the CLI
+			// path — writeDecision signs), but only the CLI's approve command
+			// writes the signed grant. A decision without the CLI grant does
+			// not unblock the guard.
+			expect(await readDecision(scope, approvedId)).toMatchObject({ approved: true });
+			expect(await listGrantPrefixes(scope)).toEqual([]);
 		} finally {
 			await rm(root, { recursive: true, force: true });
 			await rm(state, { recursive: true, force: true });
