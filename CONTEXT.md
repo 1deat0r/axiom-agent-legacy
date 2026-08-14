@@ -100,7 +100,7 @@ so it cannot drift from the menu.
 _Avoid_: Static completion lists, generated scripts that go stale
 
 **Semantic color**:
-The model-facing markdown color contract (ADR-0050):
+The model-facing markdown color contract (ADR-0068):
 `[text](#role:NAME)` / `[text](#bg:NAME)` / `[text](#hex:RRGGBB)` /
 `[text](#hexbg:RRGGBB)` pseudo-links and standalone `#RRGGBB` swatches. The
 TUI renders them via `parseColorDescriptor`; every other surface strips the

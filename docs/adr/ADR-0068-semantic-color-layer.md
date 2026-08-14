@@ -1,4 +1,4 @@
-# ADR-0050: Semantic color layer (model-facing markdown color descriptors)
+# ADR-0068: Semantic color layer (model-facing markdown color descriptors)
 
 **Status:** accepted
 **Date:** 2026-08-14
