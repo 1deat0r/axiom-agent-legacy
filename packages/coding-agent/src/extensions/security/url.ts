@@ -9,8 +9,9 @@
  *  - malformed URLs,
  *  - non-http(s) schemes (file:, data:, javascript:, ftp:, gopher:, ...),
  *  - URLs embedding credentials (SSRF/credential-leak vector),
- *  - SSRF-prone host literals: loopback / private / link-local / ULA / v4-mapped
- *    IPv4+IPv6, and loopback-patterned hostnames (localhost, *.localhost, *.local),
+ *  - SSRF-prone host literals: loopback / private / link-local / ULA / v4-mapped /
+ *    IPv4-compatible (::/96) IPv4+IPv6, and loopback-patterned hostnames
+ *    (localhost, *.localhost, *.local),
  *  - named http(s) hosts whose resolved A/AAAA addresses are SSRF-prone
  *    (ADR-0057), and named http(s) hosts whose resolution FAILS — fail closed.
  *
@@ -143,6 +144,29 @@ function decodeHexV4(tail: string): string {
 		.join(".");
 }
 
+/** Expand a compressed IPv6 literal into its eight hextets, or undefined when unparseable. */
+function expandHextets(addr: string): number[] | undefined {
+	const halves = addr.split("::");
+	if (halves.length > 2) return undefined;
+	const left = halves[0] === "" ? [] : halves[0].split(":");
+	const right = halves.length === 2 && halves[1] !== "" ? halves[1].split(":") : [];
+	if (halves.length === 1) {
+		if (left.length !== 8) return undefined;
+	} else if (8 - left.length - right.length < 1) {
+		return undefined; // "::" must stand for at least one zero group
+	}
+	const groups =
+		halves.length === 1 ? left : [...left, ...new Array<string>(8 - left.length - right.length).fill("0"), ...right];
+	if (groups.length !== 8) return undefined;
+	if (!groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return undefined;
+	return groups.map((g) => Number.parseInt(g, 16));
+}
+
+/** Render two hextets as a dotted-quad IPv4 ("7f00", "0001" -> "127.0.0.1"). */
+function hextetsToV4(hi: number, lo: number): string {
+	return [(hi >> 8) & 0xff, hi & 0xff, (lo >> 8) & 0xff, lo & 0xff].join(".");
+}
+
 /** Extract a trailing dotted-quad from a v4-mapped IPv6 (e.g. "::ffff:192.168.1.1"). */
 function extractDottedV4(addr: string): string | undefined {
 	const m = /\d{1,3}(?:\.\d{1,3}){3}$/.exec(addr);
@@ -152,10 +176,33 @@ function extractDottedV4(addr: string): string | undefined {
 /** Classify an IPv6 literal against private/reserved ranges. */
 export function isPrivateIPv6(addr: string): boolean {
 	const s = normalizeHost(addr).split("%")[0]; // strip zone id (fe80::1%eth0)
-	// v4-mapped / v4-embedded with a dotted tail
+	// v4-mapped / v4-embedded with a dotted tail (::ffff:127.0.0.1)
 	const dotted = extractDottedV4(s);
 	if (dotted) return isPrivateIPv4(dotted);
-	// v4-mapped in pure hextet form (::ffff:c0a8:0101)
+	// exact hextet classification for the v4-embedded forms
+	const hextets = expandHextets(s);
+	if (hextets) {
+		const firstFiveZero = hextets.slice(0, 5).every((h) => h === 0);
+		// v4-mapped ::ffff:0:0/96 (0:0:0:0:0:ffff:x:y)
+		if (firstFiveZero && hextets[5] === 0xffff) {
+			return isPrivateIPv4(hextetsToV4(hextets[6], hextets[7]));
+		}
+		// ::ffff:0: prefix (0:0:0:0:ffff:0:x:y): the WHATWG URL parser rewrites
+		// "::ffff:0:a.b.c.d" into this shape, so the last two hextets are the
+		// embedded IPv4. The old decodeHexV4 misparsed this three-group tail as
+		// "0.0.1" and the gate allowed the form (red-team finding).
+		if (hextets.slice(0, 4).every((h) => h === 0) && hextets[4] === 0xffff && hextets[5] === 0) {
+			return isPrivateIPv4(hextetsToV4(hextets[6], hextets[7]));
+		}
+		// IPv4-compatible ::/96 (0:0:0:0:0:0:x:y): deprecated and reserved.
+		// BSD/Windows translate the tail to IPv4; classify the whole prefix as
+		// private for defense in depth (red-team finding: Linux alone leaves
+		// ::7f00:1 unreachable, other stacks reach the embedded loopback).
+		if (hextets.slice(0, 6).every((h) => h === 0)) return true;
+	}
+	// v4-mapped in pure hextet form for spellings the expander rejects
+	// (conservative fallback: over-blocks some public addresses, the safe
+	// direction, kept per the red-team cosmetic note)
 	const idx = s.indexOf("ffff:");
 	if (idx !== -1 && s.indexOf(".", idx) === -1) {
 		return isPrivateIPv4(decodeHexV4(s.slice(idx + 5)));

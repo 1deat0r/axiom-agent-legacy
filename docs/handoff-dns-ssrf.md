@@ -62,3 +62,31 @@ the name resolves to `10.0.0.5`.
   resolver uses node:dns with `{ all: true }` offline.
 - Not done (recorded follow-ups in ADR-0057): DNS rebinding mitigation, a caching
   layer, an always-on URL gate for non-anchored runs.
+
+## Follow-up — red-team fixes and S-class threat corpus (2026-08-14)
+
+The adversarial review of the merged gate (/tmp/axiom-worktrees/dns-ssrf-redteam.md)
+found two classifier bugs; this branch fixes both and ships the S-class threat
+corpus the merge-gate rubric requires (docs/agents/review-rubric.md section 3).
+
+- Fixed: the ::ffff:0: prefix form. The WHATWG URL parser rewrites
+  ::ffff:0:127.0.0.1 to ::ffff:0:7f00:1. decodeHexV4 misparsed the three-group
+  tail ("0:7f00:1" -> "0.0.1"), so the gate allowed the form. isPrivateIPv6 now
+  expands a compressed IPv6 into eight hextets and decodes the two hextets
+  after the ::ffff:0: prefix; a private embedded IPv4 blocks.
+- Fixed: IPv4-compatible ::/96. ::127.0.0.1 becomes ::7f00:1 after URL parsing;
+  the classifier had no ::/96 rule and allowed it. The whole ::/96 prefix is
+  now classified private for defense in depth (BSD/Windows translate the tail;
+  Linux does not today). No legitimate public address lives in the reserved
+  prefix, so the false-positive cost is zero.
+- Kept safe: every safe verdict from the report stays safe (v4-mapped forms,
+  weird literals, nip.io, mixed answers, empty results, timeout fail-closed,
+  allowlist exact-match). The known ffff: over-block for some public addresses
+  is preserved (safe direction).
+- New: test/extensions/security-attack-corpus.test.ts — 15 offline corpus cases
+  (each case: name, exact input from the report, expected verdict), with the
+  documented-exposure case below.
+- Left for #43: the DNS rebinding TOCTOU. The gate resolves once and the fetch
+  resolves again; nothing pins the answers. One corpus case asserts the current
+  single-resolution behavior with a pointer to #43 (ADR-0066); update it when
+  #43 ships.
