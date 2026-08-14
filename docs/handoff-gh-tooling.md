@@ -40,12 +40,25 @@ functions. Contract tests guard the workflow, the forms, and the vocabulary.
 
 ## Review
 
-An independent fresh-context reviewer scored the system. See
-/tmp/gh-tooling-review-1.md on the host (not in the repo).
+Reviewer 1 (fresh context, strict rubric): 8/10. Findings: the workflow had
+never run on the default branch, the close ritual had no enforcement, two
+closed issues carried no label, and the form role dropdown could not set
+labels. All four are fixed. Reviewer 2 runs after the fixes.
+
+## Live verification (post-merge)
+
+The workflow runs on main. Proof, end to end:
+
+- Issue #28 (deliberately unlabeled) opened. Within 15s the open job applied
+  needs-triage and posted the readiness contract. Closed with an audit
+  comment; the close job stayed silent.
+- Issue #29 (deliberately unlabeled) opened and closed without an audit
+  comment. Within 30s the close job posted the reminder. After the audit
+  comment landed, no second reminder.
+- The live label set matches the vocabulary: exactly ten labels. Every open
+  and closed issue carries a role label. The six most recent closes carry
+  backfilled audit comments.
 
 ## What remains
 
-- Live end-to-end proof of the triage workflow: file a deliberately unlabeled
-  issue after merge and watch the action apply needs-triage and post the
-  contract.
 - Optional: the same treatment for PRs if the PR-triage flag flips to yes.
