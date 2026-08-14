@@ -66,4 +66,10 @@ describe("role guidance", () => {
 		expect(text).not.toContain("Triage role");
 		expect(text).toContain("pre-applies");
 	});
+
+	it("the bug form says the form itself pre-applies needs-triage", () => {
+		const text = read("bug-report.yml");
+		expect(text).toContain("pre-applies");
+		expect(text).not.toContain("The triage workflow applies");
+	});
 });

@@ -47,7 +47,7 @@ For a multi-line body, write the body to a file and pass `--body-file`.
 
 - **Create an issue**: `gh issue create --label <role> --title "..." --body "..."`. Use a heredoc or `--body-file` for multi-line bodies.
 - **Read an issue**: `gh issue view <number> --comments`. Use `jq` to filter the comments and fetch the labels.
-- **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
+- **List issues**: `gh issue list --state open --limit 100 --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters. The default page size is 30; pass `--limit` or `--paginate` for older issues.
 - **Comment on an issue**: `gh issue comment <number> --body "..."`
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
 - **Close**: `gh issue close <number> --comment "..."`
@@ -77,6 +77,16 @@ Verified: <what you ran and what passed>
 EOF
 )"
 gh issue close <number>
+```
+
+A close with no code (a bookkeeping close, a superseded plan, a self-test)
+uses the not-applicable form. State the reason. Never leave a line blank:
+
+```
+Commit: not required (<reason>)
+ADR: docs/adr/00XX-<slug>.md (or: not required (<reason>))
+Handoff: not required (<reason>)
+Verified: <what you checked and what you found>
 ```
 
 The audit comment is the trail from issue to code to decision to proof. Do not

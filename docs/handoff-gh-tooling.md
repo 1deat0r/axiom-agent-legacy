@@ -59,6 +59,25 @@ The workflow runs on main. Proof, end to end:
   and closed issue carries a role label. The six most recent closes carry
   backfilled audit comments.
 
+## Wave 4 (reviewer 3)
+
+Reviewer 3 scored 8.5. The findings were narrow. All are fixed:
+
+- Issue #13 closed post-ADR without an audit comment. The close job nudged
+  it. The audit comment now lands with the not-applicable form. The close
+  ritual template now defines that form (Commit: not required, with a
+  reason). The drift check returns exactly the 13 legacy closes.
+- The bug form wording now says the form pre-applies needs-triage. The
+  wording test guards both forms.
+- The drift and list commands carry --limit 100. The drift note explains the
+  two groups (legacy exempt, post-ADR violations).
+- The ADR records the three chosen boundaries: marker check not substance
+  check, label check not body check, one reminder per close.
+
+45 tests green. Live proof stands on issues #13, #27, #28, #29.
+
 ## What remains
 
 - Optional: the same treatment for PRs if the PR-triage flag flips to yes.
+- Optional: a scheduled drift-sweep workflow, if unanswered nudges become a
+  pattern.

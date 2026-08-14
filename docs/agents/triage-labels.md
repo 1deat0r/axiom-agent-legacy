@@ -76,9 +76,14 @@ Closed issues from ADR-0050 onward must carry an audit comment. List the ones
 that do not:
 
 ```
-gh issue list --state closed --json number,comments \
+gh issue list --state closed --limit 100 --json number,comments \
   --jq '[.[] | select((.comments | map(.body // "") | any(contains("Commit:") and contains("ADR:") and contains("Handoff:"))) | not) | .number]'
 ```
+
+The list mixes two groups. Closes before 2026-08-14 are the 13 legacy
+closes and are exempt. Closes from that date onward must carry an audit
+comment; each one in the list that is not legacy is a live violation. Check
+the close date with `gh issue view <number> --json closedAt`.
 
 The contract tests in packages/coding-agent/test/gh-tooling/ guard the
 templates and the workflow against the same vocabulary.
