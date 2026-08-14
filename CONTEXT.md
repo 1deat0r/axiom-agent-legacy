@@ -98,13 +98,16 @@ not a token limit)
 **Session token meter**:
 The gateway's estimate of the model-facing surface of a channel session
 (`measureSessionTokens`, ADR-0055): reads the session JSONL and prices
-every message entry under a deterministic tokenizer-free heuristic (one
-token per 4 characters plus block and role overhead). A session whose
-surface exceeds `GATEWAY_SESSION_TOKEN_BUDGET` requests pre-run
-compaction. Snapshots are immutable and carry a revision (entries
-consumed).
-_Avoid_: Provider tokenizer, token-based billing (the meter estimates; it
-never reads provider usage)
+every message entry. Since ADR-0060 it resolves a real tokenizer per
+provider/model family (gpt-tokenizer: o200k_base for openai's modern
+models, cl100k_base for openai classic models and every deepseek model);
+providers without a registered tokenizer fall back to the ADR-0055
+fixed-density heuristic (one token per 4 characters plus block and role
+overhead) with a warning. A session whose surface exceeds
+`GATEWAY_SESSION_TOKEN_BUDGET` requests pre-run compaction. Snapshots are
+immutable and carry a revision (entries consumed).
+_Avoid_: Token-based billing (the meter estimates; it never reads provider
+usage), per-message exactness (the system-prompt envelope stays unpriced)
 
 **Cost ledger**:
 The pricing side of the agent: token usage priced per model (override rates

@@ -42,7 +42,7 @@ function textMessageEntry(id: string, text: string): string {
 	});
 }
 
-describe("Session token meter estimator (ADR-0052)", () => {
+describe("Session token meter estimator (ADR-0055)", () => {
 	it("prices a string at one token per CHARS_PER_TOKEN characters, rounded up", () => {
 		expect(estimateTextTokens("")).toBe(0);
 		expect(estimateTextTokens("a")).toBe(1);
@@ -114,7 +114,7 @@ describe("Session token meter estimator (ADR-0052)", () => {
 	});
 });
 
-describe("Session token meter snapshot (ADR-0052)", () => {
+describe("Session token meter snapshot (ADR-0055)", () => {
 	it("measures a missing file as a frozen zero snapshot at revision 0", () => {
 		const snapshot = measureSessionTokens(join(tmpdir(), "does-not-exist.jsonl"));
 		expect(snapshot.revision).toBe(0);
@@ -237,7 +237,7 @@ describe("Session token meter snapshot (ADR-0052)", () => {
 	});
 });
 
-describe("Session token budget predicate (ADR-0052)", () => {
+describe("Session token budget predicate (ADR-0055)", () => {
 	it("exceedsTokenBudget is strict: at the bound it does not fire", () => {
 		const at = measureSessionTokens(join(tmpdir(), "missing.jsonl"));
 		expect(
@@ -266,7 +266,7 @@ describe("Session token budget predicate (ADR-0052)", () => {
 	});
 });
 
-describe("Gateway token-pressure compaction (ADR-0052)", () => {
+describe("Gateway token-pressure compaction (ADR-0055)", () => {
 	/** Minimal streaming transport so the gateway exercises the streaming path. */
 	function meterTransport() {
 		const sent: Array<{ to: string; text: string }> = [];

@@ -32,7 +32,7 @@ import type { RestartNoticeStore } from "./restart-notice.js";
 import type { UpdateConfig, UpdateShell } from "./self-update.js";
 import { applyUpdate, CliUpdateShell, checkUpdate } from "./self-update.js";
 import { archiveSessionFile, sessionExceedsBudget, sessionFilePath } from "./session-reset.js";
-import { sessionExceedsTokenBudget } from "./session-token-meter.js";
+import { GATEWAY_SESSION_TOKEN_BUDGET, sessionExceedsTokenBudget } from "./session-token-meter.js";
 import { STREAM_EDIT_MIN_INTERVAL_MS, StreamEditor } from "./stream-editor.js";
 import type { StreamJournal } from "./stream-journal.js";
 import type {
@@ -551,13 +551,22 @@ export class Gateway {
 		// archiving (which wipes the conversation's memory), request a
 		// pre-run compaction: the completion child summarizes the existing
 		// context, so the reply resumes on a small session while /search
-		// still indexes the full history. Token pressure (ADR-0052) is the
+		// still indexes the full history. Token pressure (ADR-0055) is the
 		// primary trigger; the byte budget (ADR-0041) stays as the safety
-		// limit for sessions the heuristic prices low.
+		// limit for sessions the meter prices low. The meter resolves a real
+		// tokenizer from the active provider+model when one is set (ADR-0060);
+		// without a stored model it prices under the fixed-density heuristic.
+		const active = this.modelStore?.load();
 		let compactBefore = false;
 		if (this.sessionsDir) {
 			const path = sessionFilePath(this.sessionsDir, sessionKey);
-			if (sessionExceedsTokenBudget(path) || sessionExceedsBudget(path)) {
+			if (
+				sessionExceedsTokenBudget(path, GATEWAY_SESSION_TOKEN_BUDGET, {
+					provider: active?.provider,
+					model: active?.model,
+				}) ||
+				sessionExceedsBudget(path)
+			) {
 				compactBefore = true;
 			}
 		}
@@ -566,7 +575,7 @@ export class Gateway {
 			sessionId,
 			prompt: msg.text,
 			profile: { name: this.profile },
-			model: this.modelStore?.load(),
+			model: active,
 			channelId: msg.channelId,
 			...(anchoredRoot ? { projectRoot: anchoredRoot } : {}),
 			...(compactBefore ? { compactBefore: true } : {}),
