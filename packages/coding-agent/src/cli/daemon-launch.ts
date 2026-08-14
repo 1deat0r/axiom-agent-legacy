@@ -11,6 +11,7 @@ import { resolve } from "node:path";
 import { appendRotatingLog, expandTildePath, getClientErrorLogPath, getDaemonLogPath, VERSION } from "../config.js";
 import { ORPHAN_PROCESS_JOURNAL_ENV } from "../core/orphan-process-journal.js";
 import { getProcessStartId, SESSION_LEASE_OWNER_ID_ENV, SESSION_LEASES_ENABLED_ENV } from "../core/session-lease.js";
+import type { AppMode } from "../main.js";
 import { DaemonClient, type DaemonHello } from "../modes/daemon/daemon-client.js";
 import { DAEMON_PROTOCOL_VERSION, DAEMON_SCHEMA_ID } from "../modes/daemon/daemon-protocol.js";
 import { getDaemonRuntimeIdentity } from "../modes/daemon/daemon-runtime-identity.js";
@@ -24,6 +25,7 @@ import {
 	DAEMON_WORKER_TOKEN_ENV,
 } from "../modes/daemon/daemon-worker-protocol.js";
 import { isHelpCommandRequest, PUBLIC_COMMAND_NAMES, REMOVED_COMMAND_NAMES } from "./command-registry.js";
+import { looksLikeSessionPath } from "./session-resolver.js";
 import { createCliSubprocessEnv, formatCurrentCliCommand } from "./subprocess-launch.js";
 
 const DAEMON_STARTUP_TIMEOUT_MS = 30_000;
@@ -578,4 +580,60 @@ export function maybeStartDaemonEarly(args: readonly string[]): void {
 		return;
 	}
 	void ensureInteractiveDaemonRunning(socketPath, spawnCwd);
+}
+
+export interface DaemonClientStartupDecision {
+	appMode: AppMode;
+	startupBenchmark: boolean;
+	noSession?: boolean;
+	help?: boolean;
+	listModels?: string | true;
+}
+
+export type InteractiveDaemonStartupDecision = DaemonClientStartupDecision;
+
+/** Retained for callers that only classify persistent interactive startup. */
+export function shouldUseDaemonInteractive(options: DaemonClientStartupDecision): boolean {
+	return (
+		options.appMode === "interactive" &&
+		!options.startupBenchmark &&
+		!options.noSession &&
+		options.listModels === undefined
+	);
+}
+
+export function shouldUseDaemonClient(options: DaemonClientStartupDecision): boolean {
+	return (
+		options.appMode !== "daemon" && !options.startupBenchmark && !options.help && options.listModels === undefined
+	);
+}
+
+export function shouldUseDaemonClientRuntime(
+	options: DaemonClientStartupDecision & {
+		ownedSessionWorker?: boolean;
+		hasProcessLocalExtensionFactories?: boolean;
+	},
+): boolean {
+	return shouldUseDaemonClient(options) && !options.ownedSessionWorker && !options.hasProcessLocalExtensionFactories;
+}
+
+export function shouldEnsureInteractiveDaemonForStartup(
+	useDaemonInteractive: boolean,
+	attachAgent: string | undefined,
+): boolean {
+	return useDaemonInteractive && attachAgent === undefined;
+}
+
+export interface DaemonActiveSessionLookupDecision {
+	useDaemonInteractive: boolean;
+	resumeSelector?: string;
+	explicitAttach?: boolean;
+}
+
+export function shouldEnsureDaemonBeforeActiveSessionLookup(options: DaemonActiveSessionLookupDecision): boolean {
+	return (
+		options.useDaemonInteractive &&
+		options.resumeSelector !== undefined &&
+		(options.explicitAttach || !looksLikeSessionPath(options.resumeSelector))
+	);
 }

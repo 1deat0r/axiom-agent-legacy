@@ -36,12 +36,7 @@ import { handleProfileCommand } from "./cli/profile-command.js";
 import { handleProjectsCommand } from "./cli/projects-command.js";
 import { handlePublicCommand } from "./cli/public-command.js";
 import { handleRootGuardCommand } from "./cli/root-guard-command.js";
-import {
-	looksLikeSessionPath,
-	resolveSessionPath,
-	SessionSelectorError,
-	SessionSelectorNotFoundError,
-} from "./cli/session-resolver.js";
+import { resolveSessionPath, SessionSelectorError, SessionSelectorNotFoundError } from "./cli/session-resolver.js";
 import { handleSkillAuditCommand } from "./cli/skill-audit-command.js";
 import { handleSkillCaptureAutoCommand } from "./cli/skill-capture-auto-command.js";
 import { handleSkillCaptureCommand } from "./cli/skill-capture-command.js";
@@ -217,47 +212,27 @@ export function parseAgentsViewCommand(args: string[]): { explicitAgentsView: bo
 	return { explicitAgentsView: false, args };
 }
 
-export interface DaemonClientStartupDecision {
-	appMode: AppMode;
-	startupBenchmark: boolean;
-	noSession?: boolean;
-	help?: boolean;
-	listModels?: string | true;
-}
+// Daemon-startup decisions live with the daemon launch module (locality:
+// decide + spawn + probe in one place). Imported here for the entrypoint's
+// own use and re-exported for callers/tests that import them from main.
+import {
+	shouldEnsureDaemonBeforeActiveSessionLookup,
+	shouldEnsureInteractiveDaemonForStartup,
+	shouldUseDaemonClientRuntime,
+} from "./cli/daemon-launch.js";
 
-export type InteractiveDaemonStartupDecision = DaemonClientStartupDecision;
-
-/** Retained for callers that only classify persistent interactive startup. */
-export function shouldUseDaemonInteractive(options: DaemonClientStartupDecision): boolean {
-	return (
-		options.appMode === "interactive" &&
-		!options.startupBenchmark &&
-		!options.noSession &&
-		options.listModels === undefined
-	);
-}
-
-export function shouldUseDaemonClient(options: DaemonClientStartupDecision): boolean {
-	return (
-		options.appMode !== "daemon" && !options.startupBenchmark && !options.help && options.listModels === undefined
-	);
-}
-
-export function shouldUseDaemonClientRuntime(
-	options: DaemonClientStartupDecision & {
-		ownedSessionWorker?: boolean;
-		hasProcessLocalExtensionFactories?: boolean;
-	},
-): boolean {
-	return shouldUseDaemonClient(options) && !options.ownedSessionWorker && !options.hasProcessLocalExtensionFactories;
-}
-
-export function shouldEnsureInteractiveDaemonForStartup(
-	useDaemonInteractive: boolean,
-	attachAgent: string | undefined,
-): boolean {
-	return useDaemonInteractive && attachAgent === undefined;
-}
+export type {
+	DaemonActiveSessionLookupDecision,
+	DaemonClientStartupDecision,
+	InteractiveDaemonStartupDecision,
+} from "./cli/daemon-launch.js";
+export {
+	shouldEnsureDaemonBeforeActiveSessionLookup,
+	shouldEnsureInteractiveDaemonForStartup,
+	shouldUseDaemonClient,
+	shouldUseDaemonClientRuntime,
+	shouldUseDaemonInteractive,
+} from "./cli/daemon-launch.js";
 
 export interface AgentsViewStartupDecision {
 	useDaemonInteractive: boolean;
@@ -296,20 +271,6 @@ export function shouldUseEphemeralSessionManagerForDaemonInteractive(
 		(options.resume === undefined || options.resume === true) &&
 		!options.continue &&
 		!options.fork
-	);
-}
-
-export interface DaemonActiveSessionLookupDecision {
-	useDaemonInteractive: boolean;
-	resumeSelector?: string;
-	explicitAttach?: boolean;
-}
-
-export function shouldEnsureDaemonBeforeActiveSessionLookup(options: DaemonActiveSessionLookupDecision): boolean {
-	return (
-		options.useDaemonInteractive &&
-		options.resumeSelector !== undefined &&
-		(options.explicitAttach || !looksLikeSessionPath(options.resumeSelector))
 	);
 }
 

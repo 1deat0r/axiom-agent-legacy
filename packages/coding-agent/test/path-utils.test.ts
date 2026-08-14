@@ -2,7 +2,7 @@ import { mkdtempSync, readdirSync, rmdirSync, unlinkSync, writeFileSync } from "
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { expandPath, resolveReadPath, resolveToCwd } from "../src/core/tools/path-utils.js";
+import { expandPath, resolveToCwd, resolveUserPath } from "../src/core/tools/path-utils.js";
 
 describe("path-utils", () => {
 	describe("expandPath", () => {
@@ -36,7 +36,7 @@ describe("path-utils", () => {
 		});
 	});
 
-	describe("resolveReadPath", () => {
+	describe("resolveUserPath", () => {
 		let tempDir: string;
 
 		beforeEach(() => {
@@ -60,7 +60,7 @@ describe("path-utils", () => {
 			const fileName = "test-file.txt";
 			writeFileSync(join(tempDir, fileName), "content");
 
-			const result = resolveReadPath(fileName, tempDir);
+			const result = resolveUserPath(fileName, tempDir);
 			expect(result).toBe(join(tempDir, fileName));
 		});
 
@@ -86,7 +86,7 @@ describe("path-utils", () => {
 			writeFileSync(join(tempDir, nfdFileName), "content");
 
 			// User provides NFC path - should find the file (via filesystem normalization or our fallback)
-			const result = resolveReadPath(nfcFileName, tempDir);
+			const result = resolveUserPath(nfcFileName, tempDir);
 			// Result should contain the accented character (either NFC or NFD form)
 			expect(result).toContain(tempDir);
 			expect(result).toMatch(/file.+\.txt$/);
@@ -108,7 +108,7 @@ describe("path-utils", () => {
 			writeFileSync(join(tempDir, curlyQuoteName), "content");
 
 			// User provides straight quote path - should find the curly quote file
-			const result = resolveReadPath(straightQuoteName, tempDir);
+			const result = resolveUserPath(straightQuoteName, tempDir);
 			expect(result).toBe(join(tempDir, curlyQuoteName));
 		});
 
@@ -125,7 +125,7 @@ describe("path-utils", () => {
 			writeFileSync(join(tempDir, nfcCurlyName), "content");
 
 			// User provides straight quote path - should find the curly quote file
-			const result = resolveReadPath(nfcStraightName, tempDir);
+			const result = resolveUserPath(nfcStraightName, tempDir);
 			expect(result).toBe(join(tempDir, nfcCurlyName));
 		});
 
@@ -138,7 +138,7 @@ describe("path-utils", () => {
 			writeFileSync(join(tempDir, macosName), "content");
 
 			// User provides regular space path
-			const result = resolveReadPath(userName, tempDir);
+			const result = resolveUserPath(userName, tempDir);
 
 			// This works because tryMacOSScreenshotPath() handles this case
 			expect(result).toBe(join(tempDir, macosName));
@@ -153,7 +153,7 @@ describe("path-utils", () => {
 			writeFileSync(join(tempDir, macosName), "content");
 
 			// User provides regular space path
-			const result = resolveReadPath(userName, tempDir);
+			const result = resolveUserPath(userName, tempDir);
 
 			// This works because tryMacOSScreenshotPath() uses case-insensitive matching
 			expect(result).toBe(join(tempDir, macosName));

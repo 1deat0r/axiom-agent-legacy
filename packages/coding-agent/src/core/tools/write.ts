@@ -14,7 +14,7 @@ import { type Static, Type } from "typebox";
 import type { ToolDefinition } from "../extensions/types.js";
 import { detectLineEnding, generateDiffString, normalizeToLF, restoreLineEndings, stripBom } from "./edit-diff.js";
 import { withFileMutationQueue } from "./file-mutation-queue.js";
-import { resolveToCwd } from "./path-utils.js";
+import { resolveUserPath } from "./path-utils.js";
 import { str } from "./render-utils.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 import { formatSize } from "./truncate.js";
@@ -160,7 +160,7 @@ export function createWriteToolDefinition(
 		parameters: writeSchema,
 		async execute(_toolCallId, rawInput, signal?, _onUpdate?, _ctx?) {
 			const { path, content, mode, lineEndings } = validateWriteInput(rawInput as WriteToolInput);
-			const absolutePath = resolveToCwd(path, cwd);
+			const absolutePath = resolveUserPath(path, cwd);
 
 			if (signal?.aborted) {
 				throw new Error("Operation aborted");

@@ -1,5 +1,6 @@
 import {
 	chmodSync,
+	existsSync,
 	lstatSync,
 	mkdtempSync,
 	readdirSync,
@@ -9,6 +10,7 @@ import {
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -201,5 +203,30 @@ describe("write tool", () => {
 		expect(fulfilled.length).toBe(1);
 		expect(rejected.length).toBe(1);
 		expect(readFileSync(file, "utf8")).toMatch(/^(first|second)\n$/);
+	});
+});
+
+describe("write path resolution (family consistency with read)", () => {
+	it("overwrites the tolerant-resolved path for macOS variant filenames", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-write-path-"));
+		try {
+			// The file exists under the curly-quote name (macOS screenshot style);
+			// the agent types the straight-quote path.
+			const curly = join(dir, "Capture d’ecran.png");
+			const straight = join(dir, "Capture d'ecran.png");
+			await writeFile(curly, "old");
+			const tool = createWriteTool(dir);
+			const result = await tool.execute(
+				"t1",
+				{ path: straight, content: "new", mode: "overwrite" },
+				undefined,
+				() => {},
+			);
+			expect(result.details?.path).toBe(curly);
+			expect(readFile(curly, "utf8")).resolves.toBe("new");
+			expect(existsSync(straight)).toBe(false);
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
 	});
 });

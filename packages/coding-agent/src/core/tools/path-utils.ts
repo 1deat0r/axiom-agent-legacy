@@ -48,7 +48,7 @@ export function expandPath(filePath: string): string {
 }
 
 /**
- * Resolve a path relative to the given cwd.
+ * Resolve a user-typed path relative to the given cwd.
  * Handles ~ expansion and absolute paths.
  */
 export function resolveToCwd(filePath: string, cwd: string): string {
@@ -59,7 +59,16 @@ export function resolveToCwd(filePath: string, cwd: string): string {
 	return resolvePath(cwd, expanded);
 }
 
-export function resolveReadPath(filePath: string, cwd: string): string {
+/**
+ * Resolve a user-typed path with the family-wide input tolerances: when the
+ * plain path does not exist, probe macOS filename variants (narrow no-break
+ * spaces before AM/PM, NFD decomposition, curly apostrophes). Used by the
+ * file-tool family (read, write, edit) and CLI file args, so a path the
+ * agent can read is the path it can write and edit. The name says "user
+ * path", not "read path" — the tolerance is an input policy, not a read
+ * behavior.
+ */
+export function resolveUserPath(filePath: string, cwd: string): string {
 	const resolved = resolveToCwd(filePath, cwd);
 
 	if (fileExists(resolved)) {

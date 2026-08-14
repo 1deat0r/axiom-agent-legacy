@@ -5,7 +5,7 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { type Static, Type } from "typebox";
 import type { ToolDefinition } from "../extensions/types.js";
 import { stripBom } from "./edit-diff.js";
-import { resolveReadPath } from "./path-utils.js";
+import { resolveUserPath } from "./path-utils.js";
 import { shortenPath, str } from "./render-utils.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, truncateHead } from "./truncate.js";
@@ -123,7 +123,7 @@ export function createReadToolDefinition(
 		parameters: readSchema,
 		async execute(_toolCallId, rawInput, signal?, _onUpdate?, _ctx?) {
 			const { path, startLine, endLine, maxBytes } = validateReadInput(rawInput as ReadToolInput);
-			const absolutePath = resolveReadPath(path, cwd);
+			const absolutePath = resolveUserPath(path, cwd);
 
 			if (signal?.aborted) {
 				throw new Error("Operation aborted");
