@@ -59,6 +59,21 @@ The default fetcher uses `node:http`/`node:https` with a `lookup` override —
 no new dependencies, no undici version churn. `resolver`, `fetcher`, and
 `gate` are injectable seams; the corpus stays offline.
 
+## Threat model
+
+Defends against: an attacker who controls DNS answers (or a public URL that
+redirects) steering a gate-approved fetch to a loopback, private, or
+link-local target after the check - the rebind TOCTOU and the
+redirect-to-private hop. The checked address is the connect address.
+
+Deliberately not defended: freeform `bash`/`ipython` egress (the ADR-0019
+OS-sandbox tier); DNS-level attackers on non-anchored runs (the gate stays
+opt-in per ADR-0028); a resolver that lies identically in both phases is
+caught only if the pinned address itself is private (no independent
+second-opinion resolver); result caching is out (ADR-0057 stance), so every
+fetch pays two resolutions; `fetchPinned` is GET-only and opt-in for egress
+tools, which is a capability boundary, not a claim of coverage.
+
 ## Alternatives considered
 
 - **Re-check only (no pinned fetch).** Rejected as the whole fix: it shrinks
