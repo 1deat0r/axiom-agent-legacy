@@ -9,6 +9,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { getCronJobsPath } from "../config.js";
+import { DEFAULT_SCHEDULE_POLL_MS } from "../core/schedule/index.js";
 import { axiomHome } from "../extensions/profile/registry.js";
 import { activeModelPath, FileActiveModelStore } from "../gateway/active-model.js";
 import { JsonChannelIndex } from "../gateway/channel-index.js";
@@ -229,6 +230,13 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 		cron,
 		ledger,
 		streamJournal,
+		// Model-facing schedule (ADR-0053): the reminder store is shared with
+		// the completion children under the axiom home's gateway dir, and the
+		// gateway sweeps it on boot and every GATEWAY_SCHEDULE_POLL_MS.
+		schedule: {
+			storePath: join(root, "gateway", "schedule.jsonl"),
+			pollMs: envInt("GATEWAY_SCHEDULE_POLL_MS", DEFAULT_SCHEDULE_POLL_MS),
+		},
 		transportName: opts.transport,
 		modelStore: new FileActiveModelStore(activeModelPath(root, profile)),
 		restartNoticeStore: new FileRestartNoticeStore(restartNoticePath(root)),

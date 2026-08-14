@@ -7,6 +7,7 @@ import axiomMemoryConsolidationExtension from "./memory-consolidation/index.js";
 import axiomPeersExtension from "./peers/index.js";
 import axiomProfileExtension from "./profile/index.js";
 import axiomRecallExtension from "./recall/index.js";
+import axiomScheduleExtension from "./schedule/index.js";
 import axiomSecurityExtension from "./security/index.js";
 import axiomSkillCaptureExtension from "./skill-capture/index.js";
 import axiomWorkspaceExtension from "./workspace/index.js";
@@ -21,6 +22,7 @@ export const builtInExtensions: ExtensionFactory[] = [
 	axiomPeersExtension,
 	axiomProfileExtension,
 	axiomRecallExtension,
+	axiomScheduleExtension,
 	axiomSkillCaptureExtension,
 	axiomSecurityExtension,
 	axiomWorkspaceExtension,

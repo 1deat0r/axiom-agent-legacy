@@ -13,6 +13,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { SCHEDULE_CHANNEL_ENV, SCHEDULE_SESSION_ENV } from "../core/schedule/index.js";
 import {
 	assembleProgramArgv,
 	buildSandboxMountArgs,
@@ -137,8 +138,15 @@ export class CliCompletionRunner implements CompletionRunner {
 	private buildSpawn(
 		args: string[],
 		root: string | undefined,
+		envExtra: Record<string, string | undefined> = {},
 	): { spawnargv: string[]; childEnv: NodeJS.ProcessEnv | undefined; confined: boolean } {
-		if (!root) return { spawnargv: [this.bin, ...args], childEnv: undefined, confined: false };
+		if (!root) {
+			return {
+				spawnargv: [this.bin, ...args],
+				childEnv: buildChildEnv(envExtra),
+				confined: false,
+			};
+		}
 		const bwrap = this.confinement?.bwrap ?? resolveBwrap(process.env);
 		if (!bwrap) {
 			throw new Error(
@@ -164,9 +172,10 @@ export class CliCompletionRunner implements CompletionRunner {
 			agentHome,
 			shadowDirs: this.confinement?.shadowDirs ?? defaultShadowDirs(home),
 		});
+		const env = buildChildEnv({ ...envExtra, AXIOM_PROJECT_ROOT: root });
 		return {
 			spawnargv: assembleProgramArgv(bwrap, mount, this.bin, args),
-			childEnv: confinementEnv({ ...process.env, AXIOM_PROJECT_ROOT: root }),
+			childEnv: confinementEnv(env ?? process.env),
 			confined: true,
 		};
 	}
@@ -178,6 +187,7 @@ export class CliCompletionRunner implements CompletionRunner {
 		model?: { provider: string; model: string };
 		projectRoot?: string;
 		compactBefore?: boolean;
+		channelId?: string;
 	}): Promise<{ reply: string; sessionId: string; error?: string }> {
 		// Per-call override wins over the boot-time anchor; BOTH thread through
 		// every anchoring point below (bwrap mount, cwd, AXIOM_PROJECT_ROOT,
@@ -204,7 +214,7 @@ export class CliCompletionRunner implements CompletionRunner {
 			args.push("--model", input.model.model);
 		}
 		try {
-			const { spawnargv, childEnv, confined } = this.buildSpawn(args, root);
+			const { spawnargv, childEnv, confined } = this.buildSpawn(args, root, gatewayTags(input));
 			const stdout = await new Promise<string>((resolve, reject) => {
 				// Spawn and collect stdout ourselves rather than execFile: the
 				// completion CLI writes its final answer to stdio, and execFile's
@@ -274,6 +284,7 @@ export class CliCompletionRunner implements CompletionRunner {
 			model?: { provider: string; model: string };
 			projectRoot?: string;
 			compactBefore?: boolean;
+			channelId?: string;
 		},
 		onDelta: (delta: string) => void,
 	): Promise<{ reply: string; sessionId: string; error?: string }> {
@@ -294,7 +305,7 @@ export class CliCompletionRunner implements CompletionRunner {
 			args.push("--model", input.model.model);
 		}
 		try {
-			const { spawnargv, childEnv, confined } = this.buildSpawn(args, root);
+			const { spawnargv, childEnv, confined } = this.buildSpawn(args, root, gatewayTags(input));
 			let full = "";
 			const collected = await new Promise<string>((resolve, reject) => {
 				const child = spawn(spawnargv[0], spawnargv.slice(1), {
@@ -402,6 +413,34 @@ function stderrTailLine(stderr: string): string {
 /** The max stderr tail surfaced in a completion error (operator-readable, not a wall). */
 const COMPLETION_STDERR_TAIL_MAX = 500;
 
+/**
+ * The env tags that let a completion child schedule reminders (ADR-0053):
+ * the channel and session the run belongs to. Runs the gateway does not tag
+ * (e.g. cron runs) get explicit undefined values so a stale tag in the
+ * gateway's own environment can never leak into an untagged child.
+ */
+function gatewayTags(input: { sessionId: string; channelId?: string }): Record<string, string | undefined> {
+	return {
+		[SCHEDULE_CHANNEL_ENV]: input.channelId,
+		[SCHEDULE_SESSION_ENV]: input.channelId === undefined ? undefined : input.sessionId,
+	};
+}
+
+/**
+ * Build the child env from the gateway's env plus overrides, deleting keys
+ * whose override is undefined (unset beats inherit). Returns undefined when
+ * there is nothing to change, so the child inherits the gateway env as-is.
+ */
+function buildChildEnv(extra: Record<string, string | undefined>): NodeJS.ProcessEnv | undefined {
+	if (Object.keys(extra).length === 0) return undefined;
+	const env: NodeJS.ProcessEnv = { ...process.env };
+	for (const [key, value] of Object.entries(extra)) {
+		if (value === undefined) delete env[key];
+		else env[key] = value;
+	}
+	return env;
+}
+
 /** A canned, injectable completion runner for router/e2e tests. */
 export function fakeCompletionRunner(): CompletionRunner & {
 	calls: Array<{
@@ -410,6 +449,7 @@ export function fakeCompletionRunner(): CompletionRunner & {
 		model: { provider: string; model: string } | undefined;
 		projectRoot?: string;
 		compactBefore?: boolean;
+		channelId?: string;
 	}>;
 } {
 	const runner: CompletionRunner & {
@@ -419,6 +459,7 @@ export function fakeCompletionRunner(): CompletionRunner & {
 			model: { provider: string; model: string } | undefined;
 			projectRoot?: string;
 			compactBefore?: boolean;
+			channelId?: string;
 		}>;
 	} = {
 		calls: [],
@@ -429,6 +470,7 @@ export function fakeCompletionRunner(): CompletionRunner & {
 				model: input.model,
 				projectRoot: input.projectRoot,
 				compactBefore: input.compactBefore,
+				channelId: input.channelId,
 			});
 
 			return { reply: `axiom reply to: ${input.prompt}`, sessionId: input.sessionId };
@@ -440,6 +482,7 @@ export function fakeCompletionRunner(): CompletionRunner & {
 				model: input.model,
 				projectRoot: input.projectRoot,
 				compactBefore: input.compactBefore,
+				channelId: input.channelId,
 			});
 			const reply = `axiom reply to: ${input.prompt}`;
 			// Emit the whole reply as two deltas so the streamed bubble ends on the
