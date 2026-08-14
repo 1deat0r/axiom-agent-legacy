@@ -25,6 +25,7 @@ import {
 	shutdownDaemonAndWait,
 } from "./cli/daemon-launch.js";
 import { confirmDaemonSessionLoss, type DaemonSessionLossCopy, pluralizeSessions } from "./cli/daemon-stop-confirm.js";
+import { handleDelegateCommand } from "./cli/delegate-command.js";
 import { processFileArguments } from "./cli/file-processor.js";
 import { handleGatewayCommand } from "./cli/gateway-command.js";
 import { buildInitialMessage } from "./cli/initial-message.js";
@@ -1111,6 +1112,9 @@ export async function main(args: string[], options?: MainOptions) {
 		return;
 	}
 
+	if (await handleDelegateCommand(args)) {
+		return;
+	}
 	if (await handlePeersCommand(args)) {
 		return;
 	}
