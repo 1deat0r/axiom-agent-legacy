@@ -39,6 +39,17 @@ export interface GitGuardOptions {
 
 export type GitGuardDecision = { blocked: true; pattern: string; reason: string } | undefined;
 
+/**
+ * Strip git global options (`-C <dir>`, `-C<dir>`, `--git-dir=<dir>`,
+ * `--git-dir <dir>`, any count) so the patterns still match commands written
+ * as `git -C /repo reset --hard` — the plain forms the blocklist assumes.
+ * Only the global-option region right after `git` is removed; a `-C` after a
+ * subcommand (`git config -C …`) is not a global option and stays.
+ */
+export function stripGitGlobals(text: string): string {
+	return text.replace(/\bgit(?:\s+(?:-C\s*\S+|--git-dir(?:=|\s+)\S+))+/g, "git");
+}
+
 /** Decision for one shell text: `undefined` to allow, or a block naming the pattern. */
 export function checkGitCommand(text: string, options: GitGuardOptions = {}): GitGuardDecision {
 	const trimmed = text.trim();
@@ -46,8 +57,9 @@ export function checkGitCommand(text: string, options: GitGuardOptions = {}): Gi
 	if ((options.allowExact ?? []).some((allowed) => allowed.trim() === trimmed)) return undefined;
 
 	const patterns = [...DEFAULT_GIT_GUARD_PATTERNS, ...(options.extraPatterns ?? [])];
+	const scanned = stripGitGlobals(text);
 	for (const { id, pattern } of patterns) {
-		if (pattern.test(text)) {
+		if (pattern.test(scanned)) {
 			return {
 				blocked: true,
 				pattern: id,

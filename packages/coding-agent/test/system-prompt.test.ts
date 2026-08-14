@@ -56,7 +56,7 @@ describe("buildRlmPrompt", () => {
 				"",
 				"Emit independent tool calls together in one response. The runtime executes them concurrently, so one batched response costs one round trip instead of one per call.",
 				"",
-				"`ipython` is the exception: a batch containing an ipython call runs fully sequential. Fold multiple shell commands into one `%%bash` cell instead of several ipython calls.",
+				"`ipython` is the exception: an ipython call runs on its own (sequential), while parallel calls around it still batch. Fold multiple shell commands into one `%%bash` cell instead of several ipython calls.",
 				"",
 				"Split calls across responses only when a later call depends on an earlier result.",
 				"",

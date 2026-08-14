@@ -77,6 +77,37 @@ describe("checkGitCommand - safe commands pass", () => {
 	}
 });
 
+describe("checkGitCommand - git global options do not bypass the guard", () => {
+	const bypassAttempts = [
+		"git -C /tmp/repo reset --hard",
+		"git -C/tmp/repo push",
+		"git --git-dir=/tmp/x reset --hard",
+		"git --git-dir /tmp/x branch -D feature/y",
+		"git -C /a -C /b clean -fd",
+		"git -C /repo checkout .",
+		"git -C /repo restore .",
+		"git -C /repo -C /other reset --hard",
+	];
+	for (const command of bypassAttempts) {
+		it(`blocks: ${command}`, () => {
+			const d = checkGitCommand(command);
+			expect(d?.blocked).toBe(true);
+			expect(d?.pattern).toBeTruthy();
+		});
+	}
+	it("still allows safe commands that use -C", () => {
+		expect(checkGitCommand("git -C /tmp/repo status")).toBeUndefined();
+		expect(checkGitCommand("git -C /repo log --oneline -3")).toBeUndefined();
+	});
+	it("does not strip a -C that appears after the subcommand", () => {
+		// `git config -C …` is not the global -C; the config line must stay intact.
+		expect(checkGitCommand("git config --get remote.origin.url")).toBeUndefined();
+	});
+	it("keeps allowExact matching on the raw text (operator escape wins)", () => {
+		expect(checkGitCommand("git -C /tmp/repo push", { allowExact: ["git -C /tmp/repo push"] })).toBeUndefined();
+	});
+});
+
 describe("checkGitCommand - matching semantics", () => {
 	it("matches anywhere in the text, like the skill's grep (conservative)", () => {
 		const d = checkGitCommand(`%%bash
