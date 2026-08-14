@@ -384,7 +384,8 @@ function mergeSubagentSnapshot(
 	previous: AgentConnectionRlmChildAgentSnapshot,
 	incoming: AgentConnectionRlmChildAgentSnapshot,
 ): AgentConnectionRlmChildAgentSnapshot {
-	const active = incoming.status === "running" || incoming.status === "queued";
+	// A stalled child is still part of an active run (and still cancelable).
+	const active = incoming.status === "running" || incoming.status === "queued" || incoming.status === "stalled";
 	return {
 		...previous,
 		...incoming,

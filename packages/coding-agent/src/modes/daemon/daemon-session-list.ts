@@ -8,7 +8,11 @@ import type { AgentSessionRuntimeDiagnostic } from "../../core/agent-session-ser
 import { type AgentCronJob, isHeartbeatCronJob } from "../../core/cron-jobs.js";
 import type { SessionActionSnapshot } from "../../core/session-action-store.js";
 import type { AgentTaskState, SessionInfo } from "../../core/session-manager.js";
-import type { AgentConnectionRlmChildAgentSnapshot } from "../agent-connection/types.js";
+import { isRlmChildStalled, resolveRlmChildStallMs } from "../../core/stall-watchdog.js";
+import type {
+	AgentConnectionRlmChildAgentSnapshot,
+	AgentConnectionRlmChildAgentStatus,
+} from "../agent-connection/types.js";
 import type { ActiveSessionState } from "./active-session-state.js";
 
 // Durable lifecycle; decides agents-view visibility. Only "live" is shown.
@@ -394,6 +398,13 @@ function rlmChildSnapshotForActiveSession(
 		? parent?.runtime.session.getRlmChildRunStatus(metadata.rlmChildId)
 		: undefined;
 	const status = runStatus ?? (session.isSessionActive ? "running" : "done");
+	// A running child whose session dir has gone quiet reads as stalled here,
+	// mirroring the live rlm_child_update snapshots (ADR-0067).
+	const sessionDir = metadata.sessionDir ?? session.sessionManager.getSessionDir();
+	const displayStatus: AgentConnectionRlmChildAgentStatus =
+		status === "running" && sessionDir && isRlmChildStalled(sessionDir, Date.now(), resolveRlmChildStallMs())
+			? "stalled"
+			: status;
 	const isActive = status === "running" || session.isSessionActive;
 	return {
 		id: metadata.rlmChildId ?? activeSession.activeSessionId,
@@ -402,7 +413,7 @@ function rlmChildSnapshotForActiveSession(
 		sessionName: session.sessionName,
 		model: session.model ? `${session.model.provider}/${session.model.id}` : undefined,
 		label: rlmChildLabel(metadata.prompt ?? ""),
-		status,
+		status: displayStatus,
 		answerPreview,
 		toolUseCount: toolUseCount > 0 ? toolUseCount : undefined,
 		tokenCount: session._contextTokensForCurrentMessages(),

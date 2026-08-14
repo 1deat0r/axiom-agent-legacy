@@ -24,6 +24,7 @@ export function countDirectSubagentStatuses(
 		const isRunning =
 			child.status === "running" ||
 			child.status === "queued" ||
+			child.status === "stalled" ||
 			child.activity !== undefined ||
 			(child.activeSessionId !== undefined && activeHeartbeatSessionIds.has(child.activeSessionId));
 		if (isRunning) {

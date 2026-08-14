@@ -119,6 +119,10 @@ export interface AgentOptions {
 	toolExecution?: ToolExecutionMode;
 	/** Optional reduced reasoning level for turns that follow a tool-call turn. */
 	toolTurnThinkingLevel?: ModelThinkingLevel;
+	/** Stream stall watchdog no-data threshold (ms); default 120000, 0 disables. See AgentLoopConfig. */
+	streamStallTimeoutMs?: number;
+	/** Total provider attempts before a repeated stall fails the turn; default 2. See AgentLoopConfig. */
+	streamStallMaxAttempts?: number;
 }
 
 class PendingMessageQueue {
@@ -222,6 +226,10 @@ export class Agent {
 	public toolExecution: ToolExecutionMode;
 	/** Reduced reasoning level applied to tool-followup turns when set. */
 	public toolTurnThinkingLevel: ModelThinkingLevel | undefined;
+	/** Stream stall watchdog no-data threshold (ms); default 120000, 0 disables. */
+	public streamStallTimeoutMs: number | undefined;
+	/** Total provider attempts before a repeated stall fails the turn; default 2. */
+	public streamStallMaxAttempts: number | undefined;
 
 	constructor(options: AgentOptions = {}) {
 		this._state = createMutableAgentState(options.initialState);
@@ -246,6 +254,8 @@ export class Agent {
 		this.toolTurnThinkingLevel = options.toolTurnThinkingLevel
 			? clampThinkingLevel(this._state.model, options.toolTurnThinkingLevel)
 			: undefined;
+		this.streamStallTimeoutMs = options.streamStallTimeoutMs;
+		this.streamStallMaxAttempts = options.streamStallMaxAttempts;
 	}
 
 	/**
@@ -490,6 +500,8 @@ export class Agent {
 			thinkingBudgets: this.thinkingBudgets,
 			maxRetryDelayMs: this.maxRetryDelayMs,
 			toolExecution: this.toolExecution,
+			streamStallTimeoutMs: this.streamStallTimeoutMs,
+			streamStallMaxAttempts: this.streamStallMaxAttempts,
 			getReasoningForTurn: this.toolTurnThinkingLevel
 				? ({ lastTurn }) =>
 						lastTurn && lastTurn.message.content.some((block) => block.type === "toolCall")

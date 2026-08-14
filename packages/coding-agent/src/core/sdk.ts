@@ -17,6 +17,7 @@ import type { ResourceLoader } from "./resource-loader.js";
 import { DefaultResourceLoader } from "./resource-loader.js";
 import { getDefaultSessionDir, SessionManager } from "./session-manager.js";
 import { SettingsManager } from "./settings-manager.js";
+import { resolveStreamStallMaxAttempts, resolveStreamStallTimeoutMs } from "./stall-watchdog.js";
 import { time } from "./timings.js";
 import { createBashTool, createEditTool, createIpythonTool, withFileMutationQueue } from "./tools/index.js";
 
@@ -304,6 +305,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		},
 		convertToLlm: convertToLlmWithBlockImages,
 		toolTurnThinkingLevel: settingsManager.getToolTurnThinkingLevel(),
+		streamStallTimeoutMs: resolveStreamStallTimeoutMs(),
+		streamStallMaxAttempts: resolveStreamStallMaxAttempts(),
 		streamFn: async (model, context, options) => {
 			const auth = await modelRegistry.getApiKeyAndHeaders(model);
 			if (!auth.ok) {

@@ -537,7 +537,8 @@ export interface AgentConnectionExtensionUiRequest {
 	payload: Record<string, unknown>;
 }
 
-export type AgentConnectionRlmChildAgentStatus = "queued" | "running" | "done" | "error" | "cancelled";
+/** Mirrors RlmChildAgentStatus; `stalled` = running but its session dir went quiet (ADR-0067). */
+export type AgentConnectionRlmChildAgentStatus = "queued" | "running" | "done" | "error" | "cancelled" | "stalled";
 
 export interface AgentConnectionRlmChildAgentActivity {
 	kind: "waiting" | "writing" | "executing";
