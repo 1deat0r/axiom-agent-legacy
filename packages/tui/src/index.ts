@@ -8,6 +8,15 @@ export {
 	CombinedAutocompleteProvider,
 	type SlashCommand,
 } from "./autocomplete.js";
+// Model-facing color descriptors (markdown pseudo-link extension)
+export {
+	type ColorDescriptor,
+	parseColorDescriptor,
+	parseHexLiteral,
+	ROLE_NAMES,
+	type RoleName,
+} from "./color-descriptor.js";
+export { stripColorDescriptors } from "./color-strip.js";
 // Components
 export { Box } from "./components/box.js";
 export { CancellableLoader } from "./components/cancellable-loader.js";

@@ -110,6 +110,7 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 		// Custom prompts (gateway profiles, anchored sessions) bypass the
 		// default RLM prompt, so append the parallel tool-call guidance here.
 		prompt += `\n\n${buildParallelToolCallGuidance()}`;
+		prompt += `\n\n${buildMarkdownColorGuidance()}`;
 
 		if (harnessState) {
 			prompt += `\n\n${formatHarnessStateForPrompt(harnessState, { includeIpythonExamples: hasIpython, includeShellExamples: hasBash, includeRefineExamples: hasIpython && hasRefineSkill })}`;
@@ -146,6 +147,8 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 		})}`;
 	}
 
+	prompt += `\n\n${buildMarkdownColorGuidance()}`;
+
 	if (harnessState) {
 		prompt += `\n\n${formatHarnessStateForPrompt(harnessState, { includeIpythonExamples: hasIpython, includeShellExamples: hasBash, includeRefineExamples: hasIpython && hasRefineSkill })}`;
 	}
@@ -175,6 +178,15 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 	}
 
 	return prompt;
+}
+
+/** Model-facing markdown color contract (ADR-0050): TUI pseudo-link descriptors. */
+export function buildMarkdownColorGuidance(): string {
+	return [
+		"# Markdown color",
+		"",
+		"Color text in the TUI with pseudo-links whose href is a color descriptor: [text](#role:NAME) (foreground role), [text](#bg:NAME) (background role), [text](#hex:RRGGBB) and [text](#hexbg:RRGGBB) (exact colors). Roles: error, warn, ok, info, accent, muted. A standalone #RRGGBB token renders colored with a swatch chip. Bold and strike compose inside the brackets. These render only in the TUI; other surfaces strip the descriptors, so keep all meaning in the visible text.",
+	].join("\n");
 }
 
 function formatPromptGuidelines(promptGuidelines: string[] | undefined): string {

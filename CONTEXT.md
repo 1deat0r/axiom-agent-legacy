@@ -99,6 +99,15 @@ runtime from `COMMAND_SPECS` (+ the active profile's project names) by
 so it cannot drift from the menu.
 _Avoid_: Static completion lists, generated scripts that go stale
 
+**Semantic color**:
+The model-facing markdown color contract (ADR-0050):
+`[text](#role:NAME)` / `[text](#bg:NAME)` / `[text](#hex:RRGGBB)` /
+`[text](#hexbg:RRGGBB)` pseudo-links and standalone `#RRGGBB` swatches. The
+TUI renders them via `parseColorDescriptor`; every other surface strips the
+descriptors to the inner text (`stripColorDescriptors`). Roles: error, warn,
+ok, info, accent, muted.
+_Avoid_: ANSI in model output, color tags that leak to Telegram/Discord/Slack
+
 **Channel**:
 A conversation's stable address on a messaging platform (gateway, ADR-0001;
 signal gateway shipped ADR-0016).

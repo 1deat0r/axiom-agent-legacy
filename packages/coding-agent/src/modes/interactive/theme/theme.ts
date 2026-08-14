@@ -3,6 +3,7 @@ import * as path from "node:path";
 import {
 	bestAnsiColor,
 	blendColor,
+	type ColorDescriptor,
 	type EditorTheme,
 	getDefaultTerminalColors,
 	getTerminalBackgroundKind,
@@ -19,6 +20,25 @@ import type { Validator } from "typebox/compile";
 import { getCustomThemesDir, getThemesDir } from "../../../config.js";
 import type { SourceInfo } from "../../../core/source-info.js";
 import { closeWatcher, watchWithErrorHandler } from "../../../utils/fs-watch.js";
+
+// ============================================================================
+// Role Palette
+// ============================================================================
+
+/** Palette hexes for the model-facing color descriptor roles. */
+const ROLE_PALETTE = new Map<string, string>([
+	["error", "#FF5555"],
+	["warn", "#FFB86C"],
+	["ok", "#50FA7B"],
+	["info", "#8BE9FD"],
+	["accent", "#BD93F9"],
+	["muted", "#6272A4"],
+]);
+
+/** Resolve a descriptor role name to its palette hex, or undefined. */
+export function roleHex(name: string): string | undefined {
+	return ROLE_PALETTE.get(name);
+}
 
 // ============================================================================
 // Types & Schema
@@ -300,6 +320,15 @@ function luminance(rgb: Rgb): number {
 
 function hexTo256(hex: string): number {
 	return rgbTo256(hexToRgb(hex));
+}
+
+/** Resolve a color descriptor to a palette hex string, or undefined. */
+function resolveDescriptorHex(color: ColorDescriptor): string | undefined {
+	if (color.kind === "role") {
+		return roleHex(color.value);
+	}
+	const hex = `#${color.value}`;
+	return /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : undefined;
 }
 
 function fgAnsi(color: string | number, mode: ColorMode): string {
@@ -1304,6 +1333,16 @@ export function getMarkdownTheme(): MarkdownTheme {
 		bold: (text: string) => theme.bold(text),
 		italic: (text: string) => theme.italic(text),
 		underline: (text: string) => theme.underline(text),
+		colored: (text: string, color: ColorDescriptor): string => {
+			const hex = resolveDescriptorHex(color);
+			if (!hex) return text;
+			return `${fgAnsi(hex, theme.colorMode)}${text}\x1b[39m`;
+		},
+		backgrounded: (text: string, color: ColorDescriptor): string => {
+			const hex = resolveDescriptorHex(color);
+			if (!hex) return text;
+			return `${bgAnsi(hex, theme.colorMode)}${text}\x1b[49m`;
+		},
 		strikethrough: (text: string) => chalk.strikethrough(text),
 		math: (text: string) => theme.fg("mdCode", text),
 		mathBlock: (text: string) => theme.fg("mdCodeBlock", text),

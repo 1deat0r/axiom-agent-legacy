@@ -125,6 +125,15 @@ describe("SlackTransport", () => {
 		await t.disconnect();
 	});
 
+	it("strips color descriptors from a sent reply", async () => {
+		const f = fakeClient();
+		const t = new SlackTransport(f.client, { pollIntervalMs: 1 });
+		await t.connect();
+		await t.send({ channelId: "C1", recipient: "owner" }, "[done](#role:ok) and [red](#hex:FF5555)");
+		expect(f.sent[0]?.text).toBe("done and red");
+		await t.disconnect();
+	});
+
 	it("delivers a DM with channel id + author user id", async () => {
 		const f = fakeClient([{ id: "C-dm" }]);
 		f.queue.set("C-dm", [msg("100.1", "C-dm", "hello")]);

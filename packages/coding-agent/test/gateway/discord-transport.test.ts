@@ -116,6 +116,15 @@ describe("DiscordTransport", () => {
 		await t.disconnect();
 	});
 
+	it("strips color descriptors from a sent reply", async () => {
+		const f = fakeClient();
+		const t = new DiscordTransport(f.client, { pollIntervalMs: 1 });
+		await t.connect();
+		await t.send({ channelId: "111", recipient: "owner" }, "[done](#role:ok)\n```\n[x](#role:warn) code\n```");
+		expect(f.sent[0]?.content).toBe("done\n```\n[x](#role:warn) code\n```");
+		await t.disconnect();
+	});
+
 	it("delivers a DM message with channel id + author id", async () => {
 		const f = fakeClient([{ id: "dm-1", type: 1 }]);
 		f.queue.set("dm-1", [msg("100", "dm-1", "hello")]);

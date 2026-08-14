@@ -1,4 +1,5 @@
 import { Marked, type Token, Tokenizer, type TokenizerExtension, type Tokens } from "marked";
+import { type ColorDescriptor, parseColorDescriptor, parseHexLiteral } from "../color-descriptor.js";
 import { latexToUnicode } from "../latex.js";
 import {
 	extractTableCellSelectionRegions,
@@ -123,7 +124,7 @@ mathMarkdownParser.setOptions({
 });
 mathMarkdownParser.use({ extensions: [blockMathExtension, inlineMathExtension] });
 
-function pickMarkdownParser(text: string): Marked {
+export function pickMarkdownParser(text: string): Marked {
 	return text.includes("$") || text.includes("\\(") || text.includes("\\[") ? mathMarkdownParser : markdownParser;
 }
 
@@ -165,6 +166,10 @@ export interface MarkdownTheme {
 	italic: (text: string) => string;
 	strikethrough: (text: string) => string;
 	underline: (text: string) => string;
+	/** Color a span foreground from a model color descriptor. */
+	colored?: (text: string, color: ColorDescriptor) => string;
+	/** Color a span background from a model color descriptor. */
+	backgrounded?: (text: string, color: ColorDescriptor) => string;
 	highlightCode?: (code: string, lang?: string) => string[];
 	/** Prefix applied to each rendered code block line (default: "  ") */
 	codeBlockIndent?: string;
@@ -588,6 +593,46 @@ export class Markdown implements Component {
 		return lines;
 	}
 
+	private static readonly HEX_LITERAL_RE = /(?<![A-Za-z0-9_#/.?])#([0-9a-fA-F]{6})(?![A-Za-z0-9_])/g;
+
+	/**
+	 * Color standalone #RRGGBB literals in plain text with their own color and
+	 * a swatch chip. Plain segments keep the ambient style, and the literal and
+	 * chip are styled with it first so headings and blockquotes compose
+	 * (weight survives the color wrap). Literals stay plain text when the theme
+	 * has no colored hook. "/" and "." preceding a literal block it, so URL
+	 * fragments like http://x.com/#aabbcc stay plain.
+	 */
+	private renderTextWithHexLiterals(text: string, styleContext: InlineStyleContext): string {
+		const colored = this.theme.colored;
+		const applyWithNewlines = (value: string): string => {
+			const segments = value.split("\n");
+			return segments.map((segment) => styleContext.applyText(segment)).join("\n");
+		};
+		if (!colored) return applyWithNewlines(text);
+		let out = "";
+		let last = 0;
+		for (const match of text.matchAll(Markdown.HEX_LITERAL_RE)) {
+			const index = match.index;
+			out += applyWithNewlines(text.slice(last, index));
+			// The regex proposes the candidate; the parser is the single gate on
+			// whether the token is a color literal.
+			const parsed = parseHexLiteral(match[0]!);
+			if (!parsed) {
+				out += applyWithNewlines(match[0]!);
+				last = index + match[0]!.length;
+				continue;
+			}
+			const descriptor: ColorDescriptor = { channel: "fg", kind: "hex", value: parsed };
+			const literal = applyWithNewlines(match[0]!.toUpperCase());
+			out += colored(literal, descriptor) + styleContext.stylePrefix;
+			out += colored(applyWithNewlines("■"), descriptor) + styleContext.stylePrefix;
+			last = index + match[0]!.length;
+		}
+		out += applyWithNewlines(text.slice(last));
+		return out;
+	}
+
 	private renderInlineTokens(tokens: Token[], styleContext?: InlineStyleContext): string {
 		let result = "";
 		const resolvedStyleContext = styleContext ?? this.getDefaultInlineStyleContext();
@@ -604,7 +649,7 @@ export class Markdown implements Component {
 					if (token.tokens && token.tokens.length > 0) {
 						result += this.renderInlineTokens(token.tokens, resolvedStyleContext);
 					} else {
-						result += applyTextWithNewlines(token.text);
+						result += this.renderTextWithHexLiterals(token.text, resolvedStyleContext);
 					}
 					break;
 
@@ -637,6 +682,18 @@ export class Markdown implements Component {
 				}
 
 				case "link": {
+					const colorDescriptor = parseColorDescriptor(token.href);
+					if (colorDescriptor) {
+						const inner = this.renderInlineTokens(token.tokens || [], resolvedStyleContext);
+						if (colorDescriptor.channel === "fg") {
+							result += this.theme.colored ? this.theme.colored(inner, colorDescriptor) + stylePrefix : inner;
+						} else {
+							result += this.theme.backgrounded
+								? this.theme.backgrounded(inner, colorDescriptor) + stylePrefix
+								: inner;
+						}
+						break;
+					}
 					const linkText = this.renderInlineTokens(token.tokens || [], resolvedStyleContext);
 					const styledLink = this.theme.link(this.theme.underline(linkText));
 					if (getCapabilities().hyperlinks) {

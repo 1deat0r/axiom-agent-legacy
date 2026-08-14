@@ -144,6 +144,39 @@ describe("TelegramTransport", () => {
 		await t.disconnect();
 	});
 
+	it("strips color descriptors from a single-message send and edit path", async () => {
+		const f = fakeClient();
+		const t = new TelegramTransport(f.client, { pollIntervalMs: 1 });
+		await t.connect();
+		await t.sendMessage({ channelId: "123", recipient: "123" }, "[done](#role:ok) and **bold**");
+		expect(f.sent[0]?.text).toBe("done and <b>bold</b>");
+		await t.editMessage("123", f.sent[0]!.messageId!, "[red](#hex:FF5555)");
+		expect(f.sent[1]?.text).toBe("red");
+		await t.disconnect();
+	});
+
+	it("never leaks a color descriptor when a long link spans chunk boundaries", async () => {
+		const f = fakeClient();
+		const t = new TelegramTransport(f.client, { pollIntervalMs: 1 });
+		await t.connect();
+		const inner = "w ".repeat(3000).trim(); // ~5999 chars, forces multiple chunks
+		await t.send({ channelId: "123", recipient: "123" }, `[${inner}](#role:ok)`);
+		const joined = f.sent.map((m) => m.text).join("\n");
+		expect(joined).not.toContain("](#role:ok)");
+		expect(joined).not.toContain("#role:ok");
+		expect(words(joined)).toEqual(words(inner));
+		await t.disconnect();
+	});
+
+	it("strips color descriptors from a sent reply", async () => {
+		const f = fakeClient();
+		const t = new TelegramTransport(f.client, { pollIntervalMs: 1 });
+		await t.connect();
+		await t.send({ channelId: "123", recipient: "123" }, "[done](#role:ok) and **bold**");
+		expect(f.sent[0]?.text).toBe("done and <b>bold</b>");
+		await t.disconnect();
+	});
+
 	it("delivers a private-chat message with String(chat.id)", async () => {
 		const f = fakeClient();
 		f.queue.push(update(1, 555, "hello"));
@@ -444,6 +477,14 @@ describe("renderTelegramText", () => {
 		expect(renderTelegramText("start **bold")).toBe("start bold");
 		expect(renderTelegramText("`code")).toBe("code");
 		expect(renderTelegramText("a * b")).toBe("a * b"); // arithmetic star stays
+	});
+
+	it("leaves color descriptors untouched - the strip runs at the transport entry", () => {
+		expect(renderTelegramText("[done](#role:ok)")).toBe("[done](#role:ok)");
+	});
+
+	it("keeps plain fragment links untouched", () => {
+		expect(renderTelegramText("[see](#section)")).toBe("[see](#section)");
 	});
 
 	it("renders each chunk after chunking, so markdown is never split mid-tag", () => {

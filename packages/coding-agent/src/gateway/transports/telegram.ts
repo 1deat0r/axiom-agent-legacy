@@ -14,6 +14,7 @@
  * id is itself allowlisted.
  */
 import { readFileSync, writeFileSync } from "node:fs";
+import { stripColorDescriptors } from "@earendil-works/pi-tui";
 import { toGatewayMessage } from "../messages.js";
 import type { GatewayMessage, GatewayRecipient, GatewayTransport } from "../types.js";
 
@@ -323,7 +324,11 @@ export class TelegramTransport implements GatewayTransport {
 
 	/** Single-message send that returns the message id (for streaming edits). */
 	async sendMessage(to: GatewayRecipient, text: string): Promise<number> {
-		return this.client.sendMessage({ chatId: to.channelId, text: renderTelegramText(text), parseMode: "HTML" });
+		return this.client.sendMessage({
+			chatId: to.channelId,
+			text: renderTelegramText(stripColorDescriptors(text)),
+			parseMode: "HTML",
+		});
 	}
 
 	/** Edit a previously-sent message in place (throws on failure -> caller falls back). */
@@ -331,7 +336,7 @@ export class TelegramTransport implements GatewayTransport {
 		await this.client.editMessageText({
 			chatId,
 			messageId,
-			text: renderTelegramText(text),
+			text: renderTelegramText(stripColorDescriptors(text)),
 			parseMode: "HTML",
 		});
 	}
@@ -347,7 +352,9 @@ export class TelegramTransport implements GatewayTransport {
 		// is stripped) instead of broken HTML. HTML tags inflate the size, so a
 		// rendered chunk over the cap is re-chunked (whitespace splits never cut
 		// an inline tag in half).
-		const chunks = chunkTelegramText(text, TELEGRAM_TEXT_LIMIT);
+		// Strip before chunking: a color link split across a chunk boundary
+		// would leak its raw descriptor syntax in a later chunk.
+		const chunks = chunkTelegramText(stripColorDescriptors(text), TELEGRAM_TEXT_LIMIT);
 		const parts: string[] = [];
 		for (const chunk of chunks) {
 			const rendered = renderTelegramText(chunk);
