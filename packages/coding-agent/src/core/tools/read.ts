@@ -1,5 +1,6 @@
 import type { Stats } from "node:fs";
-import { readFile as fsReadFile, stat as fsStat } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
+import { open as fsOpen } from "node:fs/promises";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { type Static, Type } from "typebox";
 import type { ToolDefinition } from "../extensions/types.js";
@@ -43,13 +44,21 @@ export interface ReadToolDetails {
 }
 
 export interface ReadOperations {
-	stat(path: string): Promise<Stats>;
-	readFile(path: string): Promise<string>;
+	/** Open the path for reading. O_NONBLOCK keeps FIFOs from blocking the open. */
+	open(path: string): Promise<{ fstat(): Promise<Stats>; readFile(): Promise<Buffer>; close(): Promise<void> }>;
 }
 
 export const defaultReadOperations: ReadOperations = {
-	stat: (path) => fsStat(path),
-	readFile: (path) => fsReadFile(path, "utf8"),
+	async open(path) {
+		// O_NONBLOCK is a no-op on regular files and makes FIFO opens return
+		// immediately so the fstat gate can reject them without hanging.
+		const handle = await fsOpen(path, fsConstants.O_RDONLY | fsConstants.O_NONBLOCK);
+		return {
+			fstat: () => handle.stat(),
+			readFile: () => handle.readFile(),
+			close: () => handle.close(),
+		};
+	},
 };
 
 export interface ReadToolOptions {
@@ -120,50 +129,80 @@ export function createReadToolDefinition(
 				throw new Error("Operation aborted");
 			}
 
-			let stats: Stats;
+			let handle: { fstat(): Promise<Stats>; readFile(): Promise<Buffer>; close(): Promise<void> };
 			try {
-				stats = await ops.stat(absolutePath);
+				handle = await ops.open(absolutePath);
 			} catch (error: unknown) {
 				const code =
 					error instanceof Error && "code" in error ? ` Error code: ${(error as { code?: string }).code}.` : "";
 				throw new Error(`Could not read file: ${path}.${code}`);
 			}
 
-			if (signal?.aborted) {
-				throw new Error("Operation aborted");
+			let content = "";
+			let totalBytes = 0;
+			let hadBom = false;
+			try {
+				// fstat and read go through the SAME handle, so the file-type
+				// gate cannot be raced by a path swap between check and read.
+				const stats = await handle.fstat();
+
+				if (signal?.aborted) {
+					throw new Error("Operation aborted");
+				}
+
+				if (stats.isDirectory()) {
+					throw new Error(
+						`Path is a directory, not a file: ${path}. The read tool reads files only; list directories with bash.`,
+					);
+				}
+				if (!stats.isFile()) {
+					throw new Error(
+						`Path is not a regular file: ${path}. The read tool rejects FIFOs, sockets, and device nodes.`,
+					);
+				}
+				if (stats.size >= hardMaxBytes) {
+					throw new Error(
+						`File is ${formatSize(stats.size)}, at or above the read cap of ${hardMaxLabel}. Use bash (head or sed) for files this large.`,
+					);
+				}
+
+				const buffer = await handle.readFile();
+				if (signal?.aborted) {
+					throw new Error("Operation aborted");
+				}
+
+				// Virtual files (procfs) report size 0; bound them by what was
+				// actually read before anything enters the context.
+				if (buffer.byteLength > hardMaxBytes) {
+					throw new Error(
+						`File is ${formatSize(buffer.byteLength)}, at or above the read cap of ${hardMaxLabel}. Use bash (head or sed) for files this large.`,
+					);
+				}
+
+				// TextDecoder strips a leading BOM from its output, so detect it
+				// from the buffer and skip it before decoding. The flag keeps
+				// the details contract accurate on every Node version.
+				hadBom = buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf;
+				try {
+					content = new TextDecoder("utf-8", { fatal: true }).decode(hadBom ? buffer.subarray(3) : buffer);
+				} catch {
+					throw new Error(`Binary file: ${path}. The read tool returns UTF-8 text files only.`);
+				}
+				if (content.includes("\0")) {
+					throw new Error(`Binary file: ${path}. The read tool returns text files only.`);
+				}
+
+				totalBytes = buffer.byteLength;
+			} finally {
+				await handle.close();
 			}
 
-			if (stats.isDirectory()) {
-				throw new Error(
-					`Path is a directory, not a file: ${path}. The read tool reads files only; list directories with bash.`,
-				);
-			}
-			if (!stats.isFile()) {
-				throw new Error(
-					`Path is not a regular file: ${path}. The read tool rejects FIFOs, sockets, and device nodes.`,
-				);
-			}
-			if (stats.size >= hardMaxBytes) {
-				throw new Error(
-					`File is ${formatSize(stats.size)}, at or above the read cap of ${hardMaxLabel}. Use bash (head or sed) for files this large.`,
-				);
-			}
-
-			const content = await ops.readFile(absolutePath);
-
-			if (signal?.aborted) {
-				throw new Error("Operation aborted");
-			}
-
-			if (content.includes("\0")) {
-				throw new Error(`Binary file: ${path}. The read tool returns text files only.`);
-			}
-
-			const { bom, text: withoutBom } = stripBom(content);
+			// stripBom is a safety net; the buffer-level detection above is the
+			// source of truth for the details flag.
+			const { text: withoutBom } = stripBom(content);
 			const normalized = withoutBom.replace(/\r/g, "");
 			const totalLines = countLines(normalized);
-			const totalBytes = stats.size;
-			const bomStripped = bom.length > 0;
+			const bomStripped = hadBom;
 
 			if (totalLines === 0) {
 				return {
@@ -195,12 +234,12 @@ export function createReadToolDefinition(
 			const truncation = truncateHead(selected, { maxLines: DEFAULT_MAX_LINES, maxBytes: maxBytes });
 			const shownLines = truncation.content.length === 0 ? [] : truncation.content.split("\n");
 			const shownStart = start;
-			const shownEnd = start + shownLines.length - 1;
+			const shownEnd = Math.max(shownStart, shownStart + shownLines.length - 1);
 			const shownBytes = Buffer.byteLength(truncation.content, "utf8");
 
 			let text = `Read ${shortenPath(absolutePath)} (lines ${shownStart}-${shownEnd} of ${totalLines}, ${formatSize(shownBytes)} of ${formatSize(totalBytes)})`;
 			if (truncation.content.length > 0) {
-				text += `\n${formatNumberedLines(shownLines, shownStart, Math.max(shownStart, shownEnd))}`;
+				text += `\n${formatNumberedLines(shownLines, shownStart, shownEnd)}`;
 			}
 			if (truncation.truncated) {
 				text += `\n[Truncated: showing ${formatSize(shownBytes)} of ${formatSize(totalBytes)} (lines ${shownStart}-${shownEnd} of ${totalLines}). Pass startLine/endLine to read further.]`;

@@ -178,6 +178,32 @@ describe("read tool", () => {
 		expect(text).toContain("   2\tb");
 	});
 
+	it("rejects invalid UTF-8 as binary (fatal decode)", async () => {
+		const file = join(testDir, "bad-utf8.bin");
+		writeFileSync(file, Buffer.from([0x61, 0xff, 0xfe, 0x62]));
+
+		await expect(readTool.execute("call-18", { path: file })).rejects.toThrow(/binary/i);
+	});
+
+	it("keeps the header range valid when the first line alone exceeds maxBytes", async () => {
+		const file = join(testDir, "one-long-line.txt");
+		writeFileSync(file, "y".repeat(70 * 1024));
+
+		const result = await readTool.execute("call-19", { path: file });
+		const text = getText(result);
+
+		expect(text).not.toContain("1-0");
+		expect(result.details.endLine).toBeGreaterThanOrEqual(result.details.startLine);
+		expect(result.details.truncated).toBe(true);
+	});
+
+	it("reads proc files that report size zero", async () => {
+		const result = await readTool.execute("call-20", { path: "/proc/self/stat" });
+		expect(getText(result)).toContain("Read");
+		// The real byte count comes from the read buffer, not the lying stat.
+		expect(result.details.totalBytes).toBeGreaterThan(0);
+	});
+
 	it("aborts before the read when the signal is already aborted", async () => {
 		const file = join(testDir, "abort.txt");
 		writeFileSync(file, "content\n");
