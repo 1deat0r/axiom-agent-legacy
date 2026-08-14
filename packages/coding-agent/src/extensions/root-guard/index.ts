@@ -224,13 +224,15 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 				return undefined;
 			}
 			// A failed block-audit must not replace the curated plain-English
-			// block with a raw store error — the block still stands.
+			// block with a raw store error — the block still stands. Report the
+			// POST-grant decision: it names exactly the still-blocked paths, so
+			// the reason and the audit never over-name grant-allowed tokens.
 			try {
-				await appendAudit(scope, { event: "block", tool: event.toolName, paths: decision.paths });
+				await appendAudit(scope, { event: "block", tool: event.toolName, paths: withGrants.paths });
 			} catch {
 				/* audit degraded; the block reason still reaches the model */
 			}
-			return { block: true, reason: decision.reason };
+			return { block: true, reason: withGrants.reason };
 		});
 
 		pi.registerTool({
