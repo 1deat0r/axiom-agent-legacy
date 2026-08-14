@@ -292,6 +292,23 @@ export class HttpSlackClient implements SlackClient {
 		await this.request("chat.postMessage", { channel: input.channel, text: input.text });
 	}
 
+	/**
+	 * Socket Mode link (ADR-0062): `apps.connections.open` with the app-level
+	 * (xapp-) token returns the wss url to connect. The caller validates the
+	 * url host before opening a socket; this only surfaces the response.
+	 */
+	async appsConnectionsOpen(): Promise<{ url: string }> {
+		const data = await this.request("apps.connections.open", {});
+		const url = (data as { url?: unknown }).url;
+		if (typeof url !== "string" || url.length === 0) {
+			throw Object.assign(new Error("slack apps.connections.open rejected: missing url"), {
+				status: 400,
+				slackError: "missing_url",
+			});
+		}
+		return { url };
+	}
+
 	/** Message-capable conversations the bot can see: DMs + public/private channels. */
 	async listChannels(): Promise<SlackChannel[]> {
 		const data = await this.request("conversations.list", { types: SLACK_CONVERSATION_TYPES, limit: 200 });

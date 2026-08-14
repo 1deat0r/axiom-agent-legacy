@@ -319,6 +319,19 @@ state without a menu. The service name is `AXIOM_GATEWAY_SERVICE` (default
 `axiom-telegram-gateway.service`).
 _Avoid_: Transport flag (a connector is the transport plus its credential)
 
+**Transport limits**:
+The gateway's transport breadth contract (ADR-0062): Slack receive is REST
+long-poll by default, or Socket Mode (websocket) when `SLACK_SOCKET_MODE=1`
+with `AXIOM_SLACK_APP_TOKEN` — Socket Mode frames are treated as untrusted
+input (validated, replay-cached, url-confined to `wss:` on slack.com, secrets
+redacted from logs; a 9-case threat corpus pins it). Broadcasts (`/announce`,
+`deliverToAll`) reach every active transport: a `deliverTo` entry that names a
+transport goes there alone, an unnamed entry goes to the primary and every
+built fan-out sibling, each labelled by its own name in the delivery ledger.
+`docs/transport-audit.md` is the honest inventory of every Discord/Slack/Signal
+path with status live / built-not-live / paper.
+_Avoid_: Single-transport assumption (broadcasts are multi-platform now)
+
 **Peer coordination**:
 Instances of axiom-agent anchored to the same project root (AXIOM_PROJECT_ROOT)
 see and talk to each other (ADR-0038). Each axiom home has a stable instance ID

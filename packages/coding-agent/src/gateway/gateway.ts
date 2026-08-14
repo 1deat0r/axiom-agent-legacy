@@ -469,25 +469,45 @@ export class Gateway {
 	}
 
 	/**
-	 * Fan one message out to every configured deliverTo channel — across
-	 * transports when a target names one (ADR-0023), else the active transport
-	 * (ADR-0022). Returns how many channels were targeted.
+	 * Fan one message out to every configured deliverTo channel (ADR-0022/
+	 * 0023/0062). A target that names a transport goes to that transport only
+	 * (an unknown name degrades to the active transport, ledger-labelled with
+	 * what really delivered). An UNNAMED target is a broadcast: it reaches
+	 * every active transport — the primary plus every built fan-out sibling —
+	 * not just the channel's own transport. Returns how many sends were made.
 	 */
 	async deliverToAll(text: string): Promise<{ channels: number }> {
 		const config = loadGatewayConfig(this.axiomHomeDir);
 		const targets = config.deliverTo ?? [];
+		let channels = 0;
 		await this.withPollingPaused(async () => {
 			for (const target of targets) {
-				// Resolve the actual transport first: a named target we do not hold
-				// degrades to the active transport, and the ledger labels what really
-				// delivered (never a phantom transport name).
-				const named = target.transport !== undefined ? this.transports[target.transport] : undefined;
-				const transport = named ?? this.transport;
-				const name = named !== undefined ? target.transport! : this.transportName;
-				await this.deliverVia(transport, name, { channelId: target.channel, recipient: "" }, text);
+				if (target.transport !== undefined) {
+					// Resolve the actual transport first: a named target we do not hold
+					// degrades to the active transport, and the ledger labels what really
+					// delivered (never a phantom transport name).
+					const named = this.transports[target.transport];
+					const transport = named ?? this.transport;
+					const name = named !== undefined ? target.transport! : this.transportName;
+					await this.deliverVia(transport, name, { channelId: target.channel, recipient: "" }, text);
+					channels += 1;
+					continue;
+				}
+				// Unnamed target (ADR-0062): every active transport — the primary and
+				// every built fan-out sibling — each labelled by its own name.
+				const all: Array<{ transport: GatewayTransport; name: string }> = [
+					{ transport: this.transport, name: this.transportName },
+				];
+				for (const [name, transport] of Object.entries(this.transports)) {
+					all.push({ transport, name });
+				}
+				for (const entry of all) {
+					await this.deliverVia(entry.transport, entry.name, { channelId: target.channel, recipient: "" }, text);
+				}
+				channels += all.length;
 			}
 		});
-		return { channels: targets.length };
+		return { channels };
 	}
 
 	private async handle(msg: GatewayMessage): Promise<void> {
