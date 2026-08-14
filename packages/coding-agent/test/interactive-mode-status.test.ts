@@ -625,6 +625,7 @@ type SubmitHandlerHarness = {
 	isBashRunning: () => boolean;
 	patchConnectionState: (patch: Record<string, unknown>) => void;
 	requestAgentsView: () => Promise<void>;
+	handleResumeCommand: (args: string) => Promise<void>;
 	agentConnection: {
 		prompt: (message: string) => Promise<void>;
 		executeBash: (command: string, options?: { excludeFromContext?: boolean }) => Promise<void>;
@@ -644,6 +645,7 @@ function createSubmitHandlerHarness(overrides: Partial<SubmitHandlerHarness> = {
 		patchConnectionState: vi.fn(),
 		promptStashState: {},
 		requestAgentsView: vi.fn(async () => {}),
+		handleResumeCommand: vi.fn(async () => {}),
 		promptStash: undefined,
 		pastedImages: new Map(),
 		getPromptStashImages: vi.fn(() => []),
@@ -1556,13 +1558,14 @@ describe("InteractiveMode connection events", () => {
 		expect(flushPendingBashComponents).toHaveBeenCalledOnce();
 	});
 
-	test("sends /resume as plain prompt text now that the command is retired", async () => {
+	test("routes /resume to the resume command handler", async () => {
 		const fakeThis = createSubmitHandlerHarness();
 
-		await fakeThis.defaultEditor.onSubmit?.("/resume unexpected");
+		await fakeThis.defaultEditor.onSubmit?.("/resume abc123");
 
+		expect(fakeThis.handleResumeCommand).toHaveBeenCalledWith("abc123");
 		expect(fakeThis.showError).not.toHaveBeenCalled();
-		expect(fakeThis.requestAgentsView).not.toHaveBeenCalled();
+		expect(fakeThis.agentConnection.prompt).not.toHaveBeenCalled();
 	});
 
 	test("renderCurrentSessionState waits for replacement handling before rendering", async () => {
@@ -4277,6 +4280,7 @@ describe("InteractiveMode.setToolsExpanded", () => {
 
 	test("toggles agent messages separately from tools", () => {
 		const toolChild = { setExpanded: vi.fn() };
+		const ipythonChild = { setExpanded: vi.fn(), setAgentMessagesExpanded: vi.fn() };
 		const messageChild = new AgentMessageComponent({
 			role: "custom",
 			customType: "agent_message",
@@ -4286,7 +4290,7 @@ describe("InteractiveMode.setToolsExpanded", () => {
 			timestamp: 123,
 		} as any);
 		const messageSetExpanded = vi.spyOn(messageChild, "setExpanded");
-		const fakeThis = createExpansionFakeThis([toolChild, messageChild]);
+		const fakeThis = createExpansionFakeThis([toolChild, ipythonChild, messageChild]);
 
 		fakeThis.toggleAgentMessageExpansion();
 
@@ -4294,11 +4298,15 @@ describe("InteractiveMode.setToolsExpanded", () => {
 		expect(fakeThis.toolOutputExpanded).toBe(false);
 		expect(messageSetExpanded).toHaveBeenCalledWith(true);
 		expect(toolChild.setExpanded).toHaveBeenCalledWith(false);
+		expect(ipythonChild.setExpanded).toHaveBeenCalledWith(false);
+		expect(ipythonChild.setAgentMessagesExpanded).toHaveBeenCalledWith(true);
 
 		fakeThis.setToolsExpanded(true);
 
 		expect(toolChild.setExpanded).toHaveBeenCalledWith(true);
 		expect(messageSetExpanded).toHaveBeenLastCalledWith(true);
+		expect(ipythonChild.setExpanded).toHaveBeenCalledWith(true);
+		expect(ipythonChild.setAgentMessagesExpanded).toHaveBeenLastCalledWith(true);
 		expect(fakeThis.agentMessagesExpanded).toBe(true);
 	});
 });

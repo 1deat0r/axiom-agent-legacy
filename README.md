@@ -81,6 +81,12 @@ Axiom ships a cross-platform messaging gateway (Telegram, Discord, Slack) so you
 - [Architecture overview](packages/coding-agent/docs/architecture.md) — daemon, worker, kernel, and persistence boundaries
 - [Development](packages/coding-agent/docs/development.md) — build and run from source
 
+## Contributing
+
+Start with a GitHub Discussion for [general questions](https://github.com/PrimeIntellect-ai/prime-agent/discussions/categories/general), [bug reports](https://github.com/PrimeIntellect-ai/prime-agent/discussions/categories/bug-reports), and [feature requests](https://github.com/PrimeIntellect-ai/prime-agent/discussions/categories/feature-requests). Maintainers promote accepted work into Issues, and pull requests are reviewed from maintainers and vouched contributors.
+
+Read the [contribution guidelines](CONTRIBUTING.md) for the full process. Report security vulnerabilities privately by following the [security policy](SECURITY.md).
+
 ## Acknowledgements
 
 Axiom is a fork of **Axiom** (MIT) and shares its RLM/continual-harness lineage from [`pi`](https://github.com/earendil-works/pi). We thank the Prime Intellect and `pi` authors for their valuable work.
