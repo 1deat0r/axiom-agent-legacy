@@ -8,6 +8,7 @@
  * empty override map (recorded costs stand).
  */
 
+import { readFileSync } from "node:fs";
 import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import type { OverrideRates } from "./ledger.js";
 
@@ -24,34 +25,48 @@ export interface LedgerConfig {
  * Missing or malformed fields are ignored — the ledger never crashes on a
  * bad file, and never invents a cap.
  */
-export async function loadLedgerConfig(path: string): Promise<LedgerConfig> {
+/** Parse raw ledger.json text into a config (never throws on a bad shape). */
+export function parseLedgerConfig(raw: string): LedgerConfig {
 	const config: LedgerConfig = { overrides: new Map<string, OverrideRates>() };
-	try {
-		const raw = await readFile(path, "utf8");
-		const parsed: unknown = JSON.parse(raw);
-		if (parsed === null || typeof parsed !== "object") return config;
-		const record = parsed as Record<string, unknown>;
-		const cap = record.maxRunCostUsd;
-		if (typeof cap === "number" && Number.isFinite(cap)) {
-			config.maxRunCostUsd = cap;
+	const parsed: unknown = JSON.parse(raw);
+	if (parsed === null || typeof parsed !== "object") return config;
+	const record = parsed as Record<string, unknown>;
+	const cap = record.maxRunCostUsd;
+	if (typeof cap === "number" && Number.isFinite(cap)) {
+		config.maxRunCostUsd = cap;
+	}
+	const overrides = record.overrides;
+	if (overrides === null || typeof overrides !== "object") return config;
+	for (const [key, value] of Object.entries(overrides as Record<string, unknown>)) {
+		if (value === null || typeof value !== "object") continue;
+		const rates = value as Record<string, unknown>;
+		const input = Number(rates.input);
+		const output = Number(rates.output);
+		const cacheRead = Number(rates.cacheRead);
+		const cacheWrite = Number(rates.cacheWrite);
+		if ([input, output, cacheRead, cacheWrite].every(Number.isFinite)) {
+			config.overrides.set(key, { input, output, cacheRead, cacheWrite });
 		}
-		const overrides = record.overrides;
-		if (overrides === null || typeof overrides !== "object") return config;
-		for (const [key, value] of Object.entries(overrides as Record<string, unknown>)) {
-			if (value === null || typeof value !== "object") continue;
-			const rates = value as Record<string, unknown>;
-			const input = Number(rates.input);
-			const output = Number(rates.output);
-			const cacheRead = Number(rates.cacheRead);
-			const cacheWrite = Number(rates.cacheWrite);
-			if ([input, output, cacheRead, cacheWrite].every(Number.isFinite)) {
-				config.overrides.set(key, { input, output, cacheRead, cacheWrite });
-			}
-		}
-	} catch {
-		// Missing or malformed file: no cap, recorded costs stand.
 	}
 	return config;
+}
+
+/** Sync variant for gateway commands (the command surface is synchronous). */
+export function loadLedgerConfigSync(path: string): LedgerConfig {
+	try {
+		return parseLedgerConfig(readFileSync(path, "utf8"));
+	} catch {
+		return { overrides: new Map<string, OverrideRates>() };
+	}
+}
+
+/** Async variant (the extension surfaces). Never throws on a bad file. */
+export async function loadLedgerConfig(path: string): Promise<LedgerConfig> {
+	try {
+		return parseLedgerConfig(await readFile(path, "utf8"));
+	} catch {
+		return { overrides: new Map<string, OverrideRates>() };
+	}
 }
 
 /** Override rates only (kept for callers that do not need the cap). */

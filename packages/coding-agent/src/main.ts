@@ -15,6 +15,7 @@ import chalk from "chalk";
 import { type Args, type Mode, parseArgs } from "./cli/args.js";
 import { formatTopLevelHelp } from "./cli/command-registry.js";
 import { handleCompletionCommand } from "./cli/completion-command.js";
+import { handleCostCommand } from "./cli/cost-command.js";
 import {
 	ensureInteractiveDaemonRunning,
 	isDaemonSessionSummary,
@@ -1134,6 +1135,10 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	if (await handleSkillCaptureAutoCommand(args)) {
+		return;
+	}
+
+	if (await handleCostCommand(args)) {
 		return;
 	}
 
