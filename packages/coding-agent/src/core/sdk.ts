@@ -19,7 +19,14 @@ import { getDefaultSessionDir, SessionManager } from "./session-manager.js";
 import { SettingsManager } from "./settings-manager.js";
 import { resolveStreamStallMaxAttempts, resolveStreamStallTimeoutMs } from "./stall-watchdog.js";
 import { time } from "./timings.js";
-import { createBashTool, createEditTool, createIpythonTool, withFileMutationQueue } from "./tools/index.js";
+import {
+	createBashTool,
+	createEditTool,
+	createIpythonTool,
+	createReadTool,
+	createReadToolDefinition,
+	withFileMutationQueue,
+} from "./tools/index.js";
 
 export interface CreateAgentSessionOptions extends AgentSessionCreationOptions {
 	/** Working directory for project-local discovery. Default: process.cwd() */
@@ -109,6 +116,8 @@ export {
 	createEditTool,
 	// Tool factories (for custom cwd)
 	createIpythonTool,
+	createReadTool,
+	createReadToolDefinition,
 	withFileMutationQueue,
 };
 
@@ -252,7 +261,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const allowedToolNames = options.allowedToolNames ?? options.tools ?? (options.noTools === "all" ? [] : undefined);
 	const includeGoals = options.includeGoals ?? (options.tools !== undefined || options.noTools !== "all");
 	const initialActiveToolNames: string[] =
-		options.initialActiveToolNames ?? (options.tools ? [...options.tools] : options.noTools ? [] : ["ipython"]);
+		options.initialActiveToolNames ??
+		(options.tools ? [...options.tools] : options.noTools ? [] : ["ipython", "read"]);
 
 	let agent: Agent;
 
