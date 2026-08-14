@@ -86,12 +86,15 @@ skip it.
 
 The workflow `.github/workflows/triage.yml` is the safety net. It has two jobs:
 
-1. Open job. When an issue opens with no role label, the workflow applies
-   `needs-triage` and posts the readiness contract as a comment. The workflow
-   does not edit issues that carry a role label.
-2. Close job. When an issue closes without an audit comment, the workflow
-   posts a reminder. The audit comment must carry `Commit:`, `ADR:`, and
-   `Handoff:` in one comment.
+1. Open job. Fires on `opened`, `labeled`, and `unlabeled`. Zero role labels:
+   apply `needs-triage` and post the contract (on `unlabeled`, post only).
+   Two or more role labels: post a conflict note. One role label: no action.
+2. Close job. Fires on `closed`. When the issue closes without an audit
+   comment, post one reminder. The audit comment must carry `Commit:`, `ADR:`,
+   and `Handoff:` in one comment. The reminder does not repeat.
+
+The close ritual applies to closes from ADR-0050 (2026-08-14) onward. Earlier
+closes predate the policy.
 
 Agents must still set the role at create and post the audit comment at close.
 Do not rely on the safety net.

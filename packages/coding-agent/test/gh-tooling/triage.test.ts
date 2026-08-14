@@ -5,7 +5,7 @@ import {
 	buildCloseNudge,
 	buildTriageComment,
 	classifyClose,
-	classifyIssue,
+	classifyOpen,
 	decide,
 	decideClose,
 	TRIAGE_ROLES,
@@ -18,34 +18,60 @@ describe("TRIAGE_ROLES", () => {
 	});
 });
 
-describe("classifyIssue", () => {
-	it("returns needs-triage when no labels are present", () => {
-		const decision = classifyIssue([]);
+describe("classifyOpen", () => {
+	it("returns needs-triage on opened with no labels", () => {
+		const decision = classifyOpen([], "opened");
 		expect(decision.action).toBe("needs-triage");
 		expect(decision.label).toBe("needs-triage");
 		expect(decision.comment).toBeTruthy();
 	});
 
-	it("returns skip when any role label is present", () => {
+	it("returns skip on opened when any role label is present", () => {
 		for (const role of TRIAGE_ROLES) {
-			expect(classifyIssue([role]).action).toBe("skip");
+			expect(classifyOpen([role], "opened").action).toBe("skip");
 		}
 	});
 
-	it("returns skip when a role label sits beside other labels", () => {
-		expect(classifyIssue(["wayfinder:map", "ready-for-agent"]).action).toBe("skip");
+	it("returns skip on opened when a role label sits beside other labels", () => {
+		expect(classifyOpen(["wayfinder:map", "ready-for-agent"], "opened").action).toBe("skip");
 	});
 
-	it("ignores wayfinder labels alone", () => {
-		expect(classifyIssue(["wayfinder:map"]).action).toBe("needs-triage");
+	it("treats wayfinder labels alone as unlabeled", () => {
+		expect(classifyOpen(["wayfinder:map"], "opened").action).toBe("needs-triage");
 	});
 
 	it("ignores unknown labels", () => {
-		expect(classifyIssue(["bug", "enhancement"]).action).toBe("needs-triage");
+		expect(classifyOpen(["bug", "enhancement"], "opened").action).toBe("needs-triage");
 	});
 
 	it("never emits a comment on skip", () => {
-		expect(classifyIssue(["needs-triage"]).comment).toBeUndefined();
+		expect(classifyOpen(["needs-triage"], "opened").comment).toBeUndefined();
+	});
+
+	it("returns role-conflict on labeled with two role labels", () => {
+		const decision = classifyOpen(["needs-triage", "ready-for-agent"], "labeled");
+		expect(decision.action).toBe("role-conflict");
+		expect(decision.comment).toContain("needs-triage");
+		expect(decision.comment).toContain("ready-for-agent");
+	});
+
+	it("returns skip on labeled with one role label", () => {
+		expect(classifyOpen(["ready-for-agent"], "labeled").action).toBe("skip");
+	});
+
+	it("returns needs-triage on labeled when no role label is present", () => {
+		expect(classifyOpen(["wayfinder:task"], "labeled").action).toBe("needs-triage");
+	});
+
+	it("returns remind on unlabeled with no role label and does not re-apply", () => {
+		const decision = classifyOpen([], "unlabeled");
+		expect(decision.action).toBe("remind");
+		expect(decision.label).toBeUndefined();
+		expect(decision.comment).toBeTruthy();
+	});
+
+	it("returns skip on unlabeled when a role label remains", () => {
+		expect(classifyOpen(["ready-for-agent"], "unlabeled").action).toBe("skip");
 	});
 });
 
@@ -66,17 +92,17 @@ describe("buildTriageComment", () => {
 
 describe("decide", () => {
 	it("parses gh issue view --json labels output", () => {
-		const decision = decide('{"labels":[{"name":"needs-triage"}]}');
+		const decision = decide('{"labels":[{"name":"needs-triage"}]}', "opened");
 		expect(decision.action).toBe("skip");
 	});
 
 	it("treats an empty labels array as unlabeled", () => {
-		const decision = decide('{"labels":[]}');
+		const decision = decide('{"labels":[]}', "opened");
 		expect(decision.action).toBe("needs-triage");
 	});
 
 	it("treats missing labels as unlabeled", () => {
-		const decision = decide("{}");
+		const decision = decide("{}", "opened");
 		expect(decision.action).toBe("needs-triage");
 	});
 });

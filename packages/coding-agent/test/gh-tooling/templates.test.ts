@@ -64,5 +64,6 @@ describe("role guidance", () => {
 		expect(text).toContain("needs-triage");
 		expect(text).toContain("ready-for-agent");
 		expect(text).not.toContain("Triage role");
+		expect(text).toContain("pre-applies");
 	});
 });

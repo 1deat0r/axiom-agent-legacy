@@ -14,8 +14,10 @@ export type WayfinderLabel = (typeof WAYFINDER_LABELS)[number];
 
 export const ALL_LABELS: string[] = [...TRIAGE_ROLES, ...WAYFINDER_LABELS];
 
+export type TriageAction = "skip" | "needs-triage" | "role-conflict" | "remind";
+
 export interface TriageDecision {
-	action: "skip" | "needs-triage";
+	action: TriageAction;
 	label?: string;
 	comment?: string;
 }
@@ -36,9 +38,37 @@ export function buildTriageComment(): string {
 	].join("\n");
 }
 
-export function classifyIssue(labels: readonly string[]): TriageDecision {
-	const hasRole = labels.some((label) => (TRIAGE_ROLES as readonly string[]).includes(label));
-	if (hasRole) {
+export function findRoleLabels(labels: readonly string[]): string[] {
+	return labels.filter((label) => (TRIAGE_ROLES as readonly string[]).includes(label));
+}
+
+export function buildRoleConflictComment(roles: readonly string[]): string {
+	const list = roles.map((role) => `- \`${role}\``).join("\n");
+	return [
+		"Two or more role labels are present on this issue.",
+		"",
+		list,
+		"",
+		"The vocabulary allows exactly one role label per issue. Keep one and remove the rest with:",
+		"",
+		"gh issue edit <number> --remove-label <label>",
+	].join("\n");
+}
+
+export type OpenEvent = "opened" | "labeled" | "unlabeled";
+
+export function classifyOpen(labels: readonly string[], event: OpenEvent): TriageDecision {
+	const roles = findRoleLabels(labels);
+	if (event === "unlabeled") {
+		if (roles.length === 0) {
+			return { action: "remind", comment: buildTriageComment() };
+		}
+		return { action: "skip" };
+	}
+	if (roles.length > 1) {
+		return { action: "role-conflict", comment: buildRoleConflictComment(roles) };
+	}
+	if (roles.length === 1) {
 		return { action: "skip" };
 	}
 	return {
@@ -48,7 +78,7 @@ export function classifyIssue(labels: readonly string[]): TriageDecision {
 	};
 }
 
-export function decide(json: string): TriageDecision {
+export function decide(json: string, event: string): TriageDecision {
 	let parsed: { labels?: Array<string | { name?: string }> };
 	try {
 		parsed = JSON.parse(json) as { labels?: Array<string | { name?: string }> };
@@ -58,7 +88,8 @@ export function decide(json: string): TriageDecision {
 	const labels = (parsed.labels ?? [])
 		.map((label) => (typeof label === "string" ? label : (label.name ?? "")))
 		.filter((name) => name.length > 0);
-	return classifyIssue(labels);
+	const openEvent: OpenEvent = event === "labeled" || event === "unlabeled" ? event : "opened";
+	return classifyOpen(labels, openEvent);
 }
 
 export const AUDIT_MARKERS = ["Commit:", "ADR:", "Handoff:"] as const;
