@@ -228,7 +228,7 @@ design (not confinement — that stays ADR-0019); escaped via
 _Avoid_: Sandbox, confinement (a guard, not a wall — the OS tier stays the wall)
 
 **Completion resilience**:
-The ADR-0052 gateway defense-in-depth: transient completion failures (SIGTERM
+The ADR-0051 gateway defense-in-depth: transient completion failures (SIGTERM
 143, SIGKILL 137, timeout, busy session, spawn error) are classified
 (`completion-failure.ts`) and retried once with compaction dropped, streaming
 into the same bubble; the user-facing failure text is one short sentence and

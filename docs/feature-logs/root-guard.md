@@ -27,13 +27,16 @@ ADR renumbered 0051 -> 0052 (main took 0050/0051).
 
 ## Verification
 
-- 86 new/extended tests, red-first, all green: extractor (14), scope (14),
-  store (9), extension + approval tool (24), CLI (7), workspace (18 total,
-  6 new escape/deny/audit tests).
+- 91 new/extended tests, red-first, all green: extractor (14), scope (14),
+  store (9), extension + approval tool (26), CLI (7), workspace (21 total,
+  9 new escape/deny/audit/env tests).
 - Floor: `./test.sh` from the worktree with `AXIOM_PROJECT_ROOT` unset —
   only the documented sandbox known-fails (4603 x4, 4685 x9 EXDEV,
-  daemon-serialized-refine x1) plus two shard flakes that pass standalone
-  (anthropic-oauth, kernel-rlm-heartbeat-skill). biome clean, tsgo clean.
+  daemon-serialized-refine x1); the floor has varied with machine load
+  (zero to four standalone-passing shard flakes across runs: anthropic-oauth,
+  kernel-rlm-heartbeat-skill, daemon-supervisor-process x2,
+  kernel-agent-message/attach-image — every one passes standalone); the
+  latest run had zero flakes. biome clean, tsgo clean.
 - No live model/provider run (no API key in this sandbox) — recorded, not
   faked. The approval loop is unit-verified end to end (request -> wait ->
   decision -> grant -> retry passes).

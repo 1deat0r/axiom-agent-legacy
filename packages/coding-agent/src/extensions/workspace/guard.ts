@@ -76,8 +76,12 @@ export async function decideEdit(
 ): Promise<{ block: true; reason: string } | undefined> {
 	const abs = toAbsolute(raw, cwd);
 	const target = await realpathX(abs);
+	// Prefixes resolve against the anchored cwd (not process.cwd(), which the
+	// ipython kernel can drift from): a deny like ".secrets" must mean
+	// "<project root>/.secrets" wherever the process happens to sit.
+	const normPrefix = (prefix: string): string => resolve(toAbsolute(expandTilde(prefix), cwd));
 	for (const prefix of options.denyPrefixes ?? []) {
-		const norm = resolve(expandTilde(prefix));
+		const norm = normPrefix(prefix);
 		if (isWithin(norm, abs) || isWithin(norm, target)) {
 			return {
 				block: true,
@@ -89,7 +93,7 @@ export async function decideEdit(
 	}
 	if (isWithin(rootReal, target)) return undefined;
 	for (const prefix of options.allowPrefixes ?? []) {
-		const norm = resolve(expandTilde(prefix));
+		const norm = normPrefix(prefix);
 		if (isWithin(norm, abs) || isWithin(norm, target)) return undefined;
 	}
 	return {

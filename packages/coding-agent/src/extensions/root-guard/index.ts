@@ -165,6 +165,11 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 		const timeoutMs =
 			options.approvalTimeoutMs ?? (Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : 300000);
 		const pollMs = options.pollMs ?? 500;
+		const customStateDir = options.stateDir ?? process.env.AXIOM_ROOT_GUARD_STATE_DIR;
+		// The operator's terminal usually does not share the run's env, so the
+		// relayed command must carry --root (and --state-dir when customized).
+		const operatorCommand = (id: string): string =>
+			`axiom root-guard approve ${id} --root ${rawRoot}${customStateDir ? ` --state-dir ${customStateDir}` : ""}`;
 
 		pi.on("tool_call", async (event) => {
 			const text = shellText(event.toolName, event.input);
@@ -260,10 +265,20 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 					};
 				}
 				const rootAbs = resolve(rawRoot);
-				const outside = params.paths
-					.map((p) => resolve(toAbsolutePath(p, cwd, home)))
-					.filter((p) => !isWithinPath(rootAbs, p));
-				if (outside.length === 0) {
+				const absPaths = params.paths.map((p) => resolve(toAbsolutePath(p, cwd, home)));
+				// A deny prefix can never be overridden by a grant: refuse those
+				// paths outright instead of filing a request the guard would
+				// ignore. This applies to inside-root paths too — the guard
+				// blocks a denied path anywhere, so the tool must not tell the
+				// model to retry it.
+				const deniedByOperator = absPaths.filter((p) =>
+					denyPrefixes.some((d) => {
+						const norm = resolve(toAbsolutePath(d, cwd, home));
+						return norm === p || isWithinPath(norm, p);
+					}),
+				);
+				const requestable = absPaths.filter((p) => !isWithinPath(rootAbs, p) && !deniedByOperator.includes(p));
+				if (requestable.length === 0 && deniedByOperator.length === 0) {
 					return {
 						content: [
 							{
@@ -276,15 +291,6 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 						details: null,
 					};
 				}
-				// A deny prefix can never be overridden by a grant: refuse those
-				// paths outright instead of filing a request the guard would ignore.
-				const deniedByOperator = outside.filter((p) =>
-					denyPrefixes.some((d) => {
-						const norm = resolve(toAbsolutePath(d, cwd, home));
-						return norm === p || isWithinPath(norm, p);
-					}),
-				);
-				const requestable = outside.filter((p) => !deniedByOperator.includes(p));
 				if (requestable.length === 0) {
 					return {
 						content: [
@@ -292,14 +298,31 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 								type: "text",
 								text:
 									"The operator permanently denied these paths (AXIOM_ROOT_GUARD_DENY): " +
-									`${outside.join(", ")}. Do not request them again — find another way.`,
+									`${deniedByOperator.join(", ")}. Do not request them again — find another way.`,
 							},
 						],
 						details: null,
 					};
 				}
-				const { id } = await fileRequest(scope, { paths: requestable, reason: params.reason });
-				await appendAudit(scope, { event: "request", id, paths: requestable, reason: params.reason });
+				let id: string;
+				try {
+					const filed = await fileRequest(scope, { paths: requestable, reason: params.reason });
+					id = filed.id;
+					await appendAudit(scope, { event: "request", id, paths: requestable, reason: params.reason });
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					return {
+						content: [
+							{
+								type: "text",
+								text:
+									`Could not file the request because the root-guard store failed (${message}). ` +
+									"Fix AXIOM_ROOT_GUARD_STATE_DIR and call this tool again.",
+							},
+						],
+						details: null,
+					};
+				}
 				const deadline = Date.now() + timeoutMs;
 				for (;;) {
 					const decision = await readDecision(scope, id);
@@ -342,7 +365,7 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 									type: "text",
 									text:
 										`Request ${id} is still pending (the run was interrupted). The operator can ` +
-										`still decide with 'axiom root-guard approve ${id}' or ` +
+										`still decide with '${operatorCommand(id)}' or ` +
 										`'axiom root-guard reject ${id}'; an approval applies to later calls.`,
 								},
 							],
@@ -356,7 +379,7 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 									type: "text",
 									text:
 										`Request ${id} is still pending after ${timeoutMs}ms. Tell the operator: ` +
-										`'axiom root-guard approve ${id}' to allow these paths (${requestable.join(", ")}) ` +
+										`'${operatorCommand(id)}' to allow these paths (${requestable.join(", ")}) ` +
 										"or 'axiom root-guard reject <id>' to deny. An approval applies to later " +
 										"calls automatically — retry the blocked call after it.",
 								},

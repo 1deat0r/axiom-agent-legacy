@@ -359,3 +359,98 @@ describe("workspace guard deny and block audit (ADR-0052)", () => {
 		}
 	});
 });
+
+describe("workspace guard env knobs and store failure (round 4)", () => {
+	it("reads AXIOM_ROOT_GUARD_DENY and AXIOM_ROOT_GUARD_ALLOW from the environment", async () => {
+		const root = await makeRoot();
+		const other = await makeRoot();
+		const prevDeny = process.env.AXIOM_ROOT_GUARD_DENY;
+		const prevAllow = process.env.AXIOM_ROOT_GUARD_ALLOW;
+		try {
+			process.env.AXIOM_ROOT_GUARD_DENY = other;
+			process.env.AXIOM_ROOT_GUARD_ALLOW = other;
+			const { pi, toolCall } = fakePi();
+			createWorkspaceGuard({ root, cwd: root })(pi);
+			// deny wins over allow — both env knobs parsed, deny first
+			const res = fromAny<{ block: boolean; reason: string }, unknown>(
+				await toolCall({
+					type: "tool_call",
+					toolName: "edit",
+					toolCallId: "15",
+					input: { path: join(other, "x.ts"), edits: [] },
+				}),
+			);
+			expect(res.block).toBe(true);
+			expect(res.reason).toMatch(/denied/i);
+			// the allow alone (deny removed before a fresh factory) unblocks it
+			delete process.env.AXIOM_ROOT_GUARD_DENY;
+			const { pi: pi2, toolCall: tc2 } = fakePi();
+			createWorkspaceGuard({ root, cwd: root })(pi2);
+			const allowed = fromAny<{ block: boolean }, unknown>(
+				await tc2({
+					type: "tool_call",
+					toolName: "edit",
+					toolCallId: "16",
+					input: { path: join(other, "x.ts"), edits: [] },
+				}),
+			);
+			expect(allowed).toBeUndefined();
+		} finally {
+			if (prevDeny === undefined) delete process.env.AXIOM_ROOT_GUARD_DENY;
+			else process.env.AXIOM_ROOT_GUARD_DENY = prevDeny;
+			if (prevAllow === undefined) delete process.env.AXIOM_ROOT_GUARD_ALLOW;
+			else process.env.AXIOM_ROOT_GUARD_ALLOW = prevAllow;
+			await rm(root, { recursive: true, force: true });
+			await rm(other, { recursive: true, force: true });
+		}
+	});
+
+	it("returns the curated block when the store is unusable", async () => {
+		const root = await makeRoot();
+		const other = await makeRoot();
+		const state = join(await makeRoot(), "not-a-dir");
+		await writeFile(state, "x");
+		const prev = process.env.AXIOM_ROOT_GUARD_STATE_DIR;
+		try {
+			process.env.AXIOM_ROOT_GUARD_STATE_DIR = state;
+			const { pi, toolCall } = fakePi();
+			createWorkspaceGuard({ root, cwd: root })(pi);
+			const res = fromAny<{ block: boolean; reason: string }, unknown>(
+				await toolCall({
+					type: "tool_call",
+					toolName: "edit",
+					toolCallId: "17",
+					input: { path: join(other, "x.ts"), edits: [] },
+				}),
+			);
+			expect(res.block).toBe(true);
+			expect(res.reason).toMatch(/store failed/i);
+		} finally {
+			if (prev === undefined) delete process.env.AXIOM_ROOT_GUARD_STATE_DIR;
+			else process.env.AXIOM_ROOT_GUARD_STATE_DIR = prev;
+			await rm(root, { recursive: true, force: true });
+			await rm(other, { recursive: true, force: true });
+			await rm(state, { force: true }).catch(() => {});
+		}
+	});
+
+	it("resolves relative deny prefixes against the anchored cwd", async () => {
+		const root = await makeRoot();
+		try {
+			await writeFile(join(root, "a.ts"), "x");
+			const { pi, toolCall } = fakePi();
+			createWorkspaceGuard({ root, cwd: root, denyPrefixes: [".secrets"] })(pi);
+			const res = fromAny<{ block: boolean }, unknown>(
+				await toolCall({
+					type: "tool_call",
+					toolName: "edit",
+					toolCallId: "18",
+					input: { path: join(root, ".secrets", "x.ts"), edits: [] },
+				}),
+			);
+			expect(res.block).toBe(true);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+});

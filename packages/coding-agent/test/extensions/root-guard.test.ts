@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fromAny, fromPartial } from "@total-typescript/shoehorn";
@@ -19,7 +19,6 @@ const GUARD_ENV = [
 	"AXIOM_PROJECT_ROOT",
 	"AXIOM_ROOT_GUARD_ALLOW",
 	"AXIOM_ROOT_GUARD_DENY",
-	"AXIOM_ROOT_GUARD_STRICT",
 	"AXIOM_ROOT_GUARD_STATE_DIR",
 	"AXIOM_ROOT_GUARD_APPROVAL_TIMEOUT_MS",
 ] as const;
@@ -554,6 +553,44 @@ describe("root guard freeform resolution and deny interplay", () => {
 			const names = await pendingNames(scope);
 			expect(names).toHaveLength(1);
 		} finally {
+			await rm(root, { recursive: true, force: true });
+			await rm(state, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("request tool deny handling and curated store failures (round 4)", () => {
+	it("reports permanent denial for a denied path INSIDE the root", async () => {
+		const root = await makeRoot();
+		const state = await makeRoot();
+		try {
+			const fake = fakePi();
+			createRootGuard({ root, cwd: root, stateDir: state, home: HOME, denyPrefixes: [`${root}/.secrets`] })(fake.pi);
+			const tool = await approvalTool(fake);
+			const result = await runTool(tool, { paths: [`${root}/.secrets/k.txt`], reason: "need it" });
+			expect(textOf(result)).toMatch(/permanently denied/i);
+			expect(textOf(result)).toContain(`${root}/.secrets/k.txt`);
+			const scope = await resolveScopeDir(state, root);
+			expect(await pendingNames(scope)).toEqual([]);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+			await rm(state, { recursive: true, force: true });
+		}
+	});
+
+	it("returns a plain message when filing the request fails after the scope resolved", async () => {
+		const root = await makeRoot();
+		const state = await makeRoot();
+		const scope = await resolveScopeDir(state, root);
+		try {
+			await chmod(scope, 0o555);
+			const fake = fakePi();
+			createRootGuard({ root, cwd: root, stateDir: state, home: HOME })(fake.pi);
+			const tool = await approvalTool(fake);
+			const result = await runTool(tool, { paths: ["/srv/data"], reason: "need data" });
+			expect(textOf(result)).toMatch(/store failed/i);
+		} finally {
+			await chmod(scope, 0o755);
 			await rm(root, { recursive: true, force: true });
 			await rm(state, { recursive: true, force: true });
 		}

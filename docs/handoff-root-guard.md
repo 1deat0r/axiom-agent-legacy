@@ -7,8 +7,9 @@ What was done, what was verified, and how.
 Issue #17, the last unshipped rung-3 step of the ADR-0014 anti-drift ladder:
 path confinement for the freeform file tools plus a plain-English approval
 loop. Branch `feat/root-guard` (pushed), worktree `.worktrees/root-guard`, cut from
-main 2bbdc2f0e and integrated with origin/main (gh-tooling ADR-0050 +
-gateway-resilience ADR-0051) at merge 6f50e9f3a.
+main 2bbdc2f0e and integrated with origin/main repeatedly (latest merge c1c9059ce; main has
+moved several times during review rounds — gh-tooling, gateway-resilience,
+delegate-env-scrub, review-findings-18, memory-consolidation handoff).
 
 - The root-guard extension gates `bash` and `ipython` on the `tool_call`
   seam: literal path tokens outside the project root block by default —
@@ -31,17 +32,16 @@ gateway-resilience ADR-0051) at merge 6f50e9f3a.
 
 ## Verified
 
-- Unit + mock: 86 new/extended tests, red-first, green. Cover: path
+- Unit + mock: 91 new/extended tests, red-first, green. Cover: path
   extraction, scope classification, store round trips, approval tool
   (approve/reject/timeout/abort/deny-refusal), extension wiring
   (inert-unanchored, env parsing, grants, audit), workspace edit escapes,
   CLI.
 - Floor on the worktree: `./test.sh` (AXIOM_PROJECT_ROOT unset) — only the
-  documented sandbox known-fails (4603 x4, 4685 x9, daemon-serialized-refine)
-  plus four standalone-passing shard flakes (daemon-supervisor-process x2,
-  kernel x2); `npx biome check` clean for all feature files (two pre-existing
-  biome errors in origin/main's gh-tooling files are not this feature's);
-  `tsgo --noEmit` clean.
+  documented sandbox known-fails (4603 x4, 4685 x9, daemon-serialized-refine);
+  the floor has varied with machine load: the documented known-fails plus zero to four standalone-passing shard flakes across runs (anthropic-oauth, kernel-rlm-heartbeat-skill, daemon-supervisor-process x2, kernel-agent-message/attach-image — every one passes standalone); the latest run had zero flakes; `npx biome check` clean for all feature files (two
+  pre-existing biome errors in origin/main's gh-tooling files are not this
+  feature's); `tsgo --noEmit` clean.
 - NOT verified (honest): no live model/provider run in this sandbox; the
   gateway inline-approve UX is a recorded follow-up.
 

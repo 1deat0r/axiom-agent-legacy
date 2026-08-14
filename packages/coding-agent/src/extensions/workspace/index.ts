@@ -58,7 +58,20 @@ export function createWorkspaceGuard(options: WorkspaceGuardOptions = {}): (pi: 
 			if (!blocked) return undefined;
 			if (scope === undefined) {
 				const stateDir = process.env.AXIOM_ROOT_GUARD_STATE_DIR ?? axiomHome();
-				scope = await resolveScopeDir(stateDir, rawRoot);
+				// Fail closed with the curated block when the store is unusable:
+				// a raw ENOTDIR/EACCES here would surface as a bare extension
+				// error instead of the guard's plain-English reason.
+				try {
+					scope = await resolveScopeDir(stateDir, rawRoot);
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					return {
+						block: true,
+						reason:
+							`Root guard could not verify this edit because its store failed (${message}). ` +
+							"Fix AXIOM_ROOT_GUARD_STATE_DIR and retry.",
+					};
+				}
 			}
 			const grants = await listGrantPrefixes(scope);
 			const withGrants =
