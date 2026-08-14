@@ -65,9 +65,9 @@ export interface TelegramUpdate {
 /** The Telegram Bot API boundary (a real client talks HTTPS; tests fake this). */
 export interface TelegramClient {
 	/** Sends a message and returns its Telegram message_id (for later edits). */
-	sendMessage(input: { chatId: string; text: string }): Promise<number>;
+	sendMessage(input: { chatId: string; text: string; parseMode?: "HTML" }): Promise<number>;
 	/** Edits an existing message's text in place (streaming, ADR-0004/#6). */
-	editMessageText(input: { chatId: string; messageId: number; text: string }): Promise<void>;
+	editMessageText(input: { chatId: string; messageId: number; text: string; parseMode?: "HTML" }): Promise<void>;
 	/** Sends a chat action (typing/…) so the peer sees live activity. */
 	sendChatAction(input: { chatId: string; action: string }): Promise<void>;
 	/**
@@ -106,6 +106,71 @@ export function chunkTelegramText(text: string, limit = TELEGRAM_TEXT_LIMIT): st
 	}
 	if (rest.length > 0) chunks.push(rest);
 	return chunks;
+}
+
+/** Escape text for Telegram's HTML parse mode (& < > " are the dangerous ones). */
+export function escapeHtmlText(text: string): string {
+	return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/** Strip dangling markdown delimiters a chunk split or the model left unpaired. */
+function stripDangling(line: string, marker: string): string {
+	const count = line.split(marker).length - 1;
+	if (count % 2 === 1) {
+		const at = line.lastIndexOf(marker);
+		return line.slice(0, at) + line.slice(at + marker.length);
+	}
+	return line;
+}
+
+/**
+ * Inline markdown on one line: escape HTML first, then `code`, **bold**,
+ * *italic*. A trailing single star is only stripped when it looks like a
+ * dangling italic opener (line ends with it) — arithmetic like "a * b" stays.
+ */
+function renderInline(line: string): string {
+	let s = escapeHtmlText(line);
+	s = stripDangling(s, "`");
+	s = stripDangling(s, "**");
+	if (s.endsWith("*") && s.length > 1 && !s.slice(0, -1).endsWith(" ") && (s.match(/\*/g)?.length ?? 0) % 2 === 1) {
+		s = s.slice(0, -1);
+	}
+	// Inline code first, so markdown inside `code` stays literal.
+	s = s.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+	// Bold.
+	s = s.replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>");
+	// Italic — never inside a bold pair (the `(?!\*)` guard).
+	s = s.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, "$1<i>$2</i>");
+	return s;
+}
+
+/**
+ * Render gateway text as Telegram HTML (parse_mode="HTML"): headings become
+ * bold lines, fenced code blocks become <pre>, inline `code` / **bold** /
+ * *italic* become their HTML tags. Everything else is HTML-escaped so the
+ * reply never shows raw asterisks or markup. Unbalanced fences and dangling
+ * delimiters degrade to plain text instead of broken tags.
+ */
+export function renderTelegramText(text: string): string {
+	const segments = text.split("```");
+	let out = "";
+	for (let i = 0; i < segments.length; i++) {
+		const segment = segments[i]!;
+		if (i % 2 === 1 && i < segments.length - 1) {
+			// A closed fenced block: escape its content inside <pre>.
+			out += `<pre>${escapeHtmlText(segment)}</pre>`;
+		} else {
+			out += segment
+				.split("\n")
+				.map((line) => {
+					const heading = line.match(/^(#{1,6})\s+(.*)$/);
+					if (heading !== null) return `<b>${renderInline(heading[2]!)}</b>`;
+					return renderInline(line);
+				})
+				.join("\n");
+		}
+	}
+	return out;
 }
 
 /** Persists the acknowledged getUpdates offset so restarts do not replay. */
@@ -247,12 +312,17 @@ export class TelegramTransport implements GatewayTransport {
 
 	/** Single-message send that returns the message id (for streaming edits). */
 	async sendMessage(to: GatewayRecipient, text: string): Promise<number> {
-		return this.client.sendMessage({ chatId: to.channelId, text });
+		return this.client.sendMessage({ chatId: to.channelId, text: renderTelegramText(text), parseMode: "HTML" });
 	}
 
 	/** Edit a previously-sent message in place (throws on failure -> caller falls back). */
 	async editMessage(chatId: string, messageId: number, text: string): Promise<void> {
-		await this.client.editMessageText({ chatId, messageId, text });
+		await this.client.editMessageText({
+			chatId,
+			messageId,
+			text: renderTelegramText(text),
+			parseMode: "HTML",
+		});
 	}
 
 	/** Ping a chat action (typing) so the peer sees the gateway is alive. */
@@ -261,10 +331,28 @@ export class TelegramTransport implements GatewayTransport {
 	}
 
 	async send(to: GatewayRecipient, text: string): Promise<void> {
+		// Chunk the raw text first, then render each chunk: markdown pairs split
+		// across a chunk boundary degrade to plain text (the dangling delimiter
+		// is stripped) instead of broken HTML. HTML tags inflate the size, so a
+		// rendered chunk over the cap is re-chunked (whitespace splits never cut
+		// an inline tag in half).
 		const chunks = chunkTelegramText(text, TELEGRAM_TEXT_LIMIT);
+		const parts: string[] = [];
 		for (const chunk of chunks) {
+			const rendered = renderTelegramText(chunk);
+			if (rendered.length <= TELEGRAM_TEXT_LIMIT) {
+				parts.push(rendered);
+			} else {
+				parts.push(...chunkTelegramText(rendered, TELEGRAM_TEXT_LIMIT));
+			}
+		}
+		for (const part of parts) {
 			try {
-				await this.client.sendMessage({ chatId: to.channelId, text: chunk });
+				await this.client.sendMessage({
+					chatId: to.channelId,
+					text: part,
+					parseMode: "HTML",
+				});
 			} catch (error) {
 				// Surface the failure (operator's observable) and stop this batch —
 				// never append silently dropped text.
@@ -374,10 +462,10 @@ export class HttpTelegramClient implements TelegramClient {
 		return `${this.baseUrl}/bot${this.token}/${method}`;
 	}
 
-	async sendMessage(input: { chatId: string; text: string }): Promise<number> {
+	async sendMessage(input: { chatId: string; text: string; parseMode?: "HTML" }): Promise<number> {
 		const data = await this.post(
 			"sendMessage",
-			{ chat_id: input.chatId, text: input.text },
+			{ chat_id: input.chatId, text: input.text, ...(input.parseMode ? { parse_mode: input.parseMode } : {}) },
 			undefined,
 			this.timeoutMs,
 		);
@@ -385,10 +473,20 @@ export class HttpTelegramClient implements TelegramClient {
 		return typeof result?.message_id === "number" ? result.message_id : 0;
 	}
 
-	async editMessageText(input: { chatId: string; messageId: number; text: string }): Promise<void> {
+	async editMessageText(input: {
+		chatId: string;
+		messageId: number;
+		text: string;
+		parseMode?: "HTML";
+	}): Promise<void> {
 		await this.post(
 			"editMessageText",
-			{ chat_id: input.chatId, message_id: input.messageId, text: input.text },
+			{
+				chat_id: input.chatId,
+				message_id: input.messageId,
+				text: input.text,
+				...(input.parseMode ? { parse_mode: input.parseMode } : {}),
+			},
 			undefined,
 			this.timeoutMs,
 		);

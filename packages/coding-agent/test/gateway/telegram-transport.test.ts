@@ -9,6 +9,7 @@ import {
 	chunkTelegramText,
 	FileTelegramOffsetStore,
 	HttpTelegramClient,
+	renderTelegramText,
 	TELEGRAM_HTTP_TIMEOUT_MS,
 	TELEGRAM_LONG_POLL_MAX_SECONDS,
 	type TelegramClient,
@@ -31,7 +32,14 @@ class NoopClient implements TelegramClient {
 
 /** An in-memory Telegram client the transport polls (configuration via the returned object). */
 function fakeClient(initial: TelegramUpdate[] = []) {
-	const sent: Array<{ chatId: string; text: string; messageId?: number; edited?: boolean; action?: string }> = [];
+	const sent: Array<{
+		chatId: string;
+		text: string;
+		parseMode?: "HTML";
+		messageId?: number;
+		edited?: boolean;
+		action?: string;
+	}> = [];
 	const offsets: number[] = [];
 	const timeouts: Array<number | undefined> = [];
 	const queue: TelegramUpdate[] = [...initial];
@@ -41,11 +49,17 @@ function fakeClient(initial: TelegramUpdate[] = []) {
 	const client: TelegramClient = {
 		async sendMessage(input) {
 			const id = nextId++;
-			sent.push({ chatId: input.chatId, text: input.text, messageId: id });
+			sent.push({ chatId: input.chatId, text: input.text, parseMode: input.parseMode, messageId: id });
 			return id;
 		},
 		async editMessageText(input) {
-			sent.push({ chatId: input.chatId, text: input.text, messageId: input.messageId, edited: true });
+			sent.push({
+				chatId: input.chatId,
+				text: input.text,
+				parseMode: input.parseMode,
+				messageId: input.messageId,
+				edited: true,
+			});
 		},
 		async sendChatAction(input) {
 			sent.push({ chatId: input.chatId, text: `action:${input.action}`, action: input.action });
@@ -347,6 +361,99 @@ describe("TelegramTransport", () => {
 		const t = new TelegramTransport(f.client);
 		await t.sendChatAction({ channelId: "123", recipient: "123" }, "typing");
 		expect(f.sent).toEqual([{ chatId: "123", text: "action:typing", action: "typing" }]);
+	});
+});
+
+describe("Telegram formatting at the transport", () => {
+	it("renders send() text to HTML and asks for parse mode", async () => {
+		const f = fakeClient();
+		const t = new TelegramTransport(f.client, { pollIntervalMs: 1 });
+		t.onMessage(() => {});
+		await t.connect();
+		await t.send({ channelId: "1", recipient: "1" }, "see **bold** here");
+		await settle(20);
+		expect(f.sent.some((s) => s.text === "see <b>bold</b> here")).toBe(true);
+		expect(f.sent.some((s) => s.parseMode === "HTML")).toBe(true);
+		await t.disconnect();
+	});
+
+	it("renders streamed sendMessage and editMessage the same way", async () => {
+		const f = fakeClient();
+		const t = new TelegramTransport(f.client, { pollIntervalMs: 1 });
+		t.onMessage(() => {});
+		await t.connect();
+		const id = await t.sendMessage({ channelId: "1", recipient: "1" }, "`code` and *ital*");
+		await t.editMessage("1", id, "now **bold**");
+		expect(f.sent.some((s) => s.text === "<code>code</code> and <i>ital</i>")).toBe(true);
+		expect(f.sent.some((s) => s.edited === true && s.text === "now <b>bold</b>")).toBe(true);
+		await t.disconnect();
+	});
+
+	it("keeps chunked sends within the text limit after rendering", async () => {
+		const f = fakeClient();
+		const t = new TelegramTransport(f.client, { pollIntervalMs: 1 });
+		t.onMessage(() => {});
+		await t.connect();
+		const long = "word " + "**bold** ".repeat(1200);
+		await t.send({ channelId: "1", recipient: "1" }, long);
+		await settle(20);
+		expect(f.sent.length).toBeGreaterThan(1);
+		for (const s of f.sent) {
+			expect(s.text.length).toBeLessThanOrEqual(4096);
+		}
+		await t.disconnect();
+	});
+});
+
+describe("renderTelegramText", () => {
+	it("escapes HTML and leaves plain text untouched", () => {
+		expect(renderTelegramText("a < b & c > d")).toBe("a &lt; b &amp; c &gt; d");
+		expect(renderTelegramText("plain words only")).toBe("plain words only");
+	});
+
+	it("converts bold, italic, and inline code", () => {
+		expect(renderTelegramText("see **bold** here")).toBe("see <b>bold</b> here");
+		expect(renderTelegramText("an *italic* word")).toBe("an <i>italic</i> word");
+		expect(renderTelegramText("run `npm test` now")).toBe("run <code>npm test</code> now");
+		expect(renderTelegramText("**bold** and `code` and *ital*")).toBe(
+			"<b>bold</b> and <code>code</code> and <i>ital</i>",
+		);
+	});
+
+	it("renders headings as bold lines", () => {
+		expect(renderTelegramText("# Title\nbody")).toBe("<b>Title</b>\nbody");
+		expect(renderTelegramText("## Deep\n\ntext")).toBe("<b>Deep</b>\n\ntext");
+	});
+
+	it("wraps fenced code blocks in <pre> without parsing their content", () => {
+		const out = renderTelegramText("before\n```\n**not bold**\n```\nafter");
+		expect(out).toContain("<pre>");
+		expect(out).toContain("**not bold**");
+		expect(out).toContain("before");
+		expect(out).toContain("after");
+		expect(out).not.toContain("<b>");
+	});
+
+	it("degrades an unclosed fence to plain text", () => {
+		const out = renderTelegramText("before\n```\nno closer here");
+		expect(out).not.toContain("<pre>");
+		expect(out).toContain("no closer here");
+	});
+
+	it("strips dangling delimiters instead of emitting raw asterisks", () => {
+		expect(renderTelegramText("start **bold")).toBe("start bold");
+		expect(renderTelegramText("`code")).toBe("code");
+		expect(renderTelegramText("a * b")).toBe("a * b"); // arithmetic star stays
+	});
+
+	it("renders each chunk after chunking, so markdown is never split mid-tag", () => {
+		const chunks = chunkTelegramText("**" + "x".repeat(50) + "** tail", 30);
+		expect(chunks.length).toBeGreaterThan(1);
+		for (const chunk of chunks) {
+			const rendered = renderTelegramText(chunk);
+			expect(rendered).not.toMatch(/<b>[^<]*$/); // no unclosed tag at chunk end
+			expect(rendered).not.toContain("**");
+		}
 	});
 });
 
