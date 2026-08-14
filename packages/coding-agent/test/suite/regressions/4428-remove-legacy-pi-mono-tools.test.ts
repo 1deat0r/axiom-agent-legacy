@@ -27,12 +27,12 @@ describe("regression #4428: remove legacy pi-mono built-in tools", () => {
 		}
 	});
 
-	it("registers ipython, read, and write as built-in tools", () => {
-		expect([...allToolNames]).toEqual(["ipython", "read", "write"]);
-		expect(Object.keys(createAllToolDefinitions(process.cwd()))).toEqual(["ipython", "read", "write"]);
+	it("registers ipython, read, write, and grep as built-in tools", () => {
+		expect([...allToolNames]).toEqual(["ipython", "read", "write", "grep"]);
+		expect(Object.keys(createAllToolDefinitions(process.cwd()))).toEqual(["ipython", "read", "write", "grep"]);
 	});
 
-	it("activates read alongside ipython by default", async () => {
+	it("activates read, write, and grep alongside ipython by default", async () => {
 		const settingsManager = SettingsManager.create(tempDir, agentDir);
 		const sessionManager = SessionManager.inMemory(tempDir);
 		const resourceLoader = new DefaultResourceLoader({
@@ -52,7 +52,7 @@ describe("regression #4428: remove legacy pi-mono built-in tools", () => {
 		});
 		await session.bindExtensions({});
 
-		expect(session.getActiveToolNames()).toEqual(["ipython", "read", "write"]);
+		expect(session.getActiveToolNames()).toEqual(["ipython", "read", "write", "grep"]);
 		session.dispose();
 	});
 
