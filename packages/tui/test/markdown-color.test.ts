@@ -208,3 +208,69 @@ describe("Markdown color channel composition", () => {
 		assert.ok(plain.includes("bold"), "inner text is rendered");
 	});
 });
+
+describe("Markdown hex literal ambient style and boundaries", () => {
+	afterEach(() => {
+		resetCapabilitiesCache();
+	});
+
+	it("keeps a heading style on the literal and the swatch", () => {
+		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
+		const { theme, calls } = makeCapturingTheme();
+		const markdown = new Markdown("## Result #50fa7b ok", 0, 0, theme);
+
+		const lines = markdown.render(80);
+
+		assert.equal(calls.colored.length, 2);
+		assert.deepEqual(calls.colored[0]!.color, { channel: "fg", kind: "hex", value: "50FA7B" });
+		assert.deepEqual(calls.colored[1]!.color, { channel: "fg", kind: "hex", value: "50FA7B" });
+		// The ambient heading style (bold cyan) survives inside the colored span.
+		assert.ok(calls.colored[0]!.text.includes("\x1b[1m\x1b[36m"), "heading weight and color precede the literal");
+		assert.ok(calls.colored[0]!.text.includes("#50FA7B"), "literal is colored");
+		assert.ok(calls.colored[1]!.text.includes("■"), "swatch is colored");
+		assert.ok(lines.length > 0, "heading renders");
+	});
+
+	it("skips a URL fragment hex token", () => {
+		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
+		const { theme, calls } = makeCapturingTheme();
+		const markdown = new Markdown("http://x.com/#aabbcc", 0, 0, theme);
+
+		markdown.render(80);
+
+		assert.deepStrictEqual(calls.colored, []);
+	});
+
+	it("falls back to inner text for a background descriptor when the theme has no backgrounded hook", () => {
+		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
+		const calls: Array<{ text: string }> = [];
+		const theme: MarkdownTheme = {
+			...defaultMarkdownTheme,
+			colored: (text: string) => {
+				calls.push({ text });
+				return text;
+			},
+		};
+		const markdown = new Markdown("[dim](#bg:info)", 0, 0, theme);
+
+		const lines = markdown.render(80);
+		const plain = lines.map((line) => line.replace(/\x1b\[[0-9;]*m/g, "")).join("\n");
+
+		assert.deepStrictEqual(calls, []);
+		assert.ok(plain.includes("dim"), "inner text still rendered");
+	});
+
+	it("composes strikethrough inside a role colored link", () => {
+		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
+		const { theme, calls } = makeCapturingTheme();
+		const markdown = new Markdown("[~~gone~~](#role:muted)", 0, 0, theme);
+
+		const lines = markdown.render(80);
+		const plain = lines.map((line) => line.replace(/\x1b\[[0-9;]*m/g, "")).join("\n");
+
+		assert.equal(calls.colored.length, 1);
+		assert.equal(calls.colored[0]!.color.value, "muted");
+		assert.ok(calls.colored[0]!.text.includes("gone"), "struck text is colored");
+		assert.ok(plain.includes("gone"), "inner text is rendered");
+	});
+});

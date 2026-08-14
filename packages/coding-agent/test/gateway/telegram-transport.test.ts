@@ -144,6 +144,19 @@ describe("TelegramTransport", () => {
 		await t.disconnect();
 	});
 
+	it("never leaks a color descriptor when a long link spans chunk boundaries", async () => {
+		const f = fakeClient();
+		const t = new TelegramTransport(f.client, { pollIntervalMs: 1 });
+		await t.connect();
+		const inner = "w ".repeat(3000).trim(); // ~5999 chars, forces multiple chunks
+		await t.send({ channelId: "123", recipient: "123" }, `[${inner}](#role:ok)`);
+		const joined = f.sent.map((m) => m.text).join("\n");
+		expect(joined).not.toContain("](#role:ok)");
+		expect(joined).not.toContain("#role:ok");
+		expect(words(joined)).toEqual(words(inner));
+		await t.disconnect();
+	});
+
 	it("strips color descriptors from a sent reply", async () => {
 		const f = fakeClient();
 		const t = new TelegramTransport(f.client, { pollIntervalMs: 1 });

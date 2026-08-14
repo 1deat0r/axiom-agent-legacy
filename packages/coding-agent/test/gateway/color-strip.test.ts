@@ -53,3 +53,30 @@ describe("stripColorDescriptors", () => {
 		expect(stripColorDescriptors("a ``` b [x](#role:ok)")).toBe("a ``` b [x](#role:ok)");
 	});
 });
+
+describe("stripColorDescriptors surface parity", () => {
+	it("leaves a descriptor inside inline code literal", () => {
+		expect(stripColorDescriptors("run `[x](#role:ok)` now")).toBe("run `[x](#role:ok)` now");
+	});
+
+	it("leaves a descriptor inside inline code next to real text", () => {
+		expect(stripColorDescriptors("see `[x](#role:ok)` and [y](#role:warn)")).toBe("see `[x](#role:ok)` and y");
+	});
+
+	it("strips a nested-bracket inner text the way the TUI renders it", () => {
+		expect(stripColorDescriptors("[[x]](#role:ok)")).toBe("[x]");
+	});
+
+	it("strips a soft-line-break inner text", () => {
+		expect(stripColorDescriptors("[a\nb](#role:ok)")).toBe("a\nb");
+	});
+
+	it("leaves inline code intact across many backticks", () => {
+		expect(stripColorDescriptors("`a` [x](#role:ok) `b`")).toBe("`a` x `b`");
+	});
+
+	it("keeps a color descriptor inside both inline code and a fence literal", () => {
+		const text = "```\n`[x](#role:ok)`\n```\n[real](#role:ok)";
+		expect(stripColorDescriptors(text)).toBe("```\n`[x](#role:ok)`\n```\nreal");
+	});
+});

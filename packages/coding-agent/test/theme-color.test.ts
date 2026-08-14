@@ -58,6 +58,13 @@ describe("markdown theme backgrounded", () => {
 		expect(backgrounded?.("plain", { channel: "bg", kind: "role", value: "missing" })).toBe("plain");
 	});
 
+	it("renders a hex descriptor in 256color mode with the nearest cube index", () => {
+		useThemeMode("256color");
+		const index = rgbTo256({ r: 255, g: 85, b: 85 });
+		const colored = getMarkdownTheme().colored;
+		expect(colored?.("red", { channel: "fg", kind: "hex", value: "FF5555" })).toBe(`\x1b[38;5;${index}mred\x1b[39m`);
+	});
+
 	it("renders 256color escapes when the theme is in 256color mode", () => {
 		useThemeMode("256color");
 		const index = rgbTo256({ r: 255, g: 184, b: 108 });

@@ -338,7 +338,9 @@ export class TelegramTransport implements GatewayTransport {
 		// is stripped) instead of broken HTML. HTML tags inflate the size, so a
 		// rendered chunk over the cap is re-chunked (whitespace splits never cut
 		// an inline tag in half).
-		const chunks = chunkTelegramText(text, TELEGRAM_TEXT_LIMIT);
+		// Strip before chunking: a color link split across a chunk boundary
+		// would leak its raw descriptor syntax in a later chunk.
+		const chunks = chunkTelegramText(stripColorDescriptors(text), TELEGRAM_TEXT_LIMIT);
 		const parts: string[] = [];
 		for (const chunk of chunks) {
 			const rendered = renderTelegramText(chunk);

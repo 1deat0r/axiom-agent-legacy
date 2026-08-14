@@ -1,5 +1,5 @@
 import { Marked, type Token, Tokenizer, type TokenizerExtension, type Tokens } from "marked";
-import { type ColorDescriptor, parseColorDescriptor } from "../color-descriptor.js";
+import { type ColorDescriptor, parseColorDescriptor, parseHexLiteral } from "../color-descriptor.js";
 import { latexToUnicode } from "../latex.js";
 import {
 	extractTableCellSelectionRegions,
@@ -593,12 +593,15 @@ export class Markdown implements Component {
 		return lines;
 	}
 
-	private static readonly HEX_LITERAL_RE = /(?<![#0-9a-fA-F])#([0-9a-fA-F]{6})(?![0-9a-fA-F])/g;
+	private static readonly HEX_LITERAL_RE = /(?<![#0-9a-fA-F/.])#([0-9a-fA-F]{6})(?![0-9a-fA-F])/g;
 
 	/**
 	 * Color standalone #RRGGBB literals in plain text with their own color and
-	 * a swatch chip. Plain segments keep the ambient style; literals stay plain
-	 * text when the theme has no colored hook.
+	 * a swatch chip. Plain segments keep the ambient style, and the literal and
+	 * chip are styled with it first so headings and blockquotes compose
+	 * (weight survives the color wrap). Literals stay plain text when the theme
+	 * has no colored hook. "/" and "." preceding a literal block it, so URL
+	 * fragments like http://x.com/#aabbcc stay plain.
 	 */
 	private renderTextWithHexLiterals(text: string, styleContext: InlineStyleContext): string {
 		const colored = this.theme.colored;
@@ -612,10 +615,18 @@ export class Markdown implements Component {
 		for (const match of text.matchAll(Markdown.HEX_LITERAL_RE)) {
 			const index = match.index;
 			out += applyWithNewlines(text.slice(last, index));
-			const value = match[1]!.toUpperCase();
-			const descriptor: ColorDescriptor = { channel: "fg", kind: "hex", value };
-			out += colored(match[0]!.toUpperCase(), descriptor) + styleContext.stylePrefix;
-			out += colored("■", descriptor) + styleContext.stylePrefix;
+			// The regex proposes the candidate; the parser is the single gate on
+			// whether the token is a color literal.
+			const parsed = parseHexLiteral(match[0]!);
+			if (!parsed) {
+				out += applyWithNewlines(match[0]!);
+				last = index + match[0]!.length;
+				continue;
+			}
+			const descriptor: ColorDescriptor = { channel: "fg", kind: "hex", value: parsed };
+			const literal = applyWithNewlines(match[0]!.toUpperCase());
+			out += colored(literal, descriptor) + styleContext.stylePrefix;
+			out += colored(applyWithNewlines("■"), descriptor) + styleContext.stylePrefix;
 			last = index + match[0]!.length;
 		}
 		out += applyWithNewlines(text.slice(last));

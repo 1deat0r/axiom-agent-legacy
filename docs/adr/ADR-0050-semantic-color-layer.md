@@ -23,7 +23,10 @@ A pseudo-link grammar on markdown link hrefs, parsed by
   role. Roles: error, warn, ok, info, accent, muted (`ROLE_NAMES`).
 - `[text](#hex:RRGGBB)` / `[text](#hexbg:RRGGBB)` exact hex colors.
 - A standalone `#RRGGBB` token (word boundaries) colors itself and appends a
-  swatch chip in the TUI.
+  swatch chip in the TUI. A `/` or `.` immediately before the token blocks it,
+  so URL fragments (`http://x.com/#aabbcc`) stay plain. The ambient style is
+  applied to the literal and the chip before the color wrap, so heading and
+  blockquote weight survives.
 - Channels compose: bold, underline, and strike render inside the colored
   span, because the renderer colors the fully-rendered inner tokens.
 
@@ -42,12 +45,17 @@ The contract layer has three parts:
 - **Gateway strip** — `stripColorDescriptors()`
   (`src/gateway/color-strip.ts`) strips color pseudo-links to their inner
   text on every non-TUI surface: Telegram's `renderTelegramText` (before the
-  markdown-to-HTML pass), Discord `send`, Slack `send`. Links whose href is
-  not a color descriptor are untouched. Fenced code blocks are left literal:
-  a descriptor inside a fence is code, not a tag, and the TUI renders code
-  literally too. Internal records (delivery ledger, stream journal, session
-  files) keep the raw text — the strip is a presentation rule, not a logging
-  rule.
+  markdown-to-HTML pass), Discord `send`, Slack `send`. Telegram also strips
+  before chunking, so a long link split across chunks cannot leak its
+  descriptor. Links whose href is not a color descriptor are untouched.
+  Inline code spans and fenced code blocks are left literal: a descriptor
+  inside code is code, not a tag, and the TUI renders code literally too.
+  The strip's link recognition mirrors marked: inner text may hold soft line
+  breaks and one level of balanced brackets. Known limit: an unclosed "["
+  before a color link joins into that link's inner text (the TUI renders the
+  "[" as text) — a pathological model output, accepted for a grammar-simple
+  strip. Internal records (delivery ledger, stream journal, session files)
+  keep the raw text — the strip is a presentation rule, not a logging rule.
 - **ADR + term** — this document plus the CONTEXT.md `Semantic color` term.
 
 Unknown role names, uppercase roles, malformed hexes, and `#RGB` shorthand
@@ -59,9 +67,13 @@ always writes the visible meaning inside the brackets.
 
 - Models can mark spans semantically; non-TUI surfaces degrade to clean text
   because the meaning lives in the visible inner text.
-- One parser is the single source of truth: `parseColorDescriptor` gates both
-  the TUI renderer and the gateway strip, so the two surfaces cannot drift.
+- One parser is the single source of truth for the href grammar:
+  `parseColorDescriptor` gates both the TUI renderer and the gateway strip,
+  and `parseHexLiteral` validates every candidate literal the renderer's
+  tokenizer proposes. Link recognition still differs by surface (marked vs
+  the strip's regex); the strip mirrors marked's accepted inner text and its
+  code-literal rule, with the unclosed-bracket limit above.
 - Gateway code never emits ANSI; the contract is TUI-only by definition.
-- Prompt cost: the guidance adds a short section (~70 tokens) to every system
-  prompt, including gateway profiles, where the tags are stripped — the cost
-  is accepted for one shared grammar across surfaces.
+- Prompt cost: the guidance adds a short section (71 words, ~100 tokens) to
+  every system prompt, including gateway profiles, where the tags are
+  stripped — the cost is accepted for one shared grammar across surfaces.
