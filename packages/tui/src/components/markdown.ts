@@ -593,7 +593,7 @@ export class Markdown implements Component {
 		return lines;
 	}
 
-	private static readonly HEX_LITERAL_RE = /(?<![#0-9a-fA-F/.])#([0-9a-fA-F]{6})(?![0-9a-fA-F])/g;
+	private static readonly HEX_LITERAL_RE = /(?<![A-Za-z0-9_#/.])#([0-9a-fA-F]{6})(?![A-Za-z0-9_])/g;
 
 	/**
 	 * Color standalone #RRGGBB literals in plain text with their own color and

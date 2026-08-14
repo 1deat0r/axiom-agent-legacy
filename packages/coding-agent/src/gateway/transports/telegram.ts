@@ -161,8 +161,7 @@ export function renderTelegramText(text: string): string {
 			// A closed fenced block: escape its content inside <pre>.
 			out += `<pre>${escapeHtmlText(segment)}</pre>`;
 		} else {
-			const stripped = stripColorDescriptors(segment);
-			out += stripped
+			out += segment
 				.split("\n")
 				.map((line) => {
 					const heading = line.match(/^(#{1,6})\s+(.*)$/);
@@ -314,7 +313,11 @@ export class TelegramTransport implements GatewayTransport {
 
 	/** Single-message send that returns the message id (for streaming edits). */
 	async sendMessage(to: GatewayRecipient, text: string): Promise<number> {
-		return this.client.sendMessage({ chatId: to.channelId, text: renderTelegramText(text), parseMode: "HTML" });
+		return this.client.sendMessage({
+			chatId: to.channelId,
+			text: renderTelegramText(stripColorDescriptors(text)),
+			parseMode: "HTML",
+		});
 	}
 
 	/** Edit a previously-sent message in place (throws on failure -> caller falls back). */
@@ -322,7 +325,7 @@ export class TelegramTransport implements GatewayTransport {
 		await this.client.editMessageText({
 			chatId,
 			messageId,
-			text: renderTelegramText(text),
+			text: renderTelegramText(stripColorDescriptors(text)),
 			parseMode: "HTML",
 		});
 	}

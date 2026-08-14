@@ -274,3 +274,29 @@ describe("Markdown hex literal ambient style and boundaries", () => {
 		assert.ok(plain.includes("gone"), "inner text is rendered");
 	});
 });
+
+describe("Markdown hex literal word boundaries", () => {
+	afterEach(() => {
+		resetCapabilitiesCache();
+	});
+
+	it("skips a literal glued to a word", () => {
+		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
+		const { theme, calls } = makeCapturingTheme();
+		const markdown = new Markdown("foo#aabbcc #aabbccx x.com#aabbcc x.com/foo#aabbcc", 0, 0, theme);
+
+		markdown.render(80);
+
+		assert.deepStrictEqual(calls.colored, []);
+	});
+
+	it("colors a literal after punctuation and before punctuation", () => {
+		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
+		const { theme, calls } = makeCapturingTheme();
+		const markdown = new Markdown("(#aabbcc) and #aabbcc.", 0, 0, theme);
+
+		markdown.render(80);
+
+		assert.equal(calls.colored.length, 4);
+	});
+});

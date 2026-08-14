@@ -49,8 +49,12 @@ describe("stripColorDescriptors", () => {
 		expect(stripColorDescriptors(text)).toBe("before\n```\n[x](#role:ok) stays code\n```\nafter y");
 	});
 
-	it("treats an unbalanced fence as code to the end", () => {
-		expect(stripColorDescriptors("a ``` b [x](#role:ok)")).toBe("a ``` b [x](#role:ok)");
+	it("treats a mid-line backtick run as an unclosed code span, so the link strips", () => {
+		expect(stripColorDescriptors("a ``` b [x](#role:ok)")).toBe("a ``` b x");
+	});
+
+	it("treats an unclosed real fence as code to the end", () => {
+		expect(stripColorDescriptors("before\n```\n[x](#role:ok)")).toBe("before\n```\n[x](#role:ok)");
 	});
 });
 
@@ -78,5 +82,36 @@ describe("stripColorDescriptors surface parity", () => {
 	it("keeps a color descriptor inside both inline code and a fence literal", () => {
 		const text = "```\n`[x](#role:ok)`\n```\n[real](#role:ok)";
 		expect(stripColorDescriptors(text)).toBe("```\n`[x](#role:ok)`\n```\nreal");
+	});
+});
+
+describe("stripColorDescriptors CommonMark parity", () => {
+	it("leaves a double-backtick code span literal", () => {
+		expect(stripColorDescriptors("run ``[x](#role:ok)`` now")).toBe("run ``[x](#role:ok)`` now");
+	});
+
+	it("leaves a tilde fence literal", () => {
+		expect(stripColorDescriptors("~~~\n[x](#role:ok)\n~~~\n[y](#role:warn)")).toBe("~~~\n[x](#role:ok)\n~~~\ny");
+	});
+
+	it("leaves a six-backtick fence literal", () => {
+		expect(stripColorDescriptors("``````\n[x](#role:ok)\n``````")).toBe("``````\n[x](#role:ok)\n``````");
+	});
+
+	it("treats an unclosed backtick as literal text and still strips the following link", () => {
+		expect(stripColorDescriptors("`unclosed [x](#role:ok)")).toBe("`unclosed x");
+	});
+
+	it("strips a titled descriptor link", () => {
+		expect(stripColorDescriptors('[x](#role:ok "title")')).toBe("x");
+		expect(stripColorDescriptors("[x](#role:ok 'title')")).toBe("x");
+	});
+
+	it("strips an angle-bracketed descriptor href", () => {
+		expect(stripColorDescriptors("[x](<#role:ok>)")).toBe("x");
+	});
+
+	it("keeps a titled non-descriptor link", () => {
+		expect(stripColorDescriptors('[x](#section "title")')).toBe('[x](#section "title")');
 	});
 });

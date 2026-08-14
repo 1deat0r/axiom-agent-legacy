@@ -27,8 +27,11 @@ A pseudo-link grammar on markdown link hrefs, parsed by
   so URL fragments (`http://x.com/#aabbcc`) stay plain. The ambient style is
   applied to the literal and the chip before the color wrap, so heading and
   blockquote weight survives.
-- Channels compose: bold, underline, and strike render inside the colored
-  span, because the renderer colors the fully-rendered inner tokens.
+- Channels compose: bold and strike render inside the colored span, because
+  the renderer colors the fully-rendered inner tokens. Underline has no
+  inline markdown token in the renderer (theme.underline applies to links,
+  headings, and the default style), so it stays out of scope until an
+  underline inline token exists.
 
 Four layers (issue #25): base parsing (`feat/semantic-color`), TUI link
 rendering (`feat/semantic-color-tui`), theme palette
@@ -50,12 +53,17 @@ The contract layer has three parts:
   descriptor. Links whose href is not a color descriptor are untouched.
   Inline code spans and fenced code blocks are left literal: a descriptor
   inside code is code, not a tag, and the TUI renders code literally too.
-  The strip's link recognition mirrors marked: inner text may hold soft line
-  breaks and one level of balanced brackets. Known limit: an unclosed "["
-  before a color link joins into that link's inner text (the TUI renders the
-  "[" as text) — a pathological model output, accepted for a grammar-simple
-  strip. Internal records (delivery ledger, stream journal, session files)
-  keep the raw text — the strip is a presentation rule, not a logging rule.
+  Fences pair by run character and length (``` and ~~~, any run >= 3, closing
+  run >= opening run, unclosed fence runs to end of text); code spans pair by
+  equal backtick runs, and an unclosed run is literal text, so marked still
+  parses links after it. The strip's link recognition mirrors marked: inner
+  text may hold soft line breaks and one level of balanced brackets, hrefs
+  may be angle-bracketed, and a quoted title may follow. Known limit: an
+  unclosed "[" before a color link joins into that link's inner text (the TUI
+  renders the "[" as text) — a pathological model output, accepted for a
+  grammar-simple strip. Internal records (delivery ledger, stream journal,
+  session files) keep the raw text — the strip is a presentation rule, not a
+  logging rule.
 - **ADR + term** — this document plus the CONTEXT.md `Semantic color` term.
 
 Unknown role names, uppercase roles, malformed hexes, and `#RGB` shorthand

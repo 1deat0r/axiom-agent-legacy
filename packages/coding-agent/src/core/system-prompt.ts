@@ -185,7 +185,7 @@ export function buildMarkdownColorGuidance(): string {
 	return [
 		"# Markdown color",
 		"",
-		"Color text in the TUI with pseudo-links whose href is a color descriptor: [text](#role:NAME) (foreground role), [text](#bg:NAME) (background role), [text](#hex:RRGGBB) and [text](#hexbg:RRGGBB) (exact colors). Roles: error, warn, ok, info, accent, muted. A standalone #RRGGBB token renders colored with a swatch chip. Bold, underline, and strike compose inside the brackets. These render only in the TUI; other surfaces strip the descriptors, so keep all meaning in the visible text.",
+		"Color text in the TUI with pseudo-links whose href is a color descriptor: [text](#role:NAME) (foreground role), [text](#bg:NAME) (background role), [text](#hex:RRGGBB) and [text](#hexbg:RRGGBB) (exact colors). Roles: error, warn, ok, info, accent, muted. A standalone #RRGGBB token renders colored with a swatch chip. Bold and strike compose inside the brackets. These render only in the TUI; other surfaces strip the descriptors, so keep all meaning in the visible text.",
 	].join("\n");
 }
 
