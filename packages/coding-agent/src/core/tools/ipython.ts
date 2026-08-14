@@ -16,6 +16,7 @@ import {
 	KernelManager,
 	type KernelSentAgentMessage,
 } from "../kernel/index.js";
+import type { KernelGcOptions } from "../kernel/kernel-gc.js";
 import { manifestPathIn, type RestoreResult, snapshotPathIn } from "../kernel/state-snapshot.js";
 import type { PythonSkillRuntimeInfo } from "../skills.js";
 import { parseIpythonBashCell } from "./ipython-cell-code.js";
@@ -37,6 +38,14 @@ except Exception:
 try:
     import rlm as _prime_agent_rlm_module
     rlm = _prime_agent_rlm_module.rlm
+    # Threshold-based automatic GC (rlm.gc): a post_execute hook that collects
+    # when pressure crosses the env-tunable thresholds (cheap per-cell counter,
+    # periodic tracked-object count). Never raises.
+    try:
+        from rlm import gc as _prime_agent_rlm_gc
+        _prime_agent_rlm_gc.install_post_execute_gc()
+    except Exception:
+        pass
 except Exception as _prime_agent_rlm_error:
     _AXIOM_RLM_IMPORT_ERROR = str(_prime_agent_rlm_error)
 
@@ -260,6 +269,8 @@ export interface IpythonToolDetails {
 	sentAgentMessages?: KernelSentAgentMessage[];
 	/** True when this result came after killing and restarting a busy kernel. */
 	kernelRestarted?: boolean;
+	/** GC pressure + collect metadata, attached when per-N-cell checks are enabled. */
+	gc?: ExecuteResult["gc"];
 	error?: {
 		ename: string;
 		evalue: string;
@@ -281,6 +292,8 @@ export interface IpythonToolOptions {
 	pythonSkills?: readonly PythonSkillRuntimeInfo[];
 	/** Per-session artifact dir where the kernel namespace snapshot is stored. Omit to disable snapshots. */
 	snapshotDir?: string;
+	/** Opt-in GC pressure metadata on user cell results. Defaults to env knobs (off). */
+	gc?: KernelGcOptions;
 	/** Resolves before this kernel starts — e.g. the previous provisioner's dispose, so a
 	 * /reload's old-kernel snapshot flush can't race the new kernel's restore. */
 	readyGate?: Promise<unknown>;
@@ -482,6 +495,7 @@ export class IpythonKernelProvisioner {
 				sessionId: this.options?.sessionId,
 				hostHandlers: this.options?.hostHandlers,
 				pythonSkills: this.options?.pythonSkills,
+				gc: this.options?.gc,
 				// Only persistent sessions (which have an artifact dir) get a revivable snapshot.
 				snapshot: snapshotDir
 					? { path: snapshotPathIn(snapshotDir), manifestPath: manifestPathIn(snapshotDir) }
@@ -518,6 +532,9 @@ export class IpythonKernelProvisioner {
 				this.emitStartupProgress("Preparing IPython runtime...");
 				const bootstrap = await m.execute(buildRlmBootstrapCode(this.options?.pythonSkills), {
 					signal: startupSignal,
+					// Internal: the bootstrap cell must not count toward the per-N
+					// GC check nor carry gc metadata on its result.
+					internal: true,
 				});
 				if (bootstrap.status !== "ok") {
 					const details = [bootstrap.stderr, bootstrap.error?.traceback.join("\n")].filter(Boolean).join("\n");
@@ -690,6 +707,7 @@ export function createIpythonToolDefinition(
 						attachments: r.attachments,
 						sentAgentMessages: r.sentAgentMessages,
 						kernelRestarted,
+						gc: r.gc,
 						error: r.error,
 					},
 					isError: r.status === "error" || r.status === "aborted",
