@@ -1,5 +1,5 @@
 /**
- * Root guard path extraction (ADR-0051) — pure tokenizer.
+ * Root guard path extraction (ADR-0052) — pure tokenizer.
  *
  * Extracts candidate path tokens from freeform shell / ipython text so the
  * scope gate can classify them against the project root. Conservative by

@@ -119,18 +119,19 @@ _Avoid_: Reasoning level, intelligence slider
 The ADR-0014 rung-3 enforcement: axiom extensions, inert unless a run is
 anchored by AXIOM_PROJECT_ROOT, that confine the file-touching tools to the
 project root. The workspace guard (ADR-0018) blocks an `edit` whose resolved
-path leaves the root. The root guard (ADR-0051) scans `bash`/`ipython` for
-literal path tokens and blocks, by default, any outside data path (home data,
-other projects, `/var`, `/mnt`, `/media`, `/srv`), while a small default infra
-set stays available (`/tmp`, `/usr`, `/etc`, the axiom home, `~/.local`,
-`~/.config`, `~/.cache`, ...; `AXIOM_ROOT_GUARD_STRICT=1` drops it). Escapes
-need plain-English approval: the model files a request with the
-`request_root_access` tool and waits; the operator decides with
-`axiom root-guard approve|reject <id>`. Every block, request, decision, grant,
-and grant-use lands in an append-only audit log
-(`<axiom home>/root-guard/<project-hash>/audit.jsonl`). Honest boundary:
-freeform string extraction is best-effort, not confinement — the ADR-0019 OS
-sandbox remains the strict tier.
+path leaves the root. The root guard (ADR-0052) scans `bash`/`ipython` for
+literal path tokens and blocks, by default, ANY outside path — strict
+block-by-default. The operator relaxes it with `AXIOM_ROOT_GUARD_ALLOW`
+(allow prefixes; the exported `INFRA_ALLOW_PREFIXES` list is the opt-in
+convenience set) and hardens it with `AXIOM_ROOT_GUARD_DENY` (wins
+everywhere). Escapes need plain-English approval: the model files a request
+with the `request_root_access` tool and waits; the operator decides with
+`axiom root-guard approve|reject <id>`. Every block, request, decision,
+grant, and grant-use lands in an append-only audit log
+(`<axiom home>/root-guard/<project-hash>/audit.jsonl`); a decided request
+leaves the pending board. Honest boundary: freeform string extraction is
+best-effort, not confinement — the ADR-0019 OS sandbox remains the strict
+tier.
 **Memory consolidation**:
 The declarative-memory half of "gets smarter over time" (ADR-0040, issue #19):
 after a run, an inert-by-default `agent_end` extension (enabled via
@@ -227,7 +228,7 @@ design (not confinement — that stays ADR-0019); escaped via
 _Avoid_: Sandbox, confinement (a guard, not a wall — the OS tier stays the wall)
 
 **Completion resilience**:
-The ADR-0051 gateway defense-in-depth: transient completion failures (SIGTERM
+The ADR-0052 gateway defense-in-depth: transient completion failures (SIGTERM
 143, SIGKILL 137, timeout, busy session, spawn error) are classified
 (`completion-failure.ts`) and retried once with compaction dropped, streaming
 into the same bubble; the user-facing failure text is one short sentence and

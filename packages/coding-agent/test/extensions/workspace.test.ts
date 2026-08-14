@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import type { ExtensionAPI } from "../../src/core/extensions/types.js";
-import { appendGrant, resolveScopeDir } from "../../src/core/root-guard/store.js";
+import { appendGrant, listAudit, resolveScopeDir } from "../../src/core/root-guard/store.js";
 import { createWorkspaceGuard, isWithin, realpathX } from "../../src/extensions/workspace/index.js";
 
 /** Minimal fake ExtensionAPI that captures handlers so a test can invoke them. */
@@ -214,7 +214,7 @@ describe("workspace guard tool_call handler", () => {
 	});
 });
 
-describe("workspace guard approval escapes (ADR-0051)", () => {
+describe("workspace guard approval escapes (ADR-0052)", () => {
 	it("allows an outside edit when the path matches an allow prefix", async () => {
 		const root = await makeRoot();
 		const other = await makeRoot();
@@ -276,6 +276,11 @@ describe("workspace guard approval escapes (ADR-0051)", () => {
 					input: { path: join(other, "x.ts"), edits: [] },
 				}),
 			).toBeUndefined();
+			// grant-use escapes are audited, like the shell tools (ADR-0052)
+			const audit = await listAudit(scope);
+			expect(audit.some((e) => e.event === "grant-use" && (e as { tool?: string }).tool === "edit")).toBe(
+				true,
+			);
 		} finally {
 			if (prev === undefined) delete process.env.AXIOM_ROOT_GUARD_STATE_DIR;
 			else process.env.AXIOM_ROOT_GUARD_STATE_DIR = prev;

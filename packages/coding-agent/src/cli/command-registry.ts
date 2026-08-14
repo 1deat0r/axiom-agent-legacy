@@ -204,7 +204,7 @@ export const COMMAND_SPECS: readonly CommandSpec[] = [
 	{
 		path: ["root-guard"],
 		usage: "root-guard <list|approve|reject>",
-		summary: "Approve or reject root-guard escape requests (ADR-0051)",
+		summary: "Approve or reject root-guard escape requests (ADR-0052)",
 		description:
 			"The operator's side of the root guard's approval loop: pending plain-English " +
 			"requests filed by an anchored agent, decided via approve/reject. Flags: --root " +

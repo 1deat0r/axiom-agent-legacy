@@ -43,7 +43,7 @@ describe("root guard store (file-backed approval state)", () => {
 			const { id } = await fileRequest(scope, { paths: ["/etc/passwd"], reason: "need to read it" });
 			expect(id).toMatch(/^rg-[0-9a-z]+-[0-9a-f]{4}$/);
 			const rec = await readPending(scope, id);
-			expect(rec).toMatchObject({ id, paths: ["/etc/passwd"], reason: "need to read it", status: "pending" });
+			expect(rec).toMatchObject({ id, paths: ["/etc/passwd"], reason: "need to read it" });
 		} finally {
 			await rm(state, { recursive: true, force: true });
 		}
@@ -103,6 +103,38 @@ describe("root guard store (file-backed approval state)", () => {
 			expect(audit[1]).toMatchObject({ event: "block", tool: "bash" });
 			const raw = await readFile(join(scope, "audit.jsonl"), "utf8");
 			expect(raw.trim().split("\n")).toHaveLength(2);
+		} finally {
+			await rm(state, { recursive: true, force: true });
+		}
+	});
+
+	it("drains decided requests from the pending board", async () => {
+		const state = await makeState();
+		try {
+			const scope = await resolveScopeDir(state, "/work/p");
+			await fileRequest(scope, { paths: ["/a"], reason: "one", id: "rg-1" });
+			await fileRequest(scope, { paths: ["/b"], reason: "two", id: "rg-2" });
+			expect(await listPending(scope)).toHaveLength(2);
+			await writeDecision(scope, "rg-1", { approved: true });
+			const pending = await listPending(scope);
+			expect(pending.map((p) => p.id)).toEqual(["rg-2"]);
+			// the decided request itself is preserved for the audit trail
+			expect(await readPending(scope, "rg-1")).toMatchObject({ id: "rg-1" });
+		} finally {
+			await rm(state, { recursive: true, force: true });
+		}
+	});
+
+	it("skips malformed JSONL lines instead of hiding the whole file", async () => {
+		const state = await makeState();
+		try {
+			const scope = await resolveScopeDir(state, "/work/p");
+			await appendGrant(scope, { id: "rg-1", prefixes: ["/etc"], reason: "read hosts" });
+			await import("node:fs/promises").then(async ({ appendFile }) => {
+				await appendFile(join(scope, "grants.jsonl"), "{not json}\n");
+				await appendFile(join(scope, "grants.jsonl"), `${JSON.stringify({ id: "rg-2", prefixes: ["/var/log"], reason: "logs", grantedAt: Date.now() })}\n`);
+			});
+			expect((await listGrantPrefixes(scope)).sort()).toEqual(["/etc", "/var/log"]);
 		} finally {
 			await rm(state, { recursive: true, force: true });
 		}

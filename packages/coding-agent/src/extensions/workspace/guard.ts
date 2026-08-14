@@ -15,19 +15,19 @@
  */
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { isWithinPath } from "../../core/root-guard/scope.js";
 
 /** Resolve a possibly-relative path against a cwd to an absolute path. */
 export function toAbsolute(raw: string, cwd: string): string {
 	return isAbsolute(raw) ? raw : resolve(cwd, raw);
 }
 
-/** True iff `target` is the root or strictly inside it. */
-export function isWithin(root: string, target: string): boolean {
-	if (root === target) return true;
-	const rel = relative(root, target);
-	return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
-}
+/**
+ * One containment predicate for the whole rung-3 guard (ADR-0052): the core
+ * scope module owns it; this alias keeps the ADR-0018 export stable.
+ */
+export const isWithin = isWithinPath;
 
 /**
  * realpath, walking up to the nearest existing ancestor when the target does
@@ -52,12 +52,12 @@ export async function realpathX(path: string): Promise<string> {
 }
 
 export interface DecideEditOptions {
-	/** Path prefixes that unblock an otherwise-outside edit (ADR-0051 approvals). */
+	/** Path prefixes that unblock an otherwise-outside edit (ADR-0052 approvals). */
 	allowPrefixes?: readonly string[];
 }
 
 /** Expand a leading `~/` to the home directory (approval prefixes may use it). */
-export function expandTilde(raw: string, home = homedir()): string {
+function expandTilde(raw: string, home = homedir()): string {
 	return raw === "~" ? home : raw.startsWith("~/") ? join(home, raw.slice(2)) : raw;
 }
 

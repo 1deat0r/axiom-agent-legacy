@@ -92,3 +92,28 @@ describe("checkPathScope (pure containment)", () => {
 		expect(checkPathScope({ paths: ["x.dev/a/b"], root: ROOT, cwd: ROOT, home: HOME })).toBeUndefined();
 	});
 });
+
+describe("checkPathScope shell shorthands and mixed reasons", () => {
+	it("expands ~+ to the working directory (stays inside the root)", () => {
+		expect(checkPathScope({ paths: ["~+"], root: ROOT, cwd: ROOT, home: HOME })).toBeUndefined();
+	});
+
+	it("leaves ~- unresolved so it resolves inside the root (best-effort)", () => {
+		expect(checkPathScope({ paths: ["~-"], root: ROOT, cwd: ROOT, home: HOME })).toBeUndefined();
+	});
+
+	it("names denied and outside paths separately in a mixed block", () => {
+		const d = block(
+			checkPathScope({
+				paths: ["/etc/passwd", "/mnt/x"],
+				root: ROOT,
+				cwd: ROOT,
+				home: HOME,
+				denyPrefixes: ["/etc"],
+			}),
+		);
+		expect(d.reason).toMatch(/denied: \/etc\/passwd/);
+		expect(d.reason).toMatch(/outside this project's root .*: \/mnt\/x/);
+		expect(d.reason).toMatch(/request_root_access/);
+	});
+});

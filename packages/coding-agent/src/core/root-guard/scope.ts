@@ -1,5 +1,5 @@
 /**
- * Root guard scope gate (ADR-0051) — pure containment classification.
+ * Root guard scope gate (ADR-0052) — pure containment classification.
  *
  * Classifies resolved candidate paths against the anchored project root.
  * Containment is LEXICAL (no realpath chase) for the freeform tools: a
@@ -41,7 +41,14 @@ export function isWithinPath(root: string, target: string): boolean {
 
 /** Resolve a raw token to an absolute lexical path, expanding `~` / `~user`. */
 export function toAbsolutePath(raw: string, cwd: string, home: string): string {
-	const expanded = raw.replace(/^~[A-Za-z0-9_.+-]*/, (m) => (m === "~" ? home : `/home/${m.slice(1)}`));
+	const expanded = raw.replace(/^~[A-Za-z0-9_.+-]*/, (m) => {
+		if (m === "~") return home;
+		if (m === "~+") return cwd; // bash PWD shorthand
+		// `~-` (OLDPWD) has no stable resolution here; leaving it unresolved
+		// resolves against cwd, which stays inside the root (best-effort).
+		if (m === "~-") return m;
+		return `/home/${m.slice(1)}`;
+	});
 	return isAbsolute(expanded) ? expanded : resolve(cwd, expanded);
 }
 
@@ -73,13 +80,22 @@ export function checkPathScope(options: PathScopeOptions): PathScopeDecision {
 	}
 	const paths = [...denied, ...outside];
 	if (paths.length === 0) return undefined;
-	const shown = paths.slice(0, 3).join(", ") + (paths.length > 3 ? ` and ${paths.length - 3} more` : "");
-	const reason =
-		denied.length > 0
-			? `Refusing to touch ${shown} — the operator denied these paths (AXIOM_ROOT_GUARD_DENY).`
-			: `Refusing to touch ${shown} — it is outside this project's root (${rootAbs}). ` +
-				`The root guard blocks outside paths by default: request an escape with the ` +
+	const fmt = (list: string[]) =>
+		list.slice(0, 3).join(", ") + (list.length > 3 ? ` and ${list.length - 3} more` : "");
+	const parts: string[] = [];
+	if (denied.length > 0) {
+		parts.push(
+			`the operator denied: ${fmt(denied)} (AXIOM_ROOT_GUARD_DENY — no approval can override a deny)`,
+		);
+	}
+	if (outside.length > 0) {
+		parts.push(`outside this project's root (${rootAbs}): ${fmt(outside)}`);
+	}
+	const escapeHint =
+		outside.length > 0
+			? ` The root guard blocks outside paths by default: request an escape with the ` +
 				`request_root_access tool (state the paths and a plain-English reason), or ask ` +
-				`the operator to add the path to AXIOM_ROOT_GUARD_ALLOW.`;
-	return { block: true, reason, paths };
+				`the operator to add the path to AXIOM_ROOT_GUARD_ALLOW.`
+			: "";
+	return { block: true, reason: `Refusing to touch ${fmt(paths)}. ${parts.join("; ")}.${escapeHint}`, paths };
 }

@@ -1,5 +1,5 @@
 /**
- * `axiom root-guard` — the operator's side of the approval loop (ADR-0051).
+ * `axiom root-guard` — the operator's side of the approval loop (ADR-0052).
  *
  * Reads and writes exactly the same state the agent-side request_root_access
  * tool uses, so a human at the terminal decides on the requests a running
@@ -13,7 +13,7 @@
 import { join } from "node:path";
 import {
 	appendAudit,
-	appendGrant,
+	appendGrantIfMissing,
 	listDecisions,
 	listPending,
 	readPending,
@@ -22,7 +22,7 @@ import {
 } from "../core/root-guard/store.js";
 import { axiomHome } from "../extensions/profile/registry.js";
 
-export const ROOT_GUARD_HELP = `axiom root-guard — approve or reject root-guard escape requests (ADR-0051)
+export const ROOT_GUARD_HELP = `axiom root-guard — approve or reject root-guard escape requests (ADR-0052)
 
 usage:
   axiom root-guard list                     pending requests and recent decisions
@@ -108,7 +108,7 @@ export async function handleRootGuardCommand(args: string[]): Promise<boolean> {
 			const approved = sub === "approve";
 			await writeDecision(scope, id, { approved, note });
 			if (approved) {
-				await appendGrant(scope, { id, prefixes: request.paths, reason: request.reason });
+				await appendGrantIfMissing(scope, { id, prefixes: request.paths, reason: request.reason });
 				await appendAudit(scope, { event: "grant", id, prefixes: request.paths });
 				console.log(`Approved ${id}: ${request.paths.join(", ")} — the guard now allows these paths.`);
 			} else {

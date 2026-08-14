@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fromAny, fromPartial } from "@total-typescript/shoehorn";
@@ -11,7 +11,8 @@ import {
 	resolveScopeDir,
 	writeDecision,
 } from "../../src/core/root-guard/store.js";
-import { createRootGuard, DEFAULT_ALLOW_PREFIXES } from "../../src/extensions/root-guard/index.js";
+import { handleRootGuardCommand } from "../../src/cli/root-guard-command.js";
+import { createRootGuard, INFRA_ALLOW_PREFIXES } from "../../src/extensions/root-guard/index.js";
 
 const HOME = "/home/alice";
 const GUARD_ENV = [
@@ -136,26 +137,32 @@ describe("root guard extension (tool_call gate)", () => {
 		}
 	});
 
-	it("allows OS read-surface paths by the default infra policy", async () => {
+	it("blocks outside paths by default — strict posture (issue #17 criterion a)", async () => {
 		const root = await makeRoot();
 		try {
 			const fake = fakePi();
 			createRootGuard({ root, cwd: root, stateDir: await makeRoot(), home: HOME })(fake.pi);
-			expect(await fake.toolCall(bashEvent({ command: "cat /etc/os-release" }))).toBeUndefined();
+			const res = fromAny<{ block: boolean }, unknown>(
+				await fake.toolCall(bashEvent({ command: "cat /etc/os-release" })),
+			);
+			expect(res.block).toBe(true);
 		} finally {
 			await rm(root, { recursive: true, force: true });
 		}
 	});
 
-	it("strict mode drops the default infra set (pure block-by-default)", async () => {
+	it("the infra list is opt-in via allow prefixes", async () => {
 		const root = await makeRoot();
 		try {
 			const fake = fakePi();
-			createRootGuard({ root, cwd: root, stateDir: await makeRoot(), home: HOME, includeDefaults: false })(fake.pi);
-			const res = fromAny<{ block: boolean }, unknown>(
-				await fake.toolCall(bashEvent({ command: "cat /etc/os-release" })),
-			);
-			expect(res.block).toBe(true);
+			createRootGuard({
+				root,
+				cwd: root,
+				stateDir: await makeRoot(),
+				home: HOME,
+				allowPrefixes: INFRA_ALLOW_PREFIXES(HOME, `${HOME}/.axiom`),
+			})(fake.pi);
+			expect(await fake.toolCall(bashEvent({ command: "cat /etc/os-release" }))).toBeUndefined();
 		} finally {
 			await rm(root, { recursive: true, force: true });
 		}
@@ -222,6 +229,46 @@ describe("root guard extension (tool_call gate)", () => {
 		}
 	});
 
+	it("reads AXIOM_ROOT_GUARD_DENY from the environment", async () => {
+		const root = await makeRoot();
+		const prev = process.env.AXIOM_PROJECT_ROOT;
+		const prevDeny = process.env.AXIOM_ROOT_GUARD_DENY;
+		try {
+			process.env.AXIOM_PROJECT_ROOT = root;
+			process.env.AXIOM_ROOT_GUARD_DENY = "/tmp";
+			const fake = fakePi();
+			createRootGuard({ stateDir: await makeRoot(), home: HOME })(fake.pi);
+			expect(await fake.toolCall(bashEvent({ command: "cat /tmp/x" }))).toMatchObject({ block: true });
+		} finally {
+			if (prev === undefined) delete process.env.AXIOM_PROJECT_ROOT;
+			else process.env.AXIOM_PROJECT_ROOT = prev;
+			if (prevDeny === undefined) delete process.env.AXIOM_ROOT_GUARD_DENY;
+			else process.env.AXIOM_ROOT_GUARD_DENY = prevDeny;
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it("fails closed with a plain reason when the approval store is unusable", async () => {
+		const root = await makeRoot();
+		const state = join(await makeRoot(), "not-a-dir");
+		await writeFile(state, "x");
+		try {
+			const fake = fakePi();
+			// stateDir is a FILE, so the store cannot be created under it
+			createRootGuard({ root, cwd: root, stateDir: state, home: HOME, allowPrefixes: ["/tmp"] })(
+				fake.pi,
+			);
+			const res = fromAny<{ block: boolean; reason: string }, unknown>(
+				await fake.toolCall(bashEvent({ command: "cat /tmp/x" })),
+			);
+			expect(res.block).toBe(true);
+			expect(res.reason).toMatch(/store/i);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+			await rm(state, { recursive: true, force: true });
+		}
+	});
+
 	it("anchors from AXIOM_PROJECT_ROOT and reads AXIOM_ROOT_GUARD_ALLOW", async () => {
 		const root = await makeRoot();
 		const prev = process.env.AXIOM_PROJECT_ROOT;
@@ -242,8 +289,8 @@ describe("root guard extension (tool_call gate)", () => {
 		}
 	});
 
-	it("ships the documented default infra allowlist", () => {
-		const allow = DEFAULT_ALLOW_PREFIXES(HOME, join(HOME, ".axiom"));
+	it("ships the opt-in infra allowlist (never applied automatically)", () => {
+		const allow = INFRA_ALLOW_PREFIXES(HOME, join(HOME, ".axiom"));
 		expect(allow).toContain("/etc");
 		expect(allow).toContain("/tmp");
 		expect(allow).toContain(join(HOME, ".axiom"));
@@ -284,6 +331,63 @@ describe("request_root_access tool (approval loop)", () => {
 			expect(text).toMatch(/rg-[0-9a-z]+-[0-9a-f]{4}/);
 			const scope = await resolveScopeDir(state, root);
 			expect(await listGrantPrefixes(scope)).toEqual([]);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+			await rm(state, { recursive: true, force: true });
+		}
+	});
+
+	it("reads AXIOM_ROOT_GUARD_APPROVAL_TIMEOUT_MS from the environment", async () => {
+		const root = await makeRoot();
+		const prevRoot = process.env.AXIOM_PROJECT_ROOT;
+		const prevTimeout = process.env.AXIOM_ROOT_GUARD_APPROVAL_TIMEOUT_MS;
+		try {
+			process.env.AXIOM_PROJECT_ROOT = root;
+			process.env.AXIOM_ROOT_GUARD_APPROVAL_TIMEOUT_MS = "5";
+			const fake = fakePi();
+			createRootGuard({ stateDir: await makeRoot(), home: HOME, pollMs: 5 })(fake.pi);
+			const tool = await approvalTool(fake);
+			const result = await runTool(tool, { paths: ["/srv/data"], reason: "need data" });
+			expect(textOf(result)).toMatch(/pending/i);
+		} finally {
+			if (prevRoot === undefined) delete process.env.AXIOM_PROJECT_ROOT;
+			else process.env.AXIOM_PROJECT_ROOT = prevRoot;
+			if (prevTimeout === undefined) delete process.env.AXIOM_ROOT_GUARD_APPROVAL_TIMEOUT_MS;
+			else process.env.AXIOM_ROOT_GUARD_APPROVAL_TIMEOUT_MS = prevTimeout;
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it("records exactly one grant line when the CLI approves while the wait runs", async () => {
+		const root = await makeRoot();
+		const state = await makeRoot();
+		try {
+			const scope = await resolveScopeDir(state, root);
+			const fake = fakePi();
+			createRootGuard({ root, cwd: root, stateDir: state, home: HOME, approvalTimeoutMs: 5000, pollMs: 10 })(
+				fake.pi,
+			);
+			const tool = await approvalTool(fake);
+			const running = runTool(tool, { paths: ["/srv/data"], reason: "need data" });
+			let id = "";
+			for (let i = 0; i < 200; i++) {
+				const names = await pendingNames(scope);
+				if (names.length > 0) {
+					id = names[0].replace(/\.json$/, "");
+					const logs: string[] = [];
+					const prevLog = console.log;
+					console.log = (line: string) => logs.push(line);
+					await handleRootGuardCommand(["root-guard", "approve", id, "--root", root, "--state-dir", state]);
+					console.log = prevLog;
+					break;
+				}
+				await new Promise((r) => setTimeout(r, 10));
+			}
+			const text = textOf(await running);
+			expect(text).toMatch(/approved/i);
+			expect(await listGrantPrefixes(scope)).toEqual(["/srv/data"]);
+			const grantsRaw = await readFile(join(scope, "grants.jsonl"), "utf8");
+			expect(grantsRaw.trim().split("\n")).toHaveLength(1);
 		} finally {
 			await rm(root, { recursive: true, force: true });
 			await rm(state, { recursive: true, force: true });

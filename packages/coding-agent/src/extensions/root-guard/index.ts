@@ -1,5 +1,5 @@
 /**
- * Root guard extension (ADR-0051) — freeform path confinement + approval.
+ * Root guard extension (ADR-0052) — freeform path confinement + approval.
  *
  * Ships the rung-3 gate over the freeform file-touching tools on the
  * `tool_call` seam, gated exactly like the security fence and the git guard:
@@ -8,8 +8,11 @@
  *
  *  - `bash` (input.command) and `ipython` (input.code) are scanned for
  *    literal path tokens; tokens outside the project root block the call
- *    with a plain-English reason, unless they match the default infra
- *    allowlist, an operator allow prefix, or an approved grant.
+ *    with a plain-English reason — strict block-by-default (issue #17,
+ *    criterion a), relaxed only by an operator allow prefix or an approved
+ *    grant. The exported INFRA_ALLOW_PREFIXES list is the convenience set an
+ *    operator pastes into AXIOM_ROOT_GUARD_ALLOW to restore the practical
+ *    posture.
  *  - `request_root_access` is registered: the model files a plain-English
  *    request for outside paths and WAITS (polling, abortable) for the
  *    operator's decision via `axiom root-guard approve|reject <id>`. An
@@ -21,22 +24,23 @@
  * same allow prefixes and grants so an approved escape also unblocks edits.
  *
  * Configuration:
- *  - AXIOM_ROOT_GUARD_ALLOW            comma-separated extra allow prefixes
+ *  - AXIOM_ROOT_GUARD_ALLOW            comma-separated allow prefixes (escape
+ *                                      policy; paste INFRA_ALLOW_PREFIXES here
+ *                                      to allow the OS read surface + scratch)
  *  - AXIOM_ROOT_GUARD_DENY             comma-separated deny prefixes (win)
- *  - AXIOM_ROOT_GUARD_STRICT=1         drop the default infra allowlist
  *  - AXIOM_ROOT_GUARD_STATE_DIR        approval state root (default axiom home)
  *  - AXIOM_ROOT_GUARD_APPROVAL_TIMEOUT_MS  approval wait budget (default 5 min)
  */
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { type Static, Type } from "typebox";
+import { envList } from "../../core/env-list.js";
 import type { ExtensionAPI } from "../../core/extensions/types.js";
 import { extractCandidatePaths } from "../../core/root-guard/paths.js";
 import { checkPathScope, isWithinPath, toAbsolutePath } from "../../core/root-guard/scope.js";
 import {
-	type AuditEvent,
 	appendAudit,
-	appendGrant,
+	appendGrantIfMissing,
 	fileRequest,
 	listGrantPrefixes,
 	readDecision,
@@ -44,23 +48,18 @@ import {
 } from "../../core/root-guard/store.js";
 import { axiomHome } from "../profile/registry.js";
 
-/** Parse a comma-separated env list, trimming empties; undefined when unset. */
-function envList(value: string | undefined): string[] | undefined {
-	if (!value || value.length === 0) return undefined;
-	return value
-		.split(",")
-		.map((s) => s.trim())
-		.filter((s) => s.length > 0);
-}
-
 /**
- * The default infra allowlist: OS read surfaces, scratch, and the agent's own
- * homes — the same surfaces ADR-0019 keeps visible. Deliberately NOT home
- * data (Documents, other projects, .ssh/.aws/.gnupg/.netrc, dotfiles), /var,
- * /mnt, /media, /srv, or other users' homes. This is a drift guard, not a
- * sandbox: AXIOM_ROOT_GUARD_STRICT=1 drops this set for pure block-by-default.
+ * The infra allowlist — OS read surfaces, scratch, and the agent's own homes,
+ * the same surfaces ADR-0019 keeps visible. Deliberately NOT home data
+ * (Documents, other projects, .ssh/.aws/.gnupg/.netrc, dotfiles), /var,
+ * /mnt, /media, /srv, or other users' homes.
+ *
+ * OPT-IN by design (ADR-0052): the guard is strict block-by-default, so this
+ * list is NOT applied automatically. An operator pastes it into
+ * AXIOM_ROOT_GUARD_ALLOW to restore the practical posture. This is a drift
+ * guard, not a sandbox — ADR-0019 stays the strict tier.
  */
-export function DEFAULT_ALLOW_PREFIXES(home: string, axiomHomeDir: string): string[] {
+export function INFRA_ALLOW_PREFIXES(home: string, axiomHomeDir: string): string[] {
 	return [
 		"/proc",
 		"/sys",
@@ -98,8 +97,6 @@ export interface RootGuardOptions {
 	allowPrefixes?: readonly string[];
 	/** Deny prefixes (win over allows, even inside the root). Defaults to AXIOM_ROOT_GUARD_DENY. */
 	denyPrefixes?: readonly string[];
-	/** Include the default infra allowlist (default true; false = strict mode). */
-	includeDefaults?: boolean;
 	/** Approval wait budget in ms (default 300000). */
 	approvalTimeoutMs?: number;
 	/** Approval poll interval in ms (default 500). */
@@ -141,7 +138,7 @@ function sleepMs(ms: number, signal: AbortSignal | undefined): Promise<void> {
 
 const RequestAccessSchema = Type.Object({
 	paths: Type.Array(Type.String(), { minItems: 1 }),
-	reason: Type.String(),
+	reason: Type.String({ minLength: 1 }),
 });
 type RequestAccessParams = Static<typeof RequestAccessSchema>;
 
@@ -157,11 +154,7 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 		const cwd = options.cwd ?? rawRoot;
 		const home = options.home ?? homedir();
 		const stateDir = options.stateDir ?? process.env.AXIOM_ROOT_GUARD_STATE_DIR ?? join(axiomHome(), "root-guard");
-		const includeDefaults = options.includeDefaults ?? process.env.AXIOM_ROOT_GUARD_STRICT !== "1";
-		const allowPrefixes = options.allowPrefixes ?? [
-			...(envList(process.env.AXIOM_ROOT_GUARD_ALLOW) ?? []),
-			...(includeDefaults ? DEFAULT_ALLOW_PREFIXES(home, axiomHome()) : []),
-		];
+		const allowPrefixes = options.allowPrefixes ?? envList(process.env.AXIOM_ROOT_GUARD_ALLOW) ?? [];
 		const denyPrefixes = options.denyPrefixes ?? envList(process.env.AXIOM_ROOT_GUARD_DENY) ?? [];
 		const envTimeout = Number.parseInt(process.env.AXIOM_ROOT_GUARD_APPROVAL_TIMEOUT_MS ?? "", 10);
 		const timeoutMs =
@@ -173,8 +166,22 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 			if (text === undefined) return undefined;
 			const tokens = extractCandidatePaths(text);
 			if (tokens.length === 0) return undefined;
-			const scope = await resolveScopeDir(stateDir, rawRoot);
-			const grants = await listGrantPrefixes(scope);
+			let scope: string;
+			let grants: string[];
+			try {
+				scope = await resolveScopeDir(stateDir, rawRoot);
+				grants = await listGrantPrefixes(scope);
+			} catch (error) {
+				// Fail closed: when the approval store is unusable the guard
+				// cannot verify anything, so it blocks with a plain reason.
+				const message = error instanceof Error ? error.message : String(error);
+				return {
+					block: true,
+					reason:
+						`Root guard could not verify these paths because its store failed (${message}). ` +
+						`Fix AXIOM_ROOT_GUARD_STATE_DIR (default: <axiom home>/root-guard) and retry.`,
+				};
+			}
 			// Static policy first; when it blocks, grants are the recorded escape.
 			const decision = checkPathScope({
 				root: rawRoot,
@@ -265,7 +272,7 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 					const decision = await readDecision(scope, id);
 					if (decision) {
 						if (decision.approved) {
-							await appendGrant(scope, { id, prefixes: requestable, reason: params.reason });
+							await appendGrantIfMissing(scope, { id, prefixes: requestable, reason: params.reason });
 							await appendAudit(scope, { event: "grant", id, prefixes: requestable });
 							return {
 								content: [
@@ -331,5 +338,3 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 export default function axiomRootGuardExtension(pi: ExtensionAPI): void {
 	createRootGuard()(pi);
 }
-
-export type { AuditEvent };

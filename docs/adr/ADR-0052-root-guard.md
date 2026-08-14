@@ -1,10 +1,12 @@
-# ADR-0051: Root guard v2 — freeform path confinement and plain-English approval
+# ADR-0052: Root guard v2 — freeform path confinement and plain-English approval
 
 **Status:** accepted
 **Date:** 2026-08-14
 **Extends:** ADR-0014 (anti-drift ladder, rung 3), ADR-0018 (workspace root guard),
 ADR-0028 (security fence seam), ADR-0019 (OS-tier confinement)
 **Implements:** issue #17 (the last unshipped rung-3 step)
+**Numbering:** 0052 — main's parallel sessions took 0050 (issue tooling) and
+0051 (gateway completion resilience) after this branch was cut.
 
 ## Context
 
@@ -46,30 +48,40 @@ classify each against the project root:
   **active grant**; a **deny prefix** always wins; otherwise blocked with a
   plain-English reason that names the paths and the approval tool.
 
-**Default policy** (applied by the extension factory, not the pure core): the
-guard is a drift guard, not a sandbox, so the default deny covers all data
-paths (home data — Documents, other projects, `~/.ssh`, `~/.aws`, `~/.gnupg`,
-`~/.netrc`, dotfiles — plus `/var`, `/mnt`, `/media`, `/srv`, other users'
-homes) while a small explicit infra set stays available: `/proc`, `/sys`,
-`/dev`, `/run`, `/tmp`, `/usr`, `/bin`, `/lib`, `/lib64`, `/etc`, `/opt`,
-`/sbin`, the axiom home, the agent home, `~/.local`, `~/.config`, `~/.cache`
-(the same surfaces ADR-0019 deliberately keeps visible). The operator tunes
-it: `AXIOM_ROOT_GUARD_ALLOW` (add prefixes), `AXIOM_ROOT_GUARD_DENY`
-(force-deny, wins over everything), `AXIOM_ROOT_GUARD_STRICT=1` (drop the
-default infra set — pure block-by-default).
+**Default policy** (applied by the extension factory, not the pure core):
+strict block-by-default — any literal path token outside the project root
+blocks, full stop (issue #17 criterion a, taken literally). The operator
+relaxes it explicitly: `AXIOM_ROOT_GUARD_ALLOW` (allow prefixes) and
+`AXIOM_ROOT_GUARD_DENY` (force-deny, wins over everything, even inside the
+root). The module exports `INFRA_ALLOW_PREFIXES` — OS read surfaces (`/proc`,
+`/sys`, `/dev`, `/run`, `/usr`, `/bin`, `/lib`, `/lib64`, `/etc`, `/opt`,
+`/sbin`), scratch (`/tmp`), and the agent's own homes (the axiom home,
+`~/.local`, `~/.config`, `~/.cache`), the same surfaces ADR-0019 keeps
+visible — as an OPT-IN convenience list to paste into `AXIOM_ROOT_GUARD_ALLOW`,
+never applied automatically. Home data (Documents, other projects, `.ssh`,
+`.aws`, `.gnupg`, `.netrc`, dotfiles), `/var`, `/mnt`, `/media`, `/srv`, and
+other users' homes have no opt-in entry in that list.
 
 **The approval loop**: a registered tool `request_root_access` takes
-`{ paths, reason }` (the plain-English ask). It validates that each path is
-absolute and outside the root, files a pending request, then **waits** —
-polling a decision file (default 500ms interval) up to a timeout (default 5
-minutes, `AXIOM_ROOT_GUARD_APPROVAL_TIMEOUT_MS`), abortable via the run's
-signal. On approval the grant is recorded and the guard lets the retried call
-pass; on timeout the tool returns the request id so the model relays it to
-the operator, and a grant approved later still applies. The operator decides
-with the CLI: `axiom root-guard list|approve <id>|reject <id>`. Every block,
-request, decision, and grant-use lands in an append-only audit JSONL — an
-outside path is **never silently allowed**: it passes by explicit policy or by
-a recorded, operator-approved grant.
+`{ paths, reason }` (the plain-English ask). It resolves each requested path
+to an absolute path and keeps only those outside the root (paths already
+inside are answered with "no approval needed"; paths under a deny prefix are
+refused outright — a deny can never be overridden), files a pending request,
+then **waits** — polling a decision file (default 500ms interval) up to a
+timeout (default 5 minutes, `AXIOM_ROOT_GUARD_APPROVAL_TIMEOUT_MS`),
+abortable via the run's signal. On approval the grant is recorded
+(idempotently — one grant line per request id, whether the CLI or the
+polling tool records it) and the guard lets the retried call pass; on
+timeout the tool returns the request id so the model relays it to the
+operator, and a grant approved later still applies. A decided request
+leaves the pending board (the decision history stays visible). The operator
+decides with the CLI: `axiom root-guard list|approve <id>|reject <id>`.
+Every block, request, decision, grant, and grant-use (shell tools AND
+`edit`) lands in an append-only audit JSONL — an outside path is **never
+silently allowed**: it passes by explicit policy or by a recorded,
+operator-approved grant. If the approval store itself fails, the gate fails
+closed with a plain-English reason instead of letting the call through
+unverified.
 
 **State**: `<AXIOM_HOME>/root-guard/<rootHash>/` (`AXIOM_ROOT_GUARD_STATE_DIR`
 overrides), root-scoped by `sha256(realpath(root))[:12]` (the peers pattern):
@@ -87,7 +99,10 @@ the retried `edit`.
   This is not confinement — the ADR-0019 OS sandbox remains the strict tier.
 - Freeform containment is lexical only; a symlink created inside the root
   that points outside is not chased (documented; the `edit` guard still
-  realpaths).
+  realpaths). The persistent ipython kernel can `cd` into an allowed
+  directory and read relative paths that carry no slash token, silently —
+  bounded by policy (a `cd` to a non-allowed directory is itself blocked),
+  and recorded here rather than hidden.
 - Approval is interactive through the model's relayed text plus the operator
   CLI. Inline approve buttons in the gateway are a follow-up (the gateway is
   single-threaded while a completion runs).
@@ -96,10 +111,12 @@ the retried `edit`.
 
 ## Alternatives considered
 
-- **Strict block-by-default with an empty allowlist.** Rejected: anchored runs
-  immediately grind to a halt requesting `/tmp`, the axiom home, and CLI
-  tooling; the operator can reach exactly that posture with
-  `AXIOM_ROOT_GUARD_STRICT=1`.
+- **Default infra allowlist (relaxed default).** Rejected: criterion (a) of
+  issue #17 demands block-by-default, and a silent default allow would weaken
+  "never silently allowed". Anchored runs bootstrap once — the first `/tmp` or
+  axiom-home touch files a plain-English request the operator approves, and
+  the grant persists; operators who want the practical posture up front paste
+  `INFRA_ALLOW_PREFIXES` into `AXIOM_ROOT_GUARD_ALLOW`.
 - **Realpath containment for freeform tools.** Rejected: worktree
   `node_modules` symlinks resolve outside the root and would false-block the
   standard test workflow.
@@ -112,10 +129,10 @@ the retried `edit`.
 
 ## Consequences
 
-- On an anchored run, `bash`/`ipython` calls that reference data paths outside
-  the project root are blocked by default; escapes require a plain-English
-  request an operator approves or rejects, fully audited.
-- The port-queue spine item (ADR-0015) closes; issue #17 closes.
+- On an anchored run, `bash`/`ipython` calls that reference ANY path outside
+  the project root are blocked by default (criterion a, literally); escapes
+  require a plain-English request an operator approves or rejects, fully
+  audited.
 - CONTEXT.md's Root guard term is updated to cover the full rung-3 gate.
 - Follow-ups stay recorded: gateway inline approval, a per-project escape
   config file, obfuscation-hardening (never claimed as confinement).

@@ -1,5 +1,5 @@
 /**
- * Root guard approval store (ADR-0051) — file-backed request/decision state.
+ * Root guard approval store (ADR-0052) — file-backed request/decision state.
  *
  * Everything the approval loop needs lives under one scope directory,
  * root-scoped so two projects can never see each other's requests:
@@ -24,7 +24,6 @@ export interface PendingRequest {
 	id: string;
 	paths: string[];
 	reason: string;
-	status: "pending";
 	createdAt: number;
 }
 
@@ -84,10 +83,17 @@ async function readJson<T>(file: string): Promise<T | undefined> {
 async function readJsonLines<T>(file: string): Promise<T[]> {
 	try {
 		const text = await readFile(file, "utf8");
-		return text
-			.split("\n")
-			.filter((line) => line.trim().length > 0)
-			.map((line) => JSON.parse(line) as T);
+		const parsed: T[] = [];
+		for (const line of text.split("\n")) {
+			if (line.trim().length === 0) continue;
+			try {
+				parsed.push(JSON.parse(line) as T);
+			} catch {
+				/* skip malformed lines (peers-board pattern) so one bad line
+				 * cannot hide every entry behind it */
+			}
+		}
+		return parsed;
 	} catch {
 		return [];
 	}
@@ -103,7 +109,6 @@ export async function fileRequest(
 		id,
 		paths: request.paths,
 		reason: request.reason,
-		status: "pending",
 		createdAt: Date.now(),
 	};
 	const pendingDir = join(scopeDir, "pending");
@@ -118,7 +123,11 @@ export async function readPending(scopeDir: string, id: string): Promise<Pending
 	return readJson<PendingRequest>(join(scopeDir, "pending", `${id}.json`));
 }
 
-/** All pending requests, oldest first (deterministic tie-break by id). */
+/**
+ * All UNDECIDED requests, oldest first (deterministic tie-break by id).
+ * A request with a decision file leaves the pending board — the decision
+ * history itself stays visible via listDecisions.
+ */
 export async function listPending(scopeDir: string): Promise<PendingRequest[]> {
 	const dir = join(scopeDir, "pending");
 	let names: string[] = [];
@@ -127,13 +136,27 @@ export async function listPending(scopeDir: string): Promise<PendingRequest[]> {
 	} catch {
 		return [];
 	}
+	const decided = new Set(await decisionIds(scopeDir));
 	const records: PendingRequest[] = [];
 	for (const name of names) {
 		if (!name.endsWith(".json")) continue;
+		const id = name.slice(0, -".json".length);
+		if (decided.has(id)) continue;
 		const rec = await readJson<PendingRequest>(join(dir, name));
 		if (rec) records.push(rec);
 	}
 	return records.sort((a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/** Ids of every recorded decision (used to drain the pending board). */
+async function decisionIds(scopeDir: string): Promise<string[]> {
+	let names: string[] = [];
+	try {
+		names = await readdir(join(scopeDir, "decisions"));
+	} catch {
+		return [];
+	}
+	return names.filter((n) => n.endsWith(".json")).map((n) => n.slice(0, -".json".length));
 }
 
 /** Record an operator decision (approve or reject). Last write wins. */
@@ -180,10 +203,24 @@ export async function appendGrant(
 	await appendFile(join(scopeDir, "grants.jsonl"), `${JSON.stringify(record)}\n`);
 }
 
-/** All approved path prefixes across every grant. */
+/**
+ * Append a grant only when no grant with the same request id exists yet.
+ * The CLI approve path and the agent's polling loop both record the grant;
+ * this keeps the append-only ledger to one entry per approval.
+ */
+export async function appendGrantIfMissing(
+	scopeDir: string,
+	grant: { id: string; prefixes: string[]; reason: string },
+): Promise<void> {
+	const existing = await readJsonLines<GrantRecord>(join(scopeDir, "grants.jsonl"));
+	if (existing.some((g) => g.id === grant.id)) return;
+	await appendGrant(scopeDir, grant);
+}
+
+/** All approved path prefixes across every grant, deduped. */
 export async function listGrantPrefixes(scopeDir: string): Promise<string[]> {
 	const grants = await readJsonLines<GrantRecord>(join(scopeDir, "grants.jsonl"));
-	return grants.flatMap((g) => g.prefixes);
+	return [...new Set(grants.flatMap((g) => g.prefixes))];
 }
 
 /** Append one audit event. */
