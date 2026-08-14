@@ -218,3 +218,30 @@ describe("createGitGuard wiring", () => {
 		}
 	});
 });
+
+describe("checkGitCommand - further global-option bypasses stay blocked (ADR-0049 follow-up)", () => {
+	const bypassAttempts = [
+		"git -C '/tmp/with space' reset --hard",
+		'git -C "/tmp/with space" push origin main',
+		"git -c core.pager=cat reset --hard",
+		"git -c user.name=x push",
+		"git --work-tree=/tmp/x reset --hard",
+		"git --work-tree /tmp/x clean -fd",
+		"git --no-pager push",
+		"git --bare reset --hard",
+		"git -C /a --git-dir=/b -c x=y reset --hard",
+		"git --no-pager -C /repo checkout .",
+	];
+	for (const command of bypassAttempts) {
+		it(`blocks: ${command}`, () => {
+			const d = checkGitCommand(command);
+			expect(d?.blocked).toBe(true);
+			expect(d?.pattern).toBeTruthy();
+		});
+	}
+	it("still allows safe commands with global options", () => {
+		expect(checkGitCommand("git -c color.ui=always status")).toBeUndefined();
+		expect(checkGitCommand("git --no-pager log --oneline -3")).toBeUndefined();
+		expect(checkGitCommand('git -C "/tmp/with space" status')).toBeUndefined();
+	});
+});
