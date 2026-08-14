@@ -318,3 +318,13 @@ omit it still return the old compact result. Field caps (status 100, summary
 300) keep the block bounded no matter what the helper returns.
 _Avoid_: Transcript, full log, raw summary (the handoff is the structured,
 capped projection; the summary field stays the raw capped closing text)
+
+**Shutdown worker reaping**:
+The daemon supervisor's last-resort step at shutdown (ADR-0056). A worker that
+survives its stop attempt during shutdown would otherwise leak forever — the
+background finalizer is inert once shuttingDown is set. In the
+WorkerStopTimeoutError catch, shutdown() does one fresh identity check and
+force-kills before exit: current identity signals the process group, unknown
+identity gets a group-only SIGKILL (no single-pid fallback, so a recycled pid
+cannot be signaled), replaced or gone identities are never signaled.
+_Avoid_: Finalizer escalation (that is the normal-operation path, unchanged)
