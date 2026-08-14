@@ -254,12 +254,28 @@ describe("root guard extension (tool_call gate)", () => {
 		try {
 			const fake = fakePi();
 			// stateDir is a FILE, so the store cannot be created under it
-			createRootGuard({ root, cwd: root, stateDir: state, home: HOME, allowPrefixes: ["/tmp"] })(fake.pi);
+			createRootGuard({ root, cwd: root, stateDir: state, home: HOME })(fake.pi);
 			const res = fromAny<{ block: boolean; reason: string }, unknown>(
-				await fake.toolCall(bashEvent({ command: "cat /tmp/x" })),
+				await fake.toolCall(bashEvent({ command: "cat /srv/data" })),
 			);
 			expect(res.block).toBe(true);
 			expect(res.reason).toMatch(/store/i);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+			await rm(state, { recursive: true, force: true });
+		}
+	});
+
+	it("does not consult the store for calls the static policy allows", async () => {
+		const root = await makeRoot();
+		const state = join(await makeRoot(), "not-a-dir");
+		await writeFile(state, "x");
+		try {
+			const fake = fakePi();
+			createRootGuard({ root, cwd: root, stateDir: state, home: HOME, allowPrefixes: ["/tmp"] })(fake.pi);
+			// allowed by policy -> no store consult -> no store failure (NIT-4)
+			expect(await fake.toolCall(bashEvent({ command: "cat /tmp/x" }))).toBeUndefined();
+			expect(await fake.toolCall(bashEvent({ command: "cat src/a.ts" }))).toBeUndefined();
 		} finally {
 			await rm(root, { recursive: true, force: true });
 			await rm(state, { recursive: true, force: true });

@@ -160,3 +160,39 @@ describe("axiom root-guard CLI", () => {
 		expect(errors.join("\n")).toMatch(/rg-nope/);
 	});
 });
+
+describe("axiom root-guard CLI flag-order robustness (round 6 NIT-3)", () => {
+	it("reads the request id correctly when a flag value precedes it", async () => {
+		const root = await makeRoot();
+		const state = await makeRoot();
+		try {
+			const scope = await resolveScopeDir(state, root);
+			const { id } = await fileRequest(scope, { paths: ["/srv/data"], reason: "need data" });
+			const logs: string[] = [];
+			const prevLog = console.log;
+			console.log = (line: string) => logs.push(line);
+			try {
+				expect(
+					await handleRootGuardCommand([
+						"root-guard",
+						"approve",
+						"--note",
+						"ok",
+						id,
+						"--root",
+						root,
+						"--state-dir",
+						state,
+					]),
+				).toBe(true);
+			} finally {
+				console.log = prevLog;
+			}
+			expect(logs.join("\n")).toMatch(/Approved/);
+			expect(await listGrantPrefixes(scope)).toEqual(["/srv/data"]);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+			await rm(state, { recursive: true, force: true });
+		}
+	});
+});

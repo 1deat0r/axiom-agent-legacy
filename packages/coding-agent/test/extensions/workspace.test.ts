@@ -454,3 +454,25 @@ describe("workspace guard env knobs and store failure (round 4)", () => {
 		}
 	});
 });
+
+describe("compound tilde prefixes (round 6 NIT-2)", () => {
+	it("resolves ~+/sub against the anchored cwd like the shell gate", async () => {
+		const root = await makeRoot();
+		try {
+			await writeFile(join(root, "a.ts"), "x");
+			const { pi, toolCall } = fakePi();
+			createWorkspaceGuard({ root, cwd: root, denyPrefixes: ["~+/.secrets"] })(pi);
+			const res = fromAny<{ block: boolean }, unknown>(
+				await toolCall({
+					type: "tool_call",
+					toolName: "edit",
+					toolCallId: "19",
+					input: { path: join(root, ".secrets", "x.ts"), edits: [] },
+				}),
+			);
+			expect(res.block).toBe(true);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+});

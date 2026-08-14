@@ -17,7 +17,17 @@
  */
 
 import { createHash, randomBytes } from "node:crypto";
-import { appendFile, mkdir, readdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
+import {
+	appendFile,
+	mkdir,
+	readdir,
+	readFile,
+	realpath,
+	rename,
+	stat as statFile,
+	unlink,
+	writeFile,
+} from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 export interface PendingRequest {
@@ -99,11 +109,39 @@ async function readJsonLines<T>(file: string): Promise<T[]> {
 	}
 }
 
+/**
+ * Remove `pending/*.tmp` debris older than the threshold. Atomic writes
+ * (tmp + rename) can leave a `.tmp` file behind on a crash; readers filter
+ * `.json` so the debris is invisible but accumulates. Swept on board reads
+ * and before filing — the operator-facing surfaces, not every gate call.
+ */
+export async function sweepStaleTmp(scopeDir: string, maxAgeMs = 3_600_000): Promise<void> {
+	const dir = join(scopeDir, "pending");
+	let names: string[] = [];
+	try {
+		names = await readdir(dir);
+	} catch {
+		return;
+	}
+	const cutoff = Date.now() - maxAgeMs;
+	for (const name of names) {
+		if (!name.endsWith(".tmp")) continue;
+		const file = join(dir, name);
+		try {
+			const st = await statFile(file);
+			if (st.mtimeMs < cutoff) await unlink(file);
+		} catch {
+			/* raced with another writer — leave it */
+		}
+	}
+}
+
 /** File a pending approval request. Returns its id and file path. */
 export async function fileRequest(
 	scopeDir: string,
 	request: { paths: string[]; reason: string; id?: string },
 ): Promise<{ id: string; path: string }> {
+	await sweepStaleTmp(scopeDir);
 	const id = request.id ?? newRequestId();
 	const record: PendingRequest = {
 		id,
@@ -129,6 +167,7 @@ export async function readPending(scopeDir: string, id: string): Promise<Pending
  * history itself stays visible via listDecisions.
  */
 export async function listPending(scopeDir: string): Promise<PendingRequest[]> {
+	await sweepStaleTmp(scopeDir);
 	const dir = join(scopeDir, "pending");
 	let names: string[] = [];
 	try {

@@ -65,7 +65,14 @@ export async function handleRootGuardCommand(args: string[]): Promise<boolean> {
 		return true;
 	}
 	const json = rest.includes("--json");
-	const positional = rest.filter((a) => !a.startsWith("--"));
+	// Strip values consumed by --root/--state-dir/--note so a flag value can
+	// never be misread as the positional request id ("approve --note ok <id>").
+	const consumed = new Set<number>();
+	for (const flag of ["--root", "--state-dir", "--note"]) {
+		const i = rest.indexOf(flag);
+		if (i !== -1 && i + 1 < rest.length && !rest[i + 1].startsWith("--")) consumed.add(i + 1);
+	}
+	const positional = rest.filter((a, index) => !a.startsWith("--") && !consumed.has(index));
 	const sub = positional[0] ?? "list";
 	const root = valueAfter(rest, "--root") ?? process.env.AXIOM_PROJECT_ROOT ?? process.cwd();
 	const stateDir = valueAfter(rest, "--state-dir") ?? process.env.AXIOM_ROOT_GUARD_STATE_DIR ?? axiomHome();

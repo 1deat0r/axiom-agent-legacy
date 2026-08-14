@@ -1,4 +1,4 @@
-import { appendFile, mkdtemp, readFile, rm } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readFile, rm, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -147,6 +147,28 @@ describe("root guard store (file-backed approval state)", () => {
 			const scope = await resolveScopeDir(state, "/work/p");
 			expect(await readPending(scope, "rg-nope")).toBeUndefined();
 			expect(await readDecision(scope, "rg-nope")).toBeUndefined();
+		} finally {
+			await rm(state, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("stale tmp sweep (round 6 NIT-5)", () => {
+	it("removes old pending/*.tmp debris on board reads, keeps fresh files", async () => {
+		const state = await makeState();
+		try {
+			const scope = await resolveScopeDir(state, "/work/p");
+			const pendingDir = join(scope, "pending");
+			await mkdir(pendingDir, { recursive: true });
+			const old = join(pendingDir, "rg-old.json.tmp");
+			const fresh = join(pendingDir, "rg-new.json.tmp");
+			await appendFile(old, "x");
+			await appendFile(fresh, "x");
+			const past = new Date(Date.now() - 4 * 3_600_000);
+			await utimes(old, past, past);
+			await listPending(scope);
+			expect(await readFile(fresh, "utf8")).toBe("x");
+			await expect(readFile(old, "utf8")).rejects.toThrow();
 		} finally {
 			await rm(state, { recursive: true, force: true });
 		}

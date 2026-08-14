@@ -178,23 +178,8 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 			if (text === undefined) return undefined;
 			const tokens = extractCandidatePaths(text);
 			if (tokens.length === 0) return undefined;
-			let scope: string;
-			let grants: string[];
-			try {
-				scope = await resolveScopeDir(stateDir, rawRoot);
-				grants = await listGrantPrefixes(scope);
-			} catch (error) {
-				// Fail closed: when the approval store is unusable the guard
-				// cannot verify anything, so it blocks with a plain reason.
-				const message = error instanceof Error ? error.message : String(error);
-				return {
-					block: true,
-					reason:
-						`Root guard could not verify these paths because its store failed (${message}). ` +
-						`Fix AXIOM_ROOT_GUARD_STATE_DIR (default: <axiom home>/root-guard) and retry.`,
-				};
-			}
-			// Static policy first; when it blocks, grants are the recorded escape.
+			// Static policy first: inside-root (and policy-allowed) calls never
+			// touch the approval store, so a broken store cannot block them.
 			const decision = checkPathScope({
 				root: rawRoot,
 				cwd,
@@ -204,6 +189,22 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 				denyPrefixes,
 			});
 			if (!decision) return undefined;
+			// Only when the static policy blocks can grants change the
+			// outcome — consult the store then, failing closed if it is broken.
+			let scope: string;
+			let grants: string[];
+			try {
+				scope = await resolveScopeDir(stateDir, rawRoot);
+				grants = await listGrantPrefixes(scope);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				return {
+					block: true,
+					reason:
+						`Root guard could not verify these paths because its store failed (${message}). ` +
+						`Fix AXIOM_ROOT_GUARD_STATE_DIR (default: <axiom home>/root-guard) and retry.`,
+				};
+			}
 			const withGrants = checkPathScope({
 				root: rawRoot,
 				cwd,
@@ -388,7 +389,7 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 									type: "text",
 									text:
 										`The operator rejected request ${id}. Do not touch these paths: ` +
-										`${requestable.join(", ")}. Find another way or stop.`,
+										`${requestable.join(", ")}. Find another way or stop.${deniedNote}`,
 								},
 							],
 							details: null,

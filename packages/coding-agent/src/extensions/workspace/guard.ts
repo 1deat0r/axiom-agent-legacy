@@ -64,7 +64,6 @@ function expandTilde(raw: string, home = homedir()): string {
 	if (!m) return raw;
 	const token = m[0];
 	if (token === "~") return raw === "~" ? home : join(home, raw.slice(1));
-	if (token === "~+") return raw; // bash PWD shorthand — handled by normPrefix
 	if (token === "~-") return raw; // OLDPWD — lexical best-effort, resolved against cwd
 	return `/home/${token.slice(1)}${raw.slice(token.length)}`;
 }
@@ -86,8 +85,9 @@ export async function decideEdit(
 	// ipython kernel can drift from): a deny like ".secrets" must mean
 	// "<project root>/.secrets" wherever the process happens to sit.
 	const normPrefix = (prefix: string): string => {
-		if (prefix === "~+") return resolve(cwd);
-		return resolve(toAbsolute(expandTilde(prefix), cwd));
+		// `~+` is bash PWD; it may carry a suffix (`~+/sub`) — expand both forms.
+		const expanded = prefix.startsWith("~+") ? cwd + prefix.slice(2) : expandTilde(prefix);
+		return resolve(toAbsolute(expanded, cwd));
 	};
 	for (const prefix of options.denyPrefixes ?? []) {
 		const norm = normPrefix(prefix);
