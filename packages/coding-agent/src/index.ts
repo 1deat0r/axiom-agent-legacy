@@ -177,6 +177,8 @@ export {
 	createIpythonTool,
 	createReadTool,
 	createReadToolDefinition,
+	createWriteTool,
+	createWriteToolDefinition,
 	type PromptTemplate,
 	type RlmSubagentRuntime,
 	type SubagentRuntimeHost,

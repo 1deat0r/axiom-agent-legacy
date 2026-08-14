@@ -25,6 +25,8 @@ import {
 	createIpythonTool,
 	createReadTool,
 	createReadToolDefinition,
+	createWriteTool,
+	createWriteToolDefinition,
 	withFileMutationQueue,
 } from "./tools/index.js";
 
@@ -118,6 +120,8 @@ export {
 	createIpythonTool,
 	createReadTool,
 	createReadToolDefinition,
+	createWriteTool,
+	createWriteToolDefinition,
 	withFileMutationQueue,
 };
 
@@ -262,7 +266,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const includeGoals = options.includeGoals ?? (options.tools !== undefined || options.noTools !== "all");
 	const initialActiveToolNames: string[] =
 		options.initialActiveToolNames ??
-		(options.tools ? [...options.tools] : options.noTools ? [] : ["ipython", "read"]);
+		(options.tools ? [...options.tools] : options.noTools ? [] : ["ipython", "read", "write"]);
 
 	let agent: Agent;
 
