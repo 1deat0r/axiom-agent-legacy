@@ -216,6 +216,18 @@ design (not confinement — that stays ADR-0019); escaped via
 `user_bash` stays unguarded (the operator has authority).
 _Avoid_: Sandbox, confinement (a guard, not a wall — the OS tier stays the wall)
 
+**Completion resilience**:
+The ADR-0051 gateway defense-in-depth: transient completion failures (SIGTERM
+143, SIGKILL 137, timeout, busy session, spawn error) are classified
+(`completion-failure.ts`) and retried once with compaction dropped, streaming
+into the same bubble; the user-facing failure text is one short sentence and
+never the command line. Telegram re-deliveries of the same (text, date) are
+deduped in-window, the post-/update restart waits for in-flight runs, and
+compact-before runs get their own longer timeout. Env knobs:
+`GATEWAY_COMPLETION_TIMEOUT_MS`, `GATEWAY_COMPACT_TIMEOUT_MS`,
+`GATEWAY_COMPLETION_RETRIES`, `GATEWAY_COMPLETION_RETRY_DELAY_MS`,
+`GATEWAY_RESTART_GRACE_MS`, `GATEWAY_MESSAGE_DEDUP_MS`.
+
 **Self-update**:
 The gateway-local `/update` command (ADR-0034): fetch + report, or `/update
 now` to fast-forward the configured worktree (`AXIOM_UPDATE_REPO` /

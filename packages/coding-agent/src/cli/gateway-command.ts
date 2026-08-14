@@ -56,6 +56,14 @@ function readVal(args: string[], flag: string): string | undefined {
 	return i >= 0 && i + 1 < args.length ? args[i + 1] : undefined;
 }
 
+/** Non-negative integer env override with a fallback (gateway resilience knobs). */
+function envInt(name: string, fallback: number): number {
+	const raw = process.env[name];
+	if (!raw) return fallback;
+	const value = Number.parseInt(raw, 10);
+	return Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
 /**
  * Resolve how the gateway boots from the CLI args: which transport and (for
  * telegram) which token. Unknown transport values error out rather than
@@ -179,7 +187,11 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 			);
 		}
 	}
-	const completion = new CliCompletionRunner({ projectRoot });
+	const completion = new CliCompletionRunner({
+		projectRoot,
+		timeoutMs: envInt("GATEWAY_COMPLETION_TIMEOUT_MS", 300_000),
+		compactTimeoutMs: envInt("GATEWAY_COMPACT_TIMEOUT_MS", 600_000),
+	});
 	const transport = buildTransport(opts, root);
 	// Boot recovery (streaming v2): edit any bubble a previous process left
 	// mid-stream into an interruption notice, so a restart never strands a
@@ -225,6 +237,11 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 		// The update path only fires on an explicit, successful /update now —
 		// systemd `Restart=always` brings the service back on the new bundle.
 		restart: () => process.exit(0),
+		// Completion resilience (ADR-0050): transient child failures retry
+		// once (without compaction); a restart waits for in-flight runs.
+		completionRetries: envInt("GATEWAY_COMPLETION_RETRIES", 1),
+		completionRetryDelayMs: envInt("GATEWAY_COMPLETION_RETRY_DELAY_MS", 5_000),
+		restartGraceMs: envInt("GATEWAY_RESTART_GRACE_MS", 30_000),
 	});
 	await gateway.start();
 	return gateway;
@@ -245,7 +262,10 @@ export function buildTransport(opts: GatewayStartOptions, axiomHomeDir: string):
 	if (opts.transport === "telegram") {
 		const client = new HttpTelegramClient({ token: opts.telegramToken ?? "" });
 		const offsetStore = new FileTelegramOffsetStore(join(axiomHomeDir, "gateway", "telegram-offset.json"));
-		return new TelegramTransport(client, { offsetStore });
+		return new TelegramTransport(client, {
+			offsetStore,
+			dedupWindowMs: envInt("GATEWAY_MESSAGE_DEDUP_MS", 600_000),
+		});
 	}
 	// Signal: wire the operator's --signal-cli path and linked --signal-account
 	// so the one-command live test targets the right (shared) account.

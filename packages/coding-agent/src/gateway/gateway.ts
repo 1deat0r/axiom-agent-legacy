@@ -24,6 +24,7 @@ import {
 import type { ChannelIndex } from "./channel-index.js";
 import { dispatchCommand } from "./commands/index.js";
 import { sessionIdForChannel } from "./completion.js";
+import { classifyCompletionFailure, describeCompletionFailure } from "./completion-failure.js";
 import { isAllowedSender, loadGatewayConfig } from "./config.js";
 import type { DeliveryLedger } from "./delivery-ledger.js";
 import type { RestartNoticeStore } from "./restart-notice.js";
@@ -46,6 +47,17 @@ const UNRECOGNIZED = "unrecognized sender — this gateway is private to allowed
 
 /** Chat-action refresh cadence (Telegram drops actions older than ~5s). */
 const TYPING_REFRESH_MS = 4_000;
+
+/** Sleep for a fixed delay (retry backoff / deferred-restart polling). */
+function sleepMs(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Input accepted by both completion surfaces (stream and batch). */
+type GatewayRunInput = Parameters<CompletionRunner["runCompletion"]>[0];
+
+/** The runner's result shape for either completion surface. */
+type CompletionOutcome = { reply: string; sessionId: string; error?: string };
 
 export interface GatewayDeps {
 	transport: GatewayTransport;
@@ -87,6 +99,12 @@ export interface GatewayDeps {
 	 * channels across platforms.
 	 */
 	transports?: Record<string, GatewayTransport>;
+	/** Extra attempts after a transient completion failure (default 1). */
+	completionRetries?: number;
+	/** Delay between completion retries in ms (default 5000). */
+	completionRetryDelayMs?: number;
+	/** Cap on how long a deferred restart waits for in-flight runs (default 30000). */
+	restartGraceMs?: number;
 }
 
 /** Per-channel run chain so two messages on one session never interleave. */
@@ -114,6 +132,11 @@ export class Gateway {
 	private readonly cron: (GatewayCronCommandApi & { start(): void; stop(): void }) | undefined;
 	private readonly activeProjects: ActiveProjectStore;
 	private readonly chains = new Map<string, ChannelChain>();
+	private readonly completionRetries: number;
+	private readonly completionRetryDelayMs: number;
+	private readonly restartGraceMs: number;
+	private activeRuns = 0;
+	private restartPending = false;
 	private started = false;
 
 	constructor(deps: GatewayDeps) {
@@ -144,6 +167,92 @@ export class Gateway {
 		this.restart = deps.restart;
 		this.cron = deps.cron;
 		this.activeProjects = deps.activeProjects ?? new FileActiveProjectStore(this.projectHome);
+		this.completionRetries = Math.max(0, deps.completionRetries ?? 1);
+		this.completionRetryDelayMs = Math.max(0, deps.completionRetryDelayMs ?? 5_000);
+		this.restartGraceMs = Math.max(0, deps.restartGraceMs ?? 30_000);
+	}
+
+	/** One completion attempt on the stream (default) or batch surface. */
+	private async runCompletionAttempt(
+		input: GatewayRunInput,
+		stream: boolean,
+		onDelta: ((delta: string) => void) | undefined,
+	): Promise<CompletionOutcome> {
+		if (stream && this.completion.streamCompletion) {
+			return this.completion.streamCompletion(input, onDelta ?? (() => {}));
+		}
+		return this.completion.runCompletion(input);
+	}
+
+	/**
+	 * Run a completion with retries (ADR-0050). A transient child failure —
+	 * SIGTERM/SIGKILL from a competing run or a restart, a gateway timeout, a
+	 * busy session, a spawn error — is retried after a short delay. The retry
+	 * drops compaction so the second attempt is as light as possible. The raw
+	 * error is kept for the journal; the user sees a short classified message.
+	 */
+	private async runCompletionWithRetry(
+		input: GatewayRunInput,
+		stream: boolean,
+		onDelta: ((delta: string) => void) | undefined,
+	): Promise<{ result: CompletionOutcome; attempts: number }> {
+		const maxAttempts = this.completionRetries + 1;
+		let last: CompletionOutcome | undefined;
+		for (let attempt = 0; attempt < maxAttempts; attempt++) {
+			const attemptInput: GatewayRunInput = attempt === 0 ? input : { ...input, compactBefore: false };
+			last = await this.runCompletionAttempt(attemptInput, stream, onDelta);
+			if (last.error === undefined) {
+				return { result: last, attempts: attempt + 1 };
+			}
+			const info = classifyCompletionFailure(last.error);
+			if (!info.transient || attempt + 1 >= maxAttempts) {
+				return { result: last, attempts: attempt + 1 };
+			}
+			console.error(
+				`gateway: completion attempt ${attempt + 1} failed (${info.kind}); retrying in ${this.completionRetryDelayMs}ms: ${last.error}`,
+			);
+			await sleepMs(this.completionRetryDelayMs);
+		}
+		return { result: last ?? { reply: "", sessionId: input.sessionId }, attempts: maxAttempts };
+	}
+
+	/**
+	 * Restart the process (after /update now), but never while a completion is
+	 * in flight: killing the gateway also SIGTERMs its children. The restart
+	 * is deferred until the runs settle, or dropped when the grace window
+	 * expires (the operator re-runs /update now).
+	 */
+	private requestRestart(): void {
+		if (this.activeRuns === 0) {
+			this.restart?.();
+			return;
+		}
+		if (this.restartPending) return;
+		this.restartPending = true;
+		void (async () => {
+			const deadline = Date.now() + this.restartGraceMs;
+			while (this.activeRuns > 0 && Date.now() < deadline) {
+				await sleepMs(250);
+			}
+			// maybeFireDeferredRestart may have fired already (single restart).
+			if (!this.restartPending) return;
+			this.restartPending = false;
+			if (this.activeRuns > 0) {
+				console.error(
+					"gateway: restart deferred past grace while a completion is still running; re-run /update now",
+				);
+				return;
+			}
+			this.restart?.();
+		})();
+	}
+
+	/** Fire a deferred restart the moment the last in-flight run settles. */
+	private maybeFireDeferredRestart(): void {
+		if (this.restartPending && this.activeRuns === 0) {
+			this.restartPending = false;
+			this.restart?.();
+		}
 	}
 
 	async start(): Promise<void> {
@@ -329,7 +438,7 @@ export class Gateway {
 				await this.deliver({ channelId: msg.channelId, recipient: msg.sender }, reply);
 				if (ctx.afterReply) await ctx.afterReply();
 			});
-			if (ctx.restartRequested) this.restart?.();
+			if (ctx.restartRequested) this.requestRestart();
 			return;
 		}
 		// Agent run: resolve the channel's active project (if any), derive the
@@ -374,115 +483,133 @@ export class Gateway {
 		// Replies go out while the receive loop must hold (ADR-0039): Telegram
 		// queues outbound calls behind an open long-poll, so an edit would hang
 		// for the whole poll window. Pause before any delivery, resume after
-		// (withPollingPaused resumes even when a run throws).
-		await this.withPollingPaused(async () => {
-			// Streaming (ADR-0004/#6, streaming v2): when both the transport and the
-			// runner support it, place a placeholder bubble and edit it in place as
-			// text arrives. Edits go through a StreamEditor — coalesced, strictly
-			// serialized, spacing-throttled — so the Bot API is never flooded and an
-			// older edit can never clobber newer text. The bubble is journaled while
-			// in flight so a restart can replace a stranded "…" on boot. Any
-			// placeholder-send failure falls back to the batch guarantee below.
-			const streamer = this.transport;
-			if (streamer.sendMessage && streamer.editMessage && this.completion.streamCompletion) {
-				const sendMessage = streamer.sendMessage.bind(streamer);
-				const editMessage = streamer.editMessage.bind(streamer);
-				try {
-					const stopTyping = this.startTyping(recipient);
-					let messageId: number | undefined;
-					const openedMessageIds: number[] = [];
+		// (withPollingPaused resumes even when a run throws). Runs are tracked
+		// so a deferred /update restart never kills a completion in flight.
+		this.activeRuns++;
+		try {
+			await this.withPollingPaused(async () => {
+				// Streaming (ADR-0004/#6, streaming v2): when both the transport and the
+				// runner support it, place a placeholder bubble and edit it in place as
+				// text arrives. Edits go through a StreamEditor — coalesced, strictly
+				// serialized, spacing-throttled — so the Bot API is never flooded and an
+				// older edit can never clobber newer text. The bubble is journaled while
+				// in flight so a restart can replace a stranded "…" on boot. Any
+				// placeholder-send failure falls back to the batch guarantee below.
+				const streamer = this.transport;
+				if (streamer.sendMessage && streamer.editMessage && this.completion.streamCompletion) {
+					const sendMessage = streamer.sendMessage.bind(streamer);
+					const editMessage = streamer.editMessage.bind(streamer);
 					try {
-						messageId = await sendMessage(recipient, "…");
-						openedMessageIds.push(messageId);
-						const editor = new StreamEditor({
-							edit: (text) => editMessage(msg.channelId, messageId!, text),
-							minIntervalMs: STREAM_EDIT_MIN_INTERVAL_MS,
-							// Long replies roll over: when the bubble hits the
-							// transport's text cap, Telegram rejects every further
-							// edit — so the editor seals the bubble at the cap and a
-							// fresh message continues with the overflow.
-							maxTextLength: streamer.textLimit,
-							rollover: async (overflow) => {
-								const nextId = await sendMessage(recipient, overflow);
-								openedMessageIds.push(nextId);
-								this.streamJournal?.add({ channelId: msg.channelId, messageId: nextId, startedAt: Date.now() });
-								messageId = nextId;
-							},
-						});
-						this.streamJournal?.add({ channelId: msg.channelId, messageId, startedAt: Date.now() });
-						// Long replies stream across several bubbles (ADR-0047):
-						// the editor seals a full bubble at the transport's text
-						// cap and rolls the overflow into a fresh message via the
-						// rollover hook (which re-points messageId), so every
-						// later edit targets the newest bubble.
-						// The bubble starts empty; compaction (if requested) already
-						// summarized the session before the run began.
-						let lastText = "";
-						const streamed = await this.completion.streamCompletion(input, (delta) => {
-							if (lastText === "") stopTyping(); // text is flowing; stop pinging
-							lastText += delta;
-							editor.setTarget(lastText);
-						});
-						const baseFinal =
-							streamed.error !== undefined
-								? `could not run the agent: ${streamed.error}`
-								: streamed.reply.length > 0
-									? streamed.reply
-									: "(no reply)";
-						const finalText = baseFinal;
-						// The editor applies the final text itself (and skips the edit
-						// when the bubble already shows it, so Telegram never rejects a
-						// no-op "message is not modified"). finish() rolls any pending
-						// overflow into a fresh bubble first, then lands the tail.
-						editor.setTarget(finalText);
-						const landed = await editor.finish();
-						// Fallback when the tail could not land in place: the final
-						// edit failed, or the text was fully absorbed by earlier
-						// bubbles (a short error after a long partial stream ends
-						// up beyond the last bubble window). Deliver the unlanded
-						// tail (chunked) — or the whole text when the window
-						// already absorbed it — so the answer always reaches the
-						// user.
-						if (!landed || editor.remainingText().length === 0) {
-							await this.deliver(
-								recipient,
-								editor.remainingText().length > 0 ? editor.remainingText() : finalText,
-							);
-						} else {
-							// The streamed bubble(s) ARE the delivery: record it like
-							// any outbound delivery so /ledger stays complete
-							// (ADR-0022) and the reply carries a timestamp for latency
-							// forensics.
-							this.ledger?.record({
-								ts: Date.now(),
-								transport: this.transportName,
-								channel: msg.channelId,
-								recipient: msg.sender,
-								chars: finalText.length,
-								ok: true,
+						const stopTyping = this.startTyping(recipient);
+						let messageId: number | undefined;
+						const openedMessageIds: number[] = [];
+						try {
+							messageId = await sendMessage(recipient, "…");
+							openedMessageIds.push(messageId);
+							const editor = new StreamEditor({
+								edit: (text) => editMessage(msg.channelId, messageId!, text),
+								minIntervalMs: STREAM_EDIT_MIN_INTERVAL_MS,
+								// Long replies roll over: when the bubble hits the
+								// transport's text cap, Telegram rejects every further
+								// edit — so the editor seals the bubble at the cap and a
+								// fresh message continues with the overflow.
+								maxTextLength: streamer.textLimit,
+								rollover: async (overflow) => {
+									const nextId = await sendMessage(recipient, overflow);
+									openedMessageIds.push(nextId);
+									this.streamJournal?.add({
+										channelId: msg.channelId,
+										messageId: nextId,
+										startedAt: Date.now(),
+									});
+									messageId = nextId;
+								},
 							});
+							this.streamJournal?.add({ channelId: msg.channelId, messageId, startedAt: Date.now() });
+							// Long replies stream across several bubbles (ADR-0047):
+							// the editor seals a full bubble at the transport's text
+							// cap and rolls the overflow into a fresh message via the
+							// rollover hook (which re-points messageId), so every
+							// later edit targets the newest bubble.
+							// The bubble starts empty; compaction (if requested) already
+							// summarized the session before the run began.
+							// Retry-aware streaming (ADR-0050): a transient child failure
+							// retries inside the same bubble, and the retry drops
+							// compaction so the second attempt stays light.
+							let lastText = "";
+							const { result: streamed, attempts } = await this.runCompletionWithRetry(input, true, (delta) => {
+								if (lastText === "") stopTyping(); // text is flowing; stop pinging
+								lastText += delta;
+								editor.setTarget(lastText);
+							});
+							if (streamed.error !== undefined) {
+								console.error(`gateway: completion failed after ${attempts} attempt(s): ${streamed.error}`);
+							}
+							const baseFinal =
+								streamed.error !== undefined
+									? `could not run the agent: ${describeCompletionFailure(streamed.error)}`
+									: streamed.reply.length > 0
+										? streamed.reply
+										: "(no reply)";
+							const finalText = baseFinal;
+							// The editor applies the final text itself (and skips the edit
+							// when the bubble already shows it, so Telegram never rejects a
+							// no-op "message is not modified"). finish() rolls any pending
+							// overflow into a fresh bubble first, then lands the tail.
+							editor.setTarget(finalText);
+							const landed = await editor.finish();
+							// Fallback when the tail could not land in place: the final
+							// edit failed, or the text was fully absorbed by earlier
+							// bubbles (a short error after a long partial stream ends
+							// up beyond the last bubble window). Deliver the unlanded
+							// tail (chunked) — or the whole text when the window
+							// already absorbed it — so the answer always reaches the
+							// user.
+							if (!landed || editor.remainingText().length === 0) {
+								await this.deliver(
+									recipient,
+									editor.remainingText().length > 0 ? editor.remainingText() : finalText,
+								);
+							} else {
+								// The streamed bubble(s) ARE the delivery: record it like
+								// any outbound delivery so /ledger stays complete
+								// (ADR-0022) and the reply carries a timestamp for latency
+								// forensics.
+								this.ledger?.record({
+									ts: Date.now(),
+									transport: this.transportName,
+									channel: msg.channelId,
+									recipient: msg.sender,
+									chars: finalText.length,
+									ok: true,
+								});
+							}
+						} finally {
+							stopTyping();
+							for (const id of openedMessageIds) this.streamJournal?.remove(msg.channelId, id);
 						}
-					} finally {
-						stopTyping();
-						for (const id of openedMessageIds) this.streamJournal?.remove(msg.channelId, id);
+						return;
+					} catch {
+						/* fall through to batch — the placeholder send itself failed */
 					}
-					return;
-				} catch {
-					/* fall through to batch — the placeholder send itself failed */
 				}
-			}
-			const stopTyping = this.startTyping(recipient);
-			try {
-				const result = await this.completion.runCompletion(input);
-				if (result.error) {
-					await this.deliver(recipient, `could not run the agent: ${result.error}`);
-					return;
+				const stopTyping = this.startTyping(recipient);
+				try {
+					const { result, attempts } = await this.runCompletionWithRetry(input, false, undefined);
+					if (result.error) {
+						console.error(`gateway: completion failed after ${attempts} attempt(s): ${result.error}`);
+						await this.deliver(recipient, `could not run the agent: ${describeCompletionFailure(result.error)}`);
+						return;
+					}
+					await this.deliver(recipient, `${result.reply.length > 0 ? result.reply : "(no reply)"}`);
+				} finally {
+					stopTyping();
 				}
-				await this.deliver(recipient, `${result.reply.length > 0 ? result.reply : "(no reply)"}`);
-			} finally {
-				stopTyping();
-			}
-		});
+			});
+		} finally {
+			this.activeRuns--;
+			this.maybeFireDeferredRestart();
+		}
 	}
 
 	/**

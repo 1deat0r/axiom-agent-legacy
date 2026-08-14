@@ -439,3 +439,26 @@ describe("CliCompletionRunner.streamCompletion", () => {
 		}
 	});
 });
+
+describe("CliCompletionRunner compact timeout (ADR-0050)", () => {
+	it("uses the compact timeout for compact-before runs and the plain timeout otherwise", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-compact-to-"));
+		try {
+			const bin = join(dir, "hang.mjs");
+			await writeFile(bin, "#!/usr/bin/env node\nsetInterval(() => {}, 60_000);\n");
+			await chmod(bin, 0o755);
+			const runner = new CliCompletionRunner({ bin, printFlag: "-p", timeoutMs: 150, compactTimeoutMs: 400 });
+			const compact = await runner.runCompletion({
+				sessionId: "gw-c",
+				prompt: "hi",
+				profile: { name: "default" },
+				compactBefore: true,
+			});
+			expect(compact.error).toMatch(/timed out after 400ms/);
+			const plain = await runner.runCompletion({ sessionId: "gw-c2", prompt: "hi", profile: { name: "default" } });
+			expect(plain.error).toMatch(/timed out after 150ms/);
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+});
