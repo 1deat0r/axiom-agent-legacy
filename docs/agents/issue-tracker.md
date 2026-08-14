@@ -113,6 +113,12 @@ closes predate the policy.
 Agents must still set the role at create and post the audit comment at close.
 Do not rely on the safety net.
 
+A third workflow, `.github/workflows/issue-hygiene.yml`, sweeps weekly
+(ADR-0064). It posts one summary comment on the issue named by the
+`HYGIENE_SUMMARY_ISSUE` repository variable when open issues drift (labels,
+stale `needs-triage`, unmerged branches). Branch cleanup follows
+[docs/agents/stale-branches.md](stale-branches.md).
+
 To test the classifier locally:
 
 ```
