@@ -48,8 +48,12 @@ The workflow .github/workflows/triage.yml enforces two rules:
 
 1. Open job. Fires on `opened`, `labeled`, and `unlabeled`. Zero role labels:
    apply `needs-triage` and post the contract (on `unlabeled`, post only — no
-   re-apply, so a maintainer can switch roles without a fight). Two or more
-   role labels: post a conflict note. One role label: no action.
+   re-apply, so a maintainer can switch roles without a fight; the remind
+   comment says so). Two or more role labels: post a conflict note. One role
+   label: no action. The job never comments on a closed issue, and it never
+   posts a contract or remind comment that the bot already posted. A
+   form-created issue fires two runs (opened and labeled); the second run is
+   the echo of the first and posts nothing.
 2. Close job. Fires on `closed`. When the issue closes without an audit
    comment, post one reminder. The audit comment must carry `Commit:`, `ADR:`,
    and `Handoff:` in one comment. The reminder does not repeat.
@@ -76,9 +80,17 @@ Closed issues from ADR-0050 onward must carry an audit comment. List the ones
 that do not:
 
 ```
-gh issue list --state closed --json number,comments \
+gh issue list --state closed --limit 1000 --json number,comments \
   --jq '[.[] | select((.comments | map(.body // "") | any(contains("Commit:") and contains("ADR:") and contains("Handoff:"))) | not) | .number]'
 ```
+
+`--limit 1000` is the gh ceiling; the default page size is 30. A repo past
+1000 closed issues needs a search-API sweep, not this command.
+
+The list mixes two groups. Closes before 2026-08-14 are the 13 legacy
+closes and are exempt. Closes from that date onward must carry an audit
+comment; each one in the list that is not legacy is a live violation. Check
+the close date with `gh issue view <number> --json closedAt`.
 
 The contract tests in packages/coding-agent/test/gh-tooling/ guard the
 templates and the workflow against the same vocabulary.

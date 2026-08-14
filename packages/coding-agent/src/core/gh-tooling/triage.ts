@@ -38,6 +38,25 @@ export function buildTriageComment(): string {
 	].join("\n");
 }
 
+export function buildRemindComment(): string {
+	return [
+		"A role label was removed from this issue. The workflow does not re-apply labels on removal.",
+		"",
+		"Set the role from the five in docs/agents/triage-labels.md. To mark the issue ready for an agent, the body needs five parts:",
+		"",
+		"1. Goal. One sentence. States the outcome.",
+		"2. Acceptance criteria. A checklist. Each item must be verifiable.",
+		"3. Scope. Lists what the issue does not cover.",
+		'4. ADR status. States "ADR required" or "ADR not required". One capability, one ADR.',
+		"5. Verification plan. States how to prove the work. Red tests first. ./test.sh, biome, and tsgo clean.",
+		"",
+		"When all five parts are present, change the label to `ready-for-agent`.",
+	].join("\n");
+}
+
+const CONTRACT_SENTINEL = "The workflow applied `needs-triage`.";
+const REMIND_SENTINEL = "does not re-apply labels on removal";
+
 export function findRoleLabels(labels: readonly string[]): string[] {
 	return labels.filter((label) => (TRIAGE_ROLES as readonly string[]).includes(label));
 }
@@ -57,11 +76,22 @@ export function buildRoleConflictComment(roles: readonly string[]): string {
 
 export type OpenEvent = "opened" | "labeled" | "unlabeled";
 
-export function classifyOpen(labels: readonly string[], event: OpenEvent): TriageDecision {
+export function classifyOpen(
+	labels: readonly string[],
+	event: OpenEvent,
+	comments: readonly string[] = [],
+	state?: string,
+): TriageDecision {
 	const roles = findRoleLabels(labels);
+	if (state === "CLOSED" && event !== "opened") {
+		return { action: "skip" };
+	}
 	if (event === "unlabeled") {
 		if (roles.length === 0) {
-			return { action: "remind", comment: buildTriageComment() };
+			if (comments.some((body) => body.includes(REMIND_SENTINEL))) {
+				return { action: "skip" };
+			}
+			return { action: "remind", comment: buildRemindComment() };
 		}
 		return { action: "skip" };
 	}
@@ -71,6 +101,9 @@ export function classifyOpen(labels: readonly string[], event: OpenEvent): Triag
 	if (roles.length === 1) {
 		return { action: "skip" };
 	}
+	if (comments.some((body) => body.includes(CONTRACT_SENTINEL))) {
+		return { action: "needs-triage", label: "needs-triage" };
+	}
 	return {
 		action: "needs-triage",
 		label: "needs-triage",
@@ -79,17 +112,26 @@ export function classifyOpen(labels: readonly string[], event: OpenEvent): Triag
 }
 
 export function decide(json: string, event: string): TriageDecision {
-	let parsed: { labels?: Array<string | { name?: string }> };
+	let parsed: {
+		labels?: Array<string | { name?: string }>;
+		comments?: Array<{ body?: string }>;
+		state?: string;
+	};
 	try {
-		parsed = JSON.parse(json) as { labels?: Array<string | { name?: string }> };
+		parsed = JSON.parse(json) as {
+			labels?: Array<string | { name?: string }>;
+			comments?: Array<{ body?: string }>;
+			state?: string;
+		};
 	} catch {
 		throw new Error("triage-cli: stdin is not valid JSON");
 	}
 	const labels = (parsed.labels ?? [])
 		.map((label) => (typeof label === "string" ? label : (label.name ?? "")))
 		.filter((name) => name.length > 0);
+	const comments = (parsed.comments ?? []).map((comment) => comment.body ?? "");
 	const openEvent: OpenEvent = event === "labeled" || event === "unlabeled" ? event : "opened";
-	return classifyOpen(labels, openEvent);
+	return classifyOpen(labels, openEvent, comments, parsed.state);
 }
 
 export const AUDIT_MARKERS = ["Commit:", "ADR:", "Handoff:"] as const;

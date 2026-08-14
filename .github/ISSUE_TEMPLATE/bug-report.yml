@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a bug. The triage workflow applies needs-triage.
+description: Report a bug. This form pre-applies needs-triage.
 labels: [needs-triage]
 body:
   - type: textarea
