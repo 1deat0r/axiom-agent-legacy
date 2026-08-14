@@ -16,6 +16,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { RpcDelegateBridge } from "./bridge.js";
+import { parseDelegateHandoff } from "./handoff.js";
 import { DEFAULT_SUMMARY_MAX_CHARS, emptyAccounting, toDelegateResult } from "./result.js";
 import type { DelegateResult } from "./types.js";
 
@@ -137,6 +138,7 @@ export class BackgroundDelegateRegistry {
 				{
 					ok: true,
 					summary: run.lastAssistantText,
+					handoff: parseDelegateHandoff(run.lastAssistantText),
 					tokens: run.stats.tokens ?? emptyAccounting(),
 					cost: run.stats.cost,
 					helper: { name: input.name, model: input.model, sessionId: run.stats.sessionId },

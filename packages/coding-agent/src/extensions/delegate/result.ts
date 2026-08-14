@@ -7,7 +7,8 @@
  * parent actually receives.
  */
 
-import type { DelegateBatchResult, DelegateResult, DelegateTokenAccounting } from "./types.js";
+import { capHandoff, DEFAULT_HANDOFF_CAPS, renderHandoff } from "./handoff.js";
+import type { DelegateBatchResult, DelegateHandoff, DelegateResult, DelegateTokenAccounting } from "./types.js";
 
 /** Default cap for the returned summary (compactness guarantee). */
 export const DEFAULT_SUMMARY_MAX_CHARS = 2000;
@@ -42,6 +43,8 @@ export function summaryOrFallback(text: string | null | undefined): string {
 export interface DelegateResultInput {
 	ok: boolean;
 	summary?: string | null | undefined;
+	/** Parsed Ralph handoff (already capped by parseDelegateHandoff; re-capped here). */
+	handoff?: DelegateHandoff | null | undefined;
 	tokens?: DelegateTokenAccounting | null | undefined;
 	cost?: number | null | undefined;
 	helper?: { name?: string; model?: string; sessionId?: string };
@@ -64,6 +67,11 @@ export function toDelegateResult(
 		tokens,
 		cost: typeof input.cost === "number" ? input.cost : 0,
 	};
+	if (input.ok && input.handoff) {
+		// The handoff is the bounded structured report (issue #33); cap it again
+		// at the contract boundary so no producer can leak an oversized field.
+		base.handoff = capHandoff(input.handoff, DEFAULT_HANDOFF_CAPS);
+	}
 	if (input.helper) {
 		base.helper = input.helper;
 	}
@@ -78,7 +86,11 @@ export function renderDelegateResult(result: DelegateResult): string {
 	if (!result.ok) {
 		return `[delegate failed] ${result.error ?? "unknown error"}`;
 	}
-	return `[delegate ok] ${result.tokens.total} tokens, $${result.cost.toFixed(4)}\n${result.summary}`;
+	const head = `[delegate ok] ${result.tokens.total} tokens, $${result.cost.toFixed(4)}`;
+	if (result.handoff) {
+		return `${head}\n${renderHandoff(result.handoff)}`;
+	}
+	return `${head}\n${result.summary}`;
 }
 
 /** Sum two accounting shapes (used to aggregate parallel delegations). */
@@ -113,7 +125,13 @@ export function renderBatchResult(batch: DelegateBatchResult): string {
 		`[delegate batch] ${batch.delegations.length} tasks, ${batch.tokens.total} tokens, $${batch.cost.toFixed(4)}`,
 	];
 	for (const d of batch.delegations) {
-		lines.push(d.ok ? `- ${d.summary}` : `- [failed] ${d.error ?? "unknown error"}`);
+		if (!d.ok) {
+			lines.push(`- [failed] ${d.error ?? "unknown error"}`);
+		} else if (d.handoff) {
+			lines.push(`- [${d.handoff.status}] ${d.handoff.summary}`);
+		} else {
+			lines.push(`- ${d.summary}`);
+		}
 	}
 	return lines.join("\n");
 }

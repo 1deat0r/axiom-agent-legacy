@@ -82,11 +82,24 @@ _Avoid_: Thread, chat
 **Session budget**:
 The gateway's soft cap on how large a channel session file may grow
 (`GATEWAY_SESSION_BUDGET_BYTES`, 256KB of JSONL, ADR-0041): a session past
-the cap is archived in place (`<id>.jsonl.archived-<ts>`, still found by
-`/search`) and the next run starts fresh, so replies never re-process a
-runaway history. `/new` archives on demand.
+the cap requests pre-run compaction (the completion child summarizes the
+context, so replies never re-process a runaway history); `/new` archives
+the file on demand (`<id>.jsonl.archived-<ts>`, still found by `/search`).
+Since ADR-0055 this is the safety limit; the session token meter is the
+primary trigger.
 _Avoid_: Context window, auto-compaction (the budget is a file-size gate,
 not a token limit)
+
+**Session token meter**:
+The gateway's estimate of the model-facing surface of a channel session
+(`measureSessionTokens`, ADR-0055): reads the session JSONL and prices
+every message entry under a deterministic tokenizer-free heuristic (one
+token per 4 characters plus block and role overhead). A session whose
+surface exceeds `GATEWAY_SESSION_TOKEN_BUDGET` requests pre-run
+compaction. Snapshots are immutable and carry a revision (entries
+consumed).
+_Avoid_: Provider tokenizer, token-based billing (the meter estimates; it
+never reads provider usage)
 
 **Cost ledger**:
 The pricing side of the agent: token usage priced per model (override rates
@@ -239,6 +252,24 @@ compact-before runs get their own longer timeout. Env knobs:
 `GATEWAY_COMPLETION_RETRIES`, `GATEWAY_COMPLETION_RETRY_DELAY_MS`,
 `GATEWAY_RESTART_GRACE_MS`, `GATEWAY_MESSAGE_DEDUP_MS`.
 
+**Schedule tools**:
+The model-facing reminder tools (ADR-0053): `schedule_after` (positive
+delay), `schedule_at` (absolute ISO 8601 instant with an explicit zone), and
+`schedule_every` (fixed interval, five minutes minimum) store reminders that
+return later as ordinary message turns in the session they were scheduled
+from, delivered to the session's channel. The tools exist only on runs the
+gateway tagged (`AXIOM_GATEWAY_CHANNEL_ID` + `AXIOM_GATEWAY_SESSION_ID` env),
+so nothing promises a reminder it cannot deliver. Records live in an
+append-only JSONL store at `<AXIOM_HOME>/gateway/schedule.jsonl` (agent
+appends reminders, the gateway appends fire records; the fold replays the
+log). The gateway's `ScheduleManager` sweeps on boot (a reminder missed while
+down fires exactly once) and every `GATEWAY_SCHEDULE_POLL_MS` (default 10s),
+fires each due reminder once, and re-schedules recurring ones at their
+earliest future slot; each fire becomes a completion turn on the channel's
+serialization chain in the stored session. Reminders that cross sessions,
+operator cron changes, and delivery to other channels are out of scope.
+_Avoid_: Operator cron (the gateway /cron spine is separate and stays separate)
+
 **Self-update**:
 The gateway-local `/update` command (ADR-0034): fetch + report, or `/update
 now` to fast-forward the configured worktree (`AXIOM_UPDATE_REPO` /
@@ -287,3 +318,24 @@ byte-offset cursor. Agent tools: peers_list, peers_send, peers_inbox,
 peers_intent; CLI: `axiom peers [list|inbox]`, `axiom peers msg <id|*> <text>`,
 `axiom peers group <text>`. Inert unless anchored; zero new dependencies.
 _Avoid_: Harness sub-agents (RLM children are parent-to-child, not siblings)
+
+**Ralph handoff**:
+The bounded structured report a delegate helper ends its run with (issue #33,
+ADR-0054): five capped fields — status, summary, evidence, next steps,
+blockers — parsed from the helper's final reply into `DelegateResult.handoff`.
+The helper prompt (`buildHelperPrompt`) asks every helper for it; helpers that
+omit it still return the old compact result. Field caps (status 100, summary
+2000, up to 8 evidence items of 500 chars, 8 next steps of 300, 8 blockers of
+300) keep the block bounded no matter what the helper returns.
+_Avoid_: Transcript, full log, raw summary (the handoff is the structured,
+capped projection; the summary field stays the raw capped closing text)
+
+**Shutdown worker reaping**:
+The daemon supervisor's last-resort step at shutdown (ADR-0056). A worker that
+survives its stop attempt during shutdown would otherwise leak forever — the
+background finalizer is inert once shuttingDown is set. In the
+WorkerStopTimeoutError catch, shutdown() does one fresh identity check and
+force-kills before exit: current identity signals the process group, unknown
+identity gets a group-only SIGKILL (no single-pid fallback, so a recycled pid
+cannot be signaled), replaced or gone identities are never signaled.
+_Avoid_: Finalizer escalation (that is the normal-operation path, unchanged)

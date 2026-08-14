@@ -69,3 +69,23 @@ Two reviews drove three refinements:
 The classifier logic stays pure and unit-tested; the workflow runs the same
 code the tests exercise. The close job reminds once by design; the drift
 check is the sweep.
+
+Three boundaries are chosen, not accidental:
+
+- **Marker check, not substance check.** The close job verifies that the
+  three markers sit in one comment. It does not verify that the commit, the
+  ADR file, or the handoff exist. A substance check needs git and gh lookups
+  in the runner, and it would reject legitimate not-applicable closes. The
+  marker check verifies the ritual shape; review verifies the substance.
+- **Label check, not body check.** The open job inspects labels only. A
+  `ready-for-agent` issue with a weak body passes. Role-setting is a
+  maintainer judgment (triage-labels.md); the bot guards the label state.
+- **One reminder per close.** The nudge fires once and never repeats. The
+  drift check is the sweep for unanswered nudges. A scheduled sweep
+  workflow is a future option, not a current need.
+
+One live example proved the loop: issue #13 closed on 2026-08-14 with a
+documentation-only note. The close job nudged it. The audit comment then
+landed with the not-applicable form (Commit: not required). The close-ritual
+template now defines that form, so human practice and the marker check
+converge.

@@ -59,6 +59,50 @@ The workflow runs on main. Proof, end to end:
   and closed issue carries a role label. The six most recent closes carry
   backfilled audit comments.
 
+## Wave 4 (reviewer 3)
+
+Reviewer 3 scored 8.5. The findings were narrow. All are fixed:
+
+- Issue #13 closed post-ADR without an audit comment. The close job nudged
+  it. The audit comment now lands with the not-applicable form. The close
+  ritual template now defines that form (Commit: not required, with a
+  reason). The drift check returns exactly the 13 legacy closes.
+- The bug form wording now says the form pre-applies needs-triage. The
+  wording test guards both forms.
+- The drift and list commands carry --limit 100. The drift note explains the
+  two groups (legacy exempt, post-ADR violations).
+- The ADR records the three chosen boundaries: marker check not substance
+  check, label check not body check, one reminder per close.
+
+45 tests green. Live proof stands on issues #13, #27, #28, #29.
+
+## Wave 5 (reviewer 4)
+
+Reviewer 4 scored 9.0. The last two gaps are closed:
+
+- The remind comment now tells the truth: the workflow does not re-apply
+  labels on removal. A test guards the wording.
+- The open job now reads comments and state too. It never reposts a comment
+  the bot already made (the echo-run race is guarded), and it never comments
+  on a closed issue.
+- The drift command uses --limit 1000 (the gh ceiling; gh issue list has no
+  --paginate in this gh version). The docs say so.
+- The five wayfinder labels carry their documented descriptions live.
+
+53 tests green. Live proof stands on issues #13, #27, #28, #29.
+
+## Reviewer 5 (blocked)
+
+The wave-5 fixes await an independent re-review. The attempt is blocked, not
+the work: a parallel session cleared the API credentials (~/.axiom/agent
+auth.json is empty), so no reviewer-capable model can spawn. The only
+remaining model (local gemma4:12b) cannot complete a multi-step review.
+Retry the review with the deepseek-v4-pro helper when the credentials
+return. The brief is at /tmp/review5-task.txt on the host.
+
 ## What remains
 
+- Independent re-review of wave 5 (blocked on credentials, see above).
 - Optional: the same treatment for PRs if the PR-triage flag flips to yes.
+- Optional: a scheduled drift-sweep workflow, if unanswered nudges become a
+  pattern.

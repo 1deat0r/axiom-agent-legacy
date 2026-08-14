@@ -8,6 +8,10 @@
  * The archive keeps the file searchable: it is renamed to
  * `<id>.jsonl.archived-<ts>`, and the search indexer accepts archived names,
  * so cross-session recall (/search, /sessions) survives the reset.
+ *
+ * Since ADR-0052 the session token meter is the primary pressure trigger;
+ * this byte budget stays as the safety limit for sessions the token
+ * heuristic prices low (metadata-heavy files).
  */
 import { existsSync, renameSync, statSync } from "node:fs";
 import { join } from "node:path";

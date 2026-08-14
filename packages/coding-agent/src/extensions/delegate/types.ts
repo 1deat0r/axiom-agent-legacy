@@ -3,9 +3,10 @@
  *
  * The delegate tool spawns an isolated helper process (the existing RPC
  * bridge, `--mode rpc`) to run one bounded task, then returns to the parent
- * session ONLY this compact block. The helper's intermediate tool calls and
- * full context never enter the parent session — a multi-step pipeline
- * collapses into one zero-context-cost turn.
+ * session ONLY this compact block — the summary plus, when the helper ends
+ * its run with one, the Ralph handoff (a bounded structured report). The
+ * helper's intermediate tool calls and full context never enter the parent
+ * session — a multi-step pipeline collapses into one zero-context-cost turn.
  */
 
 /** Parameters accepted by the `delegate` tool. */
@@ -37,6 +38,24 @@ export interface DelegateTokenAccounting {
 	total: number;
 }
 
+/**
+ * The Ralph handoff (issue #33): the bounded structured report a helper ends
+ * its run with. Every field is length-capped (see handoff.ts caps), so the
+ * handoff carries the helper's state back to the parent without a transcript.
+ */
+export interface DelegateHandoff {
+	/** High-level outcome: done, partial, blocked, or failed. */
+	status: string;
+	/** What happened and what is finished, in short. */
+	summary: string;
+	/** What the helper ran, read, or observed (short strings, bounded list). */
+	evidence: string[];
+	/** What the parent should do next, in order. */
+	nextSteps: string[];
+	/** What stands in the way of completion (empty when nothing blocks). */
+	blockers: string[];
+}
+
 /** Aggregated batch result for parallel `tasks` fan-out. */
 export interface DelegateBatchResult {
 	/** True only when every delegation finished without error/timeout. */
@@ -59,6 +78,8 @@ export interface DelegateResult {
 	tokens: DelegateTokenAccounting;
 	/** Recorded session cost in USD from the helper (0 when none recorded). */
 	cost: number;
+	/** Optional Ralph handoff (bounded structured report) the helper ended with. */
+	handoff?: DelegateHandoff;
 	/** Optional helper identity metadata. */
 	helper?: { name?: string; model?: string; sessionId?: string };
 	/** Human-readable failure reason when ok is false. */

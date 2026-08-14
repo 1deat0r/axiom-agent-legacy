@@ -13,6 +13,7 @@
 
 import type { SessionStats } from "../../core/session-stats.js";
 import { RpcClient } from "../../modes/rpc/rpc-client.js";
+import { buildHelperPrompt } from "./handoff.js";
 
 /** What a single delegatation run harvests from the helper. */
 export interface RpcDelegateRunResult {
@@ -124,7 +125,9 @@ export function createRpcClientBridge(options: RpcClientBridgeOptions = {}): Rpc
 				throw new Error("delegate helper not started");
 			}
 			// One fresh process per delegate call already implies a fresh session.
-			await current.promptAndWait(task, undefined, timeoutMs);
+			// The helper prompt asks for the Ralph handoff (issue #33): a bounded
+			// structured report parsed back into DelegateResult.handoff.
+			await current.promptAndWait(buildHelperPrompt(task), undefined, timeoutMs);
 			const lastAssistantText = await current.getLastAssistantText();
 			const stats = await current.getSessionStats();
 			return { lastAssistantText, stats };

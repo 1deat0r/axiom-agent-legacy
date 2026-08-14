@@ -44,13 +44,17 @@ describe(".github/workflows/triage.yml", () => {
 	it("passes the GITHUB_TOKEN to gh", () => {
 		expect(workflow).toContain("GH_TOKEN");
 	});
-});
 
-it("passes the event action to the classifier", () => {
-	expect(workflow).toContain("github.event.action");
-	expect(workflow).toContain("triage-cli.ts");
-});
+	it("passes the event action to the classifier", () => {
+		expect(workflow).toContain("github.event.action");
+		expect(workflow).toContain("triage-cli.ts");
+	});
 
-it("posts the role-conflict note on the conflict decision", () => {
-	expect(workflow).toContain("steps.decide.outputs.action == 'role-conflict'");
+	it("posts the role-conflict note on the conflict decision", () => {
+		expect(workflow).toContain("steps.decide.outputs.action == 'role-conflict'");
+	});
+	it("passes comments and state so the bot can dedupe and skip closed issues", () => {
+		expect(workflow).toContain("--json labels,comments,state");
+		expect(workflow).toContain("has_comment");
+	});
 });

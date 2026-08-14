@@ -13,6 +13,7 @@
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { ScheduleManager, type ScheduleReminder } from "../core/schedule/index.js";
 import type { ActiveModelStore } from "./active-model.js";
 import {
 	type ActiveProjectStore,
@@ -31,6 +32,7 @@ import type { RestartNoticeStore } from "./restart-notice.js";
 import type { UpdateConfig, UpdateShell } from "./self-update.js";
 import { applyUpdate, CliUpdateShell, checkUpdate } from "./self-update.js";
 import { archiveSessionFile, sessionExceedsBudget, sessionFilePath } from "./session-reset.js";
+import { sessionExceedsTokenBudget } from "./session-token-meter.js";
 import { STREAM_EDIT_MIN_INTERVAL_MS, StreamEditor } from "./stream-editor.js";
 import type { StreamJournal } from "./stream-journal.js";
 import type {
@@ -91,6 +93,13 @@ export interface GatewayDeps {
 	ledger?: DeliveryLedger;
 	/** In-flight stream journal (streaming v2): records placeholder bubbles so a restart can recover them. */
 	streamJournal?: StreamJournal;
+	/**
+	 * Model-facing schedule (ADR-0053): when configured, the gateway owns a
+	 * ScheduleManager that sweeps the shared reminder store on boot and on a
+	 * poll, running due reminders as ordinary turns in their session. Absent
+	 * => schedule tools stay inert (no delivery path).
+	 */
+	schedule?: { storePath: string; pollMs?: number; now?: () => Date };
 	/** The active transport's name, recorded on each ledger entry. */
 	transportName?: string;
 	/**
@@ -120,6 +129,7 @@ export class Gateway {
 	private readonly projectHome: string;
 	private readonly ledger: DeliveryLedger | undefined;
 	private readonly streamJournal: StreamJournal | undefined;
+	private readonly schedule: ScheduleManager | undefined;
 	private readonly transportName: string;
 	private readonly transports: Record<string, GatewayTransport>;
 	private readonly sessionsDir?: string;
@@ -151,6 +161,14 @@ export class Gateway {
 			(deps.profile === "default" ? deps.axiomHomeDir : join(deps.axiomHomeDir, "profiles", deps.profile));
 		this.ledger = deps.ledger;
 		this.streamJournal = deps.streamJournal;
+		this.schedule = deps.schedule
+			? new ScheduleManager({
+					storePath: deps.schedule.storePath,
+					pollMs: deps.schedule.pollMs,
+					now: deps.schedule.now,
+					onDue: (reminder) => this.enqueueReminder(reminder),
+				})
+			: undefined;
 		this.transportName = deps.transportName ?? "transport";
 		this.transports = deps.transports ?? {};
 		this.sessionsDir = deps.sessionsDir;
@@ -261,6 +279,9 @@ export class Gateway {
 		this.transport.onMessage((msg) => void this.enqueue(msg));
 		this.cron?.start();
 		await this.transport.connect();
+		// Schedule sweeps after connect so a reminder missed while the gateway
+		// was down can fire (and deliver) immediately on boot, exactly once.
+		this.schedule?.start();
 		await this.announceRestartCompletion();
 	}
 
@@ -277,6 +298,7 @@ export class Gateway {
 	async stop(): Promise<void> {
 		this.started = false;
 		this.cron?.stop();
+		this.schedule?.stop();
 		await this.transport.disconnect();
 	}
 
@@ -286,6 +308,71 @@ export class Gateway {
 		const next = prev.then(() => this.handle(msg)).catch(() => undefined);
 		this.chains.set(msg.channelId, next);
 		return next.then(() => undefined);
+	}
+
+	/**
+	 * Sweep the reminder store now (the manager also sweeps on boot and on a
+	 * poll). Returns how many reminders fired. Tests drive this directly.
+	 */
+	sweepSchedule(now?: Date): number {
+		return this.schedule?.sweep(now) ?? 0;
+	}
+
+	/**
+	 * Queue a due reminder as an ordinary turn on its channel's serialization
+	 * chain: it runs the completion in the session it was scheduled from and
+	 * delivers the reply to the session's channel, exactly like a message the
+	 * user sent — never interleaved with an interactive turn on that channel.
+	 */
+	enqueueReminder(reminder: ScheduleReminder): void {
+		const prev = this.chains.get(reminder.channelId) ?? Promise.resolve();
+		const next = prev.then(() => this.runReminderTurn(reminder)).catch(() => undefined);
+		this.chains.set(reminder.channelId, next);
+	}
+
+	/**
+	 * Run one due reminder: the reminder text becomes the turn's user message
+	 * in the session it was scheduled from (the stored session id), anchored to
+	 * the stored project root when there is one. The run is tagged with the
+	 * channel so a schedule tool inside the turn can schedule again.
+	 */
+	private async runReminderTurn(reminder: ScheduleReminder): Promise<void> {
+		const recipient = { channelId: reminder.channelId, recipient: reminder.channelId };
+		const input = {
+			sessionId: reminder.sessionId,
+			prompt: reminder.text,
+			profile: { name: this.profile },
+			model: this.modelStore?.load(),
+			channelId: reminder.channelId,
+			...(reminder.projectRoot ? { projectRoot: reminder.projectRoot } : {}),
+		};
+		this.activeRuns++;
+		try {
+			await this.withPollingPaused(() => this.runBatchTurn(input, recipient));
+		} finally {
+			this.activeRuns--;
+			this.maybeFireDeferredRestart();
+		}
+	}
+
+	/**
+	 * The batch completion path shared by interactive and reminder turns:
+	 * run with retries, then deliver the reply (or the classified failure)
+	 * over the active transport with the typing indicator around it.
+	 */
+	private async runBatchTurn(input: GatewayRunInput, recipient: GatewayRecipient): Promise<void> {
+		const stopTyping = this.startTyping(recipient);
+		try {
+			const { result, attempts } = await this.runCompletionWithRetry(input, false, undefined);
+			if (result.error) {
+				console.error(`gateway: completion failed after ${attempts} attempt(s): ${result.error}`);
+				await this.deliver(recipient, `could not run the agent: ${describeCompletionFailure(result.error)}`);
+				return;
+			}
+			await this.deliver(recipient, `${result.reply.length > 0 ? result.reply : "(no reply)"}`);
+		} finally {
+			stopTyping();
+		}
 	}
 
 	/**
@@ -458,16 +545,19 @@ export class Gateway {
 			sessionId = sessionIdForChannel(sessionKey);
 			this.index.set(sessionKey, sessionId);
 		}
-		// Session budget: a channel session that has grown past the soft cap
-		// makes every reply re-process a huge context (minute-scale latency
-		// before the first word). Instead of archiving (which wipes the
-		// conversation's memory), request a pre-run compaction: the completion
-		// child summarizes the existing context, so the reply resumes on a
-		// small session while /search still indexes the full history.
+		// Session pressure: a channel session whose model-facing surface has
+		// grown past the token budget makes every reply re-process a huge
+		// context (minute-scale latency before the first word). Instead of
+		// archiving (which wipes the conversation's memory), request a
+		// pre-run compaction: the completion child summarizes the existing
+		// context, so the reply resumes on a small session while /search
+		// still indexes the full history. Token pressure (ADR-0052) is the
+		// primary trigger; the byte budget (ADR-0041) stays as the safety
+		// limit for sessions the heuristic prices low.
 		let compactBefore = false;
 		if (this.sessionsDir) {
 			const path = sessionFilePath(this.sessionsDir, sessionKey);
-			if (sessionExceedsBudget(path)) {
+			if (sessionExceedsTokenBudget(path) || sessionExceedsBudget(path)) {
 				compactBefore = true;
 			}
 		}
@@ -477,6 +567,7 @@ export class Gateway {
 			prompt: msg.text,
 			profile: { name: this.profile },
 			model: this.modelStore?.load(),
+			channelId: msg.channelId,
 			...(anchoredRoot ? { projectRoot: anchoredRoot } : {}),
 			...(compactBefore ? { compactBefore: true } : {}),
 		};
@@ -593,18 +684,7 @@ export class Gateway {
 						/* fall through to batch — the placeholder send itself failed */
 					}
 				}
-				const stopTyping = this.startTyping(recipient);
-				try {
-					const { result, attempts } = await this.runCompletionWithRetry(input, false, undefined);
-					if (result.error) {
-						console.error(`gateway: completion failed after ${attempts} attempt(s): ${result.error}`);
-						await this.deliver(recipient, `could not run the agent: ${describeCompletionFailure(result.error)}`);
-						return;
-					}
-					await this.deliver(recipient, `${result.reply.length > 0 ? result.reply : "(no reply)"}`);
-				} finally {
-					stopTyping();
-				}
+				await this.runBatchTurn(input, recipient);
 			});
 		} finally {
 			this.activeRuns--;

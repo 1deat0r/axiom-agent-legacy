@@ -10,9 +10,16 @@ import { appendFileSync, readFileSync, renameSync, statSync, writeFileSync } fro
 import { join } from "node:path";
 import type { BoardEntry } from "./types.js";
 
+/** Size + mtime of the board file — the cheap unchanged check. */
+export interface BoardFileStat {
+	size: number;
+	mtimeMs: number;
+}
+
 export interface BoardDeps {
 	append?: (path: string, data: string) => void;
 	statSize?: (path: string) => number;
+	statFile?: (path: string) => BoardFileStat;
 	readSlice?: (path: string, start: number, end: number) => string;
 	writeFile?: (path: string, data: string) => void;
 	rename?: (from: string, to: string) => void;
@@ -30,6 +37,26 @@ export function cursorFile(scope: string, instanceId: string): string {
 export function appendBoardEntry(scope: string, entry: BoardEntry, deps: BoardDeps = {}): void {
 	const append = deps.append ?? ((path, data) => appendFileSync(path, data, { encoding: "utf8", flag: "a" }));
 	append(boardFile(scope), `${JSON.stringify(entry)}\n`);
+}
+
+/**
+ * Stat the board file (size + mtimeMs). A missing board is an empty stat.
+ * The board is append-only, so a size+mtime pair that has not moved means
+ * no new line can have landed (see ADR-0038 follow-up #30: this is the
+ * stat-based short circuit that lets turn-start peeks skip the parse).
+ */
+export function boardStat(scope: string, deps: BoardDeps = {}): BoardFileStat {
+	const statFile =
+		deps.statFile ??
+		((path) => {
+			try {
+				const stat = statSync(path);
+				return { size: stat.size, mtimeMs: stat.mtimeMs };
+			} catch {
+				return { size: 0, mtimeMs: 0 };
+			}
+		});
+	return statFile(boardFile(scope));
 }
 
 export function boardSize(scope: string, deps: BoardDeps = {}): number {

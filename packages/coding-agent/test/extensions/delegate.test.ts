@@ -17,6 +17,13 @@ import type { ExtensionAPI } from "../../src/core/extensions/types.js";
 import type { SessionStats } from "../../src/core/session-stats.js";
 import type { RpcDelegateBridge, RpcDelegateRunResult } from "../../src/extensions/delegate/bridge.js";
 import {
+	buildHelperPrompt,
+	capHandoff,
+	DEFAULT_HANDOFF_CAPS,
+	type DelegateHandoffCaps,
+	parseDelegateHandoff,
+} from "../../src/extensions/delegate/handoff.js";
+import {
 	BATCH_CONCURRENCY,
 	createDelegateExtension,
 	DEFAULT_TIMEOUT_MS,
@@ -28,9 +35,13 @@ import {
 	DEFAULT_SUMMARY_MAX_CHARS,
 	emptyAccounting,
 	NO_SUMMARY_TEXT,
+	renderBatchResult,
+	renderDelegateResult,
 	summaryOrFallback,
+	toBatchResult,
 	toDelegateResult,
 } from "../../src/extensions/delegate/result.js";
+import type { DelegateHandoff } from "../../src/extensions/delegate/types.js";
 
 // ============================================================================
 // Pure result-block logic
@@ -807,4 +818,379 @@ describe("background delegate", () => {
 		shutdown!.handler({ type: "session_shutdown", reason: "quit" });
 		await waitUntil(() => stub.stopped === 1);
 	});
+});
+
+// ============================================================================
+// Ralph handoff (issue #33): the helper ends its run with a bounded structured
+// report — status, summary, evidence, next steps, blockers — parsed into
+// DelegateResult.handoff. The old compact result stays the fallback.
+// ============================================================================
+
+function handoffJson(overrides: Record<string, unknown> = {}): string {
+	const base = {
+		status: "done",
+		summary: "ported the capability",
+		evidence: ["12 tests green", "tsgo clean"],
+		nextSteps: ["merge the branch"],
+		blockers: [],
+	};
+	return JSON.stringify({ ...base, ...overrides });
+}
+
+function fullHandoff(): DelegateHandoff {
+	return {
+		status: "done",
+		summary: "ported the capability",
+		evidence: ["12 tests green", "tsgo clean"],
+		nextSteps: ["merge the branch"],
+		blockers: [],
+	};
+}
+
+describe("buildHelperPrompt", () => {
+	it("keeps the task and asks the helper for the five handoff fields as JSON", () => {
+		const prompt = buildHelperPrompt("tidy the repo");
+		expect(prompt).toContain("tidy the repo");
+		for (const field of ["status", "summary", "evidence", "nextSteps", "blockers"]) {
+			expect(prompt).toContain(field);
+		}
+		expect(prompt.toLowerCase()).toContain("json");
+	});
+});
+
+describe("parseDelegateHandoff", () => {
+	it("parses a bare JSON handoff with all five fields", () => {
+		expect(parseDelegateHandoff(handoffJson())).toEqual(fullHandoff());
+	});
+
+	it("parses a fenced json block inside prose", () => {
+		const text = `finished the job.\n\`\`\`json\n${handoffJson()}\n\`\`\``;
+		const parsed = parseDelegateHandoff(text);
+		expect(parsed?.status).toBe("done");
+		expect(parsed?.evidence).toEqual(["12 tests green", "tsgo clean"]);
+	});
+
+	it("parses a handoff wrapped in prose (brace slicing)", () => {
+		const parsed = parseDelegateHandoff(`Here is my report. ${handoffJson()} Thanks.`);
+		expect(parsed?.summary).toBe("ported the capability");
+		expect(parsed?.blockers).toEqual([]);
+	});
+
+	it("accepts snake_case next_steps", () => {
+		const text = JSON.stringify({
+			status: "blocked",
+			summary: "s",
+			evidence: [],
+			next_steps: ["unblock"],
+			blockers: [],
+		});
+		expect(parseDelegateHandoff(text)?.nextSteps).toEqual(["unblock"]);
+	});
+
+	it("wraps single-string evidence/nextSteps/blockers into arrays", () => {
+		const text = JSON.stringify({
+			status: "done",
+			summary: "s",
+			evidence: "e1",
+			nextSteps: "n1",
+			blockers: "b1",
+		});
+		const parsed = parseDelegateHandoff(text)!;
+		expect(parsed.evidence).toEqual(["e1"]);
+		expect(parsed.nextSteps).toEqual(["n1"]);
+		expect(parsed.blockers).toEqual(["b1"]);
+	});
+
+	it("returns undefined when the text holds no JSON object", () => {
+		expect(parseDelegateHandoff("all done, nothing to see")).toBeUndefined();
+		expect(parseDelegateHandoff(null)).toBeUndefined();
+		expect(parseDelegateHandoff(undefined)).toBeUndefined();
+		expect(parseDelegateHandoff("   ")).toBeUndefined();
+	});
+
+	it("returns undefined for a JSON object without any handoff field", () => {
+		expect(parseDelegateHandoff(JSON.stringify({ other: 1 }))).toBeUndefined();
+	});
+});
+
+describe("capHandoff", () => {
+	const tinyCaps: DelegateHandoffCaps = {
+		statusMaxChars: 4,
+		summaryMaxChars: 10,
+		evidenceMaxItems: 2,
+		evidenceItemMaxChars: 6,
+		nextStepsMaxItems: 1,
+		nextStepItemMaxChars: 5,
+		blockersMaxItems: 2,
+		blockerItemMaxChars: 4,
+	};
+
+	it("caps every field to its limit", () => {
+		const capped = capHandoff(
+			{
+				status: "completed-status",
+				summary: "a very long summary string",
+				evidence: ["evidence item one", "evidence item two", "evidence item three"],
+				nextSteps: ["step one", "step two"],
+				blockers: ["big blocker"],
+			},
+			tinyCaps,
+		);
+		expect(capped.status).toBe("comp");
+		expect(capped.summary).toBe("a very lon");
+		expect(capped.evidence).toEqual(["eviden", "eviden"]);
+		expect(capped.nextSteps).toEqual(["step "]);
+		expect(capped.blockers).toEqual(["big "]);
+	});
+
+	it("drops blank items and trims strings", () => {
+		const capped = capHandoff(
+			{
+				status: "  done  ",
+				summary: " s ",
+				evidence: ["", "  ", "kept"],
+				nextSteps: [],
+				blockers: [],
+			},
+			DEFAULT_HANDOFF_CAPS,
+		);
+		expect(capped.status).toBe("done");
+		expect(capped.summary).toBe("s");
+		expect(capped.evidence).toEqual(["kept"]);
+	});
+
+	it("keeps the default summary cap aligned with the compact result cap", () => {
+		expect(DEFAULT_HANDOFF_CAPS.summaryMaxChars).toBe(DEFAULT_SUMMARY_MAX_CHARS);
+	});
+});
+
+describe("toDelegateResult handoff", () => {
+	it("attaches a handoff to an ok result", () => {
+		const r = toDelegateResult({ ok: true, summary: "raw text", handoff: fullHandoff() });
+		expect(r.handoff).toEqual(fullHandoff());
+	});
+
+	it("caps the handoff at the result boundary", () => {
+		const r = toDelegateResult(
+			{
+				ok: true,
+				summary: "x",
+				handoff: {
+					status: "x".repeat(500),
+					summary: "s",
+					evidence: [],
+					nextSteps: [],
+					blockers: [],
+				},
+			},
+			200,
+		);
+		expect(r.handoff!.status.length).toBe(DEFAULT_HANDOFF_CAPS.statusMaxChars);
+	});
+
+	it("renders the structured handoff in the parent-facing text", () => {
+		const result = toDelegateResult({
+			ok: true,
+			summary: "raw",
+			handoff: {
+				status: "blocked",
+				summary: "stuck",
+				evidence: ["e1"],
+				nextSteps: ["n1"],
+				blockers: ["b1"],
+			},
+			tokens: stats().tokens,
+			cost: 0,
+		});
+		const rendered = renderDelegateResult(result);
+		expect(rendered).toContain("[delegate ok]");
+		expect(rendered).toContain("stuck");
+		expect(rendered).toContain("Evidence: e1");
+		expect(rendered).toContain("Next: n1");
+		expect(rendered).toContain("Blockers: b1");
+	});
+
+	it("never attaches a handoff to a failure", () => {
+		const r = toDelegateResult({
+			ok: false,
+			error: "boom",
+			handoff: fullHandoff(),
+		});
+		expect(r.handoff).toBeUndefined();
+		expect(r.error).toBe("boom");
+	});
+});
+
+describe("delegate tool handoff wiring", () => {
+	it("attaches the parsed handoff when the helper ends with the JSON handoff", async () => {
+		const { pi, tools } = fakePi();
+		const stub = new StubBridge();
+		stub.runResult = { lastAssistantText: `Done. ${handoffJson()}`, stats: stats() };
+		createDelegateExtension({ bridge: () => stub })(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		const out = fromAny<
+			{
+				content: Array<{ type: string; text: string }>;
+				details: { ok: boolean; summary: string; handoff?: DelegateHandoff };
+			},
+			unknown
+		>(await tool.execute!("c1", { task: "port it" }));
+		expect(out.details.handoff).toBeDefined();
+		expect(out.details.handoff!.status).toBe("done");
+		expect(out.details.handoff!.evidence).toEqual(["12 tests green", "tsgo clean"]);
+		// The old compact summary still carries the raw closing text.
+		expect(out.details.summary).toContain("Done.");
+		// The parent-facing text renders the structured handoff.
+		expect(out.content[0]!.text).toContain("[delegate ok]");
+		expect(out.content[0]!.text).toContain("ported the capability");
+		expect(out.content[0]!.text).toContain("Next: merge the branch");
+	});
+
+	it("keeps the old compact result when the helper emits no handoff", async () => {
+		const { pi, tools } = fakePi();
+		const stub = new StubBridge();
+		createDelegateExtension({ bridge: () => stub })(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		const out = fromAny<
+			{
+				content: Array<{ type: string; text: string }>;
+				details: { ok: boolean; summary: string; handoff?: DelegateHandoff };
+			},
+			unknown
+		>(await tool.execute!("c1", { task: "tidy the repo" }));
+		expect(out.details.ok).toBe(true);
+		expect(out.details.handoff).toBeUndefined();
+		expect(out.content[0]!.text).toBe("[delegate ok] 60 tokens, $0.0012\ndefault summary");
+	});
+
+	it("aggregates handoffs in input order for a batch", async () => {
+		const { pi, tools } = fakePi();
+		const byTask = new Map<string, string>([
+			["first", handoffJson({ status: "done", summary: "one" })],
+			["second", handoffJson({ status: "blocked", summary: "two", blockers: ["z"] })],
+		]);
+		class PerTaskBridge extends StubBridge {
+			constructor(private readonly texts: Map<string, string>) {
+				super();
+			}
+			override async runTask(task: string, timeoutMs: number): Promise<RpcDelegateRunResult> {
+				await super.runTask(task, timeoutMs);
+				return { lastAssistantText: this.texts.get(task) ?? "default summary", stats: stats() };
+			}
+		}
+		createDelegateExtension({ bridge: () => new PerTaskBridge(byTask) })(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		const out = fromAny<
+			{
+				content: Array<{ type: string; text: string }>;
+				details: { delegations: Array<{ ok: boolean; handoff?: DelegateHandoff }> };
+			},
+			unknown
+		>(await tool.execute!("c1", { tasks: ["first", "second"] }));
+		expect(out.details.delegations[0]!.handoff?.status).toBe("done");
+		expect(out.details.delegations[0]!.handoff?.summary).toBe("one");
+		expect(out.details.delegations[1]!.handoff?.status).toBe("blocked");
+		expect(out.details.delegations[1]!.handoff?.summary).toBe("two");
+		// Rendered in order, status-labeled.
+		const rendered = out.content[0]!.text;
+		const oneIdx = rendered.indexOf("one");
+		const twoIdx = rendered.indexOf("two");
+		expect(oneIdx).toBeGreaterThan(-1);
+		expect(twoIdx).toBeGreaterThan(oneIdx);
+		expect(rendered).toContain("[blocked]");
+	});
+
+	it("writes the handoff into the background result file", async () => {
+		const { pi, tools } = fakePi();
+		const stub = new StubBridge();
+		stub.runResult = { lastAssistantText: handoffJson(), stats: stats() };
+		createDelegateExtension({ bridge: () => stub, resultsDir: mkdtempSync(join(tmpdir(), "delegate-bg-")) })(pi);
+		const tool = tools.find((t) => t.name === "delegate")!;
+		const out = fromAny<{ details: { resultFile: string } }, unknown>(
+			await tool.execute!("c1", { task: "job", background: true }),
+		);
+		await waitUntil(() => existsSync(out.details.resultFile));
+		const payload = JSON.parse(readFileSync(out.details.resultFile, "utf8"));
+		expect(payload.result.handoff.status).toBe("done");
+		expect(payload.result.handoff.evidence).toEqual(["12 tests green", "tsgo clean"]);
+		expect(stub.stopped).toBe(1);
+	});
+});
+
+describe("renderBatchResult handoff order", () => {
+	it("renders per-delegation handoffs in input order with their status", () => {
+		const batch = toBatchResult([
+			toDelegateResult({
+				ok: true,
+				summary: "s1",
+				handoff: { status: "done", summary: "first", evidence: [], nextSteps: [], blockers: [] },
+			}),
+			toDelegateResult({
+				ok: true,
+				summary: "s2",
+				handoff: {
+					status: "blocked",
+					summary: "second",
+					evidence: [],
+					nextSteps: [],
+					blockers: ["x"],
+				},
+			}),
+		]);
+		const rendered = renderBatchResult(batch);
+		const firstIdx = rendered.indexOf("first");
+		const secondIdx = rendered.indexOf("second");
+		expect(firstIdx).toBeGreaterThan(-1);
+		expect(secondIdx).toBeGreaterThan(firstIdx);
+		expect(rendered).toContain("[done]");
+		expect(rendered).toContain("[blocked]");
+	});
+});
+
+describe("delegate helper prompt (real bridge)", () => {
+	it("sends the handoff-requesting prompt to the helper process", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "delegate-prompt-"));
+		const probePath = join(dir, "probe.mjs");
+		const outPath = join(dir, "prompt.json");
+		writeFileSync(
+			probePath,
+			[
+				'import { createInterface } from "node:readline";',
+				'import { writeFileSync } from "node:fs";',
+				"const rl = createInterface({ input: process.stdin });",
+				'const out = (obj) => process.stdout.write(JSON.stringify(obj) + "\\n");',
+				'rl.on("line", (line) => {',
+				"  let cmd;",
+				"  try { cmd = JSON.parse(line); } catch { return; }",
+				'  if (cmd.type === "prompt") {',
+				"    writeFileSync(process.env.PROBE_OUT, JSON.stringify({ message: cmd.message }));",
+				'    out({ id: cmd.id, type: "response", command: "prompt", success: true });',
+				'    out({ type: "agent_end" });',
+				'  } else if (cmd.type === "get_last_assistant_text") {',
+				'    out({ id: cmd.id, type: "response", command: "get_last_assistant_text", success: true, data: { text: "probe" } });',
+				'  } else if (cmd.type === "get_session_stats") {',
+				'    out({ id: cmd.id, type: "response", command: "get_session_stats", success: true, data: { sessionFile: null, sessionId: "probe", userMessages: 0, assistantMessages: 0, toolCalls: 0, toolResults: 0, totalMessages: 0, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0 } });',
+				"  }",
+				"});",
+				"setInterval(() => {}, 60000);",
+			].join("\n"),
+		);
+		const bridge = createRpcClientBridge({ cliPath: probePath, env: { PROBE_OUT: outPath } });
+		try {
+			await bridge.start();
+			const run = await bridge.runTask("tidy the repo", 10_000);
+			expect(run.lastAssistantText).toBe("probe");
+			const deadline = Date.now() + 5000;
+			while (!existsSync(outPath) && Date.now() < deadline) {
+				await new Promise((resolve) => setTimeout(resolve, 50));
+			}
+			expect(existsSync(outPath)).toBe(true);
+			const seen = fromAny<{ message: string }, unknown>(JSON.parse(readFileSync(outPath, "utf8")));
+			expect(seen.message).toBe(buildHelperPrompt("tidy the repo"));
+			expect(seen.message).toContain("blockers");
+			expect(seen.message).toContain("tidy the repo");
+		} finally {
+			await bridge.stop();
+		}
+	}, 30_000);
 });
