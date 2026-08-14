@@ -72,6 +72,16 @@ Landed.
 
 Commit: <hash>
 ADR: docs/adr/00XX-<slug>.md (or: not required)
+
+> **ADR reservation rule:** an issue that needs an ADR claims the number at
+> create time, in the title (`(ADR-00NN)`): the LOWEST number no ADR file in
+> `docs/adr/` holds and no other OPEN issue reserves. Allocation happens in
+> the tracker, never at branch time — parallel branches cannot see each
+> other's ADR files, so first-write-wins collides (observed 0047, 0048,
+> 0067). At merge, the merging agent verifies the ADR file's number equals
+> the issue's reservation; on collision, renumber the LATER reservation
+> (rename the file, fix the title and all references) and note it on the
+> issue.
 Handoff: docs/handoff-<feature>.md
 Verified: <what you ran and what passed>
 EOF

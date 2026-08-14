@@ -141,8 +141,8 @@ describe("cross-transport fan-out (ADR-0023)", () => {
 				JSON.stringify({
 					senders: ["U-OWNER"],
 					deliverTo: [
-						{ transport: "slack", channel: "S1" }, // sibling platform
-						{ channel: "C1" }, // active transport default
+						{ transport: "slack", channel: "S1" }, // sibling platform only
+						{ channel: "C1" }, // unnamed: every active transport (ADR-0062)
 					],
 				}),
 			);
@@ -162,13 +162,13 @@ describe("cross-transport fan-out (ADR-0023)", () => {
 			});
 			await g.start();
 			const res = await g.deliverToAll("hello everyone");
-			expect(res).toEqual({ channels: 2 });
-			// Right destination per platform.
+			expect(res).toEqual({ channels: 3 });
+			// Right destination per platform: S1 named slack; C1 fans out to both.
 			expect(primary.sent.map((s) => s.channelId)).toEqual(["C1"]);
-			expect(slack.sent.map((s) => s.channelId)).toEqual(["S1"]);
+			expect(slack.sent.map((s) => s.channelId)).toEqual(["S1", "C1"]);
 			// Ledger labelled by the delivering transport.
 			const entries = ledger.recent(10);
-			expect(entries.map((e) => `${e.transport}->${e.channel}`)).toEqual(["slack->S1", "discord->C1"]);
+			expect(entries.map((e) => `${e.transport}->${e.channel}`)).toEqual(["slack->S1", "discord->C1", "slack->C1"]);
 			await g.stop();
 		} finally {
 			await rm(dir, { recursive: true, force: true });

@@ -39,6 +39,29 @@ A branch whose work is on main or that no open issue references; the closing
 agent deletes it (`docs/agents/stale-branches.md`, ADR-0064).
 _Avoid_: Old branch, dead branch
 
+**ADR**:
+A numbered decision record for this repo's architecture and process choices
+(`docs/adr/ADR-00NN-<slug>.md`; the series continues from the baseline's
+ADR-0015 restart). The number is the registry's primary key — it appears in
+CONTEXT.md terms, issue titles, commit messages, and handoffs.
+_Avoid_: Design doc, RFC, doc note (an ADR records a decision, not a summary)
+
+**ADR reservation**:
+The ADR number an issue claims at create time, written in the issue title
+(`(ADR-00NN)`). Reservations are unique and ordered: the next open issue takes
+the lowest number the registry does not hold and no other open issue reserves.
+The merging agent verifies the ADR file's number equals the issue's
+reservation; a collision is resolved by renumbering the later reservation.
+_Avoid_: Free allocation at branch time, first-write-wins (parallel branches
+cannot see each other's ADR files, so allocation must happen in the tracker)
+
+**Renumber**:
+The collision-resolution edit that changes an ADR's number: rename the file,
+update the title's `(ADR-00NN)`, and fix every reference (CONTEXT.md terms,
+commit messages, handoffs). The later reservation yields; the earlier keeps
+its number.
+_Avoid_: Reuse (a renumber never frees a number for another claim)
+
 **Axiom home**:
 The directory holding axiom-owned durable state (ledger config, memory store,
 profiles): `AXIOM_HOME`, default `~/.axiom`. Baseline-independent by design —
@@ -58,6 +81,7 @@ root home, under `projects/<name>`): a root directory that owns a run's
 working tree. Booting the gateway with `--project <name>` anchors the run
 there (cwd + AXIOM_PROJECT_ROOT) so the root guard (rung 3) confines edits.
 _Avoid_: Folder, repo, task
+
 **Command menu**:
 The roster of the axiom CLI's public subcommands. `COMMAND_SPECS` in
 `cli/command-registry.ts` is the single source of truth; `axiom help`, help
@@ -108,6 +132,14 @@ overhead) with a warning. A session whose surface exceeds
 immutable and carry a revision (entries consumed).
 _Avoid_: Token-based billing (the meter estimates; it never reads provider
 usage), per-message exactness (the system-prompt envelope stays unpriced)
+
+**Stream bubble**:
+The single message a streamed gateway reply edits in place as text arrives
+(ADR-0047): a reply that outgrows the transport's text cap (4096 chars for
+Telegram) rolls over into a NEW bubble instead of breaking the edit. The
+batch fallback after a failed final edit sends only the unlanded tail.
+_Avoid_: Message (the one-shot send path), edit window (the bubble is the
+message, not a window over one)
 
 **Cost ledger**:
 The pricing side of the agent: token usage priced per model (override rates
@@ -160,6 +192,7 @@ and grants are HMAC-signed, the agent's events advisory); a decided request
 leaves the pending board. Honest boundary: freeform string extraction is
 best-effort, not confinement — the ADR-0019 OS sandbox remains the strict
 tier.
+
 **Memory consolidation**:
 The declarative-memory half of "gets smarter over time" (ADR-0040, issue #19):
 after a run, an inert-by-default `agent_end` extension (enabled via
@@ -301,6 +334,7 @@ build, and the transport offset cursors persist, so no message is lost or
 replayed. Gated: clean worktree, on `main`, ff-only merge, build exit 0;
 any failure leaves the old code serving and never restarts.
 _Avoid_: Deploy script (the runner is typed, tested, gate-checked in-repo)
+
 **Model hotswap**:
 The gateway-local `/model` command (ADR-0033): a persisted per-profile
 active-model override (`{provider, model}` under
@@ -338,6 +372,19 @@ is SKIPped with the reason named, all-SKIP is exit 0, and exit 1 means exactly
 runs stay silent. `docs/live-verification.md` holds the operator ledger: one
 checkbox per ADR follow-up that defers a live pass to the operator.
 _Avoid_: CI test (it is an operator gate, not part of the default matrix)
+
+**Transport limits**:
+The gateway's transport breadth contract (ADR-0062): Slack receive is REST
+long-poll by default, or Socket Mode (websocket) when `SLACK_SOCKET_MODE=1`
+with `AXIOM_SLACK_APP_TOKEN` — Socket Mode frames are treated as untrusted
+input (validated, replay-cached, url-confined to `wss:` on slack.com, secrets
+redacted from logs; a 9-case threat corpus pins it). Broadcasts (`/announce`,
+`deliverToAll`) reach every active transport: a `deliverTo` entry that names a
+transport goes there alone, an unnamed entry goes to the primary and every
+built fan-out sibling, each labelled by its own name in the delivery ledger.
+`docs/transport-audit.md` is the honest inventory of every Discord/Slack/Signal
+path with status live / built-not-live / paper.
+_Avoid_: Single-transport assumption (broadcasts are multi-platform now)
 
 **Peer coordination**:
 Instances of axiom-agent anchored to the same project root (AXIOM_PROJECT_ROOT)

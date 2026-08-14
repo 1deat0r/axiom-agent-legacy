@@ -23,11 +23,19 @@ import { FileStreamJournal, recoverInterruptedStreams, streamJournalPath } from 
 import { DiscordTransport, FileDiscordCursorStore, HttpDiscordClient } from "../gateway/transports/discord.js";
 import { CliSignalClient, SignalTransport } from "../gateway/transports/signal.js";
 import { FileSlackCursorStore, HttpSlackClient, SlackTransport } from "../gateway/transports/slack.js";
+import {
+	defaultSlackSocketFactory,
+	isSlackSocketModeEnabled,
+	SLACK_SOCKET_MAX_FRAME_CHARS,
+	SLACK_SOCKET_RECONNECT_MS,
+	type SlackSocketApi,
+	SlackSocketTransport,
+} from "../gateway/transports/slack-socket.js";
 import { FileTelegramOffsetStore, HttpTelegramClient, TelegramTransport } from "../gateway/transports/telegram.js";
 import type { GatewayTransport } from "../gateway/types.js";
 
 export const GATEWAY_USAGE =
-	"axiom gateway [--profile <name>] [--project <name>] [--transport signal|telegram|discord|slack] [--telegram-token <token>] [--discord-token <token>] [--slack-token <token>] [--signal-cli <path>] [--signal-account <acct>] [--update-repo <path>]";
+	"axiom gateway [--profile <name>] [--project <name>] [--transport signal|telegram|discord|slack] [--telegram-token <token>] [--discord-token <token>] [--slack-token <token>] [--slack-app-token <token>] [--signal-cli <path>] [--signal-account <acct>] [--update-repo <path>]";
 
 export interface GatewayStartOptions {
 	transport: "signal" | "telegram" | "discord" | "slack";
@@ -36,6 +44,10 @@ export interface GatewayStartOptions {
 	discordToken?: string;
 	/** --slack-token <token> (required for the slack transport). */
 	slackToken?: string;
+	/** --slack-app-token <xapp token> — required when SLACK_SOCKET_MODE is on. */
+	slackAppToken?: string;
+	/** SLACK_SOCKET_MODE on: receive over the Socket Mode websocket, not REST poll. */
+	slackSocketMode?: boolean;
 	/** signal-cli binary path (default "signal-cli" on PATH). */
 	signalCliPath?: string;
 	/** The linked signal-cli account to send/receive under (E.164). */
@@ -101,6 +113,23 @@ export function resolveGatewayStart(
 		if (!slackToken) {
 			return { ok: false, error: "--transport slack requires --slack-token or AXIOM_SLACK_BOT_TOKEN" };
 		}
+		// Socket Mode (ADR-0062): opt in via SLACK_SOCKET_MODE; the app-level
+		// token opens the websocket while the bot token keeps sending. REST-poll
+		// receive stays the default when the gate is unset.
+		if (isSlackSocketModeEnabled(env)) {
+			const slackAppToken = readVal(args, "--slack-app-token") ?? env.AXIOM_SLACK_APP_TOKEN;
+			if (!slackAppToken) {
+				return {
+					ok: false,
+					error: "SLACK_SOCKET_MODE requires AXIOM_SLACK_APP_TOKEN (an app-level xapp- token) or --slack-app-token",
+				};
+			}
+			return {
+				ok: true,
+				profile,
+				opts: { transport, slackToken, slackAppToken, slackSocketMode: true, project, updateRepo },
+			};
+		}
 		return { ok: true, profile, opts: { transport, slackToken, project, updateRepo } };
 	}
 	if (transport === "discord") {
@@ -130,7 +159,7 @@ export async function handleGatewayCommand(
 	if (args[0] !== "gateway") return false;
 	if (args.includes("--help") || args.includes("-h")) {
 		console.log(
-			`${GATEWAY_USAGE}\n\nThe axiom assistant over Signal (signal-cli), Telegram, Discord, or Slack\n(Bot/Web API): the active profile's SOUL.md rides the prompt; gateway-local\ncommands (/help, /profiles, /projects, /soul) never reach the model. Configure\nsenders in <AXIOM_HOME>/gateway/config.json. Telegram, Discord, and Slack deny unknown\nsenders by default (allowlist the owner's personal chat / user id); never\ncommit a bot token.`,
+			`${GATEWAY_USAGE}\n\nThe axiom assistant over Signal (signal-cli), Telegram, Discord, or Slack\n(Bot/Web API): the active profile's SOUL.md rides the prompt; gateway-local\ncommands (/help, /profiles, /projects, /soul) never reach the model. Configure\nsenders in <AXIOM_HOME>/gateway/config.json. Telegram, Discord, and Slack deny unknown\nsenders by default (allowlist the owner's personal chat / user id); never\ncommit a bot token. Slack receive is REST long-poll by default; set\nSLACK_SOCKET_MODE=1 with AXIOM_SLACK_APP_TOKEN to receive over Socket Mode.`,
 		);
 		return true;
 	}
@@ -258,7 +287,29 @@ export async function defaultGatewayStart(profile: string, opts: GatewayStartOpt
 /** Real transport selection: telegram (Bot API) or signal (signal-cli, default). */
 export function buildTransport(opts: GatewayStartOptions, axiomHomeDir: string): GatewayTransport {
 	if (opts.transport === "slack") {
-		const client = new HttpSlackClient({ token: opts.slackToken ?? "" });
+		const slackToken = opts.slackToken ?? "";
+		if (opts.slackSocketMode === true) {
+			// Socket Mode receive: the app token opens the websocket link, the
+			// bot token still sends. resolveGatewayStart already failed fast for
+			// a missing app token; an empty token here is a programming error.
+			const appToken = opts.slackAppToken ?? "";
+			if (appToken === "") {
+				throw new Error("SLACK_SOCKET_MODE requires a slack app token (AXIOM_SLACK_APP_TOKEN)");
+			}
+			const botClient = new HttpSlackClient({ token: slackToken });
+			const appClient = new HttpSlackClient({ token: appToken });
+			const api: SlackSocketApi = {
+				appsConnectionsOpen: () => appClient.appsConnectionsOpen(),
+				postMessage: (input) => botClient.postMessage(input),
+			};
+			return new SlackSocketTransport(api, {
+				secrets: [appToken, slackToken],
+				reconnectDelayMs: envInt("SLACK_SOCKET_RECONNECT_MS", SLACK_SOCKET_RECONNECT_MS),
+				maxFrameChars: envInt("SLACK_SOCKET_MAX_FRAME_CHARS", SLACK_SOCKET_MAX_FRAME_CHARS),
+				socketFactory: defaultSlackSocketFactory,
+			});
+		}
+		const client = new HttpSlackClient({ token: slackToken });
 		const cursorStore = new FileSlackCursorStore(join(axiomHomeDir, "gateway", "slack-cursor.json"));
 		return new SlackTransport(client, { cursorStore });
 	}
