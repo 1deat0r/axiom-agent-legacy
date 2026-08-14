@@ -50,6 +50,14 @@ unset RLM_GLOBAL_HARNESS_STATE_DIR RLM_HARNESS_STATE_DIR
 # makes resolveGatewayStart's transport-selection assertions drift).
 unset AXIOM_TELEGRAM_BOT_TOKEN AXIOM_DISCORD_BOT_TOKEN AXIOM_SLACK_BOT_TOKEN
 unset AXIOM_UPDATE_REPO AXIOM_BIN
+# An anchored session's project root would activate the root guard, the
+# workspace guard, the fence, and the git guard inside unrelated suites whose
+# tests touch outside paths — scrub the anchor and the guard config so the
+# suite runs neutral without a manual unset.
+unset AXIOM_PROJECT_ROOT
+unset AXIOM_ROOT_GUARD_ALLOW AXIOM_ROOT_GUARD_DENY AXIOM_ROOT_GUARD_STATE_DIR
+unset AXIOM_ROOT_GUARD_APPROVAL_TIMEOUT_MS AXIOM_GIT_GUARD_ALLOW
+unset AXIOM_FENCE_ALLOW AXIOM_FENCE_ALLOW_HOSTS
 
 echo "Running tests without API keys or live-agent env..."
 npm test

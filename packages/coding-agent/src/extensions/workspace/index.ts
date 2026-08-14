@@ -15,8 +15,11 @@
  * OS-sandbox strict tier, a separate follow-up. This rung pins the structured
  * write tool and anchors cwd.
  */
+import { envList } from "../../core/env-list.js";
 import type { ExtensionAPI } from "../../core/extensions/types.js";
-import { decideEdit, realpathX } from "./guard.js";
+import { appendAudit, listGrantPrefixes, resolveScopeDir } from "../../core/root-guard/store.js";
+import { axiomHome } from "../profile/registry.js";
+import { decideEdit, realpathX, toAbsolute } from "./guard.js";
 
 export { decideEdit, isWithin, realpathX, toAbsolute } from "./guard.js";
 
@@ -25,6 +28,10 @@ export interface WorkspaceGuardOptions {
 	root?: string;
 	/** Base for resolving relative paths (tests). Defaults to process.cwd(). */
 	cwd?: string;
+	/** Extra allow prefixes (ADR-0052). Defaults to AXIOM_ROOT_GUARD_ALLOW plus active grants. */
+	allowPrefixes?: readonly string[];
+	/** Deny prefixes (win over allows, even inside the root). Defaults to AXIOM_ROOT_GUARD_DENY. */
+	denyPrefixes?: readonly string[];
 }
 
 /**
@@ -37,13 +44,61 @@ export function createWorkspaceGuard(options: WorkspaceGuardOptions = {}): (pi: 
 		const rawRoot = options.root ?? process.env.AXIOM_PROJECT_ROOT;
 		if (!rawRoot) return; // inert unless a project root is anchored
 		const cwd = options.cwd ?? process.cwd();
+		const allowPrefixes = options.allowPrefixes ?? envList(process.env.AXIOM_ROOT_GUARD_ALLOW) ?? [];
+		const denyPrefixes = options.denyPrefixes ?? envList(process.env.AXIOM_ROOT_GUARD_DENY) ?? [];
 		let rootReal: string | undefined;
+		let scope: string | undefined;
 		pi.on("tool_call", async (event) => {
 			if (event.toolName !== "edit") return undefined;
 			const raw = (event.input as { path?: unknown }).path;
 			if (typeof raw !== "string" || raw.length === 0) return undefined;
 			if (rootReal === undefined) rootReal = await realpathX(rawRoot);
-			return await decideEdit(rootReal, cwd, raw);
+			// Static policy first; approved grants (ADR-0052) are the recorded escape.
+			const blocked = await decideEdit(rootReal, cwd, raw, { allowPrefixes, denyPrefixes });
+			if (!blocked) return undefined;
+			if (scope === undefined) {
+				const stateDir = process.env.AXIOM_ROOT_GUARD_STATE_DIR ?? axiomHome();
+				// Fail closed with the curated block when the store is unusable:
+				// a raw ENOTDIR/EACCES here would surface as a bare extension
+				// error instead of the guard's plain-English reason.
+				try {
+					scope = await resolveScopeDir(stateDir, rawRoot);
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					return {
+						block: true,
+						reason:
+							`Root guard could not verify this edit because its store failed (${message}). ` +
+							"Fix AXIOM_ROOT_GUARD_STATE_DIR and retry.",
+					};
+				}
+			}
+			const grants = await listGrantPrefixes(scope);
+			const withGrants =
+				grants.length === 0
+					? blocked
+					: await decideEdit(rootReal, cwd, raw, {
+							allowPrefixes: [...allowPrefixes, ...grants],
+							denyPrefixes,
+						});
+			if (!withGrants) {
+				// A failed use-audit must not turn an authorized call into a raw
+				// error: the grant itself is already recorded in grants.jsonl.
+				try {
+					await appendAudit(scope, { event: "grant-use", tool: "edit", paths: [toAbsolute(raw, cwd)] });
+				} catch {
+					/* audit degraded; the grant record is the source of truth */
+				}
+				return undefined;
+			}
+			// Edit blocks are audited like the shell gate; a failed block-audit
+			// must not replace the curated reason with a raw store error.
+			try {
+				await appendAudit(scope, { event: "block", tool: "edit", paths: [toAbsolute(raw, cwd)] });
+			} catch {
+				/* audit degraded; the block reason still reaches the model */
+			}
+			return blocked;
 		});
 	};
 }

@@ -202,6 +202,31 @@ export const COMMAND_SPECS: readonly CommandSpec[] = [
 			"nothing is written into the repo.",
 	},
 	{
+		path: ["root-guard"],
+		usage: "root-guard <list|approve|reject>",
+		summary: "Approve or reject root-guard escape requests (ADR-0052)",
+		description:
+			"The operator's side of the root guard's approval loop: pending plain-English " +
+			"requests filed by an anchored agent, decided via approve/reject. Flags: --root " +
+			"<path> (project root), --state-dir <path>, --json (list), --help. State lives under " +
+			"<axiom home>/root-guard/<project-hash>/; nothing is written into the repo.",
+	},
+	{
+		path: ["root-guard", "list"],
+		usage: "root-guard list [--json]",
+		summary: "List pending escape requests and recent decisions",
+	},
+	{
+		path: ["root-guard", "approve"],
+		usage: "root-guard approve <id> [--note <text>]",
+		summary: "Grant the requested paths (recorded in grants + audit)",
+	},
+	{
+		path: ["root-guard", "reject"],
+		usage: "root-guard reject <id> [--note <text>]",
+		summary: "Deny the request (recorded in the audit log)",
+	},
+	{
 		path: ["peers", "list"],
 		usage: "peers list [--json]",
 		summary: "List co-anchored peers and their presence (aligned table, relative times)",

@@ -129,11 +129,22 @@ onto them.
 _Avoid_: Reasoning level, intelligence slider
 
 **Root guard**:
-The ADR-0014 rung-3 enforcement: an axiom extension, inert unless a run is
-anchored by AXIOM_PROJECT_ROOT, that blocks an `edit` whose resolved path
-leaves the project root, returning a plain-English reason surfaced to the
-model (ADR-0018). Freeform bash/ipython confinement is the OS-sandbox tier,
-recorded as a follow-up.
+The ADR-0014 rung-3 enforcement: axiom extensions, inert unless a run is
+anchored by AXIOM_PROJECT_ROOT, that confine the file-touching tools to the
+project root. The workspace guard (ADR-0018) blocks an `edit` whose resolved
+path leaves the root. The root guard (ADR-0052) scans `bash`/`ipython` for
+literal path tokens and blocks, by default, ANY outside path — strict
+block-by-default. The operator relaxes it with `AXIOM_ROOT_GUARD_ALLOW`
+(allow prefixes; the exported `INFRA_ALLOW_PREFIXES` list is the opt-in
+convenience set) and hardens it with `AXIOM_ROOT_GUARD_DENY` (wins
+everywhere). Escapes need plain-English approval: the model files a request
+with the `request_root_access` tool and waits; the operator decides with
+`axiom root-guard approve|reject <id>`. Every block, request, decision,
+grant, and grant-use lands in an append-only audit log
+(`<axiom home>/root-guard/<project-hash>/audit.jsonl`); a decided request
+leaves the pending board. Honest boundary: freeform string extraction is
+best-effort, not confinement — the ADR-0019 OS sandbox remains the strict
+tier.
 **Memory consolidation**:
 The declarative-memory half of "gets smarter over time" (ADR-0040, issue #19):
 after a run, an inert-by-default `agent_end` extension (enabled via
