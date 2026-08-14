@@ -1,0 +1,52 @@
+name: Agent task
+description: A task with the five contract parts. Triage sets the role.
+labels: [needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read the readiness contract in `docs/agents/triage-labels.md` before you file.
+        An issue is ready-for-agent only when all five parts are present.
+        This form pre-applies `needs-triage`. A maintainer upgrades the label
+        to `ready-for-agent` when the body meets the contract.
+  - type: input
+    id: goal
+    attributes:
+      label: Goal
+      description: One sentence. States the outcome.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: A checklist. Each item must be verifiable.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Lists what the issue does not cover.
+    validations:
+      required: true
+  - type: dropdown
+    id: adr
+    attributes:
+      label: ADR status
+      description: One capability, one ADR.
+      options:
+        - ADR required
+        - ADR not required
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification plan
+      description: How to prove the work. Red tests first. ./test.sh, biome, and tsgo clean.
+    validations:
+      required: true

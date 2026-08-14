@@ -1,0 +1,35 @@
+name: Bug report
+description: Report a bug. The triage workflow applies needs-triage.
+labels: [needs-triage]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The behavior you saw. Be specific.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: The behavior you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: An ordered list. Number each step.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Logs, command output, or session files.
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, node version, commit hash.

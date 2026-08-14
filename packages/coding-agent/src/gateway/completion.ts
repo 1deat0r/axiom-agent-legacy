@@ -99,6 +99,13 @@ export interface CliCompletionOptions {
 	 * reply resumes on a small session instead of prefilling a huge one.
 	 */
 	compactBefore?: boolean;
+	/**
+	 * Timeout for runs that compact first (ADR-0050). Compaction summarizes
+	 * the whole session with a model call, so it can take minutes on a large
+	 * session; such runs get this (larger) budget instead of `timeoutMs`.
+	 * Defaults to 600000.
+	 */
+	compactTimeoutMs?: number;
 }
 
 /** Real completion runner: shells the axiom CLI in print mode under --profile. */
@@ -107,6 +114,7 @@ export class CliCompletionRunner implements CompletionRunner {
 	private readonly prefix: string[];
 	private readonly printFlag: string;
 	private readonly timeoutMs: number;
+	private readonly compactTimeoutMs: number;
 	private readonly projectRoot?: string;
 	private readonly compactBefore: boolean;
 	private readonly confinement?: { bwrap?: string; axiomHome?: string; agentHome?: string; shadowDirs?: string[] };
@@ -116,6 +124,7 @@ export class CliCompletionRunner implements CompletionRunner {
 		this.prefix = child.prefix;
 		this.printFlag = options.printFlag ?? "-p";
 		this.timeoutMs = options.timeoutMs ?? 300_000;
+		this.compactTimeoutMs = options.compactTimeoutMs ?? 600_000;
 		this.projectRoot = options.projectRoot;
 		this.compactBefore = options.compactBefore ?? false;
 		this.confinement = options.confinement;
@@ -214,12 +223,13 @@ export class CliCompletionRunner implements CompletionRunner {
 					/* drain stderr; surface its tail when the child exits nonzero */
 					stderr = appendTail(stderr, d.toString("utf8"), COMPLETION_STDERR_TAIL_MAX);
 				});
+				const timeoutMs = (input.compactBefore ?? this.compactBefore) ? this.compactTimeoutMs : this.timeoutMs;
 				const timer = setTimeout(() => {
 					if (settled) return;
 					settled = true;
 					child.kill("SIGKILL");
-					reject(new Error(`completion timed out after ${this.timeoutMs}ms: ${[this.bin, ...args].join(" ")}`));
-				}, this.timeoutMs);
+					reject(new Error(`completion timed out after ${timeoutMs}ms: ${[this.bin, ...args].join(" ")}`));
+				}, timeoutMs);
 				timer.unref?.();
 				child.on("error", (error) => {
 					if (settled) return;
@@ -338,12 +348,13 @@ export class CliCompletionRunner implements CompletionRunner {
 					/* drain stderr; surface its tail when the child exits nonzero */
 					stderr = appendTail(stderr, d.toString("utf8"), COMPLETION_STDERR_TAIL_MAX);
 				});
+				const timeoutMs = (input.compactBefore ?? this.compactBefore) ? this.compactTimeoutMs : this.timeoutMs;
 				const timer = setTimeout(() => {
 					if (settled) return;
 					settled = true;
 					child.kill("SIGKILL");
-					reject(new Error(`completion timed out after ${this.timeoutMs}ms: ${[this.bin, ...args].join(" ")}`));
-				}, this.timeoutMs);
+					reject(new Error(`completion timed out after ${timeoutMs}ms: ${[this.bin, ...args].join(" ")}`));
+				}, timeoutMs);
 				timer.unref?.();
 				child.on("error", (error) => {
 					if (settled) return;

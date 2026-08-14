@@ -19,6 +19,21 @@ The act of re-implementing an archived axiom capability on the baseline
 (ADR-0015), red-first, one tracker issue per port (`docs/ports.md`).
 _Avoid_: Migration, rewrite
 
+**Role label**:
+One of five labels on every issue. Set it in the create command; exactly one
+at all times (`docs/agents/triage-labels.md`).
+_Avoid_: Status, state
+
+**Readiness contract**:
+The five parts an issue body needs before `ready-for-agent`: goal, acceptance
+criteria, scope, ADR status, verification plan.
+_Avoid_: Spec, ready bar
+
+**Close ritual**:
+The audit comment (merge commit, ADR, handoff) that precedes every issue
+close (`docs/agents/issue-tracker.md`).
+_Avoid_: Done note
+
 **Axiom home**:
 The directory holding axiom-owned durable state (ledger config, memory store,
 profiles): `AXIOM_HOME`, default `~/.axiom`. Baseline-independent by design —
@@ -210,6 +225,18 @@ design (not confinement — that stays ADR-0019); escaped via
 `AXIOM_GIT_GUARD_ALLOW` (exact commands) or the operator's own terminal;
 `user_bash` stays unguarded (the operator has authority).
 _Avoid_: Sandbox, confinement (a guard, not a wall — the OS tier stays the wall)
+
+**Completion resilience**:
+The ADR-0051 gateway defense-in-depth: transient completion failures (SIGTERM
+143, SIGKILL 137, timeout, busy session, spawn error) are classified
+(`completion-failure.ts`) and retried once with compaction dropped, streaming
+into the same bubble; the user-facing failure text is one short sentence and
+never the command line. Telegram re-deliveries of the same (text, date) are
+deduped in-window, the post-/update restart waits for in-flight runs, and
+compact-before runs get their own longer timeout. Env knobs:
+`GATEWAY_COMPLETION_TIMEOUT_MS`, `GATEWAY_COMPACT_TIMEOUT_MS`,
+`GATEWAY_COMPLETION_RETRIES`, `GATEWAY_COMPLETION_RETRY_DELAY_MS`,
+`GATEWAY_RESTART_GRACE_MS`, `GATEWAY_MESSAGE_DEDUP_MS`.
 
 **Self-update**:
 The gateway-local `/update` command (ADR-0034): fetch + report, or `/update
