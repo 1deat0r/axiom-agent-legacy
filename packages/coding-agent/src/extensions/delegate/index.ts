@@ -5,7 +5,9 @@
  *
  * Calling `delegate` spawns isolated helper processes (via `--mode rpc`), runs
  * a single bounded task (or a batch in parallel), and returns ONLY compact
- * result blocks — single: `{ok, summary, tokens, cost, helper?, error?}`;
+ * result blocks — single: `{ok, summary, handoff?, tokens, cost, helper?,
+ * error?}` (the Ralph handoff, issue #33, is the bounded structured report
+ * the helper is asked to end with);
  * batch (`tasks[]`): an aggregate `{ok, delegations[], tokens, cost}`. The
  * helpers' intermediate tool calls and full context never enter the parent
  * session: a multi-step pipeline collapses into one zero-context-cost turn,
@@ -29,6 +31,7 @@ import {
 	withTimeout,
 } from "./background.js";
 import { createRpcClientBridge, parseModelRef, type RpcDelegateBridge } from "./bridge.js";
+import { parseDelegateHandoff } from "./handoff.js";
 import {
 	DEFAULT_SUMMARY_MAX_CHARS,
 	emptyAccounting,
@@ -123,6 +126,7 @@ async function runDelegation(
 			{
 				ok: true,
 				summary: run.lastAssistantText,
+				handoff: parseDelegateHandoff(run.lastAssistantText),
 				tokens: run.stats.tokens ?? emptyAccounting(),
 				cost: run.stats.cost,
 				helper: { name, model, sessionId: run.stats.sessionId },

@@ -276,3 +276,14 @@ byte-offset cursor. Agent tools: peers_list, peers_send, peers_inbox,
 peers_intent; CLI: `axiom peers [list|inbox]`, `axiom peers msg <id|*> <text>`,
 `axiom peers group <text>`. Inert unless anchored; zero new dependencies.
 _Avoid_: Harness sub-agents (RLM children are parent-to-child, not siblings)
+
+**Ralph handoff**:
+The bounded structured report a delegate helper ends its run with (issue #33,
+ADR-0054): five capped fields — status, summary, evidence, next steps,
+blockers — parsed from the helper's final reply into `DelegateResult.handoff`.
+The helper prompt (`buildHelperPrompt`) asks every helper for it; helpers that
+omit it still return the old compact result. Field caps (status 100, summary
+2000, up to 8 evidence items of 500 chars, 8 next steps of 300, 8 blockers of
+300) keep the block bounded no matter what the helper returns.
+_Avoid_: Transcript, full log, raw summary (the handoff is the structured,
+capped projection; the summary field stays the raw capped closing text)
