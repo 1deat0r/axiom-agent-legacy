@@ -48,10 +48,11 @@ _Avoid_: Design doc, RFC, doc note (an ADR records a decision, not a summary)
 
 **ADR reservation**:
 The ADR number an issue claims at create time, written in the issue title
-(`(ADR-00NN)`). Reservations are unique and ordered: the next open issue takes
-the lowest number the registry does not hold and no other open issue reserves.
-The merging agent verifies the ADR file's number equals the issue's
-reservation; a collision is resolved by renumbering the later reservation.
+(`(ADR-00NN)`), per the allocation convention (ADR-0071). Reservations are
+unique and ordered: the next open issue takes the lowest number the registry
+does not hold and no other open issue reserves. The merging agent verifies
+the ADR file's number equals the issue's reservation; a collision is resolved
+by renumbering the later reservation.
 _Avoid_: Free allocation at branch time, first-write-wins (parallel branches
 cannot see each other's ADR files, so allocation must happen in the tracker)
 
