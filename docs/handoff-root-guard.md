@@ -37,8 +37,11 @@ gateway-resilience ADR-0051) at merge 6f50e9f3a.
   (inert-unanchored, env parsing, grants, audit), workspace edit escapes,
   CLI.
 - Floor on the worktree: `./test.sh` (AXIOM_PROJECT_ROOT unset) — only the
-  documented sandbox known-fails plus two standalone-passing shard flakes;
-  `npx biome check .` clean for all changed files; `tsgo --noEmit` clean.
+  documented sandbox known-fails (4603 x4, 4685 x9, daemon-serialized-refine)
+  plus four standalone-passing shard flakes (daemon-supervisor-process x2,
+  kernel x2); `npx biome check` clean for all feature files (two pre-existing
+  biome errors in origin/main's gh-tooling files are not this feature's);
+  `tsgo --noEmit` clean.
 - NOT verified (honest): no live model/provider run in this sandbox; the
   gateway inline-approve UX is a recorded follow-up.
 

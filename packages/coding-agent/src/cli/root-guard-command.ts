@@ -108,8 +108,9 @@ export async function handleRootGuardCommand(args: string[]): Promise<boolean> {
 			const approved = sub === "approve";
 			await writeDecision(scope, id, { approved, note });
 			if (approved) {
+				// appendGrantIfMissing records the grant AND its audit event
+				// only when it appends — one approval, one audit event.
 				await appendGrantIfMissing(scope, { id, prefixes: request.paths, reason: request.reason });
-				await appendAudit(scope, { event: "grant", id, prefixes: request.paths });
 				console.log(`Approved ${id}: ${request.paths.join(", ")} — the guard now allows these paths.`);
 			} else {
 				await appendAudit(scope, { event: "decision", id, approved: false });

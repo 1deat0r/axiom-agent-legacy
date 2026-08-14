@@ -84,9 +84,7 @@ export function checkPathScope(options: PathScopeOptions): PathScopeDecision {
 		list.slice(0, 3).join(", ") + (list.length > 3 ? ` and ${list.length - 3} more` : "");
 	const parts: string[] = [];
 	if (denied.length > 0) {
-		parts.push(
-			`the operator denied: ${fmt(denied)} (AXIOM_ROOT_GUARD_DENY — no approval can override a deny)`,
-		);
+		parts.push(`the operator denied: ${fmt(denied)} (AXIOM_ROOT_GUARD_DENY — no approval can override a deny)`);
 	}
 	if (outside.length > 0) {
 		parts.push(`outside this project's root (${rootAbs}): ${fmt(outside)}`);

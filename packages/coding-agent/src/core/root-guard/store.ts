@@ -204,17 +204,24 @@ export async function appendGrant(
 }
 
 /**
- * Append a grant only when no grant with the same request id exists yet.
- * The CLI approve path and the agent's polling loop both record the grant;
- * this keeps the append-only ledger to one entry per approval.
+ * Append a grant only when no grant with the same request id exists yet, and
+ * return whether this call appended. The CLI approve path and the agent's
+ * polling loop both record the grant; this keeps the append-only ledger to
+ * one entry per approval. When it appends, it also writes the "grant" audit
+ * event — one writer, one event, so the audit never double-records an
+ * approval. (A read-then-append race between two processes could still
+ * double-write in theory; the grants reader dedupes prefixes and the audit
+ * reader is a log, so the degradation is cosmetic, not accounting.)
  */
 export async function appendGrantIfMissing(
 	scopeDir: string,
 	grant: { id: string; prefixes: string[]; reason: string },
-): Promise<void> {
+): Promise<boolean> {
 	const existing = await readJsonLines<GrantRecord>(join(scopeDir, "grants.jsonl"));
-	if (existing.some((g) => g.id === grant.id)) return;
+	if (existing.some((g) => g.id === grant.id)) return false;
 	await appendGrant(scopeDir, grant);
+	await appendAudit(scopeDir, { event: "grant", id: grant.id, prefixes: grant.prefixes });
+	return true;
 }
 
 /** All approved path prefixes across every grant, deduped. */

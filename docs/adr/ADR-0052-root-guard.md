@@ -99,7 +99,9 @@ the retried `edit`.
   This is not confinement — the ADR-0019 OS sandbox remains the strict tier.
 - Freeform containment is lexical only; a symlink created inside the root
   that points outside is not chased (documented; the `edit` guard still
-  realpaths). The persistent ipython kernel can `cd` into an allowed
+  realpaths). `~-` (bash OLDPWD) is likewise resolved lexically inside the
+  root while the shell would expand it to a possibly-outside directory — the
+  same recorded lexical boundary. The persistent ipython kernel can `cd` into an allowed
   directory and read relative paths that carry no slash token, silently —
   bounded by policy (a `cd` to a non-allowed directory is itself blocked),
   and recorded here rather than hidden.

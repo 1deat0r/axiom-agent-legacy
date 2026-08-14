@@ -278,9 +278,7 @@ describe("workspace guard approval escapes (ADR-0052)", () => {
 			).toBeUndefined();
 			// grant-use escapes are audited, like the shell tools (ADR-0052)
 			const audit = await listAudit(scope);
-			expect(audit.some((e) => e.event === "grant-use" && (e as { tool?: string }).tool === "edit")).toBe(
-				true,
-			);
+			expect(audit.some((e) => e.event === "grant-use" && (e as { tool?: string }).tool === "edit")).toBe(true);
 		} finally {
 			if (prev === undefined) delete process.env.AXIOM_ROOT_GUARD_STATE_DIR;
 			else process.env.AXIOM_ROOT_GUARD_STATE_DIR = prev;

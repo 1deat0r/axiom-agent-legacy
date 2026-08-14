@@ -132,7 +132,10 @@ describe("root guard store (file-backed approval state)", () => {
 			await appendGrant(scope, { id: "rg-1", prefixes: ["/etc"], reason: "read hosts" });
 			await import("node:fs/promises").then(async ({ appendFile }) => {
 				await appendFile(join(scope, "grants.jsonl"), "{not json}\n");
-				await appendFile(join(scope, "grants.jsonl"), `${JSON.stringify({ id: "rg-2", prefixes: ["/var/log"], reason: "logs", grantedAt: Date.now() })}\n`);
+				await appendFile(
+					join(scope, "grants.jsonl"),
+					`${JSON.stringify({ id: "rg-2", prefixes: ["/var/log"], reason: "logs", grantedAt: Date.now() })}\n`,
+				);
 			});
 			expect((await listGrantPrefixes(scope)).sort()).toEqual(["/etc", "/var/log"]);
 		} finally {

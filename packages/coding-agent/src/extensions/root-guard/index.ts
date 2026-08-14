@@ -91,9 +91,9 @@ export interface RootGuardOptions {
 	cwd?: string;
 	/** Approval state root (tests). Defaults to AXIOM_ROOT_GUARD_STATE_DIR or the axiom home. */
 	stateDir?: string;
-	/** Home used for `~` expansion and the default allowlist. Defaults to the process home. */
+	/** Home used for `~` expansion. Defaults to the process home. */
 	home?: string;
-	/** Extra allow prefixes. Defaults to AXIOM_ROOT_GUARD_ALLOW plus the infra set. */
+	/** Extra allow prefixes. Defaults to AXIOM_ROOT_GUARD_ALLOW (strict otherwise). */
 	allowPrefixes?: readonly string[];
 	/** Deny prefixes (win over allows, even inside the root). Defaults to AXIOM_ROOT_GUARD_DENY. */
 	denyPrefixes?: readonly string[];
@@ -124,15 +124,15 @@ function sleepMs(ms: number, signal: AbortSignal | undefined): Promise<void> {
 			done();
 			return;
 		}
-		const timer = setTimeout(done, ms);
-		signal?.addEventListener(
-			"abort",
-			() => {
-				clearTimeout(timer);
-				done();
-			},
-			{ once: true },
-		);
+		const onAbort = () => {
+			clearTimeout(timer);
+			done();
+		};
+		const timer = setTimeout(() => {
+			signal?.removeEventListener("abort", onAbort);
+			done();
+		}, ms);
+		signal?.addEventListener("abort", onAbort, { once: true });
 	});
 }
 
@@ -201,10 +201,22 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 				denyPrefixes,
 			});
 			if (!withGrants) {
-				await appendAudit(scope, { event: "grant-use", tool: event.toolName, paths: decision.paths });
+				// A failed use-audit must not turn an authorized call into a raw
+				// error: the grant itself is already recorded in grants.jsonl.
+				try {
+					await appendAudit(scope, { event: "grant-use", tool: event.toolName, paths: decision.paths });
+				} catch {
+					/* audit degraded; the grant record is the source of truth */
+				}
 				return undefined;
 			}
-			await appendAudit(scope, { event: "block", tool: event.toolName, paths: decision.paths });
+			// A failed block-audit must not replace the curated plain-English
+			// block with a raw store error — the block still stands.
+			try {
+				await appendAudit(scope, { event: "block", tool: event.toolName, paths: decision.paths });
+			} catch {
+				/* audit degraded; the block reason still reaches the model */
+			}
 			return { block: true, reason: decision.reason };
 		});
 
@@ -272,8 +284,9 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 					const decision = await readDecision(scope, id);
 					if (decision) {
 						if (decision.approved) {
+							// appendGrantIfMissing records the grant AND its audit event
+							// only when it appends — one approval, one audit event.
 							await appendGrantIfMissing(scope, { id, prefixes: requestable, reason: params.reason });
-							await appendAudit(scope, { event: "grant", id, prefixes: requestable });
 							return {
 								content: [
 									{
@@ -286,7 +299,9 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 								details: null,
 							};
 						}
-						await appendAudit(scope, { event: "decision", id, approved: false });
+						// The CLI (the normal decision writer) recorded the reject
+						// audit event already; a hand-written decision file is
+						// visible in the decisions dir instead.
 						return {
 							content: [
 								{

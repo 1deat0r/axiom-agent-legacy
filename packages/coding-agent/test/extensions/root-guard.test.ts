@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { handleRootGuardCommand } from "../../src/cli/root-guard-command.js";
 import type { ExtensionAPI, ToolDefinition } from "../../src/core/extensions/types.js";
 import {
 	appendGrant,
@@ -11,7 +12,6 @@ import {
 	resolveScopeDir,
 	writeDecision,
 } from "../../src/core/root-guard/store.js";
-import { handleRootGuardCommand } from "../../src/cli/root-guard-command.js";
 import { createRootGuard, INFRA_ALLOW_PREFIXES } from "../../src/extensions/root-guard/index.js";
 
 const HOME = "/home/alice";
@@ -255,9 +255,7 @@ describe("root guard extension (tool_call gate)", () => {
 		try {
 			const fake = fakePi();
 			// stateDir is a FILE, so the store cannot be created under it
-			createRootGuard({ root, cwd: root, stateDir: state, home: HOME, allowPrefixes: ["/tmp"] })(
-				fake.pi,
-			);
+			createRootGuard({ root, cwd: root, stateDir: state, home: HOME, allowPrefixes: ["/tmp"] })(fake.pi);
 			const res = fromAny<{ block: boolean; reason: string }, unknown>(
 				await fake.toolCall(bashEvent({ command: "cat /tmp/x" })),
 			);
@@ -388,6 +386,8 @@ describe("request_root_access tool (approval loop)", () => {
 			expect(await listGrantPrefixes(scope)).toEqual(["/srv/data"]);
 			const grantsRaw = await readFile(join(scope, "grants.jsonl"), "utf8");
 			expect(grantsRaw.trim().split("\n")).toHaveLength(1);
+			const audit = await listAudit(scope);
+			expect(audit.filter((e) => e.event === "grant")).toHaveLength(1);
 		} finally {
 			await rm(root, { recursive: true, force: true });
 			await rm(state, { recursive: true, force: true });
