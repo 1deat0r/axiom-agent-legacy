@@ -18,7 +18,12 @@ export interface RlmSpawnHandle {
 	model: string;
 }
 
-export type RlmSubagentRegistryStatus = "running" | "completed" | "error";
+/**
+ * Registry status of a direct RLM child. `stalled` means the run is still
+ * `running` but its session dir has had no writes for the configured
+ * threshold (ADR-0067); the parent may cancel it via rlm.delete_subagent.
+ */
+export type RlmSubagentRegistryStatus = "running" | "completed" | "error" | "stalled";
 
 export interface RlmSubagentRegistryEntry {
 	rlm_child_id: string;

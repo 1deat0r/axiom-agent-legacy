@@ -334,6 +334,22 @@ peers_intent; CLI: `axiom peers [list|inbox]`, `axiom peers msg <id|*> <text>`,
 `axiom peers group <text>`. Inert unless anchored; zero new dependencies.
 _Avoid_: Harness sub-agents (RLM children are parent-to-child, not siblings)
 
+**Session stall watchdog**:
+Two hang detectors so no agent stalls silently (ADR-0067, issue #44): (1) the
+stream watchdog in the agent loop measures no-data time between provider
+chunks — a stream that delivers nothing for `AXIOM_STREAM_STALL_TIMEOUT_MS`
+(default 120s) is aborted, retried once (`AXIOM_STREAM_STALL_MAX_ATTEMPTS`,
+default 2), and a repeated stall fails the turn with a recorded error;
+flowing generations are never cut. (2) RLM child liveness marks a running
+child `stalled` in rlm.list_subagents, the live child snapshots, and the
+agents view when its session dir has had no writes for
+`AXIOM_RLM_CHILD_STALL_MS` (default 10 min); cancellation stays a parent
+decision (rlm.delete_subagent). Both knobs accept 0 to disable; invalid
+values fall back to defaults.
+_Avoid_: Gateway completion retry (ADR-0051 covers a child that dies; the
+watchdog covers a child that hangs); generation-length limit (the watchdog
+bounds silence, not output)
+
 **Ralph handoff**:
 The bounded structured report a delegate helper ends its run with (issue #33,
 ADR-0054): five capped fields — status, summary, evidence, next steps,

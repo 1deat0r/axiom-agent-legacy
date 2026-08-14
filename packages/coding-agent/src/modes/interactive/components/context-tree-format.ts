@@ -28,6 +28,8 @@ function statusIcon(status: ContextTreeNode["status"]): string {
 		case "error":
 		case "cancelled":
 			return theme.fg("error", "✗");
+		case "stalled":
+			return theme.fg("warning", "!");
 		default: {
 			const _exhaustive: never = status;
 			return _exhaustive;

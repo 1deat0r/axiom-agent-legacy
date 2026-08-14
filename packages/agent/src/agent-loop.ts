@@ -26,6 +26,29 @@ import type {
 export type AgentEventSink = (event: AgentEvent) => Promise<void> | void;
 
 const ABORT_ERROR_MESSAGE = "Request was aborted";
+
+/** Default no-data threshold for the stream stall watchdog (ADR-0067). */
+export const DEFAULT_STREAM_STALL_TIMEOUT_MS = 120_000;
+
+/** Default total provider attempts before a repeated stall fails the turn. */
+export const DEFAULT_STREAM_STALL_MAX_ATTEMPTS = 2;
+
+/** Error thrown when a provider stream stalls on every allowed attempt. */
+export class StreamStallError extends Error {
+	/** Stable machine-readable code, persisted in the session turn-failure record. */
+	readonly code = "STREAM_STALL";
+	constructor(
+		public readonly stallTimeoutMs: number,
+		public readonly attempts: number,
+	) {
+		super(
+			`[STREAM_STALL] Model generation stalled: no response data for ${stallTimeoutMs}ms on every one of ${attempts} attempts. ` +
+				"The turn failed instead of hanging; you can retry on the next message.",
+		);
+		this.name = "StreamStallError";
+	}
+}
+
 const EMPTY_USAGE: AssistantMessage["usage"] = {
 	input: 0,
 	output: 0,
@@ -89,6 +112,21 @@ function raceWithAbort<T>(operation: Promise<T>, signal: AbortSignal | undefined
 			},
 		);
 	});
+}
+
+/** Race an operation against a no-data stall timeout; the controller is aborted on expiry. */
+async function raceWithStallTimeout<T>(
+	operation: Promise<T>,
+	timeoutMs: number,
+	controller: AbortController,
+	onAbort?: () => void,
+): Promise<T> {
+	const timer = setTimeout(() => controller.abort(), timeoutMs);
+	try {
+		return await raceWithAbort(operation, controller.signal, onAbort);
+	} finally {
+		clearTimeout(timer);
+	}
 }
 
 function maybePromiseWithAbort<T>(
@@ -521,90 +559,134 @@ async function streamAssistantResponse(
 			config.getReasoningForTurn?.({ firstTurn: turnState?.firstTurn ?? true, lastTurn: turnState?.lastTurn }) ??
 			config.reasoning;
 
-		const response = await maybePromiseWithAbort(
-			streamFunction(config.model, llmContext, {
-				...config,
-				reasoning,
-				apiKey: resolvedApiKey,
-				signal,
-			}),
-			signal,
-		);
-		const iterator = response[Symbol.asyncIterator]();
-		const closeIterator = () => {
-			void Promise.resolve(iterator.return?.()).catch(() => undefined);
-		};
-		while (true) {
-			const next = await raceWithAbort<IteratorResult<AssistantMessageEvent>>(
-				iterator.next(),
-				signal,
-				closeIterator,
-			);
-			if (next.done) {
-				break;
+		// Stream stall watchdog (ADR-0067): measure time-since-last-chunk, never
+		// total generation time. A stall aborts the attempt (closing the provider
+		// stream), retries up to streamStallMaxAttempts, and after the final
+		// stall fails the turn with a clear error that the session records.
+		const stallTimeoutMs = config.streamStallTimeoutMs ?? DEFAULT_STREAM_STALL_TIMEOUT_MS;
+		const maxAttempts = Math.max(1, Math.trunc(config.streamStallMaxAttempts ?? DEFAULT_STREAM_STALL_MAX_ATTEMPTS));
+		let attemptsUsed = 0;
+		for (let attempt = 0; ; attempt++) {
+			attemptsUsed = attempt + 1;
+			if (attempt > 0) {
+				// Drop the partial message the aborted attempt may have started;
+				// the retry re-emits message_start with its own partial.
+				if (addedPartial) {
+					context.messages.pop();
+					addedPartial = false;
+					partialMessage = null;
+				}
 			}
-			const event = next.value;
-			switch (event.type) {
-				case "start":
-					partialMessage = event.partial;
-					context.messages.push(partialMessage);
-					addedPartial = true;
-					await emit({ type: "message_start", message: { ...partialMessage } });
-					break;
+			// Each attempt owns its controller: parent aborts propagate through
+			// it, and the stall timer aborts it alone, tearing down the fetch.
+			const attemptController = new AbortController();
+			const onParentAbort = () => attemptController.abort();
+			signal?.addEventListener("abort", onParentAbort, { once: true });
+			try {
+				const response = await maybePromiseWithAbort(
+					streamFunction(config.model, llmContext, {
+						...config,
+						reasoning,
+						apiKey: resolvedApiKey,
+						signal: attemptController.signal,
+					}),
+					attemptController.signal,
+				);
+				const iterator = response[Symbol.asyncIterator]();
+				const closeIterator = () => {
+					void Promise.resolve(iterator.return?.()).catch(() => undefined);
+				};
+				const runAttempt = async (): Promise<AssistantMessage> => {
+					while (true) {
+						const next =
+							stallTimeoutMs > 0
+								? await raceWithStallTimeout(iterator.next(), stallTimeoutMs, attemptController, closeIterator)
+								: await raceWithAbort(iterator.next(), attemptController.signal, closeIterator);
+						if (next.done) {
+							break;
+						}
+						const event = next.value;
+						switch (event.type) {
+							case "start":
+								partialMessage = event.partial;
+								context.messages.push(partialMessage);
+								addedPartial = true;
+								await emit({ type: "message_start", message: { ...partialMessage } });
+								break;
 
-				case "text_start":
-				case "text_delta":
-				case "text_end":
-				case "thinking_start":
-				case "thinking_delta":
-				case "thinking_end":
-				case "toolcall_start":
-				case "toolcall_delta":
-				case "toolcall_end":
-					if (partialMessage) {
-						partialMessage = event.partial;
-						context.messages[context.messages.length - 1] = partialMessage;
-						await emit({
-							type: "message_update",
-							assistantMessageEvent: event,
-							message: { ...partialMessage },
-						});
-					}
-					break;
+							case "text_start":
+							case "text_delta":
+							case "text_end":
+							case "thinking_start":
+							case "thinking_delta":
+							case "thinking_end":
+							case "toolcall_start":
+							case "toolcall_delta":
+							case "toolcall_end":
+								if (partialMessage) {
+									partialMessage = event.partial;
+									context.messages[context.messages.length - 1] = partialMessage;
+									await emit({
+										type: "message_update",
+										assistantMessageEvent: event,
+										message: { ...partialMessage },
+									});
+								}
+								break;
 
-				case "done":
-				case "error": {
-					let finalMessage = getTerminalMessage(event);
-					try {
-						finalMessage = await maybePromiseWithAbort(response.result(), signal);
-					} catch (error) {
-						if (!signal?.aborted || !isAbortError(error)) {
-							throw error;
+							case "done":
+							case "error": {
+								let finalMessage = getTerminalMessage(event);
+								try {
+									finalMessage = await maybePromiseWithAbort(response.result(), signal);
+								} catch (error) {
+									if (!signal?.aborted || !isAbortError(error)) {
+										throw error;
+									}
+								}
+								if (addedPartial) {
+									context.messages[context.messages.length - 1] = finalMessage;
+								} else {
+									context.messages.push(finalMessage);
+								}
+								if (!addedPartial) {
+									await emit({ type: "message_start", message: { ...finalMessage } });
+								}
+								await emit({ type: "message_end", message: finalMessage });
+								return finalMessage;
+							}
 						}
 					}
+
+					const finalMessage = await maybePromiseWithAbort(response.result(), signal);
 					if (addedPartial) {
 						context.messages[context.messages.length - 1] = finalMessage;
 					} else {
 						context.messages.push(finalMessage);
-					}
-					if (!addedPartial) {
 						await emit({ type: "message_start", message: { ...finalMessage } });
 					}
 					await emit({ type: "message_end", message: finalMessage });
 					return finalMessage;
+				};
+				return await runAttempt();
+			} catch (error) {
+				if (signal?.aborted) {
+					// Parent abort keeps its existing behavior (aborted message).
+					throw error;
 				}
+				if (!attemptController.signal.aborted) {
+					// A genuine provider/stream error is never retried as a stall.
+					throw error;
+				}
+				if (attempt + 1 >= maxAttempts) {
+					throw new StreamStallError(stallTimeoutMs, attemptsUsed);
+				}
+				// Stall: the attempt was aborted and its iterator already closed
+				// (closeIterator ran through raceWithAbort); retry with a fresh call.
+			} finally {
+				signal?.removeEventListener("abort", onParentAbort);
 			}
 		}
-
-		const finalMessage = await maybePromiseWithAbort(response.result(), signal);
-		if (addedPartial) {
-			context.messages[context.messages.length - 1] = finalMessage;
-		} else {
-			context.messages.push(finalMessage);
-			await emit({ type: "message_start", message: { ...finalMessage } });
-		}
-		await emit({ type: "message_end", message: finalMessage });
-		return finalMessage;
 	} catch (error) {
 		if (signal?.aborted && isAbortError(error)) {
 			return finishAbortedMessage();

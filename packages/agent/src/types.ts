@@ -258,6 +258,26 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	getContinuationMessages?: (context: GetContinuationMessagesContext, signal?: AbortSignal) => Promise<AgentMessage[]>;
 
 	/**
+	 * Stream stall watchdog: if a provider stream delivers no data for this many
+	 * milliseconds, the request is aborted, retried (see `streamStallMaxAttempts`),
+	 * and after the final attempt fails the turn with a clear error.
+	 *
+	 * The watchdog measures no-data time between chunks, never total generation
+	 * time; long generations with flowing tokens are never cut.
+	 *
+	 * Default: 120000. Set to 0 or a negative value to disable.
+	 */
+	streamStallTimeoutMs?: number;
+
+	/**
+	 * Total provider attempts (initial + retries) before a repeated stall fails
+	 * the turn. The default of 2 means one retry.
+	 *
+	 * Values below 1 are clamped to 1. Only applies when the watchdog is enabled.
+	 */
+	streamStallMaxAttempts?: number;
+
+	/**
 	 * Tool execution mode.
 	 * - "sequential": execute tool calls one by one
 	 * - "parallel": preflight tool calls sequentially, then execute allowed tools concurrently;

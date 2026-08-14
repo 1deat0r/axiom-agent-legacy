@@ -229,6 +229,7 @@ import {
 	type RlmListSubagentsResult,
 	type RlmSpawnHandle,
 	type RlmSubagentRegistryEntry,
+	type RlmSubagentRegistryStatus,
 	type RlmSubagentRuntime,
 	type SubagentRuntimeHost,
 } from "./rlm-runtime.js";
@@ -268,6 +269,13 @@ import {
 	type SlashCommandInfo,
 } from "./slash-commands.js";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.js";
+import {
+	isRlmChildStalled,
+	resolveRlmChildStallMs,
+	resolveStreamStallMaxAttempts,
+	resolveStreamStallTimeoutMs,
+	rlmChildStallRefreshMs,
+} from "./stall-watchdog.js";
 import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-prompt.js";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.js";
 import { createAllToolDefinitions } from "./tools/index.js";
@@ -280,7 +288,7 @@ export type { GoalState, GoalStatus } from "./goals.js";
 export type { SessionStats } from "./session-stats.js";
 export { type ParsedSkillBlock, parseSkillBlock } from "./skill-blocks.js";
 
-export type RlmChildAgentStatus = "queued" | "running" | "done" | "error" | "cancelled";
+export type RlmChildAgentStatus = "queued" | "running" | "done" | "error" | "cancelled" | "stalled";
 
 export interface RlmChildAgentActivity {
 	kind: "waiting" | "writing" | "executing";
@@ -950,6 +958,8 @@ interface RlmChildRun {
 	detachedDeletion?: RlmSubagentRegistryEntry;
 	/** Re-emits the run's rlm_child_update snapshot with its current status. */
 	emitUpdate?: () => void;
+	/** Clears the periodic snapshot refresh timer (stall liveness re-emit). */
+	stallRefresh?: () => void;
 	/** Idempotent child-event forwarder cleanup, once the child runtime exists. */
 	unsubscribe?: () => void;
 }
@@ -9078,6 +9088,8 @@ export class AgentSession {
 			transport: this.settingsManager.getTransport(),
 			maxRetryDelayMs: this.settingsManager.getProviderRetrySettings().maxRetryDelayMs,
 			toolExecution: this.agent.toolExecution,
+			streamStallTimeoutMs: resolveStreamStallTimeoutMs(),
+			streamStallMaxAttempts: resolveStreamStallMaxAttempts(),
 		});
 
 		const child = new AgentSession({
@@ -9127,6 +9139,8 @@ export class AgentSession {
 		run.status = "cancelled";
 		run.error = reason;
 		run.publication.reject(new Error(reason));
+		run.stallRefresh?.();
+		run.stallRefresh = undefined;
 		run.abort();
 		// Surface the cancellation immediately; the run's own terminal update is
 		// delayed indefinitely when the child is stuck mid-stream, which is
@@ -9161,11 +9175,33 @@ export class AgentSession {
 	}
 
 	/** Current direct-child registry for the model-facing rlm.list_subagents API. */
-	async listRlmSubagents(): Promise<RlmListSubagentsResult> {
-		return this._buildRlmSubagentList(await this._agentMessageController?.listAgents());
+	async listRlmSubagents(nowMs?: number): Promise<RlmListSubagentsResult> {
+		return this._buildRlmSubagentList(await this._agentMessageController?.listAgents(), nowMs);
 	}
 
-	private _buildRlmSubagentList(listedAgents?: AgentSessionMessageListResult): RlmListSubagentsResult {
+	/** No-write threshold that marks a running child stalled (ADR-0067). */
+	private _rlmChildStallMs(): number {
+		return resolveRlmChildStallMs();
+	}
+
+	/**
+	 * Project a running child's registry status: `stalled` when its session dir
+	 * has had no writes for the configured threshold. The run's own lifecycle
+	 * status is untouched, so a child that writes again returns to `running`.
+	 */
+	private _projectRlmChildRegistryStatus(
+		runStatus: RlmSubagentRegistryStatus,
+		sessionDir: string | undefined,
+		nowMs: number,
+	): RlmSubagentRegistryStatus {
+		if (runStatus !== "running" || !sessionDir) return runStatus;
+		return isRlmChildStalled(sessionDir, nowMs, this._rlmChildStallMs()) ? "stalled" : "running";
+	}
+
+	private _buildRlmSubagentList(
+		listedAgents?: AgentSessionMessageListResult,
+		nowMs = Date.now(),
+	): RlmListSubagentsResult {
 		const daemonChildren = new Map<string, AgentSessionMessageAgentSummary>();
 		const parentActiveSessionId = listedAgents?.current?.activeSessionId;
 		if (parentActiveSessionId) {
@@ -9187,13 +9223,15 @@ export class AgentSession {
 				continue;
 			}
 			const daemonChild = daemonChildren.get(run.id);
+			const runRegistryStatus: RlmSubagentRegistryStatus =
+				run.status === "done" ? "completed" : run.status === "error" ? "error" : "running";
 			subagents.push({
 				rlm_child_id: run.id,
 				active_session_id: daemonChild?.activeSessionId ?? null,
 				session_id: daemonChild?.sessionId ?? run.session?.sessionId ?? null,
 				session_name: daemonChild?.sessionName ?? run.session?.sessionName ?? run.sessionName,
 				session_dir: run.sessionDir,
-				status: run.status === "done" ? "completed" : run.status === "error" ? "error" : "running",
+				status: this._projectRlmChildRegistryStatus(runRegistryStatus, run.sessionDir, nowMs),
 			});
 			recorded.add(run.id);
 		}
@@ -9743,6 +9781,12 @@ export class AgentSession {
 		this._activeRlmChildRuns.set(run.id, run);
 		const emitChildUpdate = () => {
 			const childModel = childSession?.model ?? modelSelection.model;
+			// A running child whose session dir has gone quiet is reported as
+			// stalled; its lifecycle status stays "running" underneath.
+			const snapshotStatus: RlmChildAgentStatus =
+				run.status === "running" && isRlmChildStalled(childSessionDir, Date.now(), this._rlmChildStallMs())
+					? "stalled"
+					: run.status;
 			this._emit({
 				type: "rlm_child_update",
 				child: {
@@ -9751,7 +9795,7 @@ export class AgentSession {
 					sessionName: childSession?.sessionName ?? sessionName,
 					model: `${childModel.provider}/${childModel.id}`,
 					label,
-					status: run.status,
+					status: snapshotStatus,
 					durationMs,
 					answerPreview,
 					toolUseCount: toolUseCount > 0 ? toolUseCount : undefined,
@@ -9821,6 +9865,14 @@ export class AgentSession {
 				throwIfCancelled();
 				run.status = "running";
 				emitChildUpdate();
+				// Periodic snapshot re-emit so live views mark a stalled child
+				// even though a stalled child sends no events of its own.
+				const stallRefreshMs = rlmChildStallRefreshMs(this._rlmChildStallMs());
+				if (stallRefreshMs !== undefined && this._activeRlmChildRuns.get(run.id) === run) {
+					const timer = setInterval(() => run.emitUpdate?.(), stallRefreshMs);
+					timer.unref?.();
+					run.stallRefresh = () => clearInterval(timer);
+				}
 				const unsubscribeChildEvents = child.subscribe((event) => {
 					if (event.type === "rlm_child_update") {
 						this._emit(event);
@@ -10005,6 +10057,8 @@ export class AgentSession {
 						}
 					}
 				}
+				run.stallRefresh?.();
+				run.stallRefresh = undefined;
 				if (this._activeRlmChildRuns.get(run.id) === run) {
 					if (this._rlmChildSessions.has(run.id)) {
 						this._activeRlmChildRuns.delete(run.id);
