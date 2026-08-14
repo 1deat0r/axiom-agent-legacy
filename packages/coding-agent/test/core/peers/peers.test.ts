@@ -2,10 +2,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import type { BoardFileStat } from "../../../src/core/peers/board.js";
 import {
 	heartbeatRun,
 	inbox,
 	listPeers,
+	type PeekCache,
 	peekInbox,
 	registerRun,
 	sendPeerMessage,
@@ -24,6 +26,89 @@ function scope(): string {
 }
 
 describe("peers facade", () => {
+	describe("peekInbox short circuit (stat-based)", () => {
+		const statA = { size: 100, mtimeMs: 1_800_000_000_000 };
+
+		it("skips board and cursor reads when the board stat is unchanged", () => {
+			const s = scope();
+			try {
+				let reads = 0;
+				const readSlice = (): string => {
+					reads++;
+					return "";
+				};
+				const statFile = (): BoardFileStat => statA;
+				const cache: PeekCache = {};
+
+				expect(peekInbox(s, B, cache, { statSize: () => statA.size, statFile, readSlice }).messages).toHaveLength(
+					0,
+				);
+				const readsAfterFirst = reads;
+				expect(readsAfterFirst).toBeGreaterThan(0);
+				expect(peekInbox(s, B, cache, { statSize: () => statA.size, statFile, readSlice }).messages).toHaveLength(
+					0,
+				);
+				expect(reads).toBe(readsAfterFirst);
+			} finally {
+				rmSync(s, { recursive: true, force: true });
+			}
+		});
+
+		it("re-reads the board on a size-only or mtime-only stat change", () => {
+			const s = scope();
+			try {
+				let reads = 0;
+				const readSlice = (): string => {
+					reads++;
+					return "";
+				};
+				const statFile = (): BoardFileStat => statA;
+				const cache: PeekCache = {};
+				const peek = (): number =>
+					peekInbox(s, B, cache, { statSize: () => statA.size, statFile, readSlice }).messages.length;
+
+				peek();
+				const afterFirst = reads;
+				// size change, same mtime
+				statA.size = 101;
+				peek();
+				expect(reads).toBeGreaterThan(afterFirst);
+				const afterSize = reads;
+				// mtime change, same size
+				statA.mtimeMs = 1_800_000_000_001;
+				peek();
+				expect(reads).toBeGreaterThan(afterSize);
+			} finally {
+				rmSync(s, { recursive: true, force: true });
+			}
+		});
+
+		it("returns the new messages after a changed board, then goes quiet while unchanged", () => {
+			const s = scope();
+			try {
+				let stat = { size: 0, mtimeMs: 1_800_000_000_000 };
+				let boardText = "";
+				const readSlice = (path: string, from: number, to: number): string => {
+					if (path.endsWith(`cursor-${B.instanceId}.json`)) return "0";
+					return boardText.slice(from, to);
+				};
+				const statFile = (): BoardFileStat => stat;
+				const cache: PeekCache = {};
+				const peek = (): string[] =>
+					peekInbox(s, B, cache, { statSize: () => stat.size, statFile, readSlice }).messages.map((m) => m.text);
+
+				expect(peek()).toEqual([]);
+				boardText = `${JSON.stringify({ ts: "t", from: A.instanceId, to: B.instanceId, text: "hi", kind: "msg" })}\n`;
+				stat = { size: boardText.length, mtimeMs: 1_800_000_000_001 };
+				expect(peek()).toEqual(["hi"]);
+				// unchanged stat: quiet again, no parse
+				expect(peek()).toEqual([]);
+			} finally {
+				rmSync(s, { recursive: true, force: true });
+			}
+		});
+	});
+
 	it("two instances see each other; a crashed one goes stale", () => {
 		const s = scope();
 		try {

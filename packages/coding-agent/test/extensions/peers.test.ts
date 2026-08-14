@@ -184,6 +184,52 @@ describe("createPeersExtension", () => {
 		}
 	});
 
+	it("notifies once for unread messages and stays quiet while the board is unchanged", async () => {
+		const homeA = scratch();
+		const homeB = scratch();
+		const s = scratch();
+		const fakeA = fakePi();
+		const fakeB = fakePi();
+		const project = scratch();
+		try {
+			createPeersExtension({
+				root: project,
+				homeDir: homeA,
+				scope: s,
+				uuid: () => `run-a-${uuidCounter++}`,
+				now: () => NOW,
+			})(fakeA.pi);
+			createPeersExtension({
+				root: project,
+				homeDir: homeB,
+				scope: s,
+				uuid: () => `run-b-${uuidCounter++}`,
+				now: () => NOW,
+			})(fakeB.pi);
+			await fire(fakeA.handlers, "session_start", { reason: "startup" }, fakeA.ctx);
+			await fire(fakeB.handlers, "session_start", { reason: "startup" }, fakeB.ctx);
+
+			const idB = resolveInstanceId(homeB).instanceId;
+			await tool(fakeA, "peers_send", { to: idB, text: "wake up" });
+			await fire(fakeB.handlers, "turn_start", { turnIndex: 1, timestamp: NOW }, fakeB.ctx);
+			expect(fakeB.notify.filter((n) => n.message.includes("peer"))).toHaveLength(1);
+
+			// No board writes since the last peek: the same unread message must
+			// not re-notify on the next turn (stat short circuit).
+			await fire(fakeB.handlers, "turn_start", { turnIndex: 2, timestamp: NOW + 1 }, fakeB.ctx);
+			expect(fakeB.notify.filter((n) => n.message.includes("peer"))).toHaveLength(1);
+
+			// A new board write re-reads and notifies again.
+			await tool(fakeA, "peers_send", { to: idB, text: "again" });
+			await fire(fakeB.handlers, "turn_start", { turnIndex: 3, timestamp: NOW + 2 }, fakeB.ctx);
+			expect(fakeB.notify.filter((n) => n.message.includes("peer"))).toHaveLength(2);
+		} finally {
+			rmSync(homeA, { recursive: true, force: true });
+			rmSync(homeB, { recursive: true, force: true });
+			rmSync(s, { recursive: true, force: true });
+			rmSync(project, { recursive: true, force: true });
+		}
+	});
 	it("resolves scope from project root and home", () => {
 		const project = scratch();
 		const home = scratch();
