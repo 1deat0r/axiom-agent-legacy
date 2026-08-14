@@ -319,6 +319,19 @@ state without a menu. The service name is `AXIOM_GATEWAY_SERVICE` (default
 `axiom-telegram-gateway.service`).
 _Avoid_: Transport flag (a connector is the transport plus its credential)
 
+**Live verification**:
+The operator-gated harness for the live passes the ADRs defer (ADR-0058):
+`tools/live-verification/run.mjs` catalogs four checks (provider-chat,
+agent-run, rlm-kernel, gateway-delivery) and runs the subset whose keys are
+present. The exit contract is skip-not-fail: a check with missing requirements
+is SKIPped with the reason named, all-SKIP is exit 0, and exit 1 means exactly
+"a check that ran failed". The workflow
+(`.github/workflows/live-verification.yml`) runs it on dispatch or a PR
+`/run-live` comment and posts the PR report only when something ran, so keyless
+runs stay silent. `docs/live-verification.md` holds the operator ledger: one
+checkbox per ADR follow-up that defers a live pass to the operator.
+_Avoid_: CI test (it is an operator gate, not part of the default matrix)
+
 **Peer coordination**:
 Instances of axiom-agent anchored to the same project root (AXIOM_PROJECT_ROOT)
 see and talk to each other (ADR-0038). Each axiom home has a stable instance ID
