@@ -91,8 +91,18 @@ Reviewer 4 scored 9.0. The last two gaps are closed:
 
 53 tests green. Live proof stands on issues #13, #27, #28, #29.
 
+## Reviewer 5 (blocked)
+
+The wave-5 fixes await an independent re-review. The attempt is blocked, not
+the work: a parallel session cleared the API credentials (~/.axiom/agent
+auth.json is empty), so no reviewer-capable model can spawn. The only
+remaining model (local gemma4:12b) cannot complete a multi-step review.
+Retry the review with the deepseek-v4-pro helper when the credentials
+return. The brief is at /tmp/review5-task.txt on the host.
+
 ## What remains
 
+- Independent re-review of wave 5 (blocked on credentials, see above).
 - Optional: the same treatment for PRs if the PR-triage flag flips to yes.
 - Optional: a scheduled drift-sweep workflow, if unanswered nudges become a
   pattern.
