@@ -655,3 +655,28 @@ describe("rejected mixed request names the dropped denied paths (round 7 MINOR-1
 		}
 	});
 });
+
+describe("partial-grant block reporting (round 9 MINOR-1)", () => {
+	it("names and audits only the still-blocked paths when grants partially unblock", async () => {
+		const root = await makeRoot();
+		const state = await makeRoot();
+		try {
+			const scope = await resolveScopeDir(state, root);
+			await appendGrant(scope, { id: "rg-1", prefixes: ["/mnt"], reason: "backup" });
+			const fake = fakePi();
+			createRootGuard({ root, cwd: root, stateDir: state, home: HOME })(fake.pi);
+			const res = fromAny<{ block: boolean; reason: string }, unknown>(
+				await fake.toolCall(bashEvent({ command: "cat /mnt/x /srv/y" })),
+			);
+			expect(res.block).toBe(true);
+			expect(res.reason).toContain("/srv/y");
+			expect(res.reason).not.toContain("/mnt/x");
+			const audit = await listAudit(scope);
+			const blockEvent = audit.find((e) => e.event === "block") as { paths?: string[] } | undefined;
+			expect(blockEvent?.paths).toEqual(["/srv/y"]);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+			await rm(state, { recursive: true, force: true });
+		}
+	});
+});

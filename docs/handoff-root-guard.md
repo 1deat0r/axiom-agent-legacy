@@ -16,8 +16,8 @@ delegate-env-scrub, review-findings-18, memory-consolidation handoff).
   strict block-by-default (issue #17 criterion a, literally). The
   `INFRA_ALLOW_PREFIXES` list (OS read surface, /tmp, axiom home, ~/.local,
   ~/.config, ~/.cache) is opt-in via `AXIOM_ROOT_GUARD_ALLOW`.
-- Eight independent fresh-context review rounds: 7.5 -> 7.5 -> 8.0 -> 7.8 ->
-  8.8 -> 8.9 -> 9.1 -> 9.4, every finding fixed on the branch (board drain,
+- Nine independent fresh-context review rounds: 7.5 -> 7.5 -> 8.0 -> 7.8 ->
+  8.8 -> 8.9 -> 9.1 -> 9.4 -> (round 9 pending), every finding fixed on the branch (board drain,
   strict default, single audit writer, curated store failures, deny-on-edit,
   relay regression test, static-first gate order, tmp-debris sweep).
 - Escapes: `request_root_access` files a plain-English request and waits
@@ -41,7 +41,9 @@ delegate-env-scrub, review-findings-18, memory-consolidation handoff).
   (approve/reject/timeout/abort/deny-refusal), extension wiring
   (inert-unanchored, env parsing, grants, audit), workspace edit escapes,
   CLI.
-- Floor on the worktree: `./test.sh` (AXIOM_PROJECT_ROOT unset) — only the
+- Floor on the worktree: `./test.sh` — test.sh now scrubs AXIOM_PROJECT_ROOT
+  and the guard/fence/git-guard env itself (round 9 NIT-1), so no manual
+  unset is needed; only the
   documented sandbox known-fails (4603 x4, 4685 x9, daemon-serialized-refine);
   the floor has varied with machine load: the documented known-fails plus zero to four standalone-passing shard flakes across runs (anthropic-oauth, kernel-rlm-heartbeat-skill, daemon-supervisor-process x2, kernel-agent-message/attach-image — every one passes standalone); the latest run had zero flakes; `npx biome check` clean for all feature files (two
   pre-existing biome errors in origin/main's gh-tooling files are not this

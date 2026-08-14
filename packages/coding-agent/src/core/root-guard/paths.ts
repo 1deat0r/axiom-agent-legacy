@@ -36,7 +36,15 @@ export function stripComments(text: string): string {
 }
 
 const ABSOLUTE = `(?:^|${BOUNDARY})/(?!\\/)${TOKEN}+`;
-const BARE_ROOT = `(?:^|${BOUNDARY})/(?=${BOUNDARY}|$)`;
+/**
+ * A standalone `/` counts as the root path only in command-terminal
+ * positions (before end-of-text or a command separator). A `/` followed by
+ * an operand is Python spaced division (`a / b`), not a path — the guard
+ * must never block routine arithmetic. A bare root followed by a PATH
+ * operand (`ls / /tmp`) is skipped: the operand is still extracted, and
+ * this miss is recorded in ADR-0052's honest boundaries.
+ */
+const BARE_ROOT = `(?:^|${BOUNDARY})/(?=\\s*(?:$|;|&|\\||\\)))`;
 const TILDE = `(?:^|${BOUNDARY})~[A-Za-z0-9_.+\\-]*(?:/${TOKEN}+)?`;
 const RELATIVE = `(?:^|${BOUNDARY_NO_DOLLAR})[A-Za-z0-9_.+@\\-]+/${TOKEN}+`;
 const DOTTED_RELATIVE = `(?:^|${BOUNDARY_NO_DOLLAR})\\.\\.?/${TOKEN}+`;

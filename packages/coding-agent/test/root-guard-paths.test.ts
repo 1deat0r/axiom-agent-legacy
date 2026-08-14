@@ -70,3 +70,26 @@ describe("extractCandidatePaths (pure extraction)", () => {
 		expect(extractCandidatePaths(`open(f"/etc/{name}")`)).toEqual(["/etc/"]);
 	});
 });
+
+describe("bare-root token vs arithmetic operators (round 9 MAJOR-1)", () => {
+	it("does not extract the division operator from spaced arithmetic", () => {
+		expect(extractCandidatePaths("x = a / b")).toEqual([]);
+		expect(extractCandidatePaths("print(total / count)")).toEqual([]);
+		expect(extractCandidatePaths("x = a / (b)")).toEqual([]);
+		expect(extractCandidatePaths("x = a/ b")).toEqual([]);
+	});
+
+	it("still extracts a command-terminal bare root", () => {
+		expect(extractCandidatePaths("cd /")).toEqual(["/"]);
+		expect(extractCandidatePaths("rm -rf /")).toEqual(["/"]);
+		expect(extractCandidatePaths("cat / ")).toEqual(["/"]);
+		expect(extractCandidatePaths("rm -rf / && echo done")).toEqual(["/"]);
+		expect(extractCandidatePaths("rm -rf / | tee x")).toEqual(["/"]);
+		expect(extractCandidatePaths("cd /; ls")).toEqual(["/"]);
+	});
+
+	it("does not extract a bare root followed by a path operand (documented miss)", () => {
+		// `ls / /tmp` extracts only /tmp; the bare root operand is skipped.
+		expect(extractCandidatePaths("ls / /tmp")).toEqual(["/tmp"]);
+	});
+});
