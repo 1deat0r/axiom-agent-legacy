@@ -21,6 +21,7 @@ import {
 	heartbeatRun,
 	inbox,
 	listPeers,
+	type PeekCache,
 	type PeersDeps,
 	peekInbox,
 	registerRun,
@@ -76,6 +77,10 @@ export function createPeersExtension(options: PeersExtensionOptions = {}): (pi: 
 			uuid: options.uuid,
 		};
 		let runId: string | undefined;
+		// The turn-start peek cache (issue #30): an unchanged board stat
+		// short-circuits the parse, so the same unread message is never
+		// re-notified every turn.
+		const peekCache: PeekCache = {};
 
 		const ensureRegistered = (model: string): void => {
 			if (runId) return;
@@ -173,7 +178,7 @@ export function createPeersExtension(options: PeersExtensionOptions = {}): (pi: 
 		pi.on("turn_start", (_event, ctx) => {
 			touch();
 			if (ctx.hasUI) {
-				const unread = peekInbox(scope, identity).messages;
+				const unread = peekInbox(scope, identity, peekCache).messages;
 				if (unread.length > 0) {
 					ctx.ui.notify(`${unread.length} new peer message(s) — use peers_inbox to read`, "info");
 				}

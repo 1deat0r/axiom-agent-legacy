@@ -5,7 +5,15 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { appendBoardEntry, readBoardSince, readCursor, writeCursor } from "./board.js";
+import {
+	appendBoardEntry,
+	type BoardDeps,
+	type BoardFileStat,
+	boardStat,
+	readBoardSince,
+	readCursor,
+	writeCursor,
+} from "./board.js";
 import {
 	DEFAULT_STALE_MS,
 	heartbeatPresence,
@@ -110,11 +118,11 @@ export function sendPeerMessage(
 	appendBoardEntry(scope, entry);
 }
 
-function inboxMessages(scope: string, identity: PeerIdentity, markRead: boolean): InboxResult {
-	const cursor = readCursor(scope, identity.instanceId);
-	const { entries, nextCursor } = readBoardSince(scope, cursor);
+function inboxMessages(scope: string, identity: PeerIdentity, markRead: boolean, deps: BoardDeps = {}): InboxResult {
+	const cursor = readCursor(scope, identity.instanceId, deps);
+	const { entries, nextCursor } = readBoardSince(scope, cursor, deps);
 	const mine = entries.filter((e) => e.to === "*" || e.to === identity.instanceId);
-	if (markRead) writeCursor(scope, identity.instanceId, nextCursor);
+	if (markRead) writeCursor(scope, identity.instanceId, nextCursor, deps);
 	return { messages: mine };
 }
 
@@ -123,9 +131,43 @@ export function inbox(scope: string, identity: PeerIdentity): InboxResult {
 	return inboxMessages(scope, identity, true);
 }
 
-/** Read unread messages without marking them read (CLI peek). */
-export function peekInbox(scope: string, identity: PeerIdentity): InboxResult {
-	return inboxMessages(scope, identity, false);
+/**
+ * Per-caller peek state: the last board stat this caller observed. Kept by
+ * the caller across turns so an unchanged board short-circuits the parse.
+ */
+export interface PeekCache {
+	lastBoardStat?: BoardFileStat;
+}
+
+/** True when the board stat has not moved since the caller last peeked. */
+function boardUnchanged(cached: BoardFileStat | undefined, current: BoardFileStat): boolean {
+	return cached !== undefined && cached.size === current.size && cached.mtimeMs === current.mtimeMs;
+}
+
+/**
+ * Read unread messages without marking them read (CLI peek).
+ *
+ * With a caller-held `cache`, an unchanged board (same size + mtime since
+ * the last peek) returns no messages without reading or parsing the board
+ * or the cursor file. The board is append-only, so an unchanged stat means
+ * no new line can have landed; the full unread set is still available via
+ * `inbox`/`peers_inbox`. Callers that want every unread message on every
+ * call (the CLI) simply pass no cache — a cold cache always reads.
+ */
+export function peekInbox(
+	scope: string,
+	identity: PeerIdentity,
+	cache: PeekCache = {},
+	deps: BoardDeps = {},
+): InboxResult {
+	const current = boardStat(scope, deps);
+	if (boardUnchanged(cache.lastBoardStat, current)) {
+		return { messages: [] };
+	}
+	// Snapshot, never alias: the injected stat function (and callers that
+	// mutate the object it returned) must not rewrite the cached observation.
+	cache.lastBoardStat = { ...current };
+	return inboxMessages(scope, identity, false, deps);
 }
 
 /** List peers: own runs, then others split into active and stale. */
