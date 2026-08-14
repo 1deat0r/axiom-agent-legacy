@@ -61,6 +61,14 @@ The workflow .github/workflows/triage.yml enforces two rules:
 The close ritual applies to closes from ADR-0050 (2026-08-14) onward. Earlier
 closes predate the policy and carry no audit comment by design.
 
+3. Weekly sweep. `.github/workflows/issue-hygiene.yml` (ADR-0064) runs every
+   Monday. It lists open issues with missing, conflicting, or unknown role
+   labels, `needs-triage` issues older than seven days, and open issues that
+   reference a branch with commits not on main. It posts one summary comment
+   on the `HYGIENE_SUMMARY_ISSUE` issue and nothing when the problem set is
+   unchanged. It never edits labels, never closes issues, never merges, never
+   deletes branches.
+
 Agents must still set the role at create and post the audit comment at close.
 The workflow is the safety net, not the primary path.
 

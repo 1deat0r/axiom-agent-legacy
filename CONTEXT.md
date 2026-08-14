@@ -34,6 +34,11 @@ The audit comment (merge commit, ADR, handoff) that precedes every issue
 close (`docs/agents/issue-tracker.md`).
 _Avoid_: Done note
 
+**Stale branch**:
+A branch whose work is on main or that no open issue references; the closing
+agent deletes it (`docs/agents/stale-branches.md`, ADR-0064).
+_Avoid_: Old branch, dead branch
+
 **Axiom home**:
 The directory holding axiom-owned durable state (ledger config, memory store,
 profiles): `AXIOM_HOME`, default `~/.axiom`. Baseline-independent by design —
