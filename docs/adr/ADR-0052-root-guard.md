@@ -101,11 +101,14 @@ not on the human (the git-guard precedent, ADR-0049).
 - String extraction is best-effort: variable indirection (`$HOME`, Python
   `os.environ`), `eval`, process substitution, and rewording pass through.
   This is not confinement — the ADR-0019 OS sandbox remains the strict tier.
-- Arithmetic operators are not paths: a bare `/` counts as the root path only
-  in command-terminal positions (before end-of-text or a command separator),
-  so Python spaced division (`a / b`) never blocks. A bare root followed by a
-  path operand (`ls / /tmp`) is skipped — the operand is still extracted, and
-  the miss is recorded here.
+- Arithmetic operators are not paths: a bare `/` reads as the root path
+  unless it starts a division operand (a name, `$`, `(`, or a digit that is
+  not a `>` redirect). Python spaced division (`a / b`, `x = a / (b)`,
+  `x = a / 2`) never blocks, while the destructive bare-root forms
+  (`rm -rf /`, `rm -rf / --no-preserve-root`, `rm -rf /{x}`, `rm -rf /'`,
+  newline/separator continuations, `2>/dev/null`) still do. Recorded
+  trade-offs: `cat / b` misses the bare root (reads as an infix operand) and
+  `a / -1` over-blocks (unary minus reads as an argument).
 - Freeform containment is lexical only; a symlink created inside the root
   that points outside is not chased (documented; the `edit` guard still
   realpaths). `~-` (bash OLDPWD) is likewise resolved lexically inside the

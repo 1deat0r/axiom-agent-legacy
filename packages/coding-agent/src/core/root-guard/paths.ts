@@ -37,14 +37,17 @@ export function stripComments(text: string): string {
 
 const ABSOLUTE = `(?:^|${BOUNDARY})/(?!\\/)${TOKEN}+`;
 /**
- * A standalone `/` counts as the root path only in command-terminal
- * positions (before end-of-text or a command separator). A `/` followed by
- * an operand is Python spaced division (`a / b`), not a path — the guard
- * must never block routine arithmetic. A bare root followed by a PATH
- * operand (`ls / /tmp`) is skipped: the operand is still extracted, and
- * this miss is recorded in ADR-0052's honest boundaries.
+ * A standalone `/` is the root path UNLESS it starts a division operand:
+ * the next non-blank char being a name, `$` (the documented indirection
+ * gap), `(`, or a digit that is not a `>` redirect (`2>/dev/null`). So
+ * Python spaced division (`a / b`, `x = a / (b)`, `x = a / 2`) never
+ * blocks, while the destructive bare-root forms (`rm -rf /`,
+ * `rm -rf / --no-preserve-root`, `rm -rf /{x}`, `rm -rf /'`, newline and
+ * separator continuations) still do. Trade-offs recorded in ADR-0052:
+ * `cat / b` misses the bare root (read as an infix operand) and `a / -1`
+ * over-blocks (unary minus reads as an argument).
  */
-const BARE_ROOT = `(?:^|${BOUNDARY})/(?=\\s*(?:$|;|&|\\||\\)))`;
+const BARE_ROOT = `(?:^|${BOUNDARY})/(?![ \\t]*(?:[A-Za-z_$]|[0-9](?![0-9]*>)|\\())`;
 const TILDE = `(?:^|${BOUNDARY})~[A-Za-z0-9_.+\\-]*(?:/${TOKEN}+)?`;
 const RELATIVE = `(?:^|${BOUNDARY_NO_DOLLAR})[A-Za-z0-9_.+@\\-]+/${TOKEN}+`;
 const DOTTED_RELATIVE = `(?:^|${BOUNDARY_NO_DOLLAR})\\.\\.?/${TOKEN}+`;

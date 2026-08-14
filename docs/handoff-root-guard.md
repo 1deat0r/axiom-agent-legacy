@@ -16,10 +16,10 @@ delegate-env-scrub, review-findings-18, memory-consolidation handoff).
   strict block-by-default (issue #17 criterion a, literally). The
   `INFRA_ALLOW_PREFIXES` list (OS read surface, /tmp, axiom home, ~/.local,
   ~/.config, ~/.cache) is opt-in via `AXIOM_ROOT_GUARD_ALLOW`.
-- Nine independent fresh-context review rounds: 7.5 -> 7.5 -> 8.0 -> 7.8 ->
-  8.8 -> 8.9 -> 9.1 -> 9.4 -> (round 9 pending), every finding fixed on the branch (board drain,
-  strict default, single audit writer, curated store failures, deny-on-edit,
-  relay regression test, static-first gate order, tmp-debris sweep).
+- Ten independent fresh-context review rounds (scores ranged 7.5-9.4), every
+  finding fixed on the branch: board drain, strict default, single audit
+  writer, curated store failures, deny-on-edit, relay regression test,
+  static-first gate order, tmp-debris sweep, bare-root arithmetic precision.
 - Escapes: `request_root_access` files a plain-English request and waits
   (polling, abortable, 5 min default); the operator decides with
   `axiom root-guard approve|reject <id>`. Approvals persist as grants

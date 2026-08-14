@@ -71,25 +71,40 @@ describe("extractCandidatePaths (pure extraction)", () => {
 	});
 });
 
-describe("bare-root token vs arithmetic operators (round 9 MAJOR-1)", () => {
+describe("bare-root token vs arithmetic operators (rounds 9-10)", () => {
 	it("does not extract the division operator from spaced arithmetic", () => {
 		expect(extractCandidatePaths("x = a / b")).toEqual([]);
 		expect(extractCandidatePaths("print(total / count)")).toEqual([]);
 		expect(extractCandidatePaths("x = a / (b)")).toEqual([]);
 		expect(extractCandidatePaths("x = a/ b")).toEqual([]);
+		expect(extractCandidatePaths("x = a / 2")).toEqual([]);
+		expect(extractCandidatePaths("x = a / 2.5")).toEqual([]);
+		expect(extractCandidatePaths("cat / $x")).toEqual([]);
 	});
 
-	it("still extracts a command-terminal bare root", () => {
+	it("still extracts the destructive bare-root forms", () => {
 		expect(extractCandidatePaths("cd /")).toEqual(["/"]);
 		expect(extractCandidatePaths("rm -rf /")).toEqual(["/"]);
 		expect(extractCandidatePaths("cat / ")).toEqual(["/"]);
 		expect(extractCandidatePaths("rm -rf / && echo done")).toEqual(["/"]);
 		expect(extractCandidatePaths("rm -rf / | tee x")).toEqual(["/"]);
 		expect(extractCandidatePaths("cd /; ls")).toEqual(["/"]);
+		expect(extractCandidatePaths("rm -rf / --no-preserve-root")).toEqual(["/"]);
+		expect(extractCandidatePaths("sudo rm -rf / --no-preserve-root")).toEqual(["/"]);
+		expect(extractCandidatePaths("rm -rf /'")).toEqual(["/"]);
+		expect(extractCandidatePaths("rm -rf '/'")).toEqual(["/"]);
+		expect(extractCandidatePaths("rm -rf /{foo,bar}")).toEqual(["/"]);
+		// extractor passes run per pattern (ABSOLUTE before BARE_ROOT), so the
+		// redirect operand precedes the bare root — both are extracted.
+		expect(extractCandidatePaths("rm -rf / 2>/dev/null")).toEqual(["/dev/null", "/"]);
+		expect(extractCandidatePaths("rm -rf /\necho ok")).toEqual(["/"]);
+		expect(extractCandidatePaths("ls / /tmp")).toEqual(["/tmp", "/"]);
 	});
 
-	it("does not extract a bare root followed by a path operand (documented miss)", () => {
-		// `ls / /tmp` extracts only /tmp; the bare root operand is skipped.
-		expect(extractCandidatePaths("ls / /tmp")).toEqual(["/tmp"]);
+	it("documents the accepted trade-offs", () => {
+		// `cat / b` reads the bare root as an infix operand and misses it.
+		expect(extractCandidatePaths("cat / b")).toEqual([]);
+		// `a / -1` reads the unary minus as an argument, so it over-blocks.
+		expect(extractCandidatePaths("x = a / -1")).toEqual(["/"]);
 	});
 });

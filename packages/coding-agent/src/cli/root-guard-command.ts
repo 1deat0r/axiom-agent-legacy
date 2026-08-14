@@ -27,7 +27,7 @@ export const ROOT_GUARD_HELP = `axiom root-guard — approve or reject root-guar
 usage:
   axiom root-guard list                     pending requests and recent decisions
   axiom root-guard approve <id> [--note <text>]  grant the requested paths
-  axiom root-guard reject <id> [--note]     deny the request
+  axiom root-guard reject <id> [--note <text>]  deny the request
 
 flags:
   --root <path>       project root the request belongs to
