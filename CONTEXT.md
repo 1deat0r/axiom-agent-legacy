@@ -82,11 +82,24 @@ _Avoid_: Thread, chat
 **Session budget**:
 The gateway's soft cap on how large a channel session file may grow
 (`GATEWAY_SESSION_BUDGET_BYTES`, 256KB of JSONL, ADR-0041): a session past
-the cap is archived in place (`<id>.jsonl.archived-<ts>`, still found by
-`/search`) and the next run starts fresh, so replies never re-process a
-runaway history. `/new` archives on demand.
+the cap requests pre-run compaction (the completion child summarizes the
+context, so replies never re-process a runaway history); `/new` archives
+the file on demand (`<id>.jsonl.archived-<ts>`, still found by `/search`).
+Since ADR-0055 this is the safety limit; the session token meter is the
+primary trigger.
 _Avoid_: Context window, auto-compaction (the budget is a file-size gate,
 not a token limit)
+
+**Session token meter**:
+The gateway's estimate of the model-facing surface of a channel session
+(`measureSessionTokens`, ADR-0055): reads the session JSONL and prices
+every message entry under a deterministic tokenizer-free heuristic (one
+token per 4 characters plus block and role overhead). A session whose
+surface exceeds `GATEWAY_SESSION_TOKEN_BUDGET` requests pre-run
+compaction. Snapshots are immutable and carry a revision (entries
+consumed).
+_Avoid_: Provider tokenizer, token-based billing (the meter estimates; it
+never reads provider usage)
 
 **Cost ledger**:
 The pricing side of the agent: token usage priced per model (override rates
