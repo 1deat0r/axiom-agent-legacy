@@ -14,10 +14,18 @@ export const GC_RESULT_MARKER = "__AXIOM_KERNEL_GC__";
 /** Env knobs shared with the runtime (rlm.gc.resolve_thresholds). */
 export const GC_CHECK_EVERY_N_CELLS_ENV = "AXIOM_GC_CHECK_EVERY_N_CELLS";
 export const GC_MAX_UNCOLLECTED_OBJECTS_ENV = "AXIOM_GC_MAX_UNCOLLECTED_OBJECTS";
+export const GC_MAX_TRACKED_OBJECTS_ENV = "AXIOM_GC_MAX_TRACKED_OBJECTS";
 
-/** Defaults must match axiom-runtime/src/rlm/gc.py. */
-export const DEFAULT_GC_MAX_UNCOLLECTED_OBJECTS = 100_000;
-export const DEFAULT_GC_MAX_TRACKED_OBJECTS = 1_000_000;
+/**
+ * Defaults must match axiom-runtime/src/rlm/gc.py.
+ *
+ * Ceiling note (mirrors the runtime): the cheap metric is the sum of CPython's
+ * per-generation counters, structurally capped near 720 (thresholds 700/10/10)
+ * with automatic collections on, peaking near 2000 only under extreme churn.
+ * The tracked-object count is the reachable default trigger.
+ */
+export const DEFAULT_GC_MAX_UNCOLLECTED_OBJECTS = 2_000;
+export const DEFAULT_GC_MAX_TRACKED_OBJECTS = 250_000;
 export const DEFAULT_GC_MAX_ESTIMATED_BYTES = 1 << 30; // 1 GiB
 
 /** One snapshot of kernel GC pressure (cheap by default; detailed keys optional). */
@@ -52,6 +60,36 @@ export interface KernelGcOptions {
 	checkEveryNCells?: number;
 	/** Overrides AXIOM_GC_MAX_UNCOLLECTED_OBJECTS. */
 	maxUncollectedObjects?: number;
+	/** Overrides AXIOM_GC_MAX_TRACKED_OBJECTS. */
+	maxTrackedObjects?: number;
+}
+
+/** Decide whether a pressure snapshot crosses the collect thresholds. */
+export function crossesCollectThreshold(
+	pressure: GcPressure,
+	options: { maxUncollectedObjects: number; maxTrackedObjects: number },
+): boolean {
+	if (pressure.uncollectedObjects >= options.maxUncollectedObjects) return true;
+	return pressure.trackedObjects !== undefined && pressure.trackedObjects > options.maxTrackedObjects;
+}
+
+/**
+ * Validate programmatic GC options the same way the env path validates:
+ * a missing or non-positive-integer checkEveryNCells disables the check
+ * entirely, and non-finite thresholds fall back to their defaults at use.
+ */
+export function sanitizeGcOptions(options: KernelGcOptions | undefined): KernelGcOptions | undefined {
+	if (!options) return undefined;
+	const n = options.checkEveryNCells;
+	if (typeof n !== "number" || !Number.isInteger(n) || n <= 0) return undefined;
+	const sanitized: KernelGcOptions = { checkEveryNCells: n };
+	if (Number.isFinite(options.maxUncollectedObjects)) {
+		sanitized.maxUncollectedObjects = options.maxUncollectedObjects;
+	}
+	if (Number.isFinite(options.maxTrackedObjects)) {
+		sanitized.maxTrackedObjects = options.maxTrackedObjects;
+	}
+	return sanitized;
 }
 
 function parsePositiveIntEnv(raw: string | undefined): number | undefined {
@@ -66,7 +104,8 @@ export function resolveGcOptionsFromEnv(env: NodeJS.ProcessEnv = process.env): K
 	if (!checkEveryNCells) return undefined;
 	const maxUncollectedObjects =
 		parsePositiveIntEnv(env[GC_MAX_UNCOLLECTED_OBJECTS_ENV]) ?? DEFAULT_GC_MAX_UNCOLLECTED_OBJECTS;
-	return { checkEveryNCells, maxUncollectedObjects };
+	const maxTrackedObjects = parsePositiveIntEnv(env[GC_MAX_TRACKED_OBJECTS_ENV]) ?? DEFAULT_GC_MAX_TRACKED_OBJECTS;
+	return { checkEveryNCells, maxUncollectedObjects, maxTrackedObjects };
 }
 
 /** Render a JS string as a Python string literal (JSON's escaping is a valid subset). */
@@ -77,8 +116,10 @@ function pyStr(value: string): string {
 /**
  * Python for a synthetic cell that measures pressure and prints one marker line.
  * Builtins are aliased so a user-namespace shadow of print/json can't break it.
+ * `tracked` adds only the tracked-object count (the trigger metric) without
+ * the detailed sizeof sum and closure walk.
  */
-export function buildGcPressureCode(detailed: boolean): string {
+export function buildGcPressureCode(detailed: boolean, tracked = false): string {
 	return `
 def _prime_agent_gc_pressure():
     import builtins as _b, json
@@ -88,7 +129,7 @@ def _prime_agent_gc_pressure():
         _b.print(${pyStr(GC_RESULT_MARKER)} + json.dumps({"error": "rlm.gc unavailable: " + _b.str(_err)}))
         return
     try:
-        _pressure = _axiom_gc.measure_pressure(detailed=${detailed ? "True" : "False"})
+        _pressure = _axiom_gc.measure_pressure(detailed=${detailed ? "True" : "False"}, tracked=${tracked ? "True" : "False"})
     except _b.Exception as _err:
         _b.print(${pyStr(GC_RESULT_MARKER)} + json.dumps({"error": _b.str(_err)}))
         return

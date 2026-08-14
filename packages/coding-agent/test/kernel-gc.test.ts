@@ -8,11 +8,14 @@ import { KernelManager } from "../src/core/kernel/index.js";
 import {
 	buildGcCollectCode,
 	buildGcPressureCode,
+	crossesCollectThreshold,
+	DEFAULT_GC_MAX_TRACKED_OBJECTS,
 	DEFAULT_GC_MAX_UNCOLLECTED_OBJECTS,
 	GC_RESULT_MARKER,
 	parseGcCollectResult,
 	parseGcPressureResult,
 	resolveGcOptionsFromEnv,
+	sanitizeGcOptions,
 } from "../src/core/kernel/kernel-gc.js";
 
 describe("buildGcPressureCode / buildGcCollectCode", () => {
@@ -133,21 +136,109 @@ describe("resolveGcOptionsFromEnv", () => {
 		expect(resolveGcOptionsFromEnv({ AXIOM_GC_CHECK_EVERY_N_CELLS: "5" })).toEqual({
 			checkEveryNCells: 5,
 			maxUncollectedObjects: DEFAULT_GC_MAX_UNCOLLECTED_OBJECTS,
+			maxTrackedObjects: DEFAULT_GC_MAX_TRACKED_OBJECTS,
 		});
 	});
 
-	it("reads the uncollected threshold override", () => {
+	it("reads the uncollected and tracked threshold overrides", () => {
 		expect(
-			resolveGcOptionsFromEnv({ AXIOM_GC_CHECK_EVERY_N_CELLS: "2", AXIOM_GC_MAX_UNCOLLECTED_OBJECTS: "1234" }),
-		).toEqual({ checkEveryNCells: 2, maxUncollectedObjects: 1234 });
+			resolveGcOptionsFromEnv({
+				AXIOM_GC_CHECK_EVERY_N_CELLS: "2",
+				AXIOM_GC_MAX_UNCOLLECTED_OBJECTS: "1234",
+				AXIOM_GC_MAX_TRACKED_OBJECTS: "4321",
+			}),
+		).toEqual({ checkEveryNCells: 2, maxUncollectedObjects: 1234, maxTrackedObjects: 4321 });
 	});
 
 	it("ignores zero and malformed values", () => {
 		expect(resolveGcOptionsFromEnv({ AXIOM_GC_CHECK_EVERY_N_CELLS: "0" })).toBeUndefined();
 		expect(resolveGcOptionsFromEnv({ AXIOM_GC_CHECK_EVERY_N_CELLS: "nope" })).toBeUndefined();
 		expect(
-			resolveGcOptionsFromEnv({ AXIOM_GC_CHECK_EVERY_N_CELLS: "3", AXIOM_GC_MAX_UNCOLLECTED_OBJECTS: "-2" }),
-		).toEqual({ checkEveryNCells: 3, maxUncollectedObjects: DEFAULT_GC_MAX_UNCOLLECTED_OBJECTS });
+			resolveGcOptionsFromEnv({
+				AXIOM_GC_CHECK_EVERY_N_CELLS: "3",
+				AXIOM_GC_MAX_UNCOLLECTED_OBJECTS: "-2",
+				AXIOM_GC_MAX_TRACKED_OBJECTS: "nope",
+			}),
+		).toEqual({
+			checkEveryNCells: 3,
+			maxUncollectedObjects: DEFAULT_GC_MAX_UNCOLLECTED_OBJECTS,
+			maxTrackedObjects: DEFAULT_GC_MAX_TRACKED_OBJECTS,
+		});
+	});
+});
+
+describe("crossesCollectThreshold", () => {
+	it("is false below both defaults", () => {
+		expect(
+			crossesCollectThreshold(
+				{ uncollectedObjects: 300, generationCounts: [0, 0, 0], collectedObjects: 0, uncollectableObjects: 0 },
+				{
+					maxUncollectedObjects: DEFAULT_GC_MAX_UNCOLLECTED_OBJECTS,
+					maxTrackedObjects: DEFAULT_GC_MAX_TRACKED_OBJECTS,
+				},
+			),
+		).toBe(false);
+	});
+
+	it("fires on tracked objects past the default even when the cheap counter is low", () => {
+		// The cheap metric is structurally capped near 720; the tracked count
+		// is the reachable default trigger. This is the host-side mirror of
+		// the in-kernel periodic check.
+		expect(
+			crossesCollectThreshold(
+				{
+					uncollectedObjects: 620,
+					generationCounts: [600, 10, 10],
+					collectedObjects: 0,
+					uncollectableObjects: 0,
+					trackedObjects: DEFAULT_GC_MAX_TRACKED_OBJECTS + 1,
+				},
+				{
+					maxUncollectedObjects: DEFAULT_GC_MAX_UNCOLLECTED_OBJECTS,
+					maxTrackedObjects: DEFAULT_GC_MAX_TRACKED_OBJECTS,
+				},
+			),
+		).toBe(true);
+	});
+
+	it("fires on the cheap counter at the configured threshold", () => {
+		expect(
+			crossesCollectThreshold(
+				{ uncollectedObjects: 2000, generationCounts: [0, 0, 0], collectedObjects: 0, uncollectableObjects: 0 },
+				{ maxUncollectedObjects: 2000, maxTrackedObjects: DEFAULT_GC_MAX_TRACKED_OBJECTS },
+			),
+		).toBe(true);
+	});
+
+	it("requires a present tracked count before comparing it", () => {
+		expect(
+			crossesCollectThreshold(
+				{ uncollectedObjects: 10, generationCounts: [0, 0, 0], collectedObjects: 0, uncollectableObjects: 0 },
+				{ maxUncollectedObjects: 100, maxTrackedObjects: 5 },
+			),
+		).toBe(false);
+	});
+});
+
+describe("sanitizeGcOptions", () => {
+	it("keeps valid options", () => {
+		expect(sanitizeGcOptions({ checkEveryNCells: 5, maxUncollectedObjects: 10 })).toEqual({
+			checkEveryNCells: 5,
+			maxUncollectedObjects: 10,
+		});
+	});
+
+	it("drops options with an invalid checkEveryNCells", () => {
+		expect(sanitizeGcOptions({ checkEveryNCells: 0 })).toBeUndefined();
+		expect(sanitizeGcOptions({ checkEveryNCells: 1.5 })).toBeUndefined();
+		expect(sanitizeGcOptions({ checkEveryNCells: Number.POSITIVE_INFINITY })).toBeUndefined();
+		expect(sanitizeGcOptions(undefined)).toBeUndefined();
+	});
+
+	it("drops non-finite thresholds", () => {
+		expect(sanitizeGcOptions({ checkEveryNCells: 2, maxUncollectedObjects: Number.NaN })).toEqual({
+			checkEveryNCells: 2,
+		});
 	});
 });
 
@@ -263,6 +354,27 @@ describeIfKernel("kernel gc pressure and collect (real kernel)", { tags: ["kerne
 				result.gc?.collect?.before.uncollectedObjects ?? Number.POSITIVE_INFINITY,
 			);
 		} finally {
+			await manager.dispose();
+		}
+	}, 60_000);
+
+	it("collects with DEFAULT thresholds when tracked objects cross the default", async () => {
+		const manager = newManager({ gc: { checkEveryNCells: 1 } });
+		try {
+			// A bounded burst held alive in the namespace (so automatic
+			// collections cannot free it mid-test) crosses the default
+			// tracked threshold. Lists are GC-tracked (bytearrays are not).
+			const burst = await manager.execute("_burst = [[0] * 8 for _ in range(300000)]; _burst.append(_burst)");
+			expect(burst.status).toBe("ok");
+			// The next user cell's per-N check (N=1) must see tracked objects
+			// above DEFAULT_GC_MAX_TRACKED_OBJECTS and run a collect pass.
+			const result = await manager.execute("y = 1");
+			expect(result.status).toBe("ok");
+			expect(result.gc?.pressure).toBeDefined();
+			expect(result.gc?.pressure.trackedObjects).toBeGreaterThan(DEFAULT_GC_MAX_TRACKED_OBJECTS);
+			expect(result.gc?.collect).toBeDefined();
+		} finally {
+			await manager.execute("_burst.clear(); import gc as _g; _g.collect()");
 			await manager.dispose();
 		}
 	}, 60_000);

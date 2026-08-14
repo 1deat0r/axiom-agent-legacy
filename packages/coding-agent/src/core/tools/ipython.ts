@@ -39,7 +39,8 @@ try:
     import rlm as _prime_agent_rlm_module
     rlm = _prime_agent_rlm_module.rlm
     # Threshold-based automatic GC (rlm.gc): a post_execute hook that collects
-    # once uncollected objects cross the env-tunable threshold. Never raises.
+    # when pressure crosses the env-tunable thresholds (cheap per-cell counter,
+    # periodic tracked-object count). Never raises.
     try:
         from rlm import gc as _prime_agent_rlm_gc
         _prime_agent_rlm_gc.install_post_execute_gc()
@@ -531,6 +532,9 @@ export class IpythonKernelProvisioner {
 				this.emitStartupProgress("Preparing IPython runtime...");
 				const bootstrap = await m.execute(buildRlmBootstrapCode(this.options?.pythonSkills), {
 					signal: startupSignal,
+					// Internal: the bootstrap cell must not count toward the per-N
+					// GC check nor carry gc metadata on its result.
+					internal: true,
 				});
 				if (bootstrap.status !== "ok") {
 					const details = [bootstrap.stderr, bootstrap.error?.traceback.join("\n")].filter(Boolean).join("\n");

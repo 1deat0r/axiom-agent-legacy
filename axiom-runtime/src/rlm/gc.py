@@ -14,9 +14,12 @@ Layering:
 - ``collect()`` runs a full cyclic GC pass and reports before/after pressure,
   so callers can see what a pass actually freed.
 - ``install_post_execute_gc()`` wires an IPython ``post_execute`` hook that
-  runs a collection whenever uncollected objects exceed a threshold. It is
-  idempotent, safe to call outside a kernel (returns False), and its hook
-  never raises — a GC policy must never take down the kernel it protects.
+  runs a collection when pressure crosses a threshold. Two triggers run:
+  a cheap per-cell check of the stdlib generation counters, and a periodic
+  (every ``DEFAULT_TRACKED_CHECK_INTERVAL`` cells) tracked-object count that
+  is the reachable default trigger. The hook is idempotent, safe to call
+  outside a kernel (returns False), and never raises — a GC policy must
+  never take down the kernel it protects.
 
 Thresholds come from env vars (configurable per the issue scope):
 ``AXIOM_GC_MAX_UNCOLLECTED_OBJECTS``, ``AXIOM_GC_MAX_TRACKED_OBJECTS``,
@@ -39,9 +42,24 @@ except Exception:  # pragma: no cover - only available inside kernels
 
 # Default thresholds. Chosen so a freshly booted kernel (tens of thousands of
 # live objects after imports) never trips them, while a leaking session does.
-DEFAULT_MAX_UNCOLLECTED_OBJECTS = 100_000
-DEFAULT_MAX_TRACKED_OBJECTS = 1_000_000
+#
+# Ceilings matter: the cheap metric is ``sum(gc.get_count())``, the stdlib's
+# per-generation allocation counters. CPython 3.11 thresholds are (700, 10,
+# 10), so with automatic collections enabled the sum is structurally capped
+# near 720 and peaks near 2000 only under extreme churn. A value far above
+# that can never fire (the original 100 000 default was inert). 2 000 keeps
+# the cheap check as a burst tripwire without pretending it bounds sessions.
+DEFAULT_MAX_UNCOLLECTED_OBJECTS = 2_000
+# Tracked objects (len(gc.get_objects())) grow monotonically with live+cyclic
+# garbage, so this is the reachable default trigger. A freshly booted kernel
+# holds tens of thousands; 250k leaves headroom while still bounding leaks.
+DEFAULT_MAX_TRACKED_OBJECTS = 250_000
+# Report-only: estimated_bytes is never used as a trigger (a sizeof sum over
+# every tracked object costs too much to run periodically).
 DEFAULT_MAX_ESTIMATED_BYTES = 1 << 30  # 1 GiB
+# How often the post_execute hook pays for the tracked-object count (one full
+# gc.get_objects() list build). 32 cells amortizes the cost to near nothing.
+DEFAULT_TRACKED_CHECK_INTERVAL = 32
 # Cap on the user-namespace closure walk so a pathological namespace can't make
 # a detailed measurement unbounded.
 DEFAULT_MAX_USER_CLOSURE_NODES = 200_000
@@ -53,7 +71,12 @@ _NAMESPACE_SKIP = frozenset({"rlm", "asyncio", "In", "Out", "get_ipython", "exit
 
 @dataclass(frozen=True)
 class GcThresholds:
-    """Env-configurable triggers for a GC pass."""
+    """Env-configurable GC thresholds.
+
+    ``max_uncollected_objects`` (cheap per-cell trigger) and
+    ``max_tracked_objects`` (periodic trigger) drive collections;
+    ``max_estimated_bytes`` is report-only and never triggers a pass.
+    """
 
     max_uncollected_objects: int
     max_tracked_objects: int
@@ -122,12 +145,15 @@ def _user_closure_pressure(
     bytes_ = 0
     while pending and objects < max_nodes:
         obj = pending.pop()
-        if isinstance(obj, ModuleType):
-            objects += 1
-            bytes_ += _safe_sizeof(obj)
-            continue
         object_id = id(obj)
         if object_id in seen:
+            continue
+        if isinstance(obj, ModuleType):
+            # Modules are leaves (never descended), but still deduped so the
+            # same module reached under several names counts once.
+            seen.add(object_id)
+            objects += 1
+            bytes_ += _safe_sizeof(obj)
             continue
         seen.add(object_id)
         objects += 1
@@ -139,13 +165,15 @@ def _user_closure_pressure(
     return objects, bytes_
 
 
-def measure_pressure(*, detailed: bool = False) -> dict[str, Any]:
+def measure_pressure(*, detailed: bool = False, tracked: bool = False) -> dict[str, Any]:
     """Snapshot kernel GC pressure.
 
     Cheap by default: generation counters and collection totals only, so it is
-    safe to call after every cell. ``detailed=True`` adds a full tracked-object
-    scan (count + estimated bytes) and the user-namespace closure, and should
-    be used for explicit host requests rather than per-cell checks.
+    safe to call after every cell. ``tracked=True`` adds only the tracked-object
+    count (one ``gc.get_objects()`` list build, no sizeof sum) — the metric the
+    automatic triggers use. ``detailed=True`` additionally sums estimated bytes
+    and walks the user-namespace closure, and is meant for explicit host
+    requests and tests, not per-cell checks.
     """
     counts = _stdlib_gc.get_count()
     stats = _stdlib_gc.get_stats()
@@ -155,11 +183,13 @@ def measure_pressure(*, detailed: bool = False) -> dict[str, Any]:
         "collected_objects": sum(entry.get("collected", 0) for entry in stats),
         "uncollectable_objects": sum(entry.get("uncollectable", 0) for entry in stats),
     }
+    if tracked or detailed:
+        objects = _stdlib_gc.get_objects()
+        pressure["tracked_objects"] = len(objects)
+        if detailed:
+            pressure["estimated_bytes"] = sum(_safe_sizeof(obj) for obj in objects)
     if detailed:
-        tracked = _stdlib_gc.get_objects()
         user_objects, user_bytes = _user_closure_pressure()
-        pressure["tracked_objects"] = len(tracked)
-        pressure["estimated_bytes"] = sum(_safe_sizeof(obj) for obj in tracked)
         pressure["user_objects"] = user_objects
         pressure["user_bytes"] = user_bytes
     return pressure
@@ -188,16 +218,50 @@ def collect(*, generation: int = 2, detailed: bool = False) -> dict[str, Any]:
 _hook_installed = False
 _thresholds: GcThresholds | None = None
 _auto_collect_log: list[dict[str, Any]] = []
+# Cadence for the periodic tracked-object check (one gc.get_objects() list
+# build per interval of post_execute invocations).
+_cell_since_tracked_check = 0
+_tracked_check_interval = DEFAULT_TRACKED_CHECK_INTERVAL
 
 
 def _maybe_collect() -> None:
-    """One post-execute check. Never raises: a GC policy must not kill the kernel."""
+    """One post-execute check. Never raises: a GC policy must not kill the kernel.
+
+    Two triggers, in order:
+
+    - Cheap, every cell: the stdlib generation-counter sum. With automatic
+      collections enabled CPython caps it near 720 (thresholds 700/10/10), so
+      the default 2 000 is a burst tripwire, not a session bound. Operators
+      can lower ``AXIOM_GC_MAX_UNCOLLECTED_OBJECTS`` for aggressive firing.
+    - Periodic, every ``_tracked_check_interval`` cells: the tracked-object
+      count. This grows with accumulated live and cyclic garbage and is the
+      reachable default trigger. It fires on every periodic check while the
+      count exceeds the threshold, so a session holding more than the
+      threshold pays one full pass per interval (a bounded cost, ~1-2 ms per
+      cell at hundreds of thousands of objects); no floor state is kept, so a
+      slow leak can never hide below an anti-thrash baseline.
+    """
+    global _cell_since_tracked_check
+    thresholds = _thresholds or resolve_thresholds()
     try:
         pressure = measure_pressure()
     except Exception:  # pragma: no cover - defensive
         return
-    thresholds = _thresholds or resolve_thresholds()
-    if pressure["uncollected_objects"] < thresholds.max_uncollected_objects:
+    reason: str | None = None
+    tracked_before: int | None = None
+    if pressure["uncollected_objects"] >= thresholds.max_uncollected_objects:
+        reason = "uncollected-threshold"
+    else:
+        _cell_since_tracked_check += 1
+        if _cell_since_tracked_check >= _tracked_check_interval:
+            _cell_since_tracked_check = 0
+            try:
+                tracked_before = len(_stdlib_gc.get_objects())
+            except Exception:  # pragma: no cover - defensive
+                tracked_before = None
+            if tracked_before is not None and tracked_before > thresholds.max_tracked_objects:
+                reason = "tracked-threshold"
+    if reason is None:
         return
     try:
         collected = _stdlib_gc.collect()
@@ -207,7 +271,8 @@ def _maybe_collect() -> None:
         {
             "collected": collected,
             "uncollected_before": pressure["uncollected_objects"],
-            "reason": "uncollected-threshold",
+            "tracked_before": tracked_before,
+            "reason": reason,
         }
     )
     del _auto_collect_log[: -_AUTO_COLLECT_LOG_LIMIT]
@@ -246,6 +311,7 @@ def gc_status() -> dict[str, Any]:
     thresholds = _thresholds or resolve_thresholds()
     return {
         "hook_installed": _hook_installed,
+        "tracked_check_interval": _tracked_check_interval,
         "thresholds": {
             "max_uncollected_objects": thresholds.max_uncollected_objects,
             "max_tracked_objects": thresholds.max_tracked_objects,
@@ -258,6 +324,7 @@ def gc_status() -> dict[str, Any]:
 __all__ = [
     "DEFAULT_MAX_ESTIMATED_BYTES",
     "DEFAULT_MAX_TRACKED_OBJECTS",
+    "DEFAULT_TRACKED_CHECK_INTERVAL",
     "DEFAULT_MAX_UNCOLLECTED_OBJECTS",
     "GcThresholds",
     "collect",

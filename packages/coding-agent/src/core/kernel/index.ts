@@ -13,6 +13,8 @@ import { ForkServerUnavailable, forkKernel, isForkServerEnabled } from "./fork-s
 import {
 	buildGcCollectCode,
 	buildGcPressureCode,
+	crossesCollectThreshold,
+	DEFAULT_GC_MAX_TRACKED_OBJECTS,
 	DEFAULT_GC_MAX_UNCOLLECTED_OBJECTS,
 	type GcCollectResult,
 	type GcPressure,
@@ -20,6 +22,7 @@ import {
 	parseGcCollectResult,
 	parseGcPressureResult,
 	resolveGcOptionsFromEnv,
+	sanitizeGcOptions,
 } from "./kernel-gc.js";
 import {
 	buildListNamesCode,
@@ -574,7 +577,8 @@ export class KernelManager {
 			pythonSkills: options.pythonSkills,
 			snapshot: options.snapshot,
 			// Explicit options win; otherwise honor the shared env knobs (off by default).
-			gc: options.gc ?? resolveGcOptionsFromEnv(),
+			// Sanitized so programmatic options get the same validation as env values.
+			gc: sanitizeGcOptions(options.gc ?? resolveGcOptionsFromEnv()),
 			username: options.username ?? "axiom",
 		};
 	}
@@ -852,12 +856,15 @@ export class KernelManager {
 		if (this.userCellCount % opt.checkEveryNCells !== 0) {
 			return undefined;
 		}
-		const pressure = await this.gcPressure();
+		const pressure = await this.gcPressure(false, true);
 		if (!pressure) {
 			return undefined;
 		}
 		const maxUncollected = opt.maxUncollectedObjects ?? DEFAULT_GC_MAX_UNCOLLECTED_OBJECTS;
-		if (pressure.uncollectedObjects < maxUncollected) {
+		const maxTracked = opt.maxTrackedObjects ?? DEFAULT_GC_MAX_TRACKED_OBJECTS;
+		if (
+			!crossesCollectThreshold(pressure, { maxUncollectedObjects: maxUncollected, maxTrackedObjects: maxTracked })
+		) {
 			return { pressure };
 		}
 		const collect = await this.collectGarbage();
@@ -866,15 +873,16 @@ export class KernelManager {
 
 	/**
 	 * Measure kernel GC pressure. Cheap by default (generation counters only);
-	 * detailed adds tracked-object counts, estimated bytes, and the user-namespace
-	 * closure and costs a full object scan in the kernel. Never throws.
+	 * tracked adds the tracked-object count (the trigger metric); detailed adds
+	 * estimated bytes and the user-namespace closure and costs a full object
+	 * scan in the kernel. Never throws.
 	 */
-	async gcPressure(detailed = false): Promise<GcPressure | null> {
+	async gcPressure(detailed = false, tracked = false): Promise<GcPressure | null> {
 		if (!this.isRunning) {
 			return null;
 		}
 		try {
-			const r = await this.enqueueExecute(buildGcPressureCode(detailed), {
+			const r = await this.enqueueExecute(buildGcPressureCode(detailed, tracked), {
 				maxOutputChars: SNAPSHOT_MAX_OUTPUT_CHARS,
 				internal: true,
 			});

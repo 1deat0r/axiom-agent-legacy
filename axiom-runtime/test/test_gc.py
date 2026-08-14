@@ -45,6 +45,19 @@ class _FakeEvents:
         self.handlers.append((name, fn))
 
 
+
+
+def _make_tracked_cycle(count: int) -> list[object]:
+    # A bounded burst of cyclic garbage: `count` distinct small lists (plus
+    # their ints) reachable only through one outer list that references
+    # itself. Callers hold the returned outer list so CPython's automatic
+    # collections cannot free the burst before the hook's periodic check
+    # runs; clearing it and collecting frees everything.
+    burst = [[i] for i in range(count)]
+    burst.append(burst)
+    return burst
+
+
 class _FakeShell:
     def __init__(self) -> None:
         self.events = _FakeEvents()
@@ -160,6 +173,8 @@ class PostExecuteHookTest(unittest.TestCase):
         kernel_gc._hook_installed = False
         kernel_gc._thresholds = None
         kernel_gc._auto_collect_log.clear()
+        kernel_gc._cell_since_tracked_check = 0
+        kernel_gc._tracked_check_interval = kernel_gc.DEFAULT_TRACKED_CHECK_INTERVAL
 
     def test_install_without_shell_returns_false(self) -> None:
         with patch.object(kernel_gc, "get_ipython", return_value=None):
@@ -206,6 +221,77 @@ class PostExecuteHookTest(unittest.TestCase):
         status = gc_status()
         self.assertTrue(status["hook_installed"])
         self.assertEqual(status["thresholds"], {"max_uncollected_objects": 5, "max_tracked_objects": 6, "max_estimated_bytes": 7})
+
+
+    def test_default_thresholds_fire_for_bounded_burst(self) -> None:
+        # The cheap trigger (uncollected_objects) is structurally capped near
+        # CPython's per-generation thresholds and cannot reach the default by
+        # itself; the default auto-collect must come from the periodic
+        # tracked-object check. A bounded burst of cyclic garbage that crosses
+        # the default tracked threshold must trip it with DEFAULT settings.
+        shell = _FakeShell()
+        with patch.object(kernel_gc, "get_ipython", return_value=shell):
+            self.assertTrue(install_post_execute_gc(resolve_thresholds(environ={})))
+        name, handler = shell.events.handlers[0]
+        held = _make_tracked_cycle(DEFAULT_MAX_TRACKED_OBJECTS + 150_000)
+        try:
+            # The tracked check runs every DEFAULT_TRACKED_CHECK_INTERVAL
+            # post_execute invocations (32). Before that, nothing fires.
+            for _ in range(32 - 1):
+                handler()
+            self.assertEqual(gc_status()["auto_collects"], [])
+            handler()
+            auto = gc_status()["auto_collects"]
+            self.assertGreaterEqual(len(auto), 1)
+            self.assertEqual(auto[-1]["reason"], "tracked-threshold")
+        finally:
+            held.clear()
+            kernel_gc._stdlib_gc.collect()
+
+    def test_tracked_check_cadence_and_refire(self) -> None:
+        # Cadence: the tracked check runs on the interval's invocation, not
+        # before. Re-fire: while the count stays above the threshold, every
+        # periodic check runs a pass (a persistent bound, not a one-shot).
+        shell = _FakeShell()
+        with patch.object(kernel_gc, "get_ipython", return_value=shell):
+            install_post_execute_gc(GcThresholds(10**9, 10, 10**12))
+        name, handler = shell.events.handlers[0]
+        kernel_gc._tracked_check_interval = 3
+        held = _make_tracked_cycle(100)
+        try:
+            handler()
+            handler()
+            self.assertEqual(gc_status()["auto_collects"], [])
+            handler()
+            auto = gc_status()["auto_collects"]
+            self.assertEqual(len(auto), 1)
+            self.assertEqual(auto[-1]["reason"], "tracked-threshold")
+            # Still above the threshold at the next check: a pass runs again.
+            handler()
+            handler()
+            handler()
+            auto = gc_status()["auto_collects"]
+            self.assertEqual(len(auto), 2)
+            self.assertEqual(auto[-1]["reason"], "tracked-threshold")
+        finally:
+            kernel_gc._tracked_check_interval = kernel_gc.DEFAULT_TRACKED_CHECK_INTERVAL
+            held.clear()
+            kernel_gc._stdlib_gc.collect()
+
+    def test_hook_never_raises_when_tracked_check_fails(self) -> None:
+        shell = _FakeShell()
+        with patch.object(kernel_gc, "get_ipython", return_value=shell):
+            install_post_execute_gc(resolve_thresholds(environ={}))
+        name, handler = shell.events.handlers[0]
+        kernel_gc._tracked_check_interval = 1
+        with patch.object(kernel_gc._stdlib_gc, "get_objects", side_effect=RuntimeError("boom")):
+            handler()  # type: ignore[operator] -- must not raise
+        self.assertEqual(gc_status()["auto_collects"], [])
+
+    def test_user_closure_dedups_module_aliases(self) -> None:
+        # Nit fix: the same module reached under two names counts once.
+        objects, _ = kernel_gc._user_closure_pressure(roots={"a": os, "b": os})
+        self.assertEqual(objects, 1)
 
     def test_auto_collect_log_is_bounded(self) -> None:
         kernel_gc._thresholds = GcThresholds(0, 0, 0)
