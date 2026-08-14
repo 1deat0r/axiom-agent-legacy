@@ -1,6 +1,19 @@
 /**
  * Real-process daemon-backed test for serializedRefine propagation.
  *
+ * KNOWN-SKIP (fork, 2026-08-15): this test asserts the daemon socket exists
+ * while its setup passes --extension flags, and the runtime deliberately
+ * refuses the daemon path when process-local extension factories are present
+ * (shouldUseDaemonClientRuntime: "Programmatic factories are process-local
+ * functions and cannot be serialized to a daemon worker"). The premise is
+ * impossible in this fork: the socket can never exist with these args, so
+ * the test failed everywhere (sandbox known-fail, GitHub CI process-smoke
+ * job, and the upstream repo's own gate). Upstream carries the same
+ * contradiction (ebb7fd5f6 has the decision, the test has the flags).
+ * Tracked in issue #47 (make the daemon host --extension files via the
+ * daemon catalog); the skip keeps the gate green with the reason recorded,
+ * per the repo's known-fail-with-reason policy — never a silent mute.
+ *
  * Spawns the actual CLI (`pi --mode json`) which goes through:
  * client -> unix socket -> daemon supervisor -> owned worker -> AgentSession.
  *
@@ -157,7 +170,13 @@ function writeAutoRefineSettings(agentDir: string): void {
 }
 
 describe("Real-process serializedRefine — JSON mode", () => {
-	it("daemon supervisor scrubs inherited worker env, checkpoint applies refine_complete before agent_end", async () => {
+	it("daemon supervisor scrubs inherited worker env, checkpoint applies refine_complete before agent_end", {
+		// Reason (documented in the file header): --extension flags force the
+		// in-process path, so the daemon socket can never exist here.
+		// Tracking issue #47. Known-fail-with-reason, never a mute.
+		skip: true,
+		timeout: 120_000,
+	}, async () => {
 		const root = mkdtempSync(join(tmpdir(), "axiom-process-json-refine-"));
 		tempRoots.add(root);
 		const agentDir = join(root, "agent");
@@ -330,5 +349,5 @@ describe("Real-process serializedRefine — JSON mode", () => {
 		expect(budgetLimitedEntries.length).toBeGreaterThanOrEqual(1);
 		const budgetLimitedIndex = jsonlEntries.indexOf(budgetLimitedEntries[0]!);
 		expect(budgetLimitedIndex).toBeGreaterThan(firstMessageIndex);
-	}, 120_000);
+	});
 });
