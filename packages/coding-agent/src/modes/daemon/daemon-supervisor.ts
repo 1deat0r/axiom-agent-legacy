@@ -338,7 +338,7 @@ class SupervisorRecoveryCancelledError extends Error {
 
 class SnapshotLoadInvalidatedError extends Error {}
 
-class WorkerStopTimeoutError extends Error {}
+export class WorkerStopTimeoutError extends Error {}
 
 function isSupervisorGenerationStale(error: unknown): boolean {
 	return (
@@ -5114,9 +5114,31 @@ export class DaemonSupervisor {
 						if (!(error instanceof WorkerStopTimeoutError)) {
 							throw error;
 						}
-						this.log(
-							`Worker ${worker.descriptor.workerId} remains tombstoned for recovery after shutdown: ${error.message}`,
-						);
+						// Last-resort reaping: the background stop finalizer is inert once
+						// shuttingDown is set (its escalation loop exits immediately), so a
+						// wedged worker would otherwise leak forever after this supervisor
+						// exits. Do one fresh identity check and force-kill before exit.
+						const verdict = this.processIdentity(worker.descriptor.pid, worker.descriptor.processStartId);
+						if (verdict === "current") {
+							signalProcessGroupOrProcess(worker.descriptor.pid, "SIGKILL");
+							this.log(`Worker ${worker.descriptor.workerId} was force-killed at shutdown: ${error.message}`);
+						} else if (verdict === "unknown") {
+							// Final shutdown favors leak prevention over the unknown-identity
+							// caution. Group-only kill: never the single-pid fallback, so a
+							// recycled pid cannot be signaled.
+							try {
+								process.kill(-worker.descriptor.pid, "SIGKILL");
+							} catch {
+								// The process group may already be gone.
+							}
+							this.log(
+								`Worker ${worker.descriptor.workerId} had an unverifiable identity and was group-killed at shutdown: ${error.message}`,
+							);
+						} else {
+							this.log(
+								`Worker ${worker.descriptor.workerId} remains tombstoned for recovery after shutdown (process ${verdict}): ${error.message}`,
+							);
+						}
 					}
 				}),
 			);

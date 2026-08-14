@@ -1008,7 +1008,7 @@ describe("daemon worker supervisor monitoring", () => {
 		}
 	});
 
-	it("completes shutdown without awaiting an unsignalable worker finalizer", async () => {
+	it("group-kills an unverifiable-identity worker at shutdown without awaiting its finalizer", async () => {
 		vi.useFakeTimers();
 		const root = mkdtempSync(join(tmpdir(), "prime-supervisor-shutdown-finalization-test-"));
 		supervisorRegistryDirs.add(root);
@@ -1039,6 +1039,7 @@ describe("daemon worker supervisor monitoring", () => {
 		const killSpy = vi.spyOn(childProcessModule, "signalProcessGroupOrProcess").mockImplementation(() => {});
 		const existsSpy = vi.spyOn(childProcessModule, "processIdExists").mockReturnValue(true);
 		const aliveSpy = vi.spyOn(childProcessModule, "isProcessAlive").mockReturnValue(true);
+		const processKillSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
 		const catalogStop = vi.fn(async () => undefined);
 		const log = vi.fn();
 		const supervisor = fromPartial<{
@@ -1068,12 +1069,15 @@ describe("daemon worker supervisor monitoring", () => {
 
 			expect(workers.has(worker.descriptor.workerId)).toBe(true);
 			expect(killSpy).not.toHaveBeenCalled();
+			expect(processKillSpy).toHaveBeenCalledWith(-111_123, "SIGKILL");
+			expect(processKillSpy).not.toHaveBeenCalledWith(111_123, "SIGKILL");
 			expect(catalogStop).toHaveBeenCalledOnce();
-			expect(log).toHaveBeenCalledWith(expect.stringContaining("remains tombstoned for recovery"));
+			expect(log).toHaveBeenCalledWith(expect.stringContaining("was group-killed at shutdown"));
 			expect(exit).toHaveBeenCalledWith(0);
 		} finally {
 			exit.mockRestore();
 			killSpy.mockRestore();
+			processKillSpy.mockRestore();
 			existsSpy.mockRestore();
 			aliveSpy.mockRestore();
 		}
