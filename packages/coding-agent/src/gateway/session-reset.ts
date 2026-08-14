@@ -9,7 +9,7 @@
  * `<id>.jsonl.archived-<ts>`, and the search indexer accepts archived names,
  * so cross-session recall (/search, /sessions) survives the reset.
  *
- * Since ADR-0052 the session token meter is the primary pressure trigger;
+ * Since ADR-0055 the session token meter is the primary pressure trigger;
  * this byte budget stays as the safety limit for sessions the token
  * heuristic prices low (metadata-heavy files).
  */
