@@ -124,7 +124,7 @@ mathMarkdownParser.setOptions({
 });
 mathMarkdownParser.use({ extensions: [blockMathExtension, inlineMathExtension] });
 
-function pickMarkdownParser(text: string): Marked {
+export function pickMarkdownParser(text: string): Marked {
 	return text.includes("$") || text.includes("\\(") || text.includes("\\[") ? mathMarkdownParser : markdownParser;
 }
 

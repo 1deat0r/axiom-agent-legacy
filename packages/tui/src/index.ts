@@ -16,6 +16,7 @@ export {
 	ROLE_NAMES,
 	type RoleName,
 } from "./color-descriptor.js";
+export { stripColorDescriptors } from "./color-strip.js";
 // Components
 export { Box } from "./components/box.js";
 export { CancellableLoader } from "./components/cancellable-loader.js";

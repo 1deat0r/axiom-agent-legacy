@@ -45,33 +45,25 @@ The contract layer has three parts:
 - **Model guidance** — `buildMarkdownColorGuidance()` in
   `core/system-prompt.ts` teaches the model the grammar in both the default
   RLM prompt and the custom (gateway profile) prompt path.
-- **Gateway strip** — `stripColorDescriptors()`
-  (`src/gateway/color-strip.ts`) strips color pseudo-links to their inner
-  text on every non-TUI surface: Telegram's `renderTelegramText` (before the
-  markdown-to-HTML pass), Discord `send`, Slack `send`. Telegram also strips
-  before chunking, so a long link split across chunks cannot leak its
-  descriptor. Links whose href is not a color descriptor are untouched.
-  Inline code spans and fenced code blocks are left literal: a descriptor
-  inside code is code, not a tag, and the TUI renders code literally too.
-  Fences pair by run character and length (``` and ~~~, any run >= 3, closing
-  run >= opening run, closing line may end in tabs, unclosed fence runs to
-  end of text; backtick-fence info strings may not contain backticks, tilde
-  info strings may contain anything); code spans pair by equal backtick runs,
-  and an unclosed run is literal text, so marked still parses links after it.
-  The strip's link recognition mirrors marked: inner text may hold soft line
-  breaks and one level of balanced brackets, hrefs may be angle-bracketed,
-  whitespace may surround the href, and a quoted or parenthesized title may
-  follow; an escaped opening bracket is a literal. Reference-style links
-  (full, collapsed, shortcut) whose definition is a color descriptor reduce
-  to their text and the definition line is removed. Known remaining
-  divergences, all pathological: an unclosed "[" before a color link joins
-  into that link's inner text (the TUI renders the "[" as text); the gateway
-  shows a backslash the TUI consumes on an escaped bracket; a shortcut
-  reference whose label equals a color link's inner text reduces where the
-  TUI colors; the mask sentinel assumes text holds no NUL; hex word
-  boundaries are ASCII-only. Internal records (delivery ledger, stream
-  journal, session files) keep the raw text — the strip is a presentation
-  rule, not a logging rule.
+- **Gateway strip** — `stripColorDescriptors()` (packages/tui, exported
+  from pi-tui) strips color pseudo-links to their inner text on every
+  non-TUI surface: Telegram (before the markdown-to-HTML pass and before
+  chunking, so a long link split across chunks cannot leak its descriptor),
+  Discord `send`, Slack `send`. The strip lexes the text with the exact
+  marked parser the TUI renderer uses and rewrites two token kinds: a link
+  whose href parses as a color descriptor reduces to its inner raw source,
+  and a link reference definition line is removed (the TUI renders
+  definitions as nothing). Everything else is byte-identical. Parity is by
+  construction - inline and fenced code, reference resolution, escape
+  handling, blockquotes, lists, indented code, CRLF, and label whitespace
+  collapse all follow the TUI because they are the TUI's parser. Known
+  residual divergences, all out of the color grammar: non-color reference
+  links keep their raw markdown on the gateway while the TUI shows them as
+  resolved links (pre-existing gateway markdown behavior); a duplicate
+  definition that marked drops from the token stream survives as a visible
+  line on the gateway while the TUI hides it. Internal records (delivery
+  ledger, stream journal, session files) keep the raw text — the strip is a
+  presentation rule, not a logging rule.
 - **ADR + term** — this document plus the CONTEXT.md `Semantic color` term.
 
 Unknown role names, uppercase roles, malformed hexes, and `#RGB` shorthand
@@ -83,12 +75,11 @@ always writes the visible meaning inside the brackets.
 
 - Models can mark spans semantically; non-TUI surfaces degrade to clean text
   because the meaning lives in the visible inner text.
-- One parser is the single source of truth for the href grammar:
-  `parseColorDescriptor` gates both the TUI renderer and the gateway strip,
-  and `parseHexLiteral` validates every candidate literal the renderer's
-  tokenizer proposes. Link recognition still differs by surface (marked vs
-  the strip's regex); the strip mirrors marked's accepted inner text and its
-  code-literal rule, with the unclosed-bracket limit above.
+- One parser is the single source of truth: `parseColorDescriptor` gates
+  both the TUI renderer and the gateway strip, `parseHexLiteral` validates
+  every candidate literal the renderer's tokenizer proposes, and the strip
+  itself lexes with the renderer's own marked parser - the two surfaces
+  cannot drift on link or code recognition.
 - Gateway code never emits ANSI; the contract is TUI-only by definition.
 - Prompt cost: the guidance adds a short section (71 words, ~100 tokens) to
   every system prompt, including gateway profiles, where the tags are

@@ -18,7 +18,7 @@
  * config.json sender allowlist in the router before any model call.
  */
 import { readFileSync, writeFileSync } from "node:fs";
-import { stripColorDescriptors } from "../color-strip.js";
+import { stripColorDescriptors } from "@earendil-works/pi-tui";
 import { toGatewayMessage } from "../messages.js";
 import type { GatewayMessage, GatewayRecipient, GatewayTransport } from "../types.js";
 import { chunkTelegramText } from "./telegram.js";
