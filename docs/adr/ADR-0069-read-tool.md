@@ -1,4 +1,4 @@
-# ADR-0067 — Core read tool: bounded, line-numbered file reads
+# ADR-0069 — Core read tool: bounded, line-numbered file reads
 
 ## Status
 
