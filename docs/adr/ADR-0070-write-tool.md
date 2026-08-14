@@ -1,4 +1,4 @@
-# ADR-0068 — Core write tool: exclusive-create and atomic-overwrite semantics
+# ADR-0070 — Core write tool: exclusive-create and atomic-overwrite semantics
 
 ## Status
 
