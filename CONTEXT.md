@@ -163,9 +163,10 @@ user-facing durable memory.
 _Avoid_: Memory (the baseline's refinement), skills
 
 **Thinking effort**:
-The persisted quality-cost knob of the active provider; the baseline has
-per-model thinking levels — the axiom knob maps the low/medium/high levels
-onto them.
+The persisted quality-cost knob of the active provider; the provider layer
+derives per-model thinking levels (off, minimal, low, medium, high, xhigh,
+max) from provider metadata, and the axiom knob maps the low/medium/high
+settings onto them.
 _Avoid_: Reasoning level, intelligence slider
 
 **Root guard**:
