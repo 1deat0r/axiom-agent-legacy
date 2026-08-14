@@ -81,3 +81,21 @@ blast radius small.
   (resolution here is point-in-time), a caching layer, and an always-on URL
   gate for non-anchored runs.
 - CONTEXT.md's Security fence entry drops "pending DNS follow-up".
+
+- Red-team follow-up (2026-08-14): the adversarial review of the merged gate
+  found two classifier bugs; both are fixed here. Bug 1: the ::ffff:0: prefix
+  form. The WHATWG URL parser rewrites ::ffff:0:127.0.0.1 to ::ffff:0:7f00:1.
+  decodeHexV4 misparsed the three-group tail, so the gate allowed the form.
+  The classifier now decodes the two hextets after the ::ffff:0: prefix and
+  blocks a private embedded IPv4. Bug 2: IPv4-compatible ::/96 addresses.
+  ::127.0.0.1 becomes ::7f00:1 after URL parsing; the gate allowed it. The
+  whole ::/96 prefix is now classified private for defense in depth
+  (BSD/Windows translate the tail; Linux does not today). The fixes ship the
+  permanent S-class threat corpus test/extensions/security-attack-corpus.test.ts
+  (docs/agents/review-rubric.md section 3): 15 offline cases from the red-team
+  report, with regression cases for every keep-safe verdict (nip.io, weird
+  literals, mixed answers, empty results, timeout fail-closed, allowlist
+  exact-match). The DNS rebinding TOCTOU (point-in-time resolution, no
+  pinning) stays a documented exposure and is now issue #43 (ADR-0066); one
+  corpus case asserts the current single-resolution behavior and must be
+  updated when #43 ships.
