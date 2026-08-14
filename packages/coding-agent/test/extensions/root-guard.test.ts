@@ -351,6 +351,10 @@ describe("request_root_access tool (approval loop)", () => {
 			const text = textOf(result);
 			expect(text).toMatch(/pending/i);
 			expect(text).toMatch(/rg-[0-9a-z]+-[0-9a-f]{4}/);
+			// the relayed commands must work from the operator's terminal (NEW7)
+			expect(text).toContain(`--root '${root}'`);
+			expect(text).toContain(`--state-dir '${state}'`);
+			expect(text).toMatch(/reject .*--root/);
 			const scope = await resolveScopeDir(state, root);
 			expect(await listGrantPrefixes(scope)).toEqual([]);
 		} finally {
@@ -548,7 +552,9 @@ describe("root guard freeform resolution and deny interplay", () => {
 			const text = textOf(result);
 			expect(text).toMatch(/pending/i);
 			expect(text).toMatch(/\/mnt\/x/);
-			expect(text).not.toMatch(/\/srv\/data/);
+			// the dropped denied path is named, not silently vanished (NEW2)
+			expect(text).toMatch(/permanently denied/);
+			expect(text).toMatch(/\/srv\/data/);
 			const scope = await resolveScopeDir(state, root);
 			const names = await pendingNames(scope);
 			expect(names).toHaveLength(1);

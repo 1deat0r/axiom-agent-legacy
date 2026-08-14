@@ -58,9 +58,15 @@ export interface DecideEditOptions {
 	denyPrefixes?: readonly string[];
 }
 
-/** Expand a leading `~/` to the home directory (approval prefixes may use it). */
+/** Expand `~` / `~/` / `~user` like the shell gate's scope.ts (~user -> /home/<user>). */
 function expandTilde(raw: string, home = homedir()): string {
-	return raw === "~" ? home : raw.startsWith("~/") ? join(home, raw.slice(2)) : raw;
+	const m = raw.match(/^~[A-Za-z0-9_.+-]*/);
+	if (!m) return raw;
+	const token = m[0];
+	if (token === "~") return raw === "~" ? home : join(home, raw.slice(1));
+	if (token === "~+") return raw; // bash PWD shorthand — handled by normPrefix
+	if (token === "~-") return raw; // OLDPWD — lexical best-effort, resolved against cwd
+	return `/home/${token.slice(1)}${raw.slice(token.length)}`;
 }
 
 /**
@@ -79,7 +85,10 @@ export async function decideEdit(
 	// Prefixes resolve against the anchored cwd (not process.cwd(), which the
 	// ipython kernel can drift from): a deny like ".secrets" must mean
 	// "<project root>/.secrets" wherever the process happens to sit.
-	const normPrefix = (prefix: string): string => resolve(toAbsolute(expandTilde(prefix), cwd));
+	const normPrefix = (prefix: string): string => {
+		if (prefix === "~+") return resolve(cwd);
+		return resolve(toAbsolute(expandTilde(prefix), cwd));
+	};
 	for (const prefix of options.denyPrefixes ?? []) {
 		const norm = normPrefix(prefix);
 		if (isWithin(norm, abs) || isWithin(norm, target)) {

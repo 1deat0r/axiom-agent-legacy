@@ -168,8 +168,10 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 		const customStateDir = options.stateDir ?? process.env.AXIOM_ROOT_GUARD_STATE_DIR;
 		// The operator's terminal usually does not share the run's env, so the
 		// relayed command must carry --root (and --state-dir when customized).
-		const operatorCommand = (id: string): string =>
-			`axiom root-guard approve ${id} --root ${rawRoot}${customStateDir ? ` --state-dir ${customStateDir}` : ""}`;
+		const shellQuote = (arg: string): string => `'${arg.replace(/'/g, `'\\''`)}'`;
+		const operatorCommand = (id: string, verb: "approve" | "reject" = "approve"): string =>
+			`axiom root-guard ${verb} ${id} --root ${shellQuote(rawRoot)}` +
+			(customStateDir ? ` --state-dir ${shellQuote(customStateDir)}` : "");
 
 		pi.on("tool_call", async (event) => {
 			const text = shellText(event.toolName, event.input);
@@ -237,7 +239,8 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 				"Request operator approval to touch paths outside this project's root. The root guard " +
 				"blocks outside paths by default; when a bash or ipython call is blocked, call this tool " +
 				"with the blocked paths and a short plain-English reason. The operator approves or " +
-				"rejects with 'axiom root-guard approve <id>' / 'axiom root-guard reject <id>'. This tool " +
+				"rejects with 'axiom root-guard approve <id> --root <root>' / 'axiom root-guard reject " +
+				"<id> --root <root>'. This tool " +
 				"waits for the decision (up to a few minutes) and reports the outcome. An approval " +
 				"applies to later calls automatically — retry the blocked call afterwards.",
 			promptGuidelines: [
@@ -304,11 +307,15 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 						details: null,
 					};
 				}
+				const deniedNote =
+					deniedByOperator.length > 0
+						? ` The operator permanently denied these paths (AXIOM_ROOT_GUARD_DENY), so they were ` +
+							`dropped from this request: ${deniedByOperator.join(", ")}.`
+						: "";
 				let id: string;
 				try {
 					const filed = await fileRequest(scope, { paths: requestable, reason: params.reason });
 					id = filed.id;
-					await appendAudit(scope, { event: "request", id, paths: requestable, reason: params.reason });
 				} catch (error) {
 					const message = error instanceof Error ? error.message : String(error);
 					return {
@@ -323,21 +330,50 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 						details: null,
 					};
 				}
+				try {
+					await appendAudit(scope, { event: "request", id, paths: requestable, reason: params.reason });
+				} catch (error) {
+					// The request IS on the board even when its audit record
+					// failed — say so instead of inviting a duplicate request.
+					const message = error instanceof Error ? error.message : String(error);
+					return {
+						content: [
+							{
+								type: "text",
+								text:
+									`Request ${id} was filed, but its audit record failed (${message}). ` +
+									`The operator can still decide with '${operatorCommand(id)}' or ` +
+									`'${operatorCommand(id, "reject")}'.`,
+							},
+						],
+						details: null,
+					};
+				}
 				const deadline = Date.now() + timeoutMs;
 				for (;;) {
 					const decision = await readDecision(scope, id);
 					if (decision) {
 						if (decision.approved) {
 							// appendGrantIfMissing records the grant AND its audit event
-							// only when it appends — one approval, one audit event.
-							await appendGrantIfMissing(scope, { id, prefixes: requestable, reason: params.reason });
+							// only when it appends — one approval, one audit event. A
+							// grant-recording failure must not turn an approved call
+							// into a raw error; the decision still stands.
+							let grantNote = "";
+							try {
+								await appendGrantIfMissing(scope, { id, prefixes: requestable, reason: params.reason });
+							} catch (error) {
+								const message = error instanceof Error ? error.message : String(error);
+								grantNote =
+									` The grant record could not be written (${message}); the operator's ` +
+									"decision still stands — retry the call, and re-file if the guard blocks.";
+							}
 							return {
 								content: [
 									{
 										type: "text",
 										text:
 											`The operator approved request ${id} for: ${requestable.join(", ")}. ` +
-											"Retry the blocked call now — the guard allows these paths.",
+											`Retry the blocked call now — the guard allows these paths.${deniedNote}${grantNote}`,
 									},
 								],
 								details: null,
@@ -366,7 +402,7 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 									text:
 										`Request ${id} is still pending (the run was interrupted). The operator can ` +
 										`still decide with '${operatorCommand(id)}' or ` +
-										`'axiom root-guard reject ${id}'; an approval applies to later calls.`,
+										`'${operatorCommand(id, "reject")}'; an approval applies to later calls.${deniedNote}`,
 								},
 							],
 							details: null,
@@ -380,8 +416,8 @@ export function createRootGuard(options: RootGuardOptions = {}): (pi: ExtensionA
 									text:
 										`Request ${id} is still pending after ${timeoutMs}ms. Tell the operator: ` +
 										`'${operatorCommand(id)}' to allow these paths (${requestable.join(", ")}) ` +
-										"or 'axiom root-guard reject <id>' to deny. An approval applies to later " +
-										"calls automatically — retry the blocked call after it.",
+										`or '${operatorCommand(id, "reject")}' to deny. An approval applies to later ` +
+										`calls automatically — retry the blocked call after it.${deniedNote}`,
 								},
 							],
 							details: null,
