@@ -2,6 +2,7 @@ import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { describe, expect, it } from "vitest";
 import type { ExtensionAPI } from "../../src/core/extensions/types.js";
 import { createSecurityFence } from "../../src/extensions/security/index.js";
+import type { HostnameResolver } from "../../src/extensions/security/url.js";
 
 /** Minimal fake ExtensionAPI capturing handlers so a test can invoke them (workspace pattern). */
 function fakePi(): { pi: ExtensionAPI; toolCall: (event: Record<string, unknown>) => Promise<unknown> } {
@@ -21,6 +22,14 @@ function fakePi(): { pi: ExtensionAPI; toolCall: (event: Record<string, unknown>
 	};
 }
 
+/** Stub resolvers keep the DNS-aware URL gate wiring tests offline (ADR-0057). */
+function publicResolver(): HostnameResolver {
+	return async (_hostname) => [{ address: "8.8.8.8", family: 4 }];
+}
+function privateResolver(): HostnameResolver {
+	return async (_hostname) => [{ address: "10.0.0.5", family: 4 }];
+}
+
 describe("createSecurityFence wiring", () => {
 	it("blocks a URL-bearing tool call whose URL is unsafe, when anchored", async () => {
 		const { pi, toolCall } = fakePi();
@@ -36,9 +45,23 @@ describe("createSecurityFence wiring", () => {
 		expect(res.block).toBe(true);
 		expect(res.reason).toMatch(/SSRF|address/i);
 	});
+	it("blocks an anchored URL-bearing call whose named host resolves private", async () => {
+		const { pi, toolCall } = fakePi();
+		createSecurityFence({ root: "/srv/proj", resolver: privateResolver() })(pi);
+		const res = fromAny<{ block: boolean; reason: string }, unknown>(
+			await toolCall({
+				type: "tool_call",
+				toolName: "fetch",
+				toolCallId: "1b",
+				input: { url: "https://intranet.corp/admin" },
+			}),
+		);
+		expect(res.block).toBe(true);
+		expect(res.reason).toMatch(/SSRF|private/i);
+	});
 	it("allows an anchored URL-bearing call with a safe URL and no sensitive rule", async () => {
 		const { pi, toolCall } = fakePi();
-		createSecurityFence({ root: "/srv/proj" })(pi);
+		createSecurityFence({ root: "/srv/proj", resolver: publicResolver() })(pi);
 		expect(
 			await toolCall({
 				type: "tool_call",
@@ -79,15 +102,27 @@ describe("createSecurityFence wiring", () => {
 			await toolCall({ type: "tool_call", toolName: "bash", toolCallId: "6", input: { command: "ls" } }),
 		).toBeUndefined();
 	});
-	it("honors an explicit host allowlist via options (gated URL passes)", async () => {
+	it("honors an explicit host allowlist via options (resolution skipped)", async () => {
 		const { pi, toolCall } = fakePi();
-		createSecurityFence({ root: "/srv/proj", allowHosts: ["127.0.0.1"] })(pi);
+		createSecurityFence({
+			root: "/srv/proj",
+			allowHosts: ["127.0.0.1", "intranet.corp"],
+			resolver: privateResolver(),
+		})(pi);
 		expect(
 			await toolCall({
 				type: "tool_call",
 				toolName: "fetch",
 				toolCallId: "7",
 				input: { url: "http://127.0.0.1:3000/x" },
+			}),
+		).toBeUndefined();
+		expect(
+			await toolCall({
+				type: "tool_call",
+				toolName: "fetch",
+				toolCallId: "8",
+				input: { url: "http://intranet.corp/x" },
 			}),
 		).toBeUndefined();
 	});
