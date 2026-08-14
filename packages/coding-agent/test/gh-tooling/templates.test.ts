@@ -36,7 +36,7 @@ describe("issue templates", () => {
 
 	it("the agent form carries all five contract parts", () => {
 		const text = read("agent-task.yml");
-		for (const part of ["Goal", "Acceptance criteria", "Scope", "ADR status", "Verification plan", "Triage role"]) {
+		for (const part of ["Goal", "Acceptance criteria", "Scope", "ADR status", "Verification plan"]) {
 			expect(text, `${part} is in the agent form`).toContain(part);
 		}
 	});
@@ -55,5 +55,14 @@ describe("issue templates", () => {
 	it("the vocabulary is exactly ten labels", () => {
 		expect(TRIAGE_ROLES).toHaveLength(5);
 		expect(WAYFINDER_LABELS).toHaveLength(5);
+	});
+});
+
+describe("role guidance", () => {
+	it("the agent form names both role labels and defers the role to triage", () => {
+		const text = read("agent-task.yml");
+		expect(text).toContain("needs-triage");
+		expect(text).toContain("ready-for-agent");
+		expect(text).not.toContain("Triage role");
 	});
 });

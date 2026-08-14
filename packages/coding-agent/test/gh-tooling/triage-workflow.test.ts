@@ -8,9 +8,18 @@ const workflow = readFileSync(
 );
 
 describe(".github/workflows/triage.yml", () => {
-	it("triggers on new issues only", () => {
+	it("triggers on opened and closed issues", () => {
 		expect(workflow).toContain("issues:");
-		expect(workflow).toContain("types: [opened]");
+		expect(workflow).toContain("types: [opened, closed]");
+	});
+
+	it("runs the close check with the tested module", () => {
+		expect(workflow).toContain("triage-close-cli.ts");
+		expect(workflow).toContain("close-check");
+	});
+
+	it("posts the close-ritual reminder on the nudge decision", () => {
+		expect(workflow).toContain("steps.check.outputs.action == 'nudge'");
 	});
 
 	it("requests issues write permission", () => {

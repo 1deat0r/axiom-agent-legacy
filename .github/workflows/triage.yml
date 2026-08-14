@@ -2,16 +2,16 @@ name: Issue triage
 
 on:
   issues:
-    types: [opened]
+    types: [opened, closed]
 
 permissions:
   contents: read
   issues: write
 
 jobs:
-  triage:
+  triage-open:
     runs-on: ubuntu-latest
-    if: ${{ !github.event.issue.pull_request }}
+    if: ${{ github.event.action == 'opened' && !github.event.issue.pull_request }}
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -31,4 +31,24 @@ jobs:
         if: steps.decide.outputs.action == 'needs-triage'
         run: |
           jq -r .comment /tmp/decision.json \
+            | gh issue comment "${{ github.event.issue.number }}" --body-file -
+
+  close-check:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.action == 'closed' && !github.event.issue.pull_request }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check audit comment
+        id: check
+        run: |
+          gh issue view "${{ github.event.issue.number }}" --json comments \
+            | npx --yes tsx@4.23.1 packages/coding-agent/src/core/gh-tooling/triage-close-cli.ts \
+            > /tmp/close-decision.json
+          echo "action=$(jq -r .action /tmp/close-decision.json)" >> "$GITHUB_OUTPUT"
+      - name: Post close-ritual reminder
+        if: steps.check.outputs.action == 'nudge'
+        run: |
+          jq -r .comment /tmp/close-decision.json \
             | gh issue comment "${{ github.event.issue.number }}" --body-file -

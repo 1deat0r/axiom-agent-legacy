@@ -7,6 +7,9 @@ body:
       value: |
         Read the readiness contract in `docs/agents/triage-labels.md` before you file.
         An issue is ready-for-agent only when all five parts are present.
+        The triage workflow applies `needs-triage` when the issue opens. A
+        maintainer upgrades the label to `ready-for-agent` when the body meets
+        the contract.
   - type: input
     id: goal
     attributes:
@@ -46,17 +49,5 @@ body:
     attributes:
       label: Verification plan
       description: How to prove the work. Red tests first. ./test.sh, biome, and tsgo clean.
-    validations:
-      required: true
-  - type: dropdown
-    id: role
-    attributes:
-      label: Triage role
-      description: Set ready-for-agent only when all five parts are complete.
-      options:
-        - needs-triage
-        - ready-for-agent
-        - ready-for-human
-      default: 0
     validations:
       required: true

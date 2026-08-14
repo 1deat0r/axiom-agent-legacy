@@ -26,9 +26,13 @@ The system now has five parts:
    Blank issues are off.
 4. **Close ritual.** No issue closes without an audit comment that links the
    merge commit, the ADR, and the handoff (issue-tracker.md).
-5. **Automation.** The workflow .github/workflows/triage.yml applies
-   `needs-triage` and posts the contract when an issue opens with no role
-   label.
+5. **Automation.** The workflow .github/workflows/triage.yml has two jobs.
+   The open job applies `needs-triage` and posts the contract when an issue
+   opens with no role label. The close job posts a reminder when an issue
+   closes without an audit comment (`Commit:`, `ADR:`, `Handoff:` in one
+   comment). The issue forms pre-apply `needs-triage`; the maintainer sets the
+   final role after triage. The form has no role dropdown, because GitHub
+   forms cannot set labels from a field.
 
 The classifier logic lives in packages/coding-agent/src/core/gh-tooling/ as
 pure functions with unit tests. Contract tests guard the workflow, the forms,
@@ -43,5 +47,7 @@ and the label vocabulary.
 - The label vocabulary is opinionated. The default GitHub labels (bug,
   enhancement, and the rest) are deleted. A team that wants those labels must
   extend the vocabulary in triage-labels.md first.
-- The triage workflow runs on every new issue. It needs the GITHUB_TOKEN with
-  issues write. The workflow never edits an issue that carries a role label.
+- The triage workflow runs on every issue open and close. It needs the
+  GITHUB_TOKEN with issues write. The open job never edits an issue that
+  carries a role label. The close job never nudges an issue that carries an
+  audit comment or a prior nudge.

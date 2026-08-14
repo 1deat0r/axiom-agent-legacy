@@ -60,3 +60,48 @@ export function decide(json: string): TriageDecision {
 		.filter((name) => name.length > 0);
 	return classifyIssue(labels);
 }
+
+export const AUDIT_MARKERS = ["Commit:", "ADR:", "Handoff:"] as const;
+
+const NUDGE_MARKER = "This issue closed without the audit comment.";
+
+export interface CloseDecision {
+	action: "skip" | "nudge";
+	comment?: string;
+}
+
+export function buildCloseNudge(): string {
+	return [
+		NUDGE_MARKER,
+		"",
+		"The close ritual (docs/agents/issue-tracker.md) asks for one comment that links three artifacts:",
+		"",
+		"- the merge commit (or the final commit hash)",
+		"- the ADR file (when the work required one)",
+		"- the handoff doc",
+		"",
+		"Post the audit comment to complete the trail.",
+	].join("\n");
+}
+
+export function classifyClose(comments: readonly { body?: string }[]): CloseDecision {
+	const bodies = comments.map((comment) => comment.body ?? "");
+	if (bodies.some((body) => body.includes(NUDGE_MARKER))) {
+		return { action: "skip" };
+	}
+	const hasAudit = bodies.some((body) => AUDIT_MARKERS.every((marker) => body.includes(marker)));
+	if (hasAudit) {
+		return { action: "skip" };
+	}
+	return { action: "nudge", comment: buildCloseNudge() };
+}
+
+export function decideClose(json: string): CloseDecision {
+	let parsed: { comments?: Array<{ body?: string }> };
+	try {
+		parsed = JSON.parse(json) as { comments?: Array<{ body?: string }> };
+	} catch {
+		throw new Error("triage-close-cli: stdin is not valid JSON");
+	}
+	return classifyClose(parsed.comments ?? []);
+}

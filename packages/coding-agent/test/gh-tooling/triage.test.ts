@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
 	ALL_LABELS,
+	AUDIT_MARKERS,
+	buildCloseNudge,
 	buildTriageComment,
+	classifyClose,
 	classifyIssue,
 	decide,
+	decideClose,
 	TRIAGE_ROLES,
 	WAYFINDER_LABELS,
 } from "../../src/core/gh-tooling/triage.js";
@@ -81,5 +85,57 @@ describe("ALL_LABELS", () => {
 	it("is exactly the ten-label vocabulary", () => {
 		expect(ALL_LABELS).toHaveLength(10);
 		expect(ALL_LABELS).toEqual([...TRIAGE_ROLES, ...WAYFINDER_LABELS]);
+	});
+});
+
+describe("classifyClose", () => {
+	it("nudges when no comments are present", () => {
+		const decision = classifyClose([]);
+		expect(decision.action).toBe("nudge");
+		expect(decision.comment).toBeTruthy();
+	});
+
+	it("skips when one comment carries all three audit markers", () => {
+		const audit = "Landed. Commit: abc ADR: docs/adr/ADR-0050.md Handoff: docs/handoff.md Verified: tests";
+		expect(classifyClose([{ body: audit }]).action).toBe("skip");
+	});
+
+	it("nudges when the markers spread across comments", () => {
+		const decision = classifyClose([{ body: "Commit: abc" }, { body: "ADR: x Handoff: y" }]);
+		expect(decision.action).toBe("nudge");
+	});
+
+	it("skips when a prior nudge comment exists", () => {
+		expect(classifyClose([{ body: "This issue closed without the audit comment." }]).action).toBe("skip");
+	});
+
+	it("never emits a comment on skip", () => {
+		expect(classifyClose([{ body: "Commit: a ADR: b Handoff: c" }]).comment).toBeUndefined();
+	});
+});
+
+describe("buildCloseNudge", () => {
+	it("names the three audit artifacts and the doc", () => {
+		const nudge = buildCloseNudge();
+		for (const part of ["merge commit", "ADR", "handoff", "docs/agents/issue-tracker.md"]) {
+			expect(nudge).toContain(part);
+		}
+	});
+});
+
+describe("decideClose", () => {
+	it("parses gh issue view --json comments output", () => {
+		const decision = decideClose('{"comments":[{"body":"Commit: a ADR: b Handoff: c"}]}');
+		expect(decision.action).toBe("skip");
+	});
+
+	it("nudges when the comments array is empty", () => {
+		expect(decideClose('{"comments":[]}').action).toBe("nudge");
+	});
+});
+
+describe("AUDIT_MARKERS", () => {
+	it("is the three close-ritual fields", () => {
+		expect(AUDIT_MARKERS).toEqual(["Commit:", "ADR:", "Handoff:"]);
 	});
 });

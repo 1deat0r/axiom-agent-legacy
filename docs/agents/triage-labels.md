@@ -44,9 +44,15 @@ The wayfinder map protocol (issue-tracker.md) uses five labels:
 
 ## Automation
 
-The workflow .github/workflows/triage.yml enforces the role rule. When an
-issue opens with no role label, the workflow applies `needs-triage` and posts
-the readiness contract as a comment. Agents must still set the role at create.
+The workflow .github/workflows/triage.yml enforces two rules:
+
+1. When an issue opens with no role label, the workflow applies `needs-triage`
+   and posts the readiness contract as a comment.
+2. When an issue closes without an audit comment, the workflow posts a
+   reminder. The audit comment must carry `Commit:`, `ADR:`, and `Handoff:` in
+   one comment.
+
+Agents must still set the role at create and post the audit comment at close.
 The workflow is the safety net, not the primary path.
 
 ## Drift check

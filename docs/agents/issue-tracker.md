@@ -84,12 +84,17 @@ skip it.
 
 ## Automation
 
-The workflow `.github/workflows/triage.yml` is the safety net. When an issue
-opens with no role label, the workflow applies `needs-triage` and posts the
-readiness contract as a comment. The workflow does not edit issues that carry
-a role label.
+The workflow `.github/workflows/triage.yml` is the safety net. It has two jobs:
 
-Agents must still set the role at create. Do not rely on the safety net.
+1. Open job. When an issue opens with no role label, the workflow applies
+   `needs-triage` and posts the readiness contract as a comment. The workflow
+   does not edit issues that carry a role label.
+2. Close job. When an issue closes without an audit comment, the workflow
+   posts a reminder. The audit comment must carry `Commit:`, `ADR:`, and
+   `Handoff:` in one comment.
+
+Agents must still set the role at create and post the audit comment at close.
+Do not rely on the safety net.
 
 To test the classifier locally:
 
