@@ -51,3 +51,21 @@ and the label vocabulary.
   GITHUB_TOKEN with issues write. The open job never edits an issue that
   carries a role label. The close job never nudges an issue that carries an
   audit comment or a prior nudge.
+
+## Follow-ups (2026-08-14, post-merge)
+
+Two reviews drove three refinements:
+
+- **Scope note.** The close ritual applies to closes from this ADR onward.
+  The 13 legacy closes predate the policy. A drift-check command lists closed
+  issues that lack the audit markers.
+- **Exactly-one enforcement.** The open job now fires on `labeled` and
+  `unlabeled` too. Two or more role labels get a conflict note. A stripped
+  role gets a contract reminder but no re-apply, so a maintainer can switch
+  roles without a loop.
+- **Form wording.** The form pre-applies `needs-triage` via its `labels` key;
+  the preamble now says so instead of naming the workflow as the applier.
+
+The classifier logic stays pure and unit-tested; the workflow runs the same
+code the tests exercise. The close job reminds once by design; the drift
+check is the sweep.

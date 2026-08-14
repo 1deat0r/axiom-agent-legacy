@@ -1,5 +1,5 @@
 name: Agent task
-description: A task for an agent. The body follows the readiness contract.
+description: A task with the five contract parts. Triage sets the role.
 labels: [needs-triage]
 body:
   - type: markdown
@@ -7,9 +7,8 @@ body:
       value: |
         Read the readiness contract in `docs/agents/triage-labels.md` before you file.
         An issue is ready-for-agent only when all five parts are present.
-        The triage workflow applies `needs-triage` when the issue opens. A
-        maintainer upgrades the label to `ready-for-agent` when the body meets
-        the contract.
+        This form pre-applies `needs-triage`. A maintainer upgrades the label
+        to `ready-for-agent` when the body meets the contract.
   - type: input
     id: goal
     attributes:

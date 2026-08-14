@@ -10,7 +10,7 @@ const workflow = readFileSync(
 describe(".github/workflows/triage.yml", () => {
 	it("triggers on opened and closed issues", () => {
 		expect(workflow).toContain("issues:");
-		expect(workflow).toContain("types: [opened, closed]");
+		expect(workflow).toContain("types: [opened, closed, labeled, unlabeled]");
 	});
 
 	it("runs the close check with the tested module", () => {
@@ -45,3 +45,12 @@ describe(".github/workflows/triage.yml", () => {
 		expect(workflow).toContain("GH_TOKEN");
 	});
 });
+
+	it("passes the event action to the classifier", () => {
+		expect(workflow).toContain("github.event.action");
+		expect(workflow).toContain("triage-cli.ts");
+	});
+
+	it("posts the role-conflict note on the conflict decision", () => {
+		expect(workflow).toContain("steps.decide.outputs.action == 'role-conflict'");
+	});

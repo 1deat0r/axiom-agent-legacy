@@ -46,23 +46,39 @@ The wayfinder map protocol (issue-tracker.md) uses five labels:
 
 The workflow .github/workflows/triage.yml enforces two rules:
 
-1. When an issue opens with no role label, the workflow applies `needs-triage`
-   and posts the readiness contract as a comment.
-2. When an issue closes without an audit comment, the workflow posts a
-   reminder. The audit comment must carry `Commit:`, `ADR:`, and `Handoff:` in
-   one comment.
+1. Open job. Fires on `opened`, `labeled`, and `unlabeled`. Zero role labels:
+   apply `needs-triage` and post the contract (on `unlabeled`, post only — no
+   re-apply, so a maintainer can switch roles without a fight). Two or more
+   role labels: post a conflict note. One role label: no action.
+2. Close job. Fires on `closed`. When the issue closes without an audit
+   comment, post one reminder. The audit comment must carry `Commit:`, `ADR:`,
+   and `Handoff:` in one comment. The reminder does not repeat.
+
+The close ritual applies to closes from ADR-0050 (2026-08-14) onward. Earlier
+closes predate the policy and carry no audit comment by design.
 
 Agents must still set the role at create and post the audit comment at close.
 The workflow is the safety net, not the primary path.
 
-## Drift check
+## Drift checks
 
-The live label set must match this file. To verify:
+Two checks keep the live repo honest.
+
+The live label set must match this file:
 
 ```
 gh label list --limit 50
 ```
 
-Fix drift with `gh label create` / `gh label delete`. The contract tests in
-packages/coding-agent/test/gh-tooling/ guard the templates and the workflow
-against the same vocabulary.
+Fix drift with `gh label create` / `gh label delete`.
+
+Closed issues from ADR-0050 onward must carry an audit comment. List the ones
+that do not:
+
+```
+gh issue list --state closed --json number,comments \
+  --jq '[.[] | select((.comments | map(.body // "") | any(contains("Commit:") and contains("ADR:") and contains("Handoff:"))) | not) | .number]'
+```
+
+The contract tests in packages/coding-agent/test/gh-tooling/ guard the
+templates and the workflow against the same vocabulary.

@@ -1,9 +1,14 @@
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { createRpcClientBridge, parseModelRef } from "../../src/extensions/delegate/bridge.js";
+import {
+	createRpcClientBridge,
+	HELPER_ENV_SCRUB_KEYS,
+	parseModelRef,
+	scrubHelperEnv,
+} from "../../src/extensions/delegate/bridge.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -515,6 +520,118 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 			await bridge.stop();
 		}
 	}, 90_000);
+});
+
+// ============================================================================
+// Helper env scrub (issue #26): a helper spawned from an RLM-harness session
+// must never inherit the harness variables. The bridge owns the scrub;
+// RpcClient drops undefined env entries at spawn.
+// ============================================================================
+
+describe("helper env scrub", () => {
+	const ambientHarnessEnv = {
+		PATH: "/usr/bin",
+		AXIOM_HOME: "/home/u/.axiom",
+		RLM_DEPTH: "1",
+		RLM_MAX_DEPTH: "2",
+		RLM_SESSION_DIR: "/fake/session",
+		RLM_GLOBAL_HARNESS_STATE_DIR: "/fake/global",
+		RLM_HARNESS_STATE_DIR: "/fake/harness",
+		AXIOM_CODING_AGENT_DIR: "/fake/agent-dir",
+	};
+
+	it("marks the harness variables unset and keeps every other entry", () => {
+		const scrubbed = scrubHelperEnv(ambientHarnessEnv);
+		expect(scrubbed.PATH).toBe("/usr/bin");
+		expect(scrubbed.AXIOM_HOME).toBe("/home/u/.axiom");
+		for (const key of HELPER_ENV_SCRUB_KEYS) {
+			expect(scrubbed[key]).toBeUndefined();
+		}
+	});
+
+	it("lets explicit extra entries win over the ambient scrub (escape hatch)", () => {
+		const scrubbed = scrubHelperEnv(
+			{ RLM_DEPTH: "1", AXIOM_CODING_AGENT_DIR: "/ambient" },
+			{ AXIOM_CODING_AGENT_DIR: "/explicit", PROBE_KEEP: "yes" },
+		);
+		expect(scrubbed.RLM_DEPTH).toBeUndefined();
+		expect(scrubbed.AXIOM_CODING_AGENT_DIR).toBe("/explicit");
+		expect(scrubbed.PROBE_KEEP).toBe("yes");
+	});
+
+	it("matches the RLM_* set ./test.sh unsets, plus AXIOM_CODING_AGENT_DIR", () => {
+		const testShPath = join(__dirname, "..", "..", "..", "..", "test.sh");
+		const testSh = readFileSync(testShPath, "utf8");
+		const unsetRlm = new Set<string>();
+		for (const line of testSh.split("\n")) {
+			const match = line.match(/^\s*unset\s+(.+)$/);
+			if (!match) {
+				continue;
+			}
+			for (const name of match[1].split(/\s+/)) {
+				if (name.startsWith("RLM_")) {
+					unsetRlm.add(name);
+				}
+			}
+		}
+		const rlmScrub = HELPER_ENV_SCRUB_KEYS.filter((key) => key.startsWith("RLM_"));
+		expect([...unsetRlm].sort()).toEqual([...rlmScrub].sort());
+		expect(HELPER_ENV_SCRUB_KEYS).toContain("AXIOM_CODING_AGENT_DIR");
+	});
+
+	it("spawns a helper that never sees ambient harness variables but sees explicit extras", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "delegate-env-"));
+		const probePath = join(dir, "probe.mjs");
+		const outPath = join(dir, "env.json");
+		writeFileSync(
+			probePath,
+			[
+				'import { writeFileSync } from "node:fs";',
+				"writeFileSync(process.env.PROBE_OUT, JSON.stringify({",
+				"  rlm: 'RLM_DEPTH' in process.env,",
+				"  codingDir: 'AXIOM_CODING_AGENT_DIR' in process.env,",
+				"  keep: process.env.PROBE_KEEP ?? null,",
+				"}));",
+				"setInterval(() => {}, 60000);",
+			].join("\n"),
+		);
+
+		const prevRlm = process.env.RLM_DEPTH;
+		const prevCodingDir = process.env.AXIOM_CODING_AGENT_DIR;
+		process.env.RLM_DEPTH = "/fake/harness";
+		process.env.AXIOM_CODING_AGENT_DIR = "/fake/agent-dir";
+
+		const bridge = createRpcClientBridge({
+			cliPath: probePath,
+			env: { PROBE_OUT: outPath, PROBE_KEEP: "yes" },
+		});
+		try {
+			await bridge.start();
+			const deadline = Date.now() + 10_000;
+			while (!existsSync(outPath) && Date.now() < deadline) {
+				await new Promise((resolve) => setTimeout(resolve, 50));
+			}
+			expect(existsSync(outPath)).toBe(true);
+			const seen = fromAny<{ rlm: boolean; codingDir: boolean; keep: string | null }, unknown>(
+				JSON.parse(readFileSync(outPath, "utf8")),
+			);
+			expect(seen.rlm).toBe(false);
+			expect(seen.codingDir).toBe(false);
+			expect(seen.keep).toBe("yes");
+		} finally {
+			await bridge.stop();
+			if (prevRlm === undefined) {
+				delete process.env.RLM_DEPTH;
+			} else {
+				process.env.RLM_DEPTH = prevRlm;
+			}
+			if (prevCodingDir === undefined) {
+				delete process.env.AXIOM_CODING_AGENT_DIR;
+			} else {
+				process.env.AXIOM_CODING_AGENT_DIR = prevCodingDir;
+			}
+		}
+	}, 30_000);
 });
 
 describe("background delegate", () => {

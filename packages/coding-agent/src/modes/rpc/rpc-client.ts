@@ -75,8 +75,8 @@ export interface RpcClientOptions {
 	cliPath?: string;
 	/** Working directory for the agent */
 	cwd?: string;
-	/** Environment variables */
-	env?: Record<string, string>;
+	/** Environment variables (undefined entries unset the variable in the helper) */
+	env?: Record<string, string | undefined>;
 	/** Provider to use */
 	provider?: string;
 	/** Model ID to use */
@@ -132,9 +132,19 @@ export class RpcClient {
 			args.push(...this.options.args);
 		}
 
+		const env: NodeJS.ProcessEnv = { ...process.env, ...this.options.env };
+		// undefined overrides mean "unset": drop them before spawn so the
+		// helper env block never carries the key (callers such as the delegate
+		// bridge scrub harness variables this way).
+		for (const [key, value] of Object.entries(env)) {
+			if (value === undefined) {
+				delete env[key];
+			}
+		}
+
 		this.process = spawn("node", [cliPath, ...args], {
 			cwd: this.options.cwd,
-			env: { ...process.env, ...this.options.env },
+			env,
 			stdio: ["pipe", "pipe", "pipe"],
 		});
 

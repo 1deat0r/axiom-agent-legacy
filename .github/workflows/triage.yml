@@ -2,7 +2,7 @@ name: Issue triage
 
 on:
   issues:
-    types: [opened, closed]
+    types: [opened, closed, labeled, unlabeled]
 
 permissions:
   contents: read
@@ -11,7 +11,7 @@ permissions:
 jobs:
   triage-open:
     runs-on: ubuntu-latest
-    if: ${{ github.event.action == 'opened' && !github.event.issue.pull_request }}
+    if: ${{ github.event.action != 'closed' && !github.event.issue.pull_request }}
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -20,7 +20,7 @@ jobs:
         id: decide
         run: |
           gh issue view "${{ github.event.issue.number }}" --json labels \
-            | npx --yes tsx@4.23.1 packages/coding-agent/src/core/gh-tooling/triage-cli.ts \
+            | npx --yes tsx@4.23.1 packages/coding-agent/src/core/gh-tooling/triage-cli.ts "${{ github.event.action }}" \
             > /tmp/decision.json
           echo "action=$(jq -r .action /tmp/decision.json)" >> "$GITHUB_OUTPUT"
           echo "label=$(jq -r .label /tmp/decision.json)" >> "$GITHUB_OUTPUT"
@@ -28,7 +28,12 @@ jobs:
         if: steps.decide.outputs.action == 'needs-triage'
         run: gh issue edit "${{ github.event.issue.number }}" --add-label "${{ steps.decide.outputs.label }}"
       - name: Post readiness contract
-        if: steps.decide.outputs.action == 'needs-triage'
+        if: steps.decide.outputs.action == 'needs-triage' || steps.decide.outputs.action == 'remind'
+        run: |
+          jq -r .comment /tmp/decision.json \
+            | gh issue comment "${{ github.event.issue.number }}" --body-file -
+      - name: Post role-conflict note
+        if: steps.decide.outputs.action == 'role-conflict'
         run: |
           jq -r .comment /tmp/decision.json \
             | gh issue comment "${{ github.event.issue.number }}" --body-file -

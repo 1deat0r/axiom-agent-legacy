@@ -38,6 +38,44 @@ export interface RpcClientBridgeOptions {
 }
 
 /**
+ * Environment variables the delegate helper must never inherit from the
+ * parent agent process.
+ *
+ * RLM_* flip the rlm max-depth default to "env" and point the helper at the
+ * harness session state; AXIOM_CODING_AGENT_DIR points the helper agent dir
+ * at the harness session dir. A helper that inherits them emits no RPC
+ * events and hangs until the collect timeout (issue #26). The RLM_* subset
+ * matches the set ./test.sh unsets; delegate.test.ts keeps them in sync.
+ */
+export const HELPER_ENV_SCRUB_KEYS = [
+	"RLM_DEPTH",
+	"RLM_MAX_DEPTH",
+	"RLM_SESSION_DIR",
+	"RLM_GLOBAL_HARNESS_STATE_DIR",
+	"RLM_HARNESS_STATE_DIR",
+	"AXIOM_CODING_AGENT_DIR",
+] as const;
+
+/**
+ * Build the helper env: the ambient env with every harness variable marked
+ * unset (undefined), then any explicit extra entries merged last so callers
+ * can still override deliberately.
+ *
+ * The bridge passes the whole map as `RpcClientOptions.env`; RpcClient drops
+ * undefined entries at spawn, so scrubbed variables never reach the helper.
+ */
+export function scrubHelperEnv(
+	env: Record<string, string | undefined>,
+	extra: Record<string, string> = {},
+): Record<string, string | undefined> {
+	const scrubbed: Record<string, string | undefined> = { ...env };
+	for (const key of HELPER_ENV_SCRUB_KEYS) {
+		scrubbed[key] = undefined;
+	}
+	return { ...scrubbed, ...extra };
+}
+
+/**
  * Parse a "provider/model" (or bare "model") reference into client options.
  * The tool's `model` param uses this so the helper is actually configured with
  * the requested model — never merely echoed back unhonored.
@@ -66,7 +104,9 @@ export function createRpcClientBridge(options: RpcClientBridgeOptions = {}): Rpc
 	let client: RpcClient | null = new RpcClient({
 		...(options.cliPath ? { cliPath: options.cliPath } : {}),
 		...(options.cwd ? { cwd: options.cwd } : {}),
-		...(options.env ? { env: options.env } : {}),
+		// Always pass the scrubbed ambient env (never let the merge fall back
+		// to a wholesale process.env that carries harness variables).
+		env: scrubHelperEnv(process.env, options.env),
 		...(options.provider ? { provider: options.provider } : {}),
 		...(options.model ? { model: options.model } : {}),
 	});
