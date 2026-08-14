@@ -93,3 +93,95 @@ describe("Markdown color descriptors", () => {
 		assert.ok(plain.includes("#section"), "URL is rendered");
 	});
 });
+
+describe("Markdown standalone hex literals", () => {
+	afterEach(() => {
+		resetCapabilitiesCache();
+	});
+
+	it("colors a standalone hex literal with its own color and a swatch chip", () => {
+		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
+		const { theme, calls } = makeCapturingTheme();
+		const markdown = new Markdown("shade #50fa7b here", 0, 0, theme);
+
+		const lines = markdown.render(80);
+		const plain = lines.map((line) => line.replace(/\x1b\[[0-9;]*m/g, "")).join("\n");
+
+		assert.deepStrictEqual(calls.colored, [
+			{ text: "#50FA7B", color: { channel: "fg", kind: "hex", value: "50FA7B" } },
+			{ text: "■", color: { channel: "fg", kind: "hex", value: "50FA7B" } },
+		]);
+		assert.deepStrictEqual(calls.backgrounded, []);
+		assert.ok(plain.includes("shade"), "leading text is rendered");
+		assert.ok(plain.includes("here"), "trailing text is rendered");
+	});
+
+	it("colors multiple standalone hex literals on one line", () => {
+		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
+		const { theme, calls } = makeCapturingTheme();
+		const markdown = new Markdown("#FF5555 and #50fa7b", 0, 0, theme);
+
+		markdown.render(80);
+
+		assert.deepStrictEqual(calls.colored, [
+			{ text: "#FF5555", color: { channel: "fg", kind: "hex", value: "FF5555" } },
+			{ text: "■", color: { channel: "fg", kind: "hex", value: "FF5555" } },
+			{ text: "#50FA7B", color: { channel: "fg", kind: "hex", value: "50FA7B" } },
+			{ text: "■", color: { channel: "fg", kind: "hex", value: "50FA7B" } },
+		]);
+	});
+
+	it("skips a hex literal embedded in a word", () => {
+		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
+		const { theme, calls } = makeCapturingTheme();
+		const markdown = new Markdown("size#50fa7b", 0, 0, theme);
+
+		markdown.render(80);
+
+		assert.deepStrictEqual(calls.colored, []);
+	});
+
+	it("skips a hex literal inside inline code", () => {
+		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
+		const { theme, calls } = makeCapturingTheme();
+		const markdown = new Markdown("run `echo #50fa7b` now", 0, 0, theme);
+
+		markdown.render(80);
+
+		assert.deepStrictEqual(calls.colored, []);
+	});
+
+	it("skips a three digit shorthand", () => {
+		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
+		const { theme, calls } = makeCapturingTheme();
+		const markdown = new Markdown("#5f7", 0, 0, theme);
+
+		markdown.render(80);
+
+		assert.deepStrictEqual(calls.colored, []);
+	});
+
+	it("keeps the literal as plain text when the theme has no colored hook", () => {
+		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
+		const markdown = new Markdown("shade #50fa7b here", 0, 0, defaultMarkdownTheme);
+
+		const lines = markdown.render(80);
+		const plain = lines.map((line) => line.replace(/\x1b\[[0-9;]*m/g, "")).join("\n");
+
+		assert.ok(plain.includes("#50fa7b"), "literal stays plain");
+		assert.ok(!plain.includes("■"), "no swatch chip without a colored hook");
+	});
+
+	it("composes with bold around the literal", () => {
+		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
+		const { theme, calls } = makeCapturingTheme();
+		const markdown = new Markdown("**#50fa7b**", 0, 0, theme);
+
+		markdown.render(80);
+
+		assert.deepStrictEqual(calls.colored, [
+			{ text: "#50FA7B", color: { channel: "fg", kind: "hex", value: "50FA7B" } },
+			{ text: "■", color: { channel: "fg", kind: "hex", value: "50FA7B" } },
+		]);
+	});
+});

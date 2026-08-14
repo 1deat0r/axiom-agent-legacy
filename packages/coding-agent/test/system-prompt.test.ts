@@ -637,6 +637,32 @@ describe("buildSystemPrompt", () => {
 		expect(build(["bash"], [pythonSkill("agent-message")])).not.toContain("agent_message.send");
 	});
 
+	test("includes markdown color guidance in the default prompt", () => {
+		const prompt = buildSystemPrompt({
+			selectedTools: ["ipython"],
+			contextFiles: [],
+			skills: [],
+			cwd: "/repo",
+		});
+
+		expect(prompt).toContain("# Markdown color");
+		expect(prompt).toContain("[text](#role:NAME)");
+		expect(prompt).toContain("error, warn, ok, info, accent, muted");
+	});
+
+	test("includes markdown color guidance in custom prompts too", () => {
+		const prompt = buildSystemPrompt({
+			customPrompt: "custom body",
+			selectedTools: ["ipython"],
+			contextFiles: [],
+			skills: [],
+			cwd: "/repo",
+		});
+
+		expect(prompt).toContain("# Markdown color");
+		expect(prompt).toContain("[text](#hex:RRGGBB)");
+	});
+
 	test("append system prompt content is included after the rlm harness prompt", () => {
 		const prompt = buildSystemPrompt({
 			selectedTools: ["ipython"],

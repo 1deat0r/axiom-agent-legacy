@@ -593,6 +593,35 @@ export class Markdown implements Component {
 		return lines;
 	}
 
+	private static readonly HEX_LITERAL_RE = /(?<![#0-9a-fA-F])#([0-9a-fA-F]{6})(?![0-9a-fA-F])/g;
+
+	/**
+	 * Color standalone #RRGGBB literals in plain text with their own color and
+	 * a swatch chip. Plain segments keep the ambient style; literals stay plain
+	 * text when the theme has no colored hook.
+	 */
+	private renderTextWithHexLiterals(text: string, styleContext: InlineStyleContext): string {
+		const colored = this.theme.colored;
+		const applyWithNewlines = (value: string): string => {
+			const segments = value.split("\n");
+			return segments.map((segment) => styleContext.applyText(segment)).join("\n");
+		};
+		if (!colored) return applyWithNewlines(text);
+		let out = "";
+		let last = 0;
+		for (const match of text.matchAll(Markdown.HEX_LITERAL_RE)) {
+			const index = match.index;
+			out += applyWithNewlines(text.slice(last, index));
+			const value = match[1]!.toUpperCase();
+			const descriptor: ColorDescriptor = { channel: "fg", kind: "hex", value };
+			out += colored(match[0]!.toUpperCase(), descriptor) + styleContext.stylePrefix;
+			out += colored("■", descriptor) + styleContext.stylePrefix;
+			last = index + match[0]!.length;
+		}
+		out += applyWithNewlines(text.slice(last));
+		return out;
+	}
+
 	private renderInlineTokens(tokens: Token[], styleContext?: InlineStyleContext): string {
 		let result = "";
 		const resolvedStyleContext = styleContext ?? this.getDefaultInlineStyleContext();
@@ -609,7 +638,7 @@ export class Markdown implements Component {
 					if (token.tokens && token.tokens.length > 0) {
 						result += this.renderInlineTokens(token.tokens, resolvedStyleContext);
 					} else {
-						result += applyTextWithNewlines(token.text);
+						result += this.renderTextWithHexLiterals(token.text, resolvedStyleContext);
 					}
 					break;
 

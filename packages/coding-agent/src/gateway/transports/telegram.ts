@@ -14,6 +14,7 @@
  * id is itself allowlisted.
  */
 import { readFileSync, writeFileSync } from "node:fs";
+import { stripColorDescriptors } from "../color-strip.js";
 import { toGatewayMessage } from "../messages.js";
 import type { GatewayMessage, GatewayRecipient, GatewayTransport } from "../types.js";
 
@@ -160,7 +161,8 @@ export function renderTelegramText(text: string): string {
 			// A closed fenced block: escape its content inside <pre>.
 			out += `<pre>${escapeHtmlText(segment)}</pre>`;
 		} else {
-			out += segment
+			const stripped = stripColorDescriptors(segment);
+			out += stripped
 				.split("\n")
 				.map((line) => {
 					const heading = line.match(/^(#{1,6})\s+(.*)$/);

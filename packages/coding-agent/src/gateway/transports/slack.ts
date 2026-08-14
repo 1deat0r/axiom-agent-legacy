@@ -18,6 +18,7 @@
  * config.json sender allowlist in the router before any model call.
  */
 import { readFileSync, writeFileSync } from "node:fs";
+import { stripColorDescriptors } from "../color-strip.js";
 import { toGatewayMessage } from "../messages.js";
 import type { GatewayMessage, GatewayRecipient, GatewayTransport } from "../types.js";
 import { chunkTelegramText } from "./telegram.js";
@@ -183,7 +184,7 @@ export class SlackTransport implements GatewayTransport {
 	}
 
 	async send(to: GatewayRecipient, text: string): Promise<void> {
-		const chunks = chunkSlackText(text, SLACK_TEXT_LIMIT);
+		const chunks = chunkSlackText(stripColorDescriptors(text), SLACK_TEXT_LIMIT);
 		for (const chunk of chunks) {
 			try {
 				await this.client.postMessage({ channel: to.channelId, text: chunk });

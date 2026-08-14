@@ -17,6 +17,7 @@
  * deny the router sends every denial.
  */
 import { readFileSync, writeFileSync } from "node:fs";
+import { stripColorDescriptors } from "../color-strip.js";
 import { toGatewayMessage } from "../messages.js";
 import type { GatewayMessage, GatewayRecipient, GatewayTransport } from "../types.js";
 import { chunkTelegramText } from "./telegram.js";
@@ -179,7 +180,7 @@ export class DiscordTransport implements GatewayTransport {
 	}
 
 	async send(to: GatewayRecipient, text: string): Promise<void> {
-		const chunks = chunkDiscordText(text, DISCORD_TEXT_LIMIT);
+		const chunks = chunkDiscordText(stripColorDescriptors(text), DISCORD_TEXT_LIMIT);
 		// Send each ≤2000-char chunk in order; a failing chunk is surfaced to the
 		// operator's observable and stops that batch — never silently dropped.
 		for (const chunk of chunks) {
