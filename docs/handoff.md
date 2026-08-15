@@ -51,18 +51,45 @@
   kernel skills, real daemon process stress for the supervisor suites —
   never blurred.)
 
+## Follow-up fix (same session): daemon death root-caused and fixed
+
+The silent daemon death was **not** a flake. Root cause, confirmed by
+code reading and a live repro:
+
+1. `scanListeningDaemons` (daemon-ps.ts) is a system-wide `ss -lxp`
+   scan filtered only by process name (`comm == APP_NAME`). It ignores
+   the TMPDIR/registry scoping the test harness applies.
+2. The 4603 `shutdown --force` test spawns its sandbox daemons under
+   APP_NAME, so the production daemon (also APP_NAME) was discovered
+   too. `planShutdownAll` has no default-socket guard (unlike
+   `planReap`).
+3. The busy supervisor could not drain an active agent session within
+   the grace window, so the CLI escalated SIGTERM → SIGKILL (500ms) —
+   a silent death with no log line. The test passes anyway because it
+   only asserts `stopped: expect.any(Array)` and checks post-conditions
+   after the real daemon is already dead.
+
+**Fix (commit `902932e03`):** new `AXIOM_INTERNAL_DAEMON_DISCOVERY_SCOPED`
+env. When set, the ss scan reports only sockets under directories the
+invocation owns (TMPDIR-honoring default socket dir, the
+env-declared socket path, registry-tracked supervisor dirs). The 4603
+`runCli` now declares it (plus its socket path via
+`DAEMON_WORKER_SUPERVISOR_SOCKET_ENV`). Production CLIs never set it, so
+`--daemon-socket` discovery is unchanged.
+
+**Verified:** new regression test plants a production-like decoy daemon
+(comm `axiom`, foreign socket dir) and asserts `shutdown --force` leaves
+it alive — fails without the fix (red run), passes with it. Full 4603
+suite 5/5, daemon-ps unit suite 25/25, biome + tsgo clean.
+
 ## Notes
 
-- **Operational hazard (correlation, causation unproven):** the live
-  daemon hosting this agent session died silently during the floor's
-  process-stress phase. Last session activity was 02:35:06Z, inside the
-  window of the 4603 "shutdown --force removes hidden supervisors and
-  workers through the public CLI" test (~02:34:47–02:35:31Z). The
-  daemon log (`daemon.sock.1b1faf65.log`) ends with no shutdown line.
-  The floor itself survived as an orphaned child and completed green.
-  Worth checking whether that test can reach the real
-  `/tmp/axiom-1000/daemon.sock`. test.sh's auth.json move at start is
-  exonerated — the session kept working ~4.5 min after it.
+- The full floor re-run after the fix is the remaining gate; run it
+  detached (`setsid nohup ./test.sh`) so a wrong fix can't kill the
+  session again — the log lands either way.
+- test.sh's auth.json move at start was exonerated (the session kept
+  working ~4.5 min after it; the death came during the 4603 shutdown
+  test window).
 - Pre-existing untracked `docs/hermes-improvements.html` was left alone
   (removed from main during gateway-branch cleanup; not part of this
   change).
