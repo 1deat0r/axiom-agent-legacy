@@ -68,6 +68,16 @@ export interface BundledSkillsSettings {
 	websearch?: boolean; // default: true
 }
 
+export interface WebSearchSettings {
+	timeoutMs?: number; // default: 8000
+	maxResults?: number; // default: 5
+}
+
+export interface WebFetchSettings {
+	timeoutMs?: number; // default: 15000
+	maxChars?: number; // default: 20000
+}
+
 export interface WarningSettings {
 	anthropicExtraUsage?: boolean; // default: true
 }
@@ -153,6 +163,8 @@ export interface Settings {
 	enableSkillCommands?: boolean; // default: true - register skills as /skill:name commands
 	mermaidRendering?: boolean; // default: true - render mermaid code blocks as diagrams
 	bundledSkills?: BundledSkillsSettings; // Configure built-in skills shipped with Axiom
+	webSearch?: WebSearchSettings;
+	webFetch?: WebFetchSettings;
 	enableBuiltinSkills?: boolean; // default: true - load built-in skills shipped with axiom
 	terminal?: TerminalSettings;
 	images?: ImageSettings;
@@ -1093,6 +1105,14 @@ export class SettingsManager {
 		this.globalSettings.enableSkillCommands = enabled;
 		this.markModified("enableSkillCommands");
 		this.save();
+	}
+
+	getWebSearchSettings(): WebSearchSettings | undefined {
+		return this.settings.webSearch;
+	}
+
+	getWebFetchSettings(): WebFetchSettings | undefined {
+		return this.settings.webFetch;
 	}
 
 	getBundledSkills(): { websearch: boolean } {

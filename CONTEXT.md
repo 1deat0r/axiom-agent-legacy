@@ -58,6 +58,16 @@ by renumbering the later reservation.
 _Avoid_: Free allocation at branch time, first-write-wins (parallel branches
 cannot see each other's ADR files, so allocation must happen in the tracker)
 
+**File search**:
+The two purpose-built search surfaces the agent owns (ADR-0073): the `grep`
+tool (lexical: where does this text appear, shaped and capped) and the
+`ast-grep` skill (structural: where does this code shape appear). A call-graph
+index (relational: who calls this) is deferred future work. The rule: text
+questions go to `grep`, shape questions go to ast-grep, ad-hoc bash grep is
+the last resort.
+_Avoid_: Search tool (the session-archive search in `gateway/session-search.ts`
+is a different capability with the same word)
+
 **Renumber**:
 The collision-resolution edit that changes an ADR's number: rename the file,
 update the title's `(ADR-00NN)`, and fix every reference (CONTEXT.md terms,
@@ -259,6 +269,12 @@ with a "description is required" warning.
 _Avoid_: Skill audit (the security verdict, ADR-0025), Skill capture (the
 procedural-memory pipeline, ADR-0024)
 
+**Web tools**:
+The two native core tools for web access, `web_search` and `web_fetch`
+(ADR-0074). They scrape DuckDuckGo and Bing directly, fall back to the local
+Obscura MCP server, and route every fetch through the URL safety gate
+(ADR-0057, ADR-0066). The Obscura skill keeps browser automation; the Serper
+skill stays the keyed fallback.
 **Drift**:
 An agent acting outside its project's identity, context, or boundary — wrong
 files, wrong memory, wrong ledger. Prevented by the anti-drift ladder
