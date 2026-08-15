@@ -1,7 +1,7 @@
-# Handoff — sovereign layer ported (memory + skills); bridge re-point next
+# Handoff — sovereign layer fully ported (memory + skills + bridge)
 
-Written 2026-08-16 (session 3). Status: memory + skills stores ported and
-verified cross-language. Resume here.
+Written 2026-08-16 (session 4). Status: memory + skills stores AND the
+native-store-bridge plugin (port #3) ported and verified. Resume here.
 
 ## What was done (session 1 — re-foundation)
 
@@ -54,6 +54,24 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
     values (SKILL.md content starts with `---`); added `src/cli/parse_args.ts`
     (joins `--opt value` -> `--opt=value`).
 
+## What was done (session 4)
+
+16. Ported the native-store-bridge plugin (port #3, issue #64) to
+    `axiom/plugin/native-store-bridge/` — same shape as 3V0's
+    `3v0/plugin/native-store-bridge`, re-pointed at the TS sovereign CLI:
+    - `post_tool_call` mirror: `memory` -> `node src/cli/ingest.ts`,
+      `skill_manage` -> `node src/cli/ingest_skills.ts` (stdin JSON, best-effort).
+    - `axiom_store` tool -> `node src/cli/query.ts` (read).
+    - `axiom_record` tool -> `node src/cli/record.ts` / `record_skills.ts` (write).
+17. Set the `AXIOM_STORE` / `AXIOM_SKILL_STORE` / `AXIOM_PROFILE_MEM` /
+    `AXIOM_SKILLS_DIR` overrides in the plugin's subprocess env (existing env
+    wins via `setdefault`, so tests/operators can redirect the store).
+18. Re-anchored the tools from 3V0 to Axiom (`threev0_store`/`threev0_record`
+    -> `axiom_store`/`axiom_record`, toolset `axiom`); session-scoping gate
+    re-anchored to the axiom-agent repo + `AXIOM_HOME`. Out of scope (per the
+    issue): `review_session.py` stays Python/3V0 — the `on_session_end` hook is
+    not wired here.
+
 ## Verified (how)
 
 - `git ls-remote origin` — main + 3 archive branches + tag all correct.
@@ -64,14 +82,24 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
   TS-written store (incl. supersession/absorb lineage) and re-serialize it
   byte-identical (`cmp`); Python `ingest.py` -> TS `query.ts` verified the
   reverse direction.
+- Plugin E2E (`tests/axiom/test_native_store_bridge.py`, 8 tests): the
+  re-pointed plugin shells out to the real `node` CLIs against a temp store —
+  memory/skill mirror, query, record/retract, skill_update all land in the
+  byte-compatible stores; the derived-view projection (SKILL.md) lands in the
+  profile skills dir. Run via `scripts/run_tests.sh
+  tests/axiom/test_native_store_bridge.py`.
 
 ## Next steps (in order)
 
 1. ~~Decide CLI runtime~~ — resolved 2026-08-16: `node` (see session 3 #9).
 2. ~~Port #2 — skills store~~ — done (session 3 #13-15).
-   Remaining: **port #3** — re-point the native-store-bridge plugin subprocess
-   calls at the TS CLI (`node src/cli/*.ts`).
-3. **Flag — prime-era automation stale**: `axiom/docs/agents/issue-tracker.md`
+3. ~~Port #3 — re-point native-store-bridge at the TS CLI~~ — done (session 4;
+   `axiom/plugin/native-store-bridge/` registers `axiom_store` + `axiom_record`
+   and shells out to `node src/cli/*.ts`).
+4. **Port #4 — cost ledger** (ADR-0010): per-model token pricing,
+   never-invented spend. Hermes has Nous-account billing only. See
+   axiom/docs/ports.md.
+5. **Flag — prime-era automation stale**: `axiom/docs/agents/issue-tracker.md`
    "Automation" section references `.github/workflows/triage.yml` +
    `issue-hygiene.yml`, which do NOT exist on the Hermes baseline. Decide
    whether to port that automation.
@@ -86,5 +114,7 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
   `npm run typecheck` instead of `tsc` directly.
 - Sovereign CLIs resolve store/profile paths via the `AXIOM_STORE`,
   `AXIOM_SKILL_STORE`, `AXIOM_PROFILE_MEM`, `AXIOM_SKILLS_DIR` env overrides
-  (defaults: `axiom/sovereign/data/` + the Axiom Hermes profile). Port #3's
-  plugin must set these in the subprocess env.
+  (defaults: `axiom/sovereign/data/` + the Axiom Hermes profile). The ported
+  plugin sets these in its subprocess env; `AXIOM_SOVEREIGN_ROOT` points the
+  plugin at the package (falls back to a marker file, the repo-relative
+  `axiom/sovereign/`, then `~/Projects/axiom-agent/axiom/sovereign`).

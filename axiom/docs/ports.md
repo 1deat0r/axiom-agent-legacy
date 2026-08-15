@@ -29,7 +29,7 @@ plugin + CLI. The profile stays a derived view; the JSON store is canonical.
 |---|---|---|---|---|
 | 1 | Store-first memory (memory.json) | 3v0/core/memory.py | memory tool exists (profile-derived); no canonical JSON + lineage | done |
 | 2 | Skills store lineage (skills.json) | 3v0/core/skills.py | skill_manage exists; no versioned lineage store | done |
-| 3 | native-store-bridge plugin, TS CLI backend | 3v0/plugin/ | plugin seam exists; re-point subprocess at node CLI | queued |
+| 3 | native-store-bridge plugin, TS CLI backend | 3v0/plugin/ | plugin seam exists; re-point subprocess at node CLI | done |
 
 ## The cost spine (the money thesis)
 

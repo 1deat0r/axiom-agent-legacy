@@ -1,0 +1,10 @@
+name: native-store-bridge
+version: 0.1.0
+description: "Mirror memory + skill_manage writes into Axiom's native stores (store-first provenance); serve store queries (axiom_store) and store-first memory + skill writes (axiom_record)."
+author: "Axiom"
+kind: standalone
+hooks:
+  - post_tool_call
+provides_tools:
+  - axiom_store
+  - axiom_record
