@@ -118,7 +118,7 @@ Tests via `node --test` (Node 26 runs `.ts` natively).
 6. [x] Port the scripts (`ingest`/`query`/`record`) as TS CLI entrypoints
        (`profile_io.py` already ported → `src/profile_io.ts`); memory-axis
        CLIs done (`src/cli/{ingest,record,sync,query}.ts`), skills CLIs remain
-7. [ ] Port the skills store (`skills.py`, `skill_io`, `skill_bridge`, `sync_skills`, `decide_skills`)
+7. [x] Port the skills store (`skills.py` → `skills.ts`, `skill_io`, `skill_bridge`, `sync_skills`, `decide_skills`)
 8. [ ] Re-point the `native-store-bridge` plugin subprocess calls at the TS CLI
 9. [x] Re-found `axiom-agent` on Hermes HEAD + archive prime-agent
 

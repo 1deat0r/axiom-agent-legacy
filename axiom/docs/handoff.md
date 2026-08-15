@@ -1,7 +1,7 @@
-# Handoff — memory axis ported (core + CLI); skills store next
+# Handoff — sovereign layer ported (memory + skills); bridge re-point next
 
-Written 2026-08-16 (session 3). Status: memory-axis port complete and verified
-cross-language. Resume here.
+Written 2026-08-16 (session 3). Status: memory + skills stores ported and
+verified cross-language. Resume here.
 
 ## What was done (session 1 — re-foundation)
 
@@ -43,23 +43,34 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
 11. Ported the CLI entrypoints: `src/cli/{ingest,record,sync,query}.ts`
     (query is memory-axis only until port #2 lands the skill axis).
 12. Ported the tests (record/sync/bridge/decide/query) — 49 green.
+13. Ported the skills store (port #2): `src/skills.ts` (SkillStore: versioned
+    lineage + curator active/stale/archived states), `src/skill_io.ts`,
+    `src/skill_bridge.ts` (apply_skill_op), `src/sync_skills.ts`
+    (reconciliation), `src/decide_skills.ts` (store-first skill decisions),
+    and the `query.ts` skill axis (version_dict/skills/skill_history/summary).
+14. Ported the skills CLIs (`ingest_skills`, `record_skills`, `sync_skills`,
+    `seed_skills`); upgraded the `query.ts` CLI to all five actions.
+15. Fixed a cross-runtime arg edge: Node's parseArgs rejects dash-prefixed
+    values (SKILL.md content starts with `---`); added `src/cli/parse_args.ts`
+    (joins `--opt value` -> `--opt=value`).
 
 ## Verified (how)
 
 - `git ls-remote origin` — main + 3 archive branches + tag all correct.
-- `node --test` — 49/49 pass (memory + record + sync + bridge + decide + query).
+- `node --test` — 109/109 pass (memory + record + sync + bridge + decide +
+  query + skills + sync_skills + decide_skills + parse_args).
 - `tsc --noEmit` — clean.
-- Byte-compat: Python `core.memory` reads a TS-written store (incl. a
-  supersession chain) and re-serializes it byte-identical (`cmp`); Python
-  `ingest.py` -> TS `query.ts` read verified the reverse direction.
+- Byte-compat (both stores): Python `core.memory` / `core.skills` read a
+  TS-written store (incl. supersession/absorb lineage) and re-serialize it
+  byte-identical (`cmp`); Python `ingest.py` -> TS `query.ts` verified the
+  reverse direction.
 
 ## Next steps (in order)
 
 1. ~~Decide CLI runtime~~ — resolved 2026-08-16: `node` (see session 3 #9).
-2. **Port #2 — skills store** (`skills.py`, `skill_io`, `skill_bridge`,
-   `sync_skills`, `decide_skills` + their CLIs), then finish `query.ts`'s
-   skill axis + `summary`. Then **port #3** — re-point the native-store-bridge
-   plugin subprocess calls at the TS CLI.
+2. ~~Port #2 — skills store~~ — done this session (see session 3 #13-15).
+   Remaining: **port #3** — re-point the native-store-bridge plugin subprocess
+   calls at the TS CLI (`node src/cli/*.ts`).
 3. **Flag — prime-era automation stale**: `axiom/docs/agents/issue-tracker.md`
    "Automation" section references `.github/workflows/triage.yml` +
    `issue-hygiene.yml`, which do NOT exist on the Hermes baseline. Decide
