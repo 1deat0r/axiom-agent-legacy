@@ -299,6 +299,16 @@ tricks stay with the OS sandbox (ADR-0019).
 _Avoid_: Sandbox (the strict OS confinement tier); Root guard (the prompt-time
 root/credential guard)
 
+**Session recall**:
+Cross-session memory by full-text search: `/search` and `/sessions`
+(ADR-0082, issue #56), gateway-local commands over a persistent FTS5 trigram
+index (node:sqlite, reconciled per file by size+mtime) of the profile's
+session JSONL archive. Anchored runs scope to the project by default (session
+header `cwd` under `<projectHome>/projects/<name>`), `--all` crosses
+explicitly, and every hit carries its project label. Complements the memory
+tool: the tool stores facts the loop chose to keep; recall finds what it said.
+_Avoid_: Memory tool (the explicit durable-fact store); Search (web search)
+
 **Web tools**:
 The two native core tools for web access, `web_search` and `web_fetch`
 (ADR-0074). They scrape DuckDuckGo and Bing directly, fall back to the local
