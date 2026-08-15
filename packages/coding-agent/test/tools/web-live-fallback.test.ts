@@ -17,7 +17,10 @@ describe.skipIf(process.env.AXIOM_LIVE_WEB !== "1")("obscura fallback live", () 
 		const result = await tool.execute("live3", { query: "rust async runtime", numResults: 3 });
 		expect(result.details.engine).toBe("obscura");
 		const parsed = JSON.parse(
-			result.content.filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n"),
+			result.content
+				.filter((c: any) => c.type === "text")
+				.map((c: any) => c.text)
+				.join("\n"),
 		) as Array<{ url: string }>;
 		expect(parsed.length).toBeGreaterThan(0);
 		expect(parsed[0].url.startsWith("http")).toBe(true);

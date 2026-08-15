@@ -1,6 +1,6 @@
 import { VERSION } from "../../config.js";
-import { SEARCH_ENGINE_URLS, unwrapDdgUrl } from "./web-shared.js";
 import type { RawSearchResult } from "./web-search.js";
+import { SEARCH_ENGINE_URLS, unwrapDdgUrl } from "./web-shared.js";
 
 /**
  * Minimal streamable-HTTP MCP client for the local Obscura server
@@ -156,9 +156,7 @@ function coerceItems(raw: unknown): ExtractedItem[] {
 		if (!Array.isArray(parsed)) {
 			return [];
 		}
-		return parsed.filter(
-			(x): x is ExtractedItem => typeof x === "object" && x !== null,
-		);
+		return parsed.filter((x): x is ExtractedItem => typeof x === "object" && x !== null);
 	} catch {
 		return [];
 	}
@@ -173,8 +171,20 @@ export async function obscuraSearch(
 	const sessionId = await openSession(endpoint, options);
 	for (const engine of FALLBACK_ENGINES) {
 		try {
-			await callToolInSession(endpoint, "browser_navigate", { url: FALLBACK_URLS[engine](query) }, options, sessionId);
-			const raw = await callToolInSession(endpoint, "browser_evaluate", { expression: EXTRACT_JS[engine] }, options, sessionId);
+			await callToolInSession(
+				endpoint,
+				"browser_navigate",
+				{ url: FALLBACK_URLS[engine](query) },
+				options,
+				sessionId,
+			);
+			const raw = await callToolInSession(
+				endpoint,
+				"browser_evaluate",
+				{ expression: EXTRACT_JS[engine] },
+				options,
+				sessionId,
+			);
 			const out: RawSearchResult[] = [];
 			for (const item of coerceItems(raw)) {
 				const url = unwrapDdgUrl(String(item.url ?? "").trim());
