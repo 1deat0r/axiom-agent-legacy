@@ -84,9 +84,14 @@ suite 5/5, daemon-ps unit suite 25/25, biome + tsgo clean.
 
 ## Notes
 
-- The full floor re-run after the fix is the remaining gate; run it
-  detached (`setsid nohup ./test.sh`) so a wrong fix can't kill the
-  session again — the log lands either way.
+- **Full floor re-run after the fix: GREEN, and the live daemon
+  survived.** Detached run (`setsid nohup ./test.sh`,
+  log: `/tmp/floor-scoped-fix.log`): agent 4, ai 49+23 skipped,
+  coding-agent main 427+15 skipped, kernel 12 files, process-stress
+  2 files (daemon-supervisor-process 8/8 and 4603 5/5 — including the
+  new scoped-discovery regression, green inside the floor). The
+  process-stress phase that killed the daemon before now leaves the
+  session intact.
 - test.sh's auth.json move at start was exonerated (the session kept
   working ~4.5 min after it; the death came during the 4603 shutdown
   test window).
