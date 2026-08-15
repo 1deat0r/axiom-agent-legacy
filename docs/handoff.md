@@ -1,9 +1,10 @@
-# Handoff — 2026-08-15 (build session: #58 cron milestone, built and verified)
+# Handoff — 2026-08-15 (build session: #58 cron milestone, built, merged, closed)
 
 ## What this session did
 
 Built the settled #58 scope on `feat/cron-spine` (main was untouched since
-a50da7b46). Three commits land the code; the floor runs at the merge.
+a50da7b46), merged it to main as `6b5ec0bdc`, pushed to origin, and closed
+#58 with the audit comment. The branch is deleted.
 
 1. **Claim race, as the pair (b1c744f7f).** `AgentCronJobStore.claimDue`
    gained an optional claim filter (default claim-all, back-compat), threaded
@@ -21,7 +22,7 @@ a50da7b46). Three commits land the code; the floor runs at the merge.
    completion, forces a sweep, and proves claim → run → deliver → ledger —
    with a due heartbeat in the same store file asserted untouched (the race
    this check would have caught). No tokens, runs whenever the build exists.
-   Passes against the real binary this session.
+   Passes against the real binary.
 4. **ADR-0084** records what cron is, the partition fix, the gateway-only
    command surface, the live-verification home, live vs deferred (pause/resume
    deferred; deliverTo fan-out = wanted follow-up; ADR-0053 boundary), and the
@@ -43,23 +44,26 @@ a50da7b46). Three commits land the code; the floor runs at the merge.
   unfiltered, so a booting scheduler resolves any dangling dispatch in the
   shared store (a gateway boot can mark a daemon once-job interrupted). Latent
   like the fixed race (the shared file does not exist in production yet);
-  recovery filtering is a follow-up issue.
+  filed as follow-up #60.
 
 ## Verified
 
 - Red first, then green: gateway/cron.test.ts, cron-jobs.test.ts,
   daemon-mode.test.ts, commands.test.ts, live-verification.test.ts.
-- Targeted suites green: cron (88), daemon-mode (192), six heartbeat
-  regressions (62), live-verification catalog (20).
-- `node tools/live-verification/run.mjs --check cron-spine` PASSes on the
-  built dist (unit + real-binary, no mock blur).
-- Pre-commit hook (biome + tsgo + installer + browser smoke) green on every
-  commit. The full `./test.sh` floor runs at the merge.
+- Full `./test.sh` floor green on the merged tree (exit 0); `npx biome check .`
+  clean (4 pre-existing infos, none in touched files); `tsgo --noEmit` clean;
+  pre-commit hook green on every commit.
+- `node tools/live-verification/run.mjs --check cron-spine` PASS on the built
+  dist (unit + real-binary, no mock blur).
+- `npm run build` regenerated `packages/ai/src/models.generated.ts` (live
+  registry drift); reverted to keep the milestone scoped — expect that drift
+  on any build.
 
-## Tracker state
+## Tracker state (final)
 
-- #58: built on feat/cron-spine, awaiting the merge-floor and the audit
-  comment. #52 / #53 owner-blocked, untouched. #59 needs-triage, after #58.
-- Follow-up to file after close: interrupted-dispatch recovery filtering in
-  the shared store (needs-triage).
+- #58: CLOSED with the audit comment (merge 6b5ec0bdc, ADR-0084, this
+  handoff). Follow-up #60 (unfiltered interrupted-dispatch recovery in the
+  shared store) filed needs-triage.
+- #59 (dashboard) is the next needs-triage item. #52 / #53 owner-blocked,
+  untouched (worktree /tmp/axiom-worktrees/kernel-bridge stays).
 - docs/hermes-improvements.html still untracked — not ours.
