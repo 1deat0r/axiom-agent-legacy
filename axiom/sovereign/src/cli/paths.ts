@@ -13,6 +13,10 @@ export function storePath(): string {
   return process.env.AXIOM_STORE ?? join(PKG_ROOT, "data", "memory.json");
 }
 
+export function skillsStorePath(): string {
+  return process.env.AXIOM_SKILL_STORE ?? join(PKG_ROOT, "data", "skills.json");
+}
+
 export function profileMemDir(): string {
   return process.env.AXIOM_PROFILE_MEM ?? join(homedir(), ".hermes", "profiles", "axiom", "memories");
 }

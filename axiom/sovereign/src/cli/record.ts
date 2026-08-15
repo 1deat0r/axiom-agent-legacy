@@ -9,10 +9,10 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseArgs } from "node:util";
 import { decide, type DecideResult, type Decision } from "../decide.ts";
 import { MemoryStore } from "../memory.ts";
 import { profileText } from "../sync.ts";
+import { parseArgsSafe } from "./parse_args.ts";
 import { profileMemDir, storePath } from "./paths.ts";
 
 function printHuman(result: DecideResult): void {
@@ -36,7 +36,7 @@ function printHuman(result: DecideResult): void {
 }
 
 function main(): number {
-  const { values } = parseArgs({
+  const { values } = parseArgsSafe({
     options: {
       kind: { type: "string" },
       content: { type: "string" },
