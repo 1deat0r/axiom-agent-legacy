@@ -89,7 +89,9 @@ export interface AgentCronSchedulerHooks {
 	 * scheduler (default: claim every due job, the back-compat behavior).
 	 * Jobs the filter rejects are left exactly as they are — still due,
 	 * nextRunAt untouched — so a scheduler that shares a store file with
-	 * another owner never eats the other owner's due jobs (claim race).
+	 * another owner never eats the other owner's due jobs (claim race). The
+	 * same predicate gates interrupted-dispatch recovery on start (ADR-0086):
+	 * a booting scheduler resolves only the dispatches it owns.
 	 */
 	claimFilter?: (job: AgentCronJob) => boolean;
 }
@@ -771,10 +773,13 @@ export class AgentCronJobStore {
 		return updated;
 	}
 
-	recoverInterruptedDispatches(now = new Date()): AgentCronJob[] {
+	recoverInterruptedDispatches(
+		now = new Date(),
+		options: { recoveryFilter?: (job: AgentCronJob) => boolean } = {},
+	): AgentCronJob[] {
 		const recovered: AgentCronJob[] = [];
 		this.mutateStates((state) => {
-			recoverInterruptedInState(state, now, recovered);
+			recoverInterruptedInState(state, now, recovered, undefined, options.recoveryFilter);
 			return [];
 		});
 		return recovered;
@@ -963,7 +968,12 @@ export class AgentCronScheduler {
 		this.stopped = false;
 		if (!this.hasStarted) {
 			this.hasStarted = true;
-			this.store.recoverInterruptedDispatches(this.now());
+			// Resolve only the dispatches this scheduler owns: the store file
+			// is shared (gateway + daemon on the default profile), and an
+			// unfiltered start would resolve the other owner's dangling
+			// dispatch and mark its job interrupted. The claim predicate
+			// gates both claim and recovery, so the partition cannot drift.
+			this.store.recoverInterruptedDispatches(this.now(), { recoveryFilter: this.hooks.claimFilter });
 		}
 		this.scheduleNext();
 	}
@@ -1636,15 +1646,26 @@ function recoverInterruptedInState(
 	now: Date,
 	recovered: AgentCronJob[],
 	dispatchIds?: ReadonlySet<string>,
+	recoveryFilter?: (job: AgentCronJob) => boolean,
 ): void {
-	const interrupted = dispatchIds
-		? state.dispatches.filter((dispatch) => dispatchIds.has(dispatch.id))
-		: state.dispatches;
+	const interrupted = state.dispatches.filter((dispatch) => {
+		if (dispatchIds !== undefined) {
+			return dispatchIds.has(dispatch.id);
+		}
+		if (recoveryFilter === undefined) {
+			return true;
+		}
+		const job = state.jobs.find((candidate) => candidate.id === dispatch.jobId);
+		// A dispatch whose job is gone cannot be owned by the other side;
+		// resolving it only removes the record, so either owner may clean it.
+		return job === undefined || recoveryFilter(job);
+	});
 	if (interrupted.length === 0) {
 		return;
 	}
 	const interruptedIds = new Set(interrupted.map((dispatch) => dispatch.jobId));
-	state.dispatches = dispatchIds ? state.dispatches.filter((dispatch) => !dispatchIds.has(dispatch.id)) : [];
+	const interruptedDispatchIds = new Set(interrupted.map((dispatch) => dispatch.id));
+	state.dispatches = state.dispatches.filter((dispatch) => !interruptedDispatchIds.has(dispatch.id));
 	state.jobs = state.jobs.map((job) => {
 		if (!interruptedIds.has(job.id) || job.status !== "active") {
 			return job;
