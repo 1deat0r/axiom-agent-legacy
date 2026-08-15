@@ -12,7 +12,7 @@ import {
 	listPendingProposals,
 	readAuditEvents,
 } from "../../src/core/memory-consolidation/index.js";
-import type { MemoryFact } from "../../src/core/memory-consolidation/types.js";
+import type { ConsolidationRequest, MemoryFact } from "../../src/core/memory-consolidation/types.js";
 import { loadHarnessState } from "../../src/core/refinement/index.js";
 import { createMemoryConsolidationExtension } from "../../src/extensions/memory-consolidation/index.js";
 
@@ -58,6 +58,10 @@ function fakePi(): { pi: ExtensionAPI; fire(event: string, payload: unknown, ctx
 	};
 }
 
+function shutdownEvent(overrides: Record<string, unknown> = {}) {
+	return { type: "session_shutdown", reason: "quit", ...overrides };
+}
+
 function fakeCtx(overrides: Record<string, unknown> = {}) {
 	const notifyCalls: string[] = [];
 	const ctx = {
@@ -65,7 +69,17 @@ function fakeCtx(overrides: Record<string, unknown> = {}) {
 		modelRegistry: {
 			getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "test-key", headers: {} }),
 		},
-		sessionManager: { getSessionId: () => "sess-1" },
+		sessionManager: {
+			getSessionId: () => "sess-1",
+			getEntries: () =>
+				session().map((message, index) => ({
+					id: `entry-${index}`,
+					parentId: null,
+					timestamp: new Date(0).toISOString(),
+					type: "message",
+					message,
+				})),
+		},
 		ui: { notify: (m: string) => notifyCalls.push(m) },
 		signal: undefined,
 		...overrides,
@@ -96,7 +110,7 @@ function pendingCount(dir: string): number {
 	return listPendingProposals(consolidationPendingDir(dir)).length;
 }
 
-describe("createMemoryConsolidationExtension (agent_end)", () => {
+describe("createMemoryConsolidationExtension (session_shutdown)", () => {
 	it("is inert when explicitly disabled", async () => {
 		const root = makeTempDir();
 		const { pi, fire } = fakePi();
@@ -108,7 +122,7 @@ describe("createMemoryConsolidationExtension (agent_end)", () => {
 			harnessStateDir: root,
 			plan,
 		})(pi);
-		await fire("agent_end", { type: "agent_end", messages: session() }, ctx);
+		await fire("session_shutdown", shutdownEvent(), ctx);
 		expect(plan).not.toHaveBeenCalled();
 		expect(notifyCalls).toHaveLength(0);
 		expect(pendingCount(root)).toBe(0);
@@ -119,7 +133,7 @@ describe("createMemoryConsolidationExtension (agent_end)", () => {
 		const { pi, fire } = fakePi();
 		const plan = vi.fn();
 		createMemoryConsolidationExtension({ enabled: true, consolidationDir: root, harnessStateDir: root, plan })(pi);
-		await fire("agent_end", { type: "agent_end", messages: session() }, fakeCtx({ model: undefined }).ctx);
+		await fire("session_shutdown", shutdownEvent(), fakeCtx({ model: undefined }).ctx);
 		expect(plan).not.toHaveBeenCalled();
 		await fire(
 			"agent_end",
@@ -140,7 +154,7 @@ describe("createMemoryConsolidationExtension (agent_end)", () => {
 			harnessStateDir: root,
 			plan: async () => proposal(),
 		})(pi);
-		await fire("agent_end", { type: "agent_end", messages: session() }, ctx);
+		await fire("session_shutdown", shutdownEvent(), ctx);
 		const pending = listPendingProposals(consolidationPendingDir(root));
 		expect(pending).toHaveLength(1);
 		expect(pending[0]?.facts.map((f) => f.title)).toEqual(["Sandbox known-fails"]);
@@ -163,7 +177,7 @@ describe("createMemoryConsolidationExtension (agent_end)", () => {
 			harnessStateDir: root,
 			plan: async () => ({ summary: "s", rationale: "r", facts: facts().slice(1) }),
 		})(pi);
-		await fire("agent_end", { type: "agent_end", messages: session() }, ctx);
+		await fire("session_shutdown", shutdownEvent(), ctx);
 		expect(pendingCount(root)).toBe(0);
 		expect(readAuditEvents(consolidationAuditPath(root))).toHaveLength(0);
 		expect(notifyCalls).toHaveLength(0);
@@ -180,7 +194,7 @@ describe("createMemoryConsolidationExtension (agent_end)", () => {
 			harnessStateDir: root,
 			plan: async () => proposal(),
 		})(pi);
-		await fire("agent_end", { type: "agent_end", messages: session() }, ctx);
+		await fire("session_shutdown", shutdownEvent(), ctx);
 		const state = loadHarnessState(root);
 		const entries = Object.values(state.entries.memory);
 		expect(entries).toHaveLength(1);
@@ -206,7 +220,7 @@ describe("createMemoryConsolidationExtension (agent_end)", () => {
 				throw new Error("model exploded");
 			},
 		})(pi);
-		await expect(fire("agent_end", { type: "agent_end", messages: session() }, ctx)).resolves.toBeUndefined();
+		await expect(fire("session_shutdown", shutdownEvent(), ctx)).resolves.toBeUndefined();
 		const events = readAuditEvents(consolidationAuditPath(root));
 		expect(events).toHaveLength(1);
 		expect(events[0]?.action).toBe("failed");
@@ -233,7 +247,7 @@ describe("createMemoryConsolidationExtension (agent_end)", () => {
 		// Only paths injected: enablement comes from the environment, and the
 		// real plan → gate → apply pipeline runs against the mocked model.
 		createMemoryConsolidationExtension({ consolidationDir: root, harnessStateDir: root })(pi);
-		await fire("agent_end", { type: "agent_end", messages: session() }, ctx);
+		await fire("session_shutdown", shutdownEvent(), ctx);
 		const state = loadHarnessState(root);
 		expect(Object.values(state.entries.memory)).toHaveLength(1);
 		expect(readAuditEvents(consolidationAuditPath(root))[0]?.action).toBe("auto_applied");
@@ -258,7 +272,7 @@ describe("createMemoryConsolidationExtension (agent_end)", () => {
 		const { ctx, notifyCalls } = fakeCtx();
 		// No enabled/auto/plan deps and no env vars: the new default is on + auto.
 		createMemoryConsolidationExtension({ consolidationDir: root, harnessStateDir: root })(pi);
-		await fire("agent_end", { type: "agent_end", messages: session() }, ctx);
+		await fire("session_shutdown", shutdownEvent(), ctx);
 		const state = loadHarnessState(root);
 		expect(Object.values(state.entries.memory)).toHaveLength(1);
 		expect(readAuditEvents(consolidationAuditPath(root))[0]?.action).toBe("auto_applied");
@@ -272,10 +286,74 @@ describe("createMemoryConsolidationExtension (agent_end)", () => {
 		const { pi, fire } = fakePi();
 		const { ctx, notifyCalls } = fakeCtx();
 		createMemoryConsolidationExtension({ consolidationDir: root, harnessStateDir: root })(pi);
-		await fire("agent_end", { type: "agent_end", messages: session() }, ctx);
+		await fire("session_shutdown", shutdownEvent(), ctx);
 		expect(completeSimpleMock).not.toHaveBeenCalled();
 		expect(notifyCalls).toHaveLength(0);
 		expect(pendingCount(root)).toBe(0);
 		expect(existsSync(consolidationAuditPath(root))).toBe(false);
+	});
+
+	it("does not consolidate on agent_end (the per-prompt hook is not a session end)", async () => {
+		const root = makeTempDir();
+		const { pi, fire } = fakePi();
+		const { ctx, notifyCalls } = fakeCtx();
+		const plan = vi.fn();
+		createMemoryConsolidationExtension({
+			enabled: true,
+			consolidationDir: root,
+			harnessStateDir: root,
+			plan,
+		})(pi);
+		// A resident session (interactive/daemon) ends its agent loop on every
+		// prompt. Consolidating there would add an extra model call per prompt —
+		// the flip to silent-by-default must never make agent_end a trigger.
+		await fire("agent_end", { type: "agent_end", messages: session() }, ctx);
+		expect(plan).not.toHaveBeenCalled();
+		expect(notifyCalls).toHaveLength(0);
+		expect(pendingCount(root)).toBe(0);
+	});
+
+	it("does not consolidate on non-quit shutdowns (reload/new/resume/fork are not session ends)", async () => {
+		const root = makeTempDir();
+		const { pi, fire } = fakePi();
+		const { ctx, notifyCalls } = fakeCtx();
+		const plan = vi.fn();
+		createMemoryConsolidationExtension({
+			enabled: true,
+			consolidationDir: root,
+			harnessStateDir: root,
+			plan,
+		})(pi);
+		for (const reason of ["reload", "new", "resume", "fork"] as const) {
+			await fire("session_shutdown", shutdownEvent({ reason }), ctx);
+		}
+		expect(plan).not.toHaveBeenCalled();
+		expect(notifyCalls).toHaveLength(0);
+		expect(pendingCount(root)).toBe(0);
+	});
+
+	it("builds the proposal request from the finished session entries", async () => {
+		const root = makeTempDir();
+		const { pi, fire } = fakePi();
+		const { ctx } = fakeCtx();
+		const received: unknown[] = [];
+		createMemoryConsolidationExtension({
+			enabled: true,
+			auto: false,
+			consolidationDir: root,
+			harnessStateDir: root,
+			buildRequest: (messages, options) => {
+				received.push({ messages, options });
+				return fromAny<ConsolidationRequest, unknown>({
+					conversationText: "",
+					messages,
+					existingMemories: options.existingMemories,
+				});
+			},
+			plan: async () => proposal(),
+		})(pi);
+		await fire("session_shutdown", shutdownEvent(), ctx);
+		expect(received).toHaveLength(1);
+		expect(fromAny<{ messages: AgentMessage[] }, unknown>(received[0]).messages).toEqual(session());
 	});
 });

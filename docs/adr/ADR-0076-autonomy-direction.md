@@ -35,5 +35,6 @@ The owner used Hermes Agent and Prime Agent side by side and made a decision: ax
 ## Consequences
 
 - `AXIOM_MEMORY_CONSOLIDATION` and `AXIOM_MEMORY_CONSOLIDATION_AUTO` default to enabled+auto; opt-out is `=0`. Pinned by new tests in `packages/coding-agent/test/extensions/memory-consolidation.test.ts`.
+- The consolidation hook moved from `agent_end` to `session_shutdown` (reason `quit` only), amended 2026-08-15 before merge: in resident sessions `agent_end` fires after every prompt, and a silent per-prompt consolidation call would break the cheap-per-turn posture this ADR sets. Every mode's dispose path awaits its shutdown handlers, so one-shot exits and daemon session closes still consolidate exactly once.
 - The ownership lattice (pin/protected/curator-managed) is the next core capability after `/learn`.
 - SOUL.md amendment for the daily-driver veto is owed; a follow-up ADR will word it.

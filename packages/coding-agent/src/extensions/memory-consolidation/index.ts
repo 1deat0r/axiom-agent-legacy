@@ -1,7 +1,9 @@
 /**
  * Memory-consolidation extension — the runtime hook that closes the loop on
  * "gets smarter over time": recall is the read path and /refine is manual, but
- * nothing auto-persisted durable facts learned across sessions. On `agent_end`
+ * nothing auto-persisted durable facts learned across sessions. On
+ * `session_shutdown` with reason `quit` — the session's real end in every mode
+ * (one-shot process exit, daemon session close/passivation, interactive quit) —
  * this extension reviews the finished session, proposes durable facts, passes
  * them through the deterministic durability gate, and either:
  *
@@ -17,6 +19,14 @@
  * available through the refinement history. It never blocks or crashes a
  * run: without model auth it skips silently; any failure is audited and
  * swallowed.
+ *
+ * The hook is session_shutdown, NOT agent_end: in resident sessions
+ * (interactive TUI, daemon workers) agent_end fires after every prompt, and
+ * consolidating per prompt would add a model call to every turn — against the
+ * ADR-0076 "cheap per turn" posture. Only `quit` consolidates: it is emitted
+ * by every mode's dispose path (one-shot process exit and daemon session
+ * close both await their shutdown handlers), while new/resume/fork are
+ * session switches and reload is not an end.
  */
 
 import { join } from "node:path";
@@ -43,6 +53,7 @@ import {
 	stagePendingProposal,
 } from "../../core/memory-consolidation/index.js";
 import { getGlobalHarnessStateDir, type HarnessState, loadHarnessState } from "../../core/refinement/index.js";
+import type { SessionMessageEntry } from "../../core/session-manager.js";
 import { axiomHome } from "../profile/registry.js";
 
 export interface MemoryConsolidationExtensionOptions {
@@ -132,8 +143,12 @@ export function createMemoryConsolidationExtension(
 	const loadExistingMemories = deps.loadExistingMemories ?? defaultLoadExistingMemories;
 
 	return (pi) => {
-		pi.on("agent_end", async (event, ctx) => {
+		pi.on("session_shutdown", async (event, ctx) => {
 			if (!enabled) return;
+			// Only a real session end consolidates: quit is emitted by every
+			// mode's dispose path. new/resume/fork are session switches (the
+			// old session lives on in the tree) and reload is not an end.
+			if (event.reason !== "quit") return;
 			try {
 				const model = ctx.model;
 				if (!model) return;
@@ -141,7 +156,11 @@ export function createMemoryConsolidationExtension(
 				if (!auth.ok || !auth.apiKey) return;
 
 				const sessionId = ctx.sessionManager.getSessionId() || undefined;
-				const request = buildRequest(event.messages, {
+				const messages = ctx.sessionManager
+					.getEntries()
+					.filter((entry): entry is SessionMessageEntry => entry.type === "message")
+					.map((entry) => entry.message);
+				const request = buildRequest(messages, {
 					...(sessionId ? { sessionId } : {}),
 					existingMemories: loadExistingMemories(harnessStateDir),
 				});

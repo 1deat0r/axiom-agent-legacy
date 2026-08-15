@@ -217,19 +217,24 @@ best-effort, not confinement — the ADR-0019 OS sandbox remains the strict
 tier.
 
 **Memory consolidation**:
-The declarative-memory half of "gets smarter over time" (ADR-0040, issue #19):
-after a run, an inert-by-default `agent_end` extension (enabled via
-`AXIOM_MEMORY_CONSOLIDATION=1`) has the model propose durable facts
+The declarative-memory half of "gets smarter over time" (ADR-0040, issue #19;
+silent-by-default since ADR-0076): when a session really ends — the
+`session_shutdown` event with reason `quit`, emitted by every mode's dispose
+path — a built-in extension has the model propose durable facts
 (`{title, content, path}`) from the finished session, filters them through a
 deterministic durability gate (length bounds, transient phrasing like "this
 session"/"currently"/"todo", dedup against existing global harness memory),
-then either stages them for operator confirmation (`axiom
-memory-consolidation pending|show|approve|reject|audit`) or — with
-`AXIOM_MEMORY_CONSOLIDATION_AUTO=1` — applies them to the global harness
-memory with a full audit trail (`<AXIOM_HOME>/consolidation/audit.jsonl`).
-Applied entries carry `source: "consolidate"` and are rollback-able through
-the refinement history. Pairs with skill capture: tasks → skills
-(procedural), facts → harness memory (declarative).
+and applies them to the global harness memory with a full audit trail
+(`<AXIOM_HOME>/consolidation/audit.jsonl`). Opt out with
+`AXIOM_MEMORY_CONSOLIDATION=0`, or stage for operator confirmation with
+`AXIOM_MEMORY_CONSOLIDATION_AUTO=0` (`axiom memory-consolidation
+pending|show|approve|reject|audit`). The hook is NOT `agent_end`: in resident
+sessions (interactive TUI, daemon workers) agent_end fires after every
+prompt, and consolidating per prompt would add a model call to every turn;
+`new`/`resume`/`fork` are session switches, not ends, and `reload` is not an
+end either. Applied entries carry `source: "consolidate"` and are
+rollback-able through the refinement history. Pairs with skill capture: tasks
+→ skills (procedural), facts → harness memory (declarative).
 _Avoid_: Recall (the read path over past sessions); refine (manual harness
 editing — consolidation is automatic and gated, not invoked)
 
