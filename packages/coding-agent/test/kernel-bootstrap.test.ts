@@ -81,12 +81,18 @@ dependencies = ["${dependencyName}"]
 function writeFakePython(filePath: string, importableModules: readonly string[]): void {
 	const cases = importableModules.map((moduleName) => `    "import ${moduleName}") exit 0 ;;`).join("\n");
 	const runtimeCase = importableModules.includes("rlm") ? '    *"_harness_methods"*) exit 0 ;;' : "";
+	const probeIpykernelOk = importableModules.includes("ipykernel") ? "true" : "false";
+	const probeRuntimeOk = importableModules.includes("rlm") ? "true" : "false";
 	writeExecutable(
 		filePath,
 		[
 			"#!/bin/sh",
 			'if [ "$1" = "-c" ]; then',
+			'  if [ -n "$FAKE_PYTHON_LOG" ]; then printf -- "--spawn--\\n" >> "$FAKE_PYTHON_LOG"; printf "%s\\n" "$2" >> "$FAKE_PYTHON_LOG"; fi',
 			'  case "$2" in',
+			'    *"_AXIOM_KERNEL_READINESS_PROBE_"*)',
+			`      printf '{"ipykernel":${probeIpykernelOk},"runtime":${probeRuntimeOk}}\\n'`,
+			"      exit 0 ;;",
 			cases,
 			runtimeCase,
 			"    *) exit 1 ;;",
@@ -121,6 +127,9 @@ function installFakeUv(): string {
 			"#!/bin/sh",
 			'if [ "$1" = "-c" ]; then',
 			'  case "$2" in',
+			'    *"_AXIOM_KERNEL_READINESS_PROBE_"*)',
+			'      printf \'{"ipykernel":true,"runtime":true}\\n\'',
+			"      exit 0 ;;",
 			'    "import ipykernel"|"import rlm") exit 0 ;;',
 			...extraImportCases,
 			'    *"_harness_methods"*) exit 0 ;;',
@@ -424,6 +433,24 @@ dependencies = ["httpx"]
 		await expect(ensureKernelPython()).resolves.toBe(python);
 	});
 
+	it("probes a warm kernel with a single python readiness spawn", async () => {
+		const venv = join(tempDir, "kernel-venv");
+		const python = join(venv, "bin", "python");
+		mkdirSync(join(venv, "bin"), { recursive: true });
+		writeFakePython(python, ["ipykernel", "rlm", ...DEFAULT_RLM_EXTRA_IMPORT_NAMES]);
+		writeBootstrapVersion(venv);
+		const logPath = join(tempDir, "fake-python.log");
+		process.env.FAKE_PYTHON_LOG = logPath;
+		process.env.AXIOM_KERNEL_VENV = venv;
+
+		await expect(ensureKernelPython()).resolves.toBe(python);
+
+		const log = readFileSync(logPath, "utf8");
+		const spawns = log.split("\n").filter((line) => line === "--spawn--");
+		expect(spawns).toHaveLength(1);
+		expect(log).toContain("_AXIOM_KERNEL_READINESS_PROBE_");
+	});
+
 	it("rebuilds a warm venv whose recorded runtime hash no longer matches local source", async () => {
 		const logPath = installFakeUv();
 		const venv = join(tempDir, "kernel-venv");
@@ -461,6 +488,9 @@ dependencies = ["httpx"]
 				"#!/bin/sh",
 				'if [ "$1" = "-c" ]; then',
 				'  case "$2" in',
+				'    *"_AXIOM_KERNEL_READINESS_PROBE_"*)',
+				'      printf \'{"ipykernel":true,"runtime":false}\\n\'',
+				"      exit 0 ;;",
 				'    "import ipykernel"|"import rlm") exit 0 ;;',
 				"    *) exit 1 ;;",
 				"  esac",
@@ -485,6 +515,49 @@ dependencies = ["httpx"]
 		process.env.AXIOM_KERNEL_VENV = venv;
 
 		await expect(ensureKernelPython()).resolves.toBe(join(venv, "bin", "python"));
+
+		expect(readFileSync(logPath, "utf8")).toContain(`venv ${venv} --python 3.11 --seed`);
+	});
+
+	it("rebuilds a warm venv when the readiness probe prints unparsable output", async () => {
+		const logPath = installFakeUv();
+		const venv = join(tempDir, "kernel-venv");
+		const python = join(venv, "bin", "python");
+		mkdirSync(join(venv, "bin"), { recursive: true });
+		writeExecutable(
+			python,
+			[
+				"#!/bin/sh",
+				'if [ "$1" = "-c" ]; then',
+				'  case "$2" in',
+				'    *"_AXIOM_KERNEL_READINESS_PROBE_"*)',
+				"      printf 'not json\\n'",
+				"      exit 0 ;;",
+				"    *) exit 1 ;;",
+				"  esac",
+				"fi",
+				"exit 0",
+				"",
+			].join("\n"),
+		);
+		writeBootstrapVersion(venv);
+		process.env.AXIOM_KERNEL_VENV = venv;
+
+		await expect(ensureKernelPython()).resolves.toBe(python);
+
+		expect(readFileSync(logPath, "utf8")).toContain(`venv ${venv} --python 3.11 --seed`);
+	});
+
+	it("rebuilds a warm venv when the readiness probe exits nonzero", async () => {
+		const logPath = installFakeUv();
+		const venv = join(tempDir, "kernel-venv");
+		const python = join(venv, "bin", "python");
+		mkdirSync(join(venv, "bin"), { recursive: true });
+		writeExecutable(python, ["#!/bin/sh", 'if [ "$1" = "-c" ]; then exit 1; fi', "exit 0", ""].join("\n"));
+		writeBootstrapVersion(venv);
+		process.env.AXIOM_KERNEL_VENV = venv;
+
+		await expect(ensureKernelPython()).resolves.toBe(python);
 
 		expect(readFileSync(logPath, "utf8")).toContain(`venv ${venv} --python 3.11 --seed`);
 	});
@@ -534,6 +607,9 @@ dependencies = ["httpx"]
 				"#!/bin/sh",
 				'if [ "$1" = "-c" ]; then',
 				'  case "$2" in',
+				'    *"_AXIOM_KERNEL_READINESS_PROBE_"*)',
+				'      printf \'{"ipykernel":true,"runtime":false}\\n\'',
+				"      exit 0 ;;",
 				'    "import ipykernel"|"import rlm") exit 0 ;;',
 				'    *"_harness_methods"*) exit 1 ;;',
 				"    *\"assert not hasattr(rlm.rlm, 'background')\"*) exit 0 ;;",
