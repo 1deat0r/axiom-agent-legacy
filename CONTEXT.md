@@ -250,8 +250,9 @@ it unattended (inert unless AXIOM_SKILL_CAPTURE_AUTO=1). The public surface is
 the `/learn` extension command (ADR-0080): on demand it traces the current
 session's branch, evaluates, and captures into `<AXIOM_HOME>/captured-skills`
 (no-overwrite, real-loader-verified, provenance source "learn"), then offers
-the result — installs are the ownership lattice's job (#55). Hub/sync over
-agentskills.io remains.
+the result. Installs route through the ownership lattice: `/learn --install`
+and the unattended hook install into the loop's own curator-skills directory.
+Hub/sync over agentskills.io remains.
 
 **Skill audit**:
 The security half (ADR-0025, step 2): statically inspecting a skill directory
@@ -277,6 +278,26 @@ hand-written skill (`tui-pty-testing`) shipped without frontmatter and dropped
 with a "description is required" warning.
 _Avoid_: Skill audit (the security verdict, ADR-0025), Skill capture (the
 procedural-memory pipeline, ADR-0024)
+
+**Ownership lattice**:
+The code-enforced map (ADR-0081, issue #55) over what the learning loop may
+write: three layers — pin (the floor: bundled skills, the witness audit log,
+the profile soul, and the repo floor when cwd is the repo), protected
+(user-owned work: user skills, project skills), curator (the loop's own
+territory: captured-skills staging, curator-skills live skills, consolidation
+staging, the harness memory store). `classifyPath` picks the most specific
+boundary-safe root (tie → stricter layer; unmapped → outside);
+`admitWrite` enforces the hard bounds (pin refused for every actor; the
+learning actor admitted only on curator territory through
+`LEARNING_ACTOR_TOOLSET`; outside fails closed); `installCapturedSkill` is
+the first consumer — a capture installs only into curator territory with the
+real-loader verify, protected targets get the manual `cp -r` printed, never
+run. `<AXIOM_HOME>/curator-skills` is the loop's live skills dir, loaded via
+the `resources_discover` seam, with user/project skills winning name
+collisions. Classification is lexical path policy, not confinement — symlink
+tricks stay with the OS sandbox (ADR-0019).
+_Avoid_: Sandbox (the strict OS confinement tier); Root guard (the prompt-time
+root/credential guard)
 
 **Web tools**:
 The two native core tools for web access, `web_search` and `web_fetch`

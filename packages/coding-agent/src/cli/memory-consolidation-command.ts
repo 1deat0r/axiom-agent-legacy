@@ -24,6 +24,7 @@ import {
 	readAuditEvents,
 	resolvePendingProposal,
 } from "../core/memory-consolidation/index.js";
+import { CONSOLIDATION_DIR_NAME } from "../core/ownership-lattice/index.js";
 import { getGlobalHarnessStateDir } from "../core/refinement/index.js";
 import { axiomHome } from "../extensions/profile/registry.js";
 
@@ -121,7 +122,7 @@ export async function handleMemoryConsolidationCommand(
 		return true;
 	}
 
-	const consolidationDir = deps.consolidationDir ?? join(axiomHome(), "consolidation");
+	const consolidationDir = deps.consolidationDir ?? join(axiomHome(), CONSOLIDATION_DIR_NAME);
 	const harnessStateDir = deps.harnessStateDir ?? getGlobalHarnessStateDir();
 	const pendingDir = consolidationPendingDir(consolidationDir);
 	const auditPath = consolidationAuditPath(consolidationDir);

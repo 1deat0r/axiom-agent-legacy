@@ -27,11 +27,19 @@
  * by every mode's dispose path (one-shot process exit and daemon session
  * close both await their shutdown handlers), while new/resume/fork are
  * session switches and reload is not an end.
+ *
+ * The write paths are lattice-routed (ADR-0081): before applying or staging,
+ * the hook admits the target through the ownership lattice with the learning
+ * actor's toolset (memory.apply / memory.stage). In the live layout those
+ * paths are curator territory, so the checks admit unchanged; a refusal is
+ * audited through the witness append (the sanctioned primitive, which is not
+ * itself lattice-routed) and nothing is written.
  */
 
 import { join } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Model } from "@earendil-works/pi-ai";
+import { getAgentDir, getBundledSkillsDir } from "../../config.js";
 import type { ExtensionAPI } from "../../core/extensions/types.js";
 import {
 	type ApplyMemoryFactsResult,
@@ -52,6 +60,12 @@ import {
 	planMemoryConsolidation,
 	stagePendingProposal,
 } from "../../core/memory-consolidation/index.js";
+import {
+	admitWrite,
+	CONSOLIDATION_DIR_NAME,
+	defaultLatticeConfig,
+	type LatticeConfig,
+} from "../../core/ownership-lattice/index.js";
 import { getGlobalHarnessStateDir, type HarnessState, loadHarnessState } from "../../core/refinement/index.js";
 import type { SessionMessageEntry } from "../../core/session-manager.js";
 import { axiomHome } from "../profile/registry.js";
@@ -65,6 +79,8 @@ export interface MemoryConsolidationExtensionOptions {
 	consolidationDir?: string;
 	/** Global harness state dir (default getGlobalHarnessStateDir()). */
 	harnessStateDir?: string;
+	/** Lattice view for write admission (default: the live profile/agent/cwd dirs). */
+	latticeConfig?: LatticeConfig;
 	/** Injectable pieces so tests isolate one concern without disk/model IO. */
 	buildRequest?: (
 		messages: readonly AgentMessage[],
@@ -130,7 +146,7 @@ export function createMemoryConsolidationExtension(
 	// AXIOM_MEMORY_CONSOLIDATION_AUTO=0 (stage-for-confirmation).
 	const enabled = deps.enabled ?? process.env.AXIOM_MEMORY_CONSOLIDATION !== "0";
 	const auto = deps.auto ?? process.env.AXIOM_MEMORY_CONSOLIDATION_AUTO !== "0";
-	const consolidationDir = deps.consolidationDir ?? join(axiomHome(), "consolidation");
+	const consolidationDir = deps.consolidationDir ?? join(axiomHome(), CONSOLIDATION_DIR_NAME);
 	const pendingDir = consolidationPendingDir(consolidationDir);
 	const auditPath = consolidationAuditPath(consolidationDir);
 	const harnessStateDir = deps.harnessStateDir ?? getGlobalHarnessStateDir();
@@ -168,7 +184,39 @@ export function createMemoryConsolidationExtension(
 				const gateResult = gate(proposal.facts, { existing: request.existingMemories });
 				if (gateResult.accepted.length === 0) return;
 
+				// The lattice view is built only when a write is imminent: the
+				// live layout admits harness memory and pending staging
+				// unchanged (curator territory); anything else is refused and
+				// audited through the witness append.
+				const lattice =
+					deps.latticeConfig ??
+					defaultLatticeConfig({
+						axiomHome: axiomHome(),
+						agentDir: getAgentDir(),
+						cwd: ctx.cwd,
+						bundledSkillsDir: getBundledSkillsDir(),
+						harnessStateDir,
+					});
+
 				if (auto) {
+					// The harness memory write is lattice-routed (ADR-0081): the
+					// learning actor applies only where the lattice admits it —
+					// in the live layout that is curator territory, so the check
+					// admits unchanged. A refusal is audited through the witness
+					// append (the sanctioned primitive, not lattice-routed).
+					const admission = admitWrite(harnessStateDir, { actor: "learning", operation: "memory.apply" }, lattice);
+					if (!admission.admitted) {
+						audit(auditPath, {
+							id: `mc_audit_${Date.now()}`,
+							action: "failed",
+							proposed: proposal.facts.length,
+							accepted: 0,
+							rejected: [],
+							error: `lattice refused memory.apply: ${admission.reason}`,
+							createdAt: new Date().toISOString(),
+						});
+						return;
+					}
 					const proposalId = newProposalId();
 					const applied = apply({
 						facts: gateResult.accepted,
@@ -201,6 +249,21 @@ export function createMemoryConsolidationExtension(
 				}
 
 				// Propose mode: only gate-accepted facts are staged for review.
+				// Pending staging is lattice-routed too (memory.stage on curator
+				// territory); a refusal is audited and nothing is staged.
+				const admission = admitWrite(pendingDir, { actor: "learning", operation: "memory.stage" }, lattice);
+				if (!admission.admitted) {
+					audit(auditPath, {
+						id: `mc_audit_${Date.now()}`,
+						action: "failed",
+						proposed: proposal.facts.length,
+						accepted: 0,
+						rejected: [],
+						error: `lattice refused memory.stage: ${admission.reason}`,
+						createdAt: new Date().toISOString(),
+					});
+					return;
+				}
 				const staged = stage(
 					pendingDir,
 					{ summary: proposal.summary, rationale: proposal.rationale, facts: gateResult.accepted },

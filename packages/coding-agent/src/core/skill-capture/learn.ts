@@ -5,8 +5,9 @@
  * a task trace from the current session, runs the ADR-0026 flagging
  * heuristic, and materializes a provenance-bearing, loader-verified skill
  * through the ADR-0024 pipeline. Captured skills are staged into the capture
- * directory and offered — installing them into a live skills directory is the
- * ownership lattice's job (issue #55).
+ * directory and offered. `--install` hands the capture to the ownership
+ * lattice's install primitive (ADR-0081, issue #55) — the extension wires the
+ * flag to `installCapturedSkill`, which admits only curator targets.
  */
 import { mkdirSync } from "node:fs";
 import { persistCapturedSkill, verifyCapturedSkill } from "./capture.js";
@@ -15,17 +16,29 @@ import type { TaskTrace } from "./evaluate.js";
 import { evaluateTaskForCapture } from "./evaluate.js";
 import type { SkillProvenance, TaskCapture } from "./types.js";
 
-/** Parsed /learn arguments: the only accepted form is `--force`. */
+/** Parsed /learn arguments: `--force` captures against the heuristic;
+ *  `--install` routes the capture through the ownership lattice's curator
+ *  install (ADR-0081) — user-invoked, so not silent-by-default. */
 export interface LearnCommandOptions {
 	force: boolean;
+	install: boolean;
 }
 
-/** Parse "/learn [--force]"; throws a usage error on anything else. */
+const LEARN_USAGE = "Usage: /learn [--force] [--install]";
+
+/** Parse "/learn [--force] [--install]"; throws a usage error on anything else. */
 export function parseLearnCommandOptions(args: string): LearnCommandOptions {
-	const trimmed = args.trim();
-	if (trimmed === "") return { force: false };
-	if (trimmed === "--force") return { force: true };
-	throw new Error("Usage: /learn [--force]");
+	const tokens = args
+		.trim()
+		.split(/\s+/)
+		.filter((token) => token !== "");
+	const options: LearnCommandOptions = { force: false, install: false };
+	for (const token of tokens) {
+		if (token === "--force") options.force = true;
+		else if (token === "--install") options.install = true;
+		else throw new Error(LEARN_USAGE);
+	}
+	return options;
 }
 
 /**

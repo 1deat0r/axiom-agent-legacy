@@ -110,6 +110,12 @@ function pendingCount(dir: string): number {
 	return listPendingProposals(consolidationPendingDir(dir)).length;
 }
 
+/** A lattice view over one temp root: everything under it is curator
+ *  territory, so the extension's writes admit unchanged (ADR-0081). */
+function curatorLattice(root: string): { roots: Array<{ path: string; layer: "curator" }> } {
+	return { roots: [{ path: root, layer: "curator" }] };
+}
+
 describe("createMemoryConsolidationExtension (session_shutdown)", () => {
 	it("is inert when explicitly disabled", async () => {
 		const root = makeTempDir();
@@ -152,6 +158,7 @@ describe("createMemoryConsolidationExtension (session_shutdown)", () => {
 			auto: false,
 			consolidationDir: root,
 			harnessStateDir: root,
+			latticeConfig: curatorLattice(root),
 			plan: async () => proposal(),
 		})(pi);
 		await fire("session_shutdown", shutdownEvent(), ctx);
@@ -192,6 +199,7 @@ describe("createMemoryConsolidationExtension (session_shutdown)", () => {
 			auto: true,
 			consolidationDir: root,
 			harnessStateDir: root,
+			latticeConfig: curatorLattice(root),
 			plan: async () => proposal(),
 		})(pi);
 		await fire("session_shutdown", shutdownEvent(), ctx);
@@ -246,7 +254,11 @@ describe("createMemoryConsolidationExtension (session_shutdown)", () => {
 		const { ctx, notifyCalls } = fakeCtx();
 		// Only paths injected: enablement comes from the environment, and the
 		// real plan → gate → apply pipeline runs against the mocked model.
-		createMemoryConsolidationExtension({ consolidationDir: root, harnessStateDir: root })(pi);
+		createMemoryConsolidationExtension({
+			consolidationDir: root,
+			harnessStateDir: root,
+			latticeConfig: curatorLattice(root),
+		})(pi);
 		await fire("session_shutdown", shutdownEvent(), ctx);
 		const state = loadHarnessState(root);
 		expect(Object.values(state.entries.memory)).toHaveLength(1);
@@ -271,7 +283,11 @@ describe("createMemoryConsolidationExtension (session_shutdown)", () => {
 		const { pi, fire } = fakePi();
 		const { ctx, notifyCalls } = fakeCtx();
 		// No enabled/auto/plan deps and no env vars: the new default is on + auto.
-		createMemoryConsolidationExtension({ consolidationDir: root, harnessStateDir: root })(pi);
+		createMemoryConsolidationExtension({
+			consolidationDir: root,
+			harnessStateDir: root,
+			latticeConfig: curatorLattice(root),
+		})(pi);
 		await fire("session_shutdown", shutdownEvent(), ctx);
 		const state = loadHarnessState(root);
 		expect(Object.values(state.entries.memory)).toHaveLength(1);
@@ -342,6 +358,7 @@ describe("createMemoryConsolidationExtension (session_shutdown)", () => {
 			auto: false,
 			consolidationDir: root,
 			harnessStateDir: root,
+			latticeConfig: curatorLattice(root),
 			buildRequest: (messages, options) => {
 				received.push({ messages, options });
 				return fromAny<ConsolidationRequest, unknown>({
@@ -355,5 +372,53 @@ describe("createMemoryConsolidationExtension (session_shutdown)", () => {
 		await fire("session_shutdown", shutdownEvent(), ctx);
 		expect(received).toHaveLength(1);
 		expect(fromAny<{ messages: AgentMessage[] }, unknown>(received[0]).messages).toEqual(session());
+	});
+});
+
+describe("createMemoryConsolidationExtension (ownership lattice, ADR-0081)", () => {
+	it("refuses to apply when the harness dir is outside the lattice and audits the refusal", async () => {
+		const root = makeTempDir();
+		const elsewhere = makeTempDir();
+		const { pi, fire } = fakePi();
+		const { ctx, notifyCalls } = fakeCtx();
+		createMemoryConsolidationExtension({
+			enabled: true,
+			auto: true,
+			consolidationDir: root,
+			harnessStateDir: root,
+			// The lattice admits nothing under root: the write must be refused.
+			latticeConfig: curatorLattice(elsewhere),
+			plan: async () => proposal(),
+		})(pi);
+		await fire("session_shutdown", shutdownEvent(), ctx);
+		expect(Object.values(loadHarnessState(root).entries.memory)).toHaveLength(0);
+		expect(pendingCount(root)).toBe(0);
+		const events = readAuditEvents(consolidationAuditPath(root));
+		expect(events).toHaveLength(1);
+		expect(events[0]?.action).toBe("failed");
+		expect(events[0]?.error).toContain("lattice");
+		expect(notifyCalls).toHaveLength(0);
+	});
+
+	it("refuses to stage when the pending dir is outside the lattice and audits the refusal", async () => {
+		const root = makeTempDir();
+		const elsewhere = makeTempDir();
+		const { pi, fire } = fakePi();
+		const { ctx, notifyCalls } = fakeCtx();
+		createMemoryConsolidationExtension({
+			enabled: true,
+			auto: false,
+			consolidationDir: root,
+			harnessStateDir: root,
+			latticeConfig: curatorLattice(elsewhere),
+			plan: async () => proposal(),
+		})(pi);
+		await fire("session_shutdown", shutdownEvent(), ctx);
+		expect(pendingCount(root)).toBe(0);
+		const events = readAuditEvents(consolidationAuditPath(root));
+		expect(events).toHaveLength(1);
+		expect(events[0]?.action).toBe("failed");
+		expect(events[0]?.error).toContain("lattice");
+		expect(notifyCalls).toHaveLength(0);
 	});
 });
