@@ -45,6 +45,24 @@ export {
 	truncateTail,
 } from "./truncate.js";
 export {
+	createWebFetchTool,
+	createWebFetchToolDefinition,
+	type WebFetchOperations,
+	type WebFetchToolDetails,
+	type WebFetchToolInput,
+	type WebFetchToolOptions,
+} from "./web-fetch.js";
+export {
+	createWebSearchTool,
+	createWebSearchToolDefinition,
+	type RawSearchResult,
+	type SearchResult,
+	type WebSearchOperations,
+	type WebSearchToolDetails,
+	type WebSearchToolInput,
+	type WebSearchToolOptions,
+} from "./web-search.js";
+export {
 	createWriteTool,
 	createWriteToolDefinition,
 	type WriteLineEndings,
@@ -59,17 +77,21 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { ToolDefinition } from "../extensions/types.js";
 import { createIpythonTool, createIpythonToolDefinition, type IpythonToolOptions } from "./ipython.js";
 import { createReadTool, createReadToolDefinition, type ReadToolOptions } from "./read.js";
+import { createWebFetchTool, createWebFetchToolDefinition, type WebFetchToolOptions } from "./web-fetch.js";
+import { createWebSearchTool, createWebSearchToolDefinition, type WebSearchToolOptions } from "./web-search.js";
 import { createWriteTool, createWriteToolDefinition, type WriteToolOptions } from "./write.js";
 
 export type Tool = AgentTool<any>;
 export type ToolDef = ToolDefinition<any, any>;
-export type ToolName = "ipython" | "read" | "write";
-export const allToolNames: Set<ToolName> = new Set(["ipython", "read", "write"]);
+export type ToolName = "ipython" | "read" | "write" | "web_search" | "web_fetch";
+export const allToolNames: Set<ToolName> = new Set(["ipython", "read", "write", "web_search", "web_fetch"]);
 
 export interface ToolsOptions {
 	ipython?: IpythonToolOptions;
 	read?: ReadToolOptions;
 	write?: WriteToolOptions;
+	webSearch?: WebSearchToolOptions;
+	webFetch?: WebFetchToolOptions;
 }
 
 export function createToolDefinition(toolName: ToolName, cwd: string, options?: ToolsOptions): ToolDef {
@@ -80,6 +102,10 @@ export function createToolDefinition(toolName: ToolName, cwd: string, options?: 
 			return createReadToolDefinition(cwd, options?.read);
 		case "write":
 			return createWriteToolDefinition(cwd, options?.write);
+		case "web_search":
+			return createWebSearchToolDefinition(cwd, options?.webSearch);
+		case "web_fetch":
+			return createWebFetchToolDefinition(cwd, options?.webFetch);
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -93,6 +119,10 @@ export function createTool(toolName: ToolName, cwd: string, options?: ToolsOptio
 			return createReadTool(cwd, options?.read);
 		case "write":
 			return createWriteTool(cwd, options?.write);
+		case "web_search":
+			return createWebSearchTool(cwd, options?.webSearch);
+		case "web_fetch":
+			return createWebFetchTool(cwd, options?.webFetch);
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -103,6 +133,8 @@ export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): R
 		ipython: createIpythonToolDefinition(cwd, options?.ipython),
 		read: createReadToolDefinition(cwd, options?.read),
 		write: createWriteToolDefinition(cwd, options?.write),
+		web_search: createWebSearchToolDefinition(cwd, options?.webSearch),
+		web_fetch: createWebFetchToolDefinition(cwd, options?.webFetch),
 	};
 }
 
@@ -111,5 +143,7 @@ export function createAllTools(cwd: string, options?: ToolsOptions): Record<Tool
 		ipython: createIpythonTool(cwd, options?.ipython),
 		read: createReadTool(cwd, options?.read),
 		write: createWriteTool(cwd, options?.write),
+		web_search: createWebSearchTool(cwd, options?.webSearch),
+		web_fetch: createWebFetchTool(cwd, options?.webFetch),
 	};
 }

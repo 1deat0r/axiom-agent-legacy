@@ -8675,6 +8675,8 @@ export class AgentSession {
 				onRestore: notifyRestore ? (result) => this._onIpythonStateRestored(result) : undefined,
 			});
 			configuredBaseToolDefinitions = createAllToolDefinitions(this._cwd, {
+				webSearch: this.settingsManager.getWebSearchSettings(),
+				webFetch: this.settingsManager.getWebFetchSettings(),
 				ipython: {
 					provisioner: this._ipythonKernelProvisioner,
 					commandPrefix: this.settingsManager.getShellCommandPrefix(),
@@ -8717,7 +8719,7 @@ export class AgentSession {
 
 		const defaultActiveToolNames = this._baseToolsOverride
 			? Object.keys(this._baseToolsOverride)
-			: ["ipython", "read", "write"];
+			: ["ipython", "read", "write", "web_search", "web_fetch"];
 		const baseActiveToolNames = [...(options.activeToolNames ?? defaultActiveToolNames)];
 		if (this._goalState.status === "active" && this._includeGoals) {
 			// An active goal needs ipython so the model can reach the goal skill.

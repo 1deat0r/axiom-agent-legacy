@@ -75,7 +75,7 @@ export interface Args {
 
 const VALID_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 const REMOVED_BUILTIN_TOOL_NAMES = new Set(["grep", "find", "ls"]);
-const BUILTIN_TOOL_NAMES = ["ipython", "read", "write"];
+const BUILTIN_TOOL_NAMES = ["ipython", "read", "write", "web_search", "web_fetch"];
 
 export const INTERNAL_RUNTIME_COMMAND_MARKER = "\0axiom-runtime-command";
 
