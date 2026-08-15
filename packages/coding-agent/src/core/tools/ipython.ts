@@ -339,6 +339,16 @@ function applyShellSettingsToBashMagicCell(
  * clears the memo so the next call retries fresh, and progress listeners can
  * attach mid-flight (a tool call racing a background prewarm()).
  */
+
+function trace52(text: string): void {
+	try {
+		const { appendFileSync } = require("node:fs");
+		appendFileSync("/tmp/52-boot-trace.log", `${Date.now()} [${process.pid}] ${text}\n`);
+	} catch {
+		// best-effort
+	}
+}
+
 export class IpythonKernelProvisioner {
 	private managerPromise?: Promise<KernelManager>;
 	private startedManager?: KernelManager;
@@ -511,7 +521,9 @@ export class IpythonKernelProvisioner {
 				// covers only start(). Restore/bootstrap run per-kernel afterwards and are
 				// unbounded execute()s; holding the global permit across them could pin it
 				// forever on a wedged bootstrap and starve every other session's boot.
+				trace52("waiting for boot permit");
 				await withKernelBootPermit(() => {
+					trace52("boot permit acquired");
 					// Disposed while queued for the permit — don't spawn a kernel nobody wants.
 					if (startupSignal.aborted) throw new Error("Kernel provisioner disposed before start");
 					return m.start({
