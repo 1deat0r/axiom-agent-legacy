@@ -520,6 +520,15 @@ export class Gateway {
 			return;
 		}
 		if (msg.isCommand) {
+			// Live marks for /dashboard: channels with an in-flight chain are
+			// running right now; resolve each to its session id the same way
+			// the run path does (anchored channels carry the project key).
+			const liveSessionIds = new Set<string>();
+			for (const channelId of this.chains.keys()) {
+				const project = this.activeProjects.get(channelId);
+				const key = project ? `${channelId}:${project}:${this.activeProjects.generation(project)}` : channelId;
+				liveSessionIds.add(this.index.get(key) ?? sessionIdForChannel(key));
+			}
 			const ctx: GatewayCommandContext = {
 				profile: this.profile,
 				axiomHomeDir: this.axiomHomeDir,
@@ -534,6 +543,7 @@ export class Gateway {
 				restartNoticeStore: this.restartNoticeStore,
 				...(this.updateApi ? { update: this.updateApi } : {}),
 				channelId: msg.channelId,
+				liveSessionIds,
 				cron: this.cron,
 				ledger: this.ledger,
 				deliverToAll: (text) => this.deliverToAll(text),

@@ -98,6 +98,11 @@ export const COMMAND_SPECS: readonly CommandSpec[] = [
 		summary: "Show background service status",
 	},
 	{
+		path: ["dashboard"],
+		usage: "dashboard [--json]",
+		summary: "One-glance report: sessions, automation spine, spend",
+	},
+	{
 		path: ["doctor"],
 		usage: "doctor [--fix] [--json]",
 		summary: "Inspect and safely clean up background services",
