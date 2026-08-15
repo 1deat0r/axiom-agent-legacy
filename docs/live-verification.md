@@ -14,6 +14,7 @@ follow-up that still waits on the operator.
 | `agent-run` | The full agent loop boots and answers through the real CLI: provider, model registry, session, completion. | A provider key + built CLI (`npm run build`) | Exit 0 with the assistant's reply on stdout. |
 | `rlm-kernel` | The IPython kernel the RLM prompt relies on boots and executes a cell (via the repo's own `KernelManager`). | `AXIOM_KERNEL_PYTHON` or the kernel venv (`AXIOM_KERNEL_VENV` / `~/.axiom/agent/kernel-venv`) + built kernel module | `print(1+1)` reports status ok and stdout contains "2". |
 | `gateway-delivery` | Each configured transport token is live and its API surface reachable. | One or more of `AXIOM_TELEGRAM_BOT_TOKEN`, `AXIOM_DISCORD_BOT_TOKEN`, `AXIOM_SLACK_BOT_TOKEN` | Telegram `getMe` ok:true with the bot username; Discord `users/@me` returns the bot id; Slack `auth.test` ok:true. |
+| `slack-socket-mode` | The Socket Mode app token is live and the websocket surface reachable (the REST-only `gateway-delivery` check never touches it). | `AXIOM_SLACK_APP_TOKEN` | Slack `apps.connections.open` ok:true with a websocket url. |
 
 `node tools/live-verification/run.mjs --list` prints the full catalog with
 purposes and requirements. `--json` emits a machine-readable report. Model
@@ -67,6 +68,12 @@ item; tick it and link the run's report (or paste the SKIP reason) when done.
 
 ### Deferred live passes (equivalent phrasings)
 
+- [ ] **ADR-0062 (Slack Socket Mode)** — "Live Socket Mode and live
+  cross-platform fan-out remain operator follow-ups (no Slack/Discord
+  credentials in this sandbox); the gateway is exercised by its test suite
+  until then." Set `AXIOM_SLACK_APP_TOKEN` (and `SLACK_SOCKET_MODE`) and run
+  `slack-socket-mode`; then send one manual message through the booted
+  socket-mode gateway to confirm the receive loop.
 - [ ] **ADR-0016 (Signal gateway)** — "the gateway is exercised by its test
   suite and the live pass is the follow-up." Link signal-cli, add the number
   to the allowlist, point the completion runner at a working provider. Then
