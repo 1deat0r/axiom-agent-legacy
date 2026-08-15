@@ -9,7 +9,7 @@ Axiom re-founded as a hardfork of Hermes Agent at HEAD per ADR-0087 (see
 `axiom/CONTEXT.md`). Prime-era (`archive/prime-v0.7.2`, `baseline/prime-v0.7.2`)
 and pi (`archive/pi-v0.84.1`) preserved as archived eras.
 
-## What was done (session 2 — this session)
+## What was done (session 2)
 
 1. Unshallowed `upstream` — full Hermes history; `.git/shallow` gone.
 2. Pushed the archived eras to origin (3 branches + `archive/prime-v0.7.2` tag).
@@ -29,7 +29,7 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
 8. Folded the sovereign package into `axiom/sovereign/` (was a separate
    `~/Projects/axiom-sovereign/` dir); committed `510670e158`.
 
-## What was done (session 3 — this session)
+## What was done (session 3)
 
 9. Decided the CLI runtime: `node` (single runtime, already `engines >=26`;
    bun's cold-start win is immaterial at the bridge's write frequency, and one
@@ -68,7 +68,7 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
 ## Next steps (in order)
 
 1. ~~Decide CLI runtime~~ — resolved 2026-08-16: `node` (see session 3 #9).
-2. ~~Port #2 — skills store~~ — done this session (see session 3 #13-15).
+2. ~~Port #2 — skills store~~ — done (session 3 #13-15).
    Remaining: **port #3** — re-point the native-store-bridge plugin subprocess
    calls at the TS CLI (`node src/cli/*.ts`).
 3. **Flag — prime-era automation stale**: `axiom/docs/agents/issue-tracker.md`
@@ -76,7 +76,7 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
    `issue-hygiene.yml`, which do NOT exist on the Hermes baseline. Decide
    whether to port that automation.
 
-## Environment quirks (verified this session)
+## Environment quirks (verified)
 
 - `NODE_ENV=production` is set in the shell — `npm install` omits devDeps
   unless `--include=dev` is passed.
