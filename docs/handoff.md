@@ -69,3 +69,27 @@
 2. Session recall (#56, ADR-0082) after the lattice.
 3. Owner's calls, still open: #52 tag decision + optional spawn-merge
    hardening; delete feat/autonomy-direction-adr-0076 (tip == main).
+
+## Next-session prompt (ready to paste)
+
+> You're in /home/mustbearn/Projects/axiom-agent, branch main, pushed and
+> floor-green. /learn landed (issue #54, ADR-0080, closed; handoff above).
+> Read SOUL.md, AGENTS.md, docs/handoff.md, ADR-0078, and ADR-0080 first.
+>
+> Start the next thread: the ownership lattice (issue #55, ADR-0081) — the
+> second restructure capability per ADR-0078's port order. It governs what
+> the learning loop may write: pin/protected/curator-managed layers with
+> code-enforced hard bounds and a whitelisted toolset. /learn's staged
+> captures (and the ADR-0027 hook's offers) are the first consumers:
+> installing a learned skill into a live skills directory must go through
+> the lattice's rules.
+>
+> Under the execution rules there is no readiness-contract blocker, but
+> write the red test first and keep the floor/bundling honest: run
+> ./test.sh detached (setsid nohup ./test.sh > /tmp/floor-<name>.log 2>&1 &)
+> before anything reaches main.
+>
+> Open decisions that are the owner's, not yours: #52's kernel-heavy tag
+> and the optional merged-readiness-spawn hardening (ADR-0076, proposed on
+> fix/kernel-bridge-stall). Report back when the lattice has its first red
+> test.
