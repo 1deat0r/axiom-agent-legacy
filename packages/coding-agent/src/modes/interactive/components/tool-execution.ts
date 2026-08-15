@@ -4,6 +4,7 @@ import type { ToolDefinition, ToolRenderContext, ToolRenderResultOptions } from 
 import type { KernelSentAgentMessage } from "../../../core/kernel/index.js";
 import { createBashToolDefinition } from "../../../core/tools/bash.js";
 import { createEditToolDefinition } from "../../../core/tools/edit.js";
+import { createGrepToolDefinition } from "../../../core/tools/grep.js";
 import { createAllToolDefinitions } from "../../../core/tools/index.js";
 import { getTextOutput as getRenderedTextOutput } from "../../../core/tools/render-utils.js";
 import type { AgentConnectionToolDefinition } from "../../agent-connection/index.js";
@@ -60,6 +61,10 @@ function createReplayBuiltInToolDefinition(
 		}
 		case "edit": {
 			const builtInDefinition = createEditToolDefinition(cwd);
+			return matchesBuiltInReplayMetadata(toolName, toolDefinition) ? builtInDefinition : undefined;
+		}
+		case "grep": {
+			const builtInDefinition = createGrepToolDefinition(cwd);
 			return matchesBuiltInReplayMetadata(toolName, toolDefinition) ? builtInDefinition : undefined;
 		}
 		default:

@@ -58,6 +58,16 @@ by renumbering the later reservation.
 _Avoid_: Free allocation at branch time, first-write-wins (parallel branches
 cannot see each other's ADR files, so allocation must happen in the tracker)
 
+**File search**:
+The two purpose-built search surfaces the agent owns (ADR-0073): the `grep`
+tool (lexical: where does this text appear, shaped and capped) and the
+`ast-grep` skill (structural: where does this code shape appear). A call-graph
+index (relational: who calls this) is deferred future work. The rule: text
+questions go to `grep`, shape questions go to ast-grep, ad-hoc bash grep is
+the last resort.
+_Avoid_: Search tool (the session-archive search in `gateway/session-search.ts`
+is a different capability with the same word)
+
 **Renumber**:
 The collision-resolution edit that changes an ADR's number: rename the file,
 update the title's `(ADR-00NN)`, and fix every reference (CONTEXT.md terms,
@@ -446,6 +456,16 @@ omit it still return the old compact result. Field caps (status 100, summary
 300) keep the block bounded no matter what the helper returns.
 _Avoid_: Transcript, full log, raw summary (the handoff is the structured,
 capped projection; the summary field stays the raw capped closing text)
+
+**Delegate journal**:
+The append-only activity log every delegate run writes (ADR-0072): bounded
+JSONL records (start, assistant text, tool call, tool result, turn, end) at
+`<agent-dir>/delegate-results/<handle>.journal.jsonl`. It is the data source
+for `axiom delegate list` and `axiom delegate watch`, the live TUI a human
+uses to see what a helper does. The journal is best-effort: a failed write
+never fails the delegation.
+_Avoid_: Helper transcripts in the parent context (the journal stays on disk;
+the compact result block stays the only model-facing artifact).
 
 **Runtime GC**:
 Garbage collection for the persistent Python kernel (ADR-0059). The runtime

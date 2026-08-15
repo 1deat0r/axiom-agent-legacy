@@ -16,6 +16,24 @@ export const COMMAND_SPECS: readonly CommandSpec[] = [
 		summary: "Show command help",
 	},
 	{
+		path: ["delegate"],
+		usage: "delegate <list|watch>",
+		summary: "See what delegate helpers do",
+		description: "Every delegate run writes an activity journal under <agent-dir>/delegate-results.",
+	},
+	{
+		path: ["delegate", "list"],
+		usage: "delegate list [--json]",
+		summary: "List recent delegate runs (newest first)",
+		options: ["--json  Print JSON"],
+	},
+	{
+		path: ["delegate", "watch"],
+		usage: "delegate watch <handle|journal-path> [--json]",
+		summary: "Watch a delegate helper live",
+		options: ["--json  Dump the journal records"],
+	},
+	{
 		path: ["agents"],
 		usage: "agents",
 		summary: "Search and open sessions",

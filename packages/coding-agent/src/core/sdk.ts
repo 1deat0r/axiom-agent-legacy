@@ -25,10 +25,10 @@ import {
 	createIpythonTool,
 	createReadTool,
 	createReadToolDefinition,
-	createWebFetchTool,
-	createWebFetchToolDefinition,
 	createWebSearchTool,
 	createWebSearchToolDefinition,
+	createWebFetchTool,
+	createWebFetchToolDefinition,
 	createWriteTool,
 	createWriteToolDefinition,
 	withFileMutationQueue,
@@ -124,10 +124,10 @@ export {
 	createIpythonTool,
 	createReadTool,
 	createReadToolDefinition,
-	createWebFetchTool,
-	createWebFetchToolDefinition,
 	createWebSearchTool,
 	createWebSearchToolDefinition,
+	createWebFetchTool,
+	createWebFetchToolDefinition,
 	createWriteTool,
 	createWriteToolDefinition,
 	withFileMutationQueue,
@@ -278,7 +278,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			? [...options.tools]
 			: options.noTools
 				? []
-				: ["ipython", "read", "write", "web_search", "web_fetch"]);
+				: ["ipython", "read", "write", "grep", "web_search", "web_fetch"]);
 
 	let agent: Agent;
 

@@ -11,6 +11,7 @@
  * `createRpcClientBridge` wires the genuine helper process.
  */
 
+import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import type { SessionStats } from "../../core/session-stats.js";
 import { RpcClient } from "../../modes/rpc/rpc-client.js";
 import { buildHelperPrompt } from "./handoff.js";
@@ -28,6 +29,13 @@ export interface RpcDelegateBridge {
 	start(): Promise<void>;
 	runTask(task: string, timeoutMs: number): Promise<RpcDelegateRunResult>;
 	stop(): Promise<void>;
+	/**
+	 * Optional hook for every agent event the helper emits while running.
+	 * The delegate extension assigns a journal writer after construction;
+	 * the adapter forwards events from the underlying RPC client to whatever
+	 * is assigned at event time.
+	 */
+	onEvent?: (event: AgentEvent) => void;
 }
 
 export interface RpcClientBridgeOptions {
@@ -112,7 +120,7 @@ export function createRpcClientBridge(options: RpcClientBridgeOptions = {}): Rpc
 		...(options.model ? { model: options.model } : {}),
 	});
 
-	return {
+	const bridge: RpcDelegateBridge = {
 		async start(): Promise<void> {
 			if (!client) {
 				throw new Error("delegate helper already stopped");
@@ -140,4 +148,13 @@ export function createRpcClientBridge(options: RpcClientBridgeOptions = {}): Rpc
 			}
 		},
 	};
+
+	// Forward the helper's agent events to the (assignable) hook. Reading the
+	// property at event time means the extension can attach its journal writer
+	// after construction, right before the run starts.
+	client.onEvent((event) => {
+		bridge.onEvent?.(event);
+	});
+
+	return bridge;
 }
