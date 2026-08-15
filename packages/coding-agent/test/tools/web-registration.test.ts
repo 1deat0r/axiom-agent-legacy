@@ -16,7 +16,7 @@ describe("web tool registration", () => {
 	});
 
 	it("lists both tools in the CLI builtin tool diagnostics", () => {
-		const result = parseArgs(["--tools", "grep"]);
+		const result = parseArgs(["--tools", "find"]);
 		const message = result.diagnostics.find((d) => d.type === "error")?.message ?? "";
 		expect(message).toContain("web_search");
 		expect(message).toContain("web_fetch");

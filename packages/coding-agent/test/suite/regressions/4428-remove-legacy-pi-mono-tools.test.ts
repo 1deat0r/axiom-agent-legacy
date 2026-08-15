@@ -29,7 +29,14 @@ describe("regression #4428: remove legacy pi-mono built-in tools", () => {
 
 	it("registers ipython, read, write, and grep as built-in tools", () => {
 		expect([...allToolNames]).toEqual(["ipython", "read", "write", "grep", "web_search", "web_fetch"]);
-		expect(Object.keys(createAllToolDefinitions(process.cwd()))).toEqual(["ipython", "read", "write", "grep"]);
+		expect(Object.keys(createAllToolDefinitions(process.cwd()))).toEqual([
+			"ipython",
+			"read",
+			"write",
+			"grep",
+			"web_search",
+			"web_fetch",
+		]);
 	});
 
 	it("activates read, write, and grep alongside ipython by default", async () => {
