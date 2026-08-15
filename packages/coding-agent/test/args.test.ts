@@ -542,7 +542,8 @@ describe("parseArgs", () => {
 			expect(result.tools).toEqual(["find", "ls"]);
 			expect(result.diagnostics).toContainEqual({
 				type: "error",
-				message: "Unknown built-in tool(s): find, ls. Available built-in tools: ipython, read, write, grep",
+				message:
+					"Unknown built-in tool(s): find, ls. Available built-in tools: ipython, read, write, grep, web_search, web_fetch",
 			});
 		});
 	});
