@@ -58,6 +58,16 @@ by renumbering the later reservation.
 _Avoid_: Free allocation at branch time, first-write-wins (parallel branches
 cannot see each other's ADR files, so allocation must happen in the tracker)
 
+**File search**:
+The two purpose-built search surfaces the agent owns (ADR-0073): the `grep`
+tool (lexical: where does this text appear, shaped and capped) and the
+`ast-grep` skill (structural: where does this code shape appear). A call-graph
+index (relational: who calls this) is deferred future work. The rule: text
+questions go to `grep`, shape questions go to ast-grep, ad-hoc bash grep is
+the last resort.
+_Avoid_: Search tool (the session-archive search in `gateway/session-search.ts`
+is a different capability with the same word)
+
 **Renumber**:
 The collision-resolution edit that changes an ADR's number: rename the file,
 update the title's `(ADR-00NN)`, and fix every reference (CONTEXT.md terms,

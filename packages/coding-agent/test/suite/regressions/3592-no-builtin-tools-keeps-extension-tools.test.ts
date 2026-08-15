@@ -78,12 +78,13 @@ describe("regression #3592: no-builtin-tools keeps extension tools enabled", () 
 				.getAllTools()
 				.map((tool) => tool.name)
 				.sort(),
-		).toEqual(["extension_tool", "ipython", "read", "write"]);
+		).toEqual(["extension_tool", "grep", "ipython", "read", "write"]);
 		expect(session.getActiveToolNames()).toEqual(["extension_tool"]);
 		expect(session.systemPrompt).not.toContain("- extension_tool: Run extension test behavior");
 		expect(session.systemPrompt).not.toContain("- ipython:");
 		expect(session.systemPrompt).not.toContain("- bash:");
 		expect(session.systemPrompt).not.toContain("- edit:");
+		expect(session.systemPrompt).not.toContain("- grep:");
 		session.dispose();
 	});
 
