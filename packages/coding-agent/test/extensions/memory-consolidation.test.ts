@@ -97,7 +97,7 @@ function pendingCount(dir: string): number {
 }
 
 describe("createMemoryConsolidationExtension (agent_end)", () => {
-	it("is inert when disabled (default, env unset)", async () => {
+	it("is inert when explicitly disabled", async () => {
 		const root = makeTempDir();
 		const { pi, fire } = fakePi();
 		const { ctx, notifyCalls } = fakeCtx();
@@ -135,6 +135,7 @@ describe("createMemoryConsolidationExtension (agent_end)", () => {
 		const { ctx, notifyCalls } = fakeCtx();
 		createMemoryConsolidationExtension({
 			enabled: true,
+			auto: false,
 			consolidationDir: root,
 			harnessStateDir: root,
 			plan: async () => proposal(),
@@ -157,6 +158,7 @@ describe("createMemoryConsolidationExtension (agent_end)", () => {
 		const { ctx, notifyCalls } = fakeCtx();
 		createMemoryConsolidationExtension({
 			enabled: true,
+			auto: false,
 			consolidationDir: root,
 			harnessStateDir: root,
 			plan: async () => ({ summary: "s", rationale: "r", facts: facts().slice(1) }),
@@ -197,6 +199,7 @@ describe("createMemoryConsolidationExtension (agent_end)", () => {
 		const { ctx, notifyCalls } = fakeCtx();
 		createMemoryConsolidationExtension({
 			enabled: true,
+			auto: false,
 			consolidationDir: root,
 			harnessStateDir: root,
 			plan: async () => {
@@ -238,5 +241,41 @@ describe("createMemoryConsolidationExtension (agent_end)", () => {
 		// Auto mode applies directly: no staged proposals, only the audit log.
 		expect(existsSync(consolidationAuditPath(root))).toBe(true);
 		expect(listPendingProposals(consolidationPendingDir(root))).toHaveLength(0);
+	});
+
+	it("is enabled and auto-applies silently by default (no env, no deps) — ADR-0076", async () => {
+		completeSimpleMock.mockResolvedValue({
+			stopReason: "stop",
+			content: [
+				{
+					type: "text",
+					text: '{"summary":"default-run","rationale":"r","facts":[{"title":"Default fact","content":"Silent-by-default consolidation applies without asking."}]}',
+				},
+			],
+		});
+		const root = makeTempDir();
+		const { pi, fire } = fakePi();
+		const { ctx, notifyCalls } = fakeCtx();
+		// No enabled/auto/plan deps and no env vars: the new default is on + auto.
+		createMemoryConsolidationExtension({ consolidationDir: root, harnessStateDir: root })(pi);
+		await fire("agent_end", { type: "agent_end", messages: session() }, ctx);
+		const state = loadHarnessState(root);
+		expect(Object.values(state.entries.memory)).toHaveLength(1);
+		expect(readAuditEvents(consolidationAuditPath(root))[0]?.action).toBe("auto_applied");
+		expect(notifyCalls.some((m) => m.includes("applied 1 durable fact"))).toBe(true);
+		expect(listPendingProposals(consolidationPendingDir(root))).toHaveLength(0);
+	});
+
+	it("AXIOM_MEMORY_CONSOLIDATION=0 opts out of the silent default", async () => {
+		process.env.AXIOM_MEMORY_CONSOLIDATION = "0";
+		const root = makeTempDir();
+		const { pi, fire } = fakePi();
+		const { ctx, notifyCalls } = fakeCtx();
+		createMemoryConsolidationExtension({ consolidationDir: root, harnessStateDir: root })(pi);
+		await fire("agent_end", { type: "agent_end", messages: session() }, ctx);
+		expect(completeSimpleMock).not.toHaveBeenCalled();
+		expect(notifyCalls).toHaveLength(0);
+		expect(pendingCount(root)).toBe(0);
+		expect(existsSync(consolidationAuditPath(root))).toBe(false);
 	});
 });

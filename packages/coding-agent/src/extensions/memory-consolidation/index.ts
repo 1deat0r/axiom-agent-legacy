@@ -5,13 +5,16 @@
  * this extension reviews the finished session, proposes durable facts, passes
  * them through the deterministic durability gate, and either:
  *
- *  - stages them for operator confirmation (default; `axiom
- *    memory-consolidation pending` to review), or
- *  - applies them immediately with a full audit trail (auto mode,
- *    AXIOM_MEMORY_CONSOLIDATION_AUTO=1).
+ *  - applies them immediately with a full audit trail (silent-by-default,
+ *    per the autonomy direction ADR-0076), or
+ *  - stages them for operator confirmation (opt-in confirm mode,
+ *    AXIOM_MEMORY_CONSOLIDATION_AUTO=0; `axiom memory-consolidation pending`
+ *    to review).
  *
- * Deliberately inert by default (AXIOM_MEMORY_CONSOLIDATION=1 to enable), like
- * skill-capture's unattended hook (ADR-0027). It never blocks or crashes a
+ * Enabled and silent by default (AXIOM_MEMORY_CONSOLIDATION=0 to disable),
+ * per the autonomy direction ADR-0076 — the loop writes what it owns without
+ * asking, every write lands in the append-only audit log, and rollback stays
+ * available through the refinement history. It never blocks or crashes a
  * run: without model auth it skips silently; any failure is audited and
  * swallowed.
  */
@@ -111,8 +114,11 @@ function rejectedReasons(gate: GateResult, applied?: ApplyMemoryFactsResult): st
 export function createMemoryConsolidationExtension(
 	deps: MemoryConsolidationExtensionOptions = {},
 ): (pi: ExtensionAPI) => void {
-	const enabled = deps.enabled ?? process.env.AXIOM_MEMORY_CONSOLIDATION === "1";
-	const auto = deps.auto ?? process.env.AXIOM_MEMORY_CONSOLIDATION_AUTO === "1";
+	// Silent by default (ADR-0076): consolidation is on and auto-applies.
+	// Opt out explicitly with AXIOM_MEMORY_CONSOLIDATION=0 (off) or
+	// AXIOM_MEMORY_CONSOLIDATION_AUTO=0 (stage-for-confirmation).
+	const enabled = deps.enabled ?? process.env.AXIOM_MEMORY_CONSOLIDATION !== "0";
+	const auto = deps.auto ?? process.env.AXIOM_MEMORY_CONSOLIDATION_AUTO !== "0";
 	const consolidationDir = deps.consolidationDir ?? join(axiomHome(), "consolidation");
 	const pendingDir = consolidationPendingDir(consolidationDir);
 	const auditPath = consolidationAuditPath(consolidationDir);
