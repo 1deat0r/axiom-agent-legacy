@@ -38,19 +38,21 @@ function readyDeps(overrides: Partial<CheckDeps> = {}): CheckDeps {
 	return {
 		cliJsExists: () => true,
 		kernelModuleExists: () => true,
+		gatewayCronModuleExists: () => true,
 		resolveKernelPython: () => null,
 		...overrides,
 	};
 }
 
 describe("live-verification catalog", () => {
-	it("catalogs exactly the five required live checks", () => {
+	it("catalogs exactly the six required live checks", () => {
 		expect(CHECKS.map((check) => check.id)).toEqual([
 			"provider-chat",
 			"agent-run",
 			"rlm-kernel",
 			"gateway-delivery",
 			"slack-socket-mode",
+			"cron-spine",
 		]);
 	});
 
@@ -112,17 +114,29 @@ describe("missingRequirements", () => {
 });
 
 describe("plan", () => {
-	it("skips every check when the environment has no keys", () => {
-		const { runnable, skipped } = plan(CHECKS, keylessEnv(), readyDeps());
+	it("skips every check when the environment has no keys and nothing is built", () => {
+		const { runnable, skipped } = plan(CHECKS, keylessEnv(), readyDeps({ gatewayCronModuleExists: () => false }));
 		expect(runnable).toEqual([]);
 		expect(skipped).toHaveLength(CHECKS.length);
 		for (const entry of skipped) expect(entry.reasons.length).toBeGreaterThan(0);
 	});
 
+	it("runs cron-spine even with no keys when the gateway module is built", () => {
+		const { runnable, skipped } = plan(CHECKS, keylessEnv(), readyDeps());
+		expect(runnable.map((check) => check.id)).toEqual(["cron-spine"]);
+		expect(skipped.map((entry) => entry.check.id).sort()).toEqual([
+			"agent-run",
+			"gateway-delivery",
+			"provider-chat",
+			"rlm-kernel",
+			"slack-socket-mode",
+		]);
+	});
+
 	it("runs only the checks whose requirements are met", () => {
 		const env: CheckEnv = { DEEPSEEK_API_KEY: "k" };
 		const { runnable, skipped } = plan(CHECKS, env, readyDeps());
-		expect(runnable.map((check) => check.id)).toEqual(["provider-chat", "agent-run"]);
+		expect(runnable.map((check) => check.id)).toEqual(["provider-chat", "agent-run", "cron-spine"]);
 		expect(skipped.map((entry) => entry.check.id).sort()).toEqual([
 			"gateway-delivery",
 			"rlm-kernel",
@@ -130,7 +144,7 @@ describe("plan", () => {
 		]);
 	});
 
-	it("runs all five checks when keys, tokens, and a kernel python are present", () => {
+	it("runs all six checks when keys, tokens, and a kernel python are present", () => {
 		const env: CheckEnv = {
 			DEEPSEEK_API_KEY: "k",
 			AXIOM_TELEGRAM_BOT_TOKEN: "t",
@@ -183,6 +197,9 @@ describe("run.mjs (offline, no keys)", () => {
 		// Force the kernel python probe to miss so the offline run never boots a kernel.
 		AXIOM_KERNEL_PYTHON: "/nonexistent/live-check-python",
 		AXIOM_KERNEL_VENV: mkdtempSync(join(tmpdir(), "live-check-venv-")),
+		// Force the cron-spine module probe to miss so the offline run never
+		// loads the compiled gateway (the build may or may not exist here).
+		LIVE_CHECK_GATEWAY_MODULE: "/nonexistent/live-check-gateway-cron.js",
 	};
 
 	function runCli(args: string[]): { status: number | null; stdout: string; stderr: string } {
@@ -231,6 +248,7 @@ describe("run.mjs (offline, no keys)", () => {
 		expect(run.stdout).toContain("agent-run");
 		expect(run.stdout).toContain("rlm-kernel");
 		expect(run.stdout).toContain("gateway-delivery");
+		expect(run.stdout).toContain("cron-spine");
 		expect(run.stdout).toContain("env:");
 		expect(run.stdout).toContain("expects:");
 	});

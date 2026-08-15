@@ -10,7 +10,7 @@
  * expression. The schedule is taken as the longest prefix of the arguments
  * that parses; the rest is the prompt.
  */
-import { type AgentCronJob, parseAgentCronSchedule } from "../../core/cron-jobs.js";
+import { type AgentCronJob, isGatewayCronJob, parseAgentCronSchedule } from "../../core/cron-jobs.js";
 import type { GatewayCommand, GatewayCommandContext } from "../types.js";
 
 const USAGE = "usage: /cron list | /cron add <schedule> <prompt...> | /cron rm <id>";
@@ -62,7 +62,12 @@ function splitSchedulePrompt(args: string[], now = new Date()): { scheduleText: 
 
 function list(ctx: GatewayCommandContext): string {
 	if (!ctx.cron) return "cron is not wired on this gateway.";
-	const jobs = ctx.cron.listJobs().filter((j) => j.status === "active" || j.status === "paused");
+	// The store file is shared with the daemon: only gateway-owned jobs
+	// (cron-sourced with a channel) are /cron jobs. Heartbeats stay visible
+	// only through `axiom daemon cron`.
+	const jobs = ctx.cron
+		.listJobs()
+		.filter((j) => isGatewayCronJob(j) && (j.status === "active" || j.status === "paused"));
 	if (jobs.length === 0) return "no scheduled cron jobs — try /cron add <schedule> <prompt>.";
 	return jobs
 		.map((j) => {
@@ -91,7 +96,9 @@ function remove(args: string[], ctx: GatewayCommandContext): string {
 	if (!ctx.cron) return "cron is not wired on this gateway.";
 	const raw = args[0];
 	if (!raw) return `${USAGE} — /cron rm <id>`;
-	const jobs = ctx.cron.listJobs();
+	// Resolve only gateway-owned jobs: /cron rm must never cancel a heartbeat
+	// or a daemon schedule job sharing the store.
+	const jobs = ctx.cron.listJobs().filter((j) => isGatewayCronJob(j));
 	const exact = jobs.find((j) => j.id === raw);
 	const byPrefix = jobs.filter((j) => j.id.startsWith(raw));
 	const target = exact ?? (byPrefix.length === 1 ? byPrefix[0] : undefined);

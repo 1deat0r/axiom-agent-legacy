@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { AgentCronJobStore } from "../../src/core/cron-jobs.js";
 import { InMemoryActiveModelStore } from "../../src/gateway/active-model.js";
 import { MemoryActiveProjectStore } from "../../src/gateway/active-project.js";
 import { dispatchCommand } from "../../src/gateway/commands/index.js";
@@ -186,6 +187,49 @@ describe("cron command", () => {
 			const bySchedule = Object.fromEntries(c.cron!.listJobs().map((j) => [j.schedule.expression, j]));
 			expect(bySchedule["0 * * * *"]?.prompt).toBe("ping");
 			expect(bySchedule["0 3 * * *"]?.prompt).toBe("daily digest");
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("list shows only gateway cron jobs, hiding heartbeats sharing the store", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-croncmd-"));
+		try {
+			const c = cronCtx(dir);
+			dispatchCommand("/cron add every 5m weekly cost summary", c);
+			// A heartbeat in the SAME store file must not render as a /cron job.
+			new AgentCronJobStore(join(dir, "cron-jobs.json")).createHeartbeat({
+				activeSessionId: "active-1",
+				sessionId: "session-1",
+				sessionFile: join(dir, "session.jsonl"),
+				cwd: dir,
+				scheduleText: "every 5m",
+				prompt: "check on the session",
+			});
+			const listed = dispatchCommand("/cron list", c);
+			expect(listed).toContain("weekly cost summary");
+			expect(listed).not.toContain("check on the session");
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("rm resolves only gateway cron jobs and cannot cancel a heartbeat", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-croncmd-"));
+		try {
+			const c = cronCtx(dir);
+			const heartbeat = new AgentCronJobStore(join(dir, "cron-jobs.json")).createHeartbeat({
+				activeSessionId: "active-1",
+				sessionId: "session-1",
+				sessionFile: join(dir, "session.jsonl"),
+				cwd: dir,
+				scheduleText: "every 5m",
+				prompt: "check on the session",
+			});
+			expect(dispatchCommand(`/cron rm ${heartbeat.id}`, c)).toContain("no cron job matching");
+			expect(
+				new AgentCronJobStore(join(dir, "cron-jobs.json")).list().find((j) => j.id === heartbeat.id),
+			).toMatchObject({ status: "active" });
 		} finally {
 			await rm(dir, { recursive: true, force: true });
 		}

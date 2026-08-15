@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { AgentCronJob } from "../../src/core/cron-jobs.js";
+import { type AgentCronJob, AgentCronJobStore } from "../../src/core/cron-jobs.js";
 import { sessionIdForChannel } from "../../src/gateway/completion.js";
 import { GatewayCron } from "../../src/gateway/cron.js";
 import { MemoryDeliveryLedger } from "../../src/gateway/delivery-ledger.js";
@@ -169,6 +169,45 @@ describe("gateway cron manager", () => {
 			const stored = cron.listJobs().find((j) => j.id === added.id);
 			expect(stored?.status).toBe("completed");
 			expect(stored?.runCount).toBe(1);
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("gateway cron claim filter (shared store)", () => {
+	it("a due heartbeat sharing the store survives a gateway scheduler sweep untouched", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-cron-claim-"));
+		try {
+			const h = harness();
+			// A heartbeat lives in the SAME store file the gateway sweeps (the
+			// shared-store claim race: a claim-all sweep eats the daemon's due
+			// heartbeat and advances its nextRunAt before the run guard can skip it).
+			const shared = new AgentCronJobStore(join(dir, "cron-jobs.json"));
+			const heartbeat = shared.createHeartbeat({
+				activeSessionId: "hb",
+				sessionId: "hb",
+				sessionFile: join(dir, "hb.jsonl"),
+				cwd: dir,
+				scheduleText: "every 5m",
+				prompt: "check on the session",
+				now: new Date("2026-01-01T12:00:00.000Z"),
+			});
+			const cron = newCron(dir, h);
+			const added = cron.addJob({ channelId: "42", scheduleText: "in 1m", prompt: "tick" });
+			cron.start();
+			await cron.runDue(new Date(Date.parse(added.nextRunAt ?? "")));
+			cron.stop();
+			// The gateway job ran and delivered...
+			expect(h.calls).toHaveLength(1);
+			expect(h.sends).toEqual([{ channelId: "42", text: "reply to: tick" }]);
+			// ...and the heartbeat was left exactly as the daemon scheduled it.
+			expect(shared.list().find((job) => job.id === heartbeat.id)).toMatchObject({
+				status: "active",
+				runCount: 0,
+				nextRunAt: "2026-01-01T12:05:00.000Z",
+			});
+			expect(shared.list().find((job) => job.id === heartbeat.id)).not.toHaveProperty("lastSkippedAt");
 		} finally {
 			await rm(dir, { recursive: true, force: true });
 		}

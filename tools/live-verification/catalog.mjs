@@ -10,9 +10,9 @@
  * `run` is invoked with real credentials; the unit tests never call them.
  */
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const PROVIDER_KEY_ENV_VARS = ["DEEPSEEK_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"];
@@ -23,12 +23,14 @@ export const KERNEL_PYTHON_ENV_VAR = "AXIOM_KERNEL_PYTHON";
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const CLI_JS = join(REPO_ROOT, "packages/coding-agent/dist/cli.js");
 const KERNEL_MODULE = join(REPO_ROOT, "packages/coding-agent/dist/core/kernel/index.js");
+const GATEWAY_CRON_MODULE = join(REPO_ROOT, "packages/coding-agent/dist/gateway/cron.js");
 const PROBE_PROMPT = "Reply with the single word: ok";
 
 const PROVIDER_CHAT_TIMEOUT_MS = 30_000;
 const AGENT_RUN_TIMEOUT_MS = 180_000;
 const KERNEL_BOOT_TIMEOUT_MS = 60_000;
 const GATEWAY_PROBE_TIMEOUT_MS = 20_000;
+const CRON_SPINE_TIMEOUT_MS = 20_000;
 
 /** Chat-completion model used by the provider-chat check, overridable per provider. */
 const CHAT_MODELS = {
@@ -58,6 +60,16 @@ function truncate(text, max) {
 	if (typeof text !== "string") return "";
 	const flat = text.replace(/\s+/g, " ").trim();
 	return flat.length > max ? `${flat.slice(0, max)}...` : flat;
+}
+
+/**
+ * The compiled gateway cron module the cron-spine check loads. An explicit
+ * LIVE_CHECK_GATEWAY_MODULE wins (also the offline tests' scrub hook);
+ * otherwise the repo build's dist/gateway/cron.js.
+ */
+export function resolveGatewayCronModule(env) {
+	const override = env.LIVE_CHECK_GATEWAY_MODULE;
+	return typeof override === "string" && override.length > 0 ? override : GATEWAY_CRON_MODULE;
 }
 
 /**
@@ -342,6 +354,109 @@ async function runSlackSocketSurface(ctx) {
 }
 
 /**
+ * One cron spine round-trip on the real binary (issue #58): a temp home, a
+ * stubbed completion (no model spend, no tokens), a forced sweep, and then
+ * proof that claim -> run -> deliver -> ledger all happened — and that a due
+ * heartbeat sharing the same store file survived the sweep untouched (the
+ * shared-store claim race this check would have caught). Never throws.
+ */
+async function runCronSpine(ctx) {
+	const gatewayModulePath = resolveGatewayCronModule(ctx.env);
+	const gatewayDir = dirname(gatewayModulePath);
+	const ledgerModulePath = join(gatewayDir, "delivery-ledger.js");
+	const cronJobsModulePath = join(dirname(gatewayDir), "core", "cron-jobs.js");
+	let GatewayCron;
+	let FileDeliveryLedger;
+	let AgentCronJobStore;
+	try {
+		({ GatewayCron } = await import(pathToFileURL(gatewayModulePath).href));
+		({ FileDeliveryLedger } = await import(pathToFileURL(ledgerModulePath).href));
+		({ AgentCronJobStore } = await import(pathToFileURL(cronJobsModulePath).href));
+	} catch (error) {
+		return { ok: false, detail: `dist import failed: ${truncate(String(error?.message ?? error), 200)}` };
+	}
+	if (
+		typeof GatewayCron !== "function" ||
+		typeof FileDeliveryLedger !== "function" ||
+		typeof AgentCronJobStore !== "function"
+	) {
+		return { ok: false, detail: "dist exports are missing (expected GatewayCron, FileDeliveryLedger, AgentCronJobStore)" };
+	}
+	const home = mkdtempSync(join(tmpdir(), "axiom-cron-spine-"));
+	try {
+		const sends = [];
+		const completions = [];
+		const completion = {
+			async runCompletion(input) {
+				completions.push({ sessionId: input.sessionId, prompt: input.prompt });
+				return { reply: "spine ok", sessionId: input.sessionId };
+			},
+		};
+		const transport = {
+			async connect() {},
+			async disconnect() {},
+			async send(to, text) {
+				sends.push({ channelId: to.channelId, text });
+			},
+			onMessage() {},
+		};
+		mkdirSync(join(home, "gateway"), { recursive: true });
+		const storePath = join(home, "cron-jobs.json");
+		const ledger = new FileDeliveryLedger(join(home, "gateway", "ledger.jsonl"));
+		const cron = new GatewayCron({
+			storePath,
+			completion,
+			transport,
+			profile: "default",
+			projectHome: home,
+			ledger,
+			transportName: "live-check",
+		});
+		// A heartbeat shares the SAME store file (the claim race): a claim-all
+		// sweep would eat it and advance its nextRunAt before the run guard.
+		const sharedStore = new AgentCronJobStore(storePath);
+		const heartbeat = sharedStore.createHeartbeat({
+			activeSessionId: "hb",
+			sessionId: "hb",
+			sessionFile: join(home, "sessions", "hb.jsonl"),
+			cwd: home,
+			scheduleText: "every 5m",
+			prompt: "heartbeat probe",
+			now: new Date(Date.now() - 10 * 60_000),
+		});
+		const added = cron.addJob({ channelId: "live-check", scheduleText: "in 1m", prompt: "spine tick" });
+		const dueAt = new Date(Date.parse(added.nextRunAt ?? "") + 1000);
+		const ran = await withTimeout(cron.runDue(dueAt), CRON_SPINE_TIMEOUT_MS, "cron sweep");
+		if (ran !== 1) return { ok: false, detail: `sweep ran ${ran} jobs, expected 1` };
+		if (completions.length !== 1 || completions[0]?.prompt !== "spine tick") {
+			return { ok: false, detail: `completion did not run once for the job: ${truncate(JSON.stringify(completions), 120)}` };
+		}
+		if (sends.length !== 1 || sends[0]?.channelId !== "live-check" || !String(sends[0]?.text ?? "").includes("spine ok")) {
+			return { ok: false, detail: `delivery mismatch: ${truncate(JSON.stringify(sends), 120)}` };
+		}
+		const stored = sharedStore.list().find((job) => job.id === added.id);
+		if (stored?.status !== "completed" || stored.runCount !== 1) {
+			return { ok: false, detail: `job not completed once: ${truncate(JSON.stringify(stored), 200)}` };
+		}
+		const storedHeartbeat = sharedStore.list().find((job) => job.id === heartbeat.id);
+		if (storedHeartbeat?.nextRunAt !== heartbeat.nextRunAt || storedHeartbeat.runCount !== 0) {
+			return { ok: false, detail: "the sweep touched the shared heartbeat (claim race)" };
+		}
+		const entries = ledger.recent(10);
+		const entry = entries.find((candidate) => candidate.channel === "live-check");
+		if (!entry || entry.transport !== "live-check" || entry.ok !== true) {
+			return { ok: false, detail: `ledger missing the delivery: ${truncate(JSON.stringify(entries), 200)}` };
+		}
+		return {
+			ok: true,
+			detail: `claim -> run -> deliver -> ledger on the real binary (job ${added.id.slice(0, 8)}); shared heartbeat untouched`,
+		};
+	} finally {
+		rmSync(home, { recursive: true, force: true });
+	}
+}
+
+/**
  * The catalog. Each check names what it proves, which env vars it needs,
  * and what its output looks like when it passes.
  */
@@ -410,6 +525,22 @@ export const CHECKS = [
 		expectedOutput:
 			"Slack apps.connections.open ok:true with a websocket url. The full socket receive loop stays the operator's manual pass (docs/live-verification.md).",
 		run: runSlackSocketSurface,
+	},
+	{
+		id: "cron-spine",
+		name: "Gateway cron spine round-trip",
+		purpose:
+			"Proves the real gateway cron spine claims, runs, delivers, and ledger-records a scheduled run on the compiled binary — a stubbed completion means no model spend and no tokens — and that a due heartbeat sharing the same store file survives the sweep untouched (the shared-store claim race).",
+		envVars: undefined,
+		extraRequirements: [
+			{
+				label: `built gateway cron module at ${GATEWAY_CRON_MODULE} (run: npm run build)`,
+				satisfied: (env, deps) => deps.gatewayCronModuleExists(resolveGatewayCronModule(env)),
+			},
+		],
+		expectedOutput:
+			"One once-job completes (runCount 1), its reply delivers to its channel, one ok:true live-check ledger entry is recorded, and the shared heartbeat is untouched.",
+		run: runCronSpine,
 	},
 ];
 
@@ -486,6 +617,7 @@ export function makeDefaultDeps() {
 	return {
 		cliJsExists: (path) => existsSync(path),
 		kernelModuleExists: (path) => existsSync(path),
+		gatewayCronModuleExists: (path) => existsSync(path),
 		resolveKernelPython: (env) => resolveKernelPython(env),
 	};
 }

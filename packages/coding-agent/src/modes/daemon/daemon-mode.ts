@@ -93,6 +93,7 @@ import {
 	type AgentHeartbeatManagementAction,
 	type AgentHeartbeatUpdateAction,
 	DEFAULT_HEARTBEAT_SCHEDULE,
+	isGatewayCronJob,
 	isHeartbeatCronJob,
 	normalizeHeartbeatDeliveryMode,
 	normalizeHeartbeatSchedule,
@@ -542,6 +543,11 @@ export class AgentDaemon {
 			this.recoveryJournal = new WorkerRecoveryJournal(recoveryJournalPath);
 		}
 		this.cronScheduler = new AgentCronScheduler(this.cronStore, {
+			// Claim only jobs the daemon owns: heartbeats, rlm heartbeats, and
+			// its own schedule jobs (cron-sourced without a channel). Gateway
+			// /cron jobs share the same store file and must survive a daemon
+			// sweep untouched for the gateway scheduler to claim them.
+			claimFilter: (job) => !isGatewayCronJob(job),
 			runJob: (job) => this.runCronJob(job),
 			beginDispatch: () => {
 				this.mutationDrain.begin();
