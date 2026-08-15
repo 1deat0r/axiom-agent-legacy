@@ -2,7 +2,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { KernelManager } from "../../../src/core/kernel/index.js";
+import type { KernelManager } from "../../../src/core/kernel/index.js";
 import { IpythonKernelProvisioner } from "../../../src/core/tools/ipython.js";
 
 /**
