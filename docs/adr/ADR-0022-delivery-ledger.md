@@ -64,11 +64,12 @@ multi-transport fan-out and the cron spine feeding `deliverTo` are follow-ups
   configs keep working.
 - **Known limitations (recorded, not built):** fan-out is single-transport (the
   router owns one transport); the subscription / automation spine (cron)
-  delivering a run's result through `deliverTo` on this branch is a follow-up
-  once the branch rebases onto the cron baseline; `/announce` is fire-and-forget
-  (confirms immediately, audit via `/ledger`), not awaited by the command; a
-  `deliverTo` channel the bot cannot send to is recorded ok:false by the
-  transport's own logging rather than failing the fan-out.
+  delivering a run's result through `deliverTo` is a wanted follow-up — the
+  cron baseline rebase happened and the spine is live (ADR-0084), and it
+  delivers to its creating channel only, never via `deliverTo`; `/announce`
+  is fire-and-forget (confirms immediately, audit via `/ledger`), not awaited
+  by the command; a `deliverTo` channel the bot cannot send to is recorded
+  ok:false by the transport's own logging rather than failing the fan-out.
 - **Baseline drift (recorded):** branch remains cut from `baseline/prime-v0.7.2`
   @ 01948fe39 (see ADR-0020); routine baseline merge brings it current.
 - Test suite grows with ledger + fan-out coverage: delivery-ledger (5),
