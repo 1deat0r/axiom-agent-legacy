@@ -4,7 +4,7 @@
  *
  * Surfaces the pure ledger core on the extension API:
  *  - `/cost` — session + lifetime spend, override repricing, honest notes.
- *  - `agent_end` — the footer status shows the live session cost (axiom v0.7.2 has no `agent_settled`; the agent loop's end is the settled moment).
+ *  - `agent_end` — the footer status shows the live session cost (prime-agent v0.7.2 has no `agent_settled`; the agent loop's end is the settled moment).
  *  - the spend cap — run spend accumulates per turn; `turn_start` (which
  *    fires before every provider call) aborts the run once the cap is hit,
  *    so the loop stops before the next LLM call.

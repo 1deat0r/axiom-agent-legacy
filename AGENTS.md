@@ -8,7 +8,7 @@ tracker rituals, the money thesis. It binds every coding-agent run here.
 
 ## The baseline
 
-This repo is a fork of **axiom v0.7.2** (PrimeIntellect-ai/axiom,
+This repo is a fork of **prime-agent v0.7.2** (PrimeIntellect-ai/prime-agent,
 MIT) — the baseline (ADR-0015). Upstream is `git remote upstream`; merge
 upstream `main` routinely. The pi-fork line (pi v0.84.1 + the twelve axiom
 commits) lives on `archive/pi-v0.84.1` (remote `upstream-pi`); its capabilities

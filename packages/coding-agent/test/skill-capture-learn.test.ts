@@ -35,16 +35,22 @@ const highScoreButIncompleteTrace = (): TaskTrace => ({
 
 describe("parseLearnCommandOptions", () => {
 	it("accepts no arguments as a normal (unforced) learn", () => {
-		expect(parseLearnCommandOptions("")).toEqual({ force: false });
+		expect(parseLearnCommandOptions("")).toEqual({ force: false, install: false });
 	});
 	it("accepts --force", () => {
-		expect(parseLearnCommandOptions("--force")).toEqual({ force: true });
-		expect(parseLearnCommandOptions("  --force  ")).toEqual({ force: true });
+		expect(parseLearnCommandOptions("--force")).toEqual({ force: true, install: false });
+		expect(parseLearnCommandOptions("  --force  ")).toEqual({ force: true, install: false });
+	});
+	it("accepts --install (the lattice-routed curator install, ADR-0081)", () => {
+		expect(parseLearnCommandOptions("--install")).toEqual({ force: false, install: true });
+		expect(parseLearnCommandOptions("--force --install")).toEqual({ force: true, install: true });
+		expect(parseLearnCommandOptions("--install --force")).toEqual({ force: true, install: true });
 	});
 	it("rejects unknown options and trailing text with the usage line", () => {
-		expect(() => parseLearnCommandOptions("--name foo")).toThrow("Usage: /learn [--force]");
-		expect(() => parseLearnCommandOptions("--force extra")).toThrow("Usage: /learn [--force]");
-		expect(() => parseLearnCommandOptions("force")).toThrow("Usage: /learn [--force]");
+		expect(() => parseLearnCommandOptions("--name foo")).toThrow("Usage: /learn [--force] [--install]");
+		expect(() => parseLearnCommandOptions("--force extra")).toThrow("Usage: /learn [--force] [--install]");
+		expect(() => parseLearnCommandOptions("--force --install extra")).toThrow("Usage: /learn [--force] [--install]");
+		expect(() => parseLearnCommandOptions("force")).toThrow("Usage: /learn [--force] [--install]");
 	});
 });
 

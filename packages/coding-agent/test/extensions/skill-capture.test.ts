@@ -83,7 +83,7 @@ describe("createSkillCaptureExtension (agent_end)", () => {
 		await fire(
 			"agent_end",
 			{ type: "agent_end", messages: reusableSession() },
-			{ ui: { notify: (m: string) => notifyCalls.push(m) } },
+			{ cwd: dir, ui: { notify: (m: string) => notifyCalls.push(m) } },
 		);
 		expect(countSkills(dir)).toBe(1);
 		expect(notifyCalls.some((m) => m.includes("Captured reusable skill"))).toBe(true);
@@ -242,5 +242,201 @@ describe("createSkillCaptureExtension (/learn command)", () => {
 			.map((p) => readFileSync(p, "utf-8"));
 		expect(skill.join("\n")).toContain("sessionId: sess-777");
 		expect(skill.join("\n")).toContain("source: learn");
+	});
+});
+
+describe("createSkillCaptureExtension (ownership lattice, ADR-0081)", () => {
+	/** fakePi that also collects handler return values (for resources_discover). */
+	function collectPi(): {
+		pi: ExtensionAPI;
+		fire(event: string, payload: unknown, ctx: unknown): Promise<unknown[]>;
+		command(name: string): ((args: string, ctx: unknown) => Promise<void>) | undefined;
+	} {
+		const handlers = new Map<string, Array<(...a: unknown[]) => unknown>>();
+		const commands = new Map<string, (args: string, ctx: unknown) => Promise<void>>();
+		return {
+			pi: fromAny<ExtensionAPI, unknown>({
+				on: (evt: string, h: (...a: unknown[]) => unknown) => handlers.set(evt, [...(handlers.get(evt) ?? []), h]),
+				registerCommand: (name: string, options: { handler: (args: string, ctx: unknown) => Promise<void> }) =>
+					commands.set(name, options.handler),
+			}),
+			fire: async (event, payload, ctx) => {
+				const results: unknown[] = [];
+				for (const handler of handlers.get(event) ?? []) {
+					results.push(await handler(payload, ctx));
+				}
+				return results;
+			},
+			command: (name) => commands.get(name),
+		};
+	}
+
+	/** A ctx for /learn with cwd so the extension can build its lattice view. */
+	function learnCtxWithCwd(messages: AgentMessage[], cwd: string): { ctx: unknown; notify: string[] } {
+		const notify: string[] = [];
+		const entries = messages.map((message, index) => ({
+			type: "message",
+			id: `entry-${index}`,
+			parentId: index === 0 ? null : `entry-${index - 1}`,
+			timestamp: "2026-08-15T00:00:00.000Z",
+			message,
+		}));
+		return {
+			notify,
+			ctx: fromAny<unknown, unknown>({
+				cwd,
+				ui: { notify: (message: string) => notify.push(message) },
+				sessionManager: {
+					getBranch: () => entries,
+					getLeafId: () => "leaf",
+					getSessionId: () => "sess-1",
+				},
+			}),
+		};
+	}
+
+	/** A lattice view over one temp root, where the capture dir and the live
+	 *  curator dir both live under the root (curator territory). */
+	function curatorLattice(root: string): { roots: Array<{ path: string; layer: "curator" }> } {
+		return { roots: [{ path: root, layer: "curator" }] };
+	}
+
+	it("/learn --install installs a capture into the live curator skills dir", async () => {
+		const root = makeTempDir();
+		const captureDir = join(root, "captured-skills");
+		const curatorSkillsDir = join(root, "curator-skills");
+		const { pi, command } = collectPi();
+		createSkillCaptureExtension({
+			enabled: false,
+			captureDir,
+			curatorSkillsDir,
+			latticeConfig: curatorLattice(root),
+		})(pi);
+		const { ctx, notify } = learnCtxWithCwd(reusableSession(), root);
+		await command("learn")?.("--install", ctx);
+		expect(
+			existsSync(join(curatorSkillsDir, "set-up-a-reusable-ci-pipeline-for-every-new-service", "SKILL.md")),
+		).toBe(true);
+		expect(notify.some((m) => m.includes("Installed"))).toBe(true);
+		expect(notify.some((m) => m.includes(curatorSkillsDir))).toBe(true);
+	});
+
+	it("/learn --install installs an already-staged capture without re-capturing", async () => {
+		const root = makeTempDir();
+		const captureDir = join(root, "captured-skills");
+		const curatorSkillsDir = join(root, "curator-skills");
+		const { pi, command } = collectPi();
+		createSkillCaptureExtension({
+			enabled: false,
+			captureDir,
+			curatorSkillsDir,
+			latticeConfig: curatorLattice(root),
+		})(pi);
+		const { ctx } = learnCtxWithCwd(reusableSession(), root);
+		await command("learn")?.("", ctx); // capture + stage only
+		expect(countSkills(captureDir)).toBe(1);
+		expect(countSkills(curatorSkillsDir)).toBe(0);
+		const { ctx: ctx2, notify } = learnCtxWithCwd(reusableSession(), root);
+		await command("learn")?.("--install", ctx2); // staged capture installs
+		expect(countSkills(curatorSkillsDir)).toBe(1);
+		expect(notify.some((m) => m.includes("Installed"))).toBe(true);
+	});
+
+	it("/learn --install refuses a protected target and prints the manual command", async () => {
+		const root = makeTempDir();
+		const captureDir = join(root, "captured-skills");
+		const userSkillsDir = join(root, "skills");
+		const { pi, command } = collectPi();
+		createSkillCaptureExtension({
+			enabled: false,
+			captureDir,
+			curatorSkillsDir: userSkillsDir,
+			latticeConfig: {
+				roots: [
+					{ path: captureDir, layer: "curator" },
+					{ path: userSkillsDir, layer: "protected" },
+				],
+			},
+		})(pi);
+		const { ctx, notify } = learnCtxWithCwd(reusableSession(), root);
+		await command("learn")?.("--install", ctx);
+		expect(countSkills(captureDir)).toBe(1);
+		expect(existsSync(join(userSkillsDir, "set-up-a-reusable-ci-pipeline-for-every-new-service"))).toBe(false);
+		expect(notify.some((m) => m.includes("refused"))).toBe(true);
+		expect(notify.some((m) => m.includes("cp -r"))).toBe(true);
+	});
+
+	it("emits curator-skills through resources_discover when the directory is present", async () => {
+		const root = makeTempDir();
+		const curatorSkillsDir = join(root, "curator-skills");
+		mkdirSync(curatorSkillsDir, { recursive: true });
+		const { pi, fire } = collectPi();
+		createSkillCaptureExtension({ enabled: false, curatorSkillsDir, latticeConfig: curatorLattice(root) })(pi);
+		const results = await fire(
+			"resources_discover",
+			{ type: "resources_discover", cwd: root, reason: "startup" },
+			{},
+		);
+		const result = results[0] as { skillPaths?: string[] } | undefined;
+		expect(result?.skillPaths).toContain(curatorSkillsDir);
+	});
+
+	it("emits nothing from resources_discover when curator-skills is absent", async () => {
+		const root = makeTempDir();
+		const curatorSkillsDir = join(root, "curator-skills");
+		const { pi, fire } = collectPi();
+		createSkillCaptureExtension({ enabled: false, curatorSkillsDir, latticeConfig: curatorLattice(root) })(pi);
+		const results = await fire(
+			"resources_discover",
+			{ type: "resources_discover", cwd: root, reason: "startup" },
+			{},
+		);
+		const result = results[0] as { skillPaths?: string[] } | undefined;
+		expect(result?.skillPaths ?? []).toHaveLength(0);
+	});
+
+	it("auto-installs a capture into curator-skills on agent_end when the hook is enabled", async () => {
+		const root = makeTempDir();
+		const captureDir = join(root, "captured-skills");
+		const curatorSkillsDir = join(root, "curator-skills");
+		const notifyCalls: string[] = [];
+		const { pi, fire } = collectPi();
+		createSkillCaptureExtension({
+			enabled: true,
+			captureDir,
+			curatorSkillsDir,
+			latticeConfig: curatorLattice(root),
+		})(pi);
+		await fire(
+			"agent_end",
+			{ type: "agent_end", messages: reusableSession() },
+			{ cwd: root, ui: { notify: (m: string) => notifyCalls.push(m) } },
+		);
+		expect(countSkills(captureDir)).toBe(1);
+		expect(countSkills(curatorSkillsDir)).toBe(1);
+		expect(notifyCalls.some((m) => m.includes("Captured reusable skill"))).toBe(true);
+		expect(notifyCalls.some((m) => m.includes("Installed into"))).toBe(true);
+	});
+
+	it("stages but does not install when the hook's target is outside the lattice", async () => {
+		const root = makeTempDir();
+		const captureDir = join(root, "captured-skills");
+		const curatorSkillsDir = join(root, "curator-skills");
+		const notifyCalls: string[] = [];
+		const { pi, fire } = collectPi();
+		createSkillCaptureExtension({
+			enabled: true,
+			captureDir,
+			curatorSkillsDir,
+			latticeConfig: { roots: [{ path: captureDir, layer: "curator" }] },
+		})(pi);
+		await fire(
+			"agent_end",
+			{ type: "agent_end", messages: reusableSession() },
+			{ cwd: root, ui: { notify: (m: string) => notifyCalls.push(m) } },
+		);
+		expect(countSkills(captureDir)).toBe(1);
+		expect(countSkills(curatorSkillsDir)).toBe(0);
+		expect(notifyCalls.some((m) => m.includes("Not installed"))).toBe(true);
 	});
 });

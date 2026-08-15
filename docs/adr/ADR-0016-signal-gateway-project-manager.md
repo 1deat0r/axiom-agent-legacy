@@ -2,7 +2,7 @@
 
 **Status:** accepted (owner directive, 2026-08-12)
 **Relates to:** ADR-0001/0004/0006 (gateway architecture, previously un-ported)
-on the axiom v0.7.2 baseline (ADR-0015).
+on the prime-agent v0.7.2 baseline (ADR-0015).
 
 ## Context
 

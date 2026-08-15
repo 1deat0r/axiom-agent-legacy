@@ -13,14 +13,29 @@
  * on-demand front-end over the same pipeline. /learn is always available,
  * even when the unattended hook is disabled — silent-by-default means the
  * loop stays quiet, not that the user cannot ask. Captured skills are staged
- * into the capture directory and offered; installing them into a live skills
- * directory is the ownership lattice's job (issue #55).
+ * into the capture directory and offered. Installing is the ownership
+ * lattice's job (ADR-0081, issue #55): the hook auto-installs into the loop's
+ * own curator-skills directory (curator → curator, silent, audited by the
+ * notification), /learn --install does the same on request, and the live
+ * curator-skills directory is emitted through the resources_discover seam so
+ * installed curator skills actually load — with user/project skills winning
+ * name collisions, the precedence the lattice encodes.
  */
 
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import { getAgentDir, getBundledSkillsDir } from "../../config.js";
 import type { ExtensionAPI } from "../../core/extensions/types.js";
+import type { LatticeConfig } from "../../core/ownership-lattice/index.js";
+import {
+	CAPTURED_SKILLS_DIR_NAME,
+	CURATOR_SKILLS_DIR_NAME,
+	defaultLatticeConfig,
+	installCapturedSkill,
+	type SkillInstallResult,
+} from "../../core/ownership-lattice/index.js";
+import { getGlobalHarnessStateDir } from "../../core/refinement/index.js";
 import type { SessionMessageEntry } from "../../core/session-manager.js";
 import type {
 	LearnCaptureResult,
@@ -135,9 +150,10 @@ export function learnResultMessage(result: LearnCaptureResult): { message: strin
 		case "captured":
 			return {
 				message:
-					`Captured reusable skill "${result.name}" → ${result.path}. ` +
+					`Captured reusable skill "${result.name}" → ${result.path} (curator staging — the loop's own territory). ` +
 					`Verified: loads with ${result.diagnostics.length} loader diagnostics. ` +
-					`Install it by copying the '${result.name}' directory into a skills directory.`,
+					`Install it into the loop's live skills directory with /learn --install, ` +
+					`or copy the '${result.name}' directory into your own skills directory.`,
 				severity: "info",
 			};
 		case "not-flagged":
@@ -166,11 +182,56 @@ export function learnResultMessage(result: LearnCaptureResult): { message: strin
 	}
 }
 
+/** Turn a lattice install verdict into the in-session report (ADR-0081). */
+export function learnInstallResultMessage(result: SkillInstallResult): { message: string; severity: "info" | "error" } {
+	switch (result.kind) {
+		case "installed":
+			return {
+				message:
+					`Installed "${result.name}" into ${result.to} ` +
+					`(curator skills — the loop's live skills directory; loads next session).`,
+				severity: "info",
+			};
+		case "refused":
+			return {
+				message:
+					`Install refused (${result.layer}): ${result.reason}` +
+					(result.manual ? ` — run it yourself: ${result.manual}` : ""),
+				severity: "error",
+			};
+		case "missing":
+			return { message: `Install failed: ${result.errors.join("; ")}`, severity: "error" };
+		case "exists":
+			return {
+				message: `Install skipped: "${basename(dirname(result.path))}" already installed at ${result.path}.`,
+				severity: "error",
+			};
+		case "error":
+			return { message: `Install failed: ${result.errors.join("; ")}`, severity: "error" };
+	}
+}
+
+/** The live lattice view for an event's cwd, built from the same dirs the
+ *  loaders use so the lattice cannot drift from where sessions read. */
+function buildLatticeConfig(cwd: string): LatticeConfig {
+	return defaultLatticeConfig({
+		axiomHome: axiomHome(),
+		agentDir: getAgentDir(),
+		cwd,
+		bundledSkillsDir: getBundledSkillsDir(),
+		harnessStateDir: getGlobalHarnessStateDir(),
+	});
+}
+
 export interface SkillCaptureExtensionOptions {
 	/** Enable unattended capture (defaults to env AXIOM_SKILL_CAPTURE_AUTO=1). */
 	enabled?: boolean;
 	/** Directory to write captured skills into (default <AXIOM_HOME>/captured-skills). */
 	captureDir?: string;
+	/** Live skills dir installs target (default <AXIOM_HOME>/curator-skills). */
+	curatorSkillsDir?: string;
+	/** Lattice view for install admission (default: the live profile/agent/cwd dirs). */
+	latticeConfig?: LatticeConfig;
 	/** Overridable pieces so callers/tests can isolate one concern. */
 	buildTrace?: (messages: readonly AgentMessage[]) => TaskTrace;
 	buildCapture?: (trace: TaskTrace) => TaskCapture;
@@ -178,13 +239,14 @@ export interface SkillCaptureExtensionOptions {
 
 export function createSkillCaptureExtension(deps: SkillCaptureExtensionOptions = {}): (pi: ExtensionAPI) => void {
 	const enabled = deps.enabled ?? process.env.AXIOM_SKILL_CAPTURE_AUTO === "1";
-	const captureDir = deps.captureDir ?? join(axiomHome(), "captured-skills");
+	const captureDir = deps.captureDir ?? join(axiomHome(), CAPTURED_SKILLS_DIR_NAME);
+	const curatorSkillsDir = deps.curatorSkillsDir ?? join(axiomHome(), CURATOR_SKILLS_DIR_NAME);
 	const buildTrace = deps.buildTrace ?? buildTaskTraceFromMessages;
 	const buildCapture = deps.buildCapture ?? defaultBuildCapture;
 
 	return (pi) => {
 		pi.registerCommand("learn", {
-			description: "Capture this session as a reusable skill on demand (/learn [--force])",
+			description: "Capture this session as a reusable skill on demand (/learn [--force] [--install])",
 			handler: async (args, ctx) => {
 				let options: LearnCommandOptions;
 				try {
@@ -203,9 +265,28 @@ export function createSkillCaptureExtension(deps: SkillCaptureExtensionOptions =
 					metadata: { sessionId: ctx.sessionManager.getSessionId() },
 				};
 				const result = runLearnCapture(trace, { captureDir, force: options.force });
+				// --install routes the capture through the lattice (ADR-0081):
+				// a staged capture — fresh or already staged — installs into the
+				// loop's curator-skills only when the lattice admits it. User-
+				// invoked, so the verdict is reported, never silent.
+				if (options.install && (result.kind === "captured" || result.kind === "exists")) {
+					const name = result.kind === "captured" ? result.name : basename(dirname(result.path));
+					const lattice = deps.latticeConfig ?? buildLatticeConfig(ctx.cwd);
+					const installed = installCapturedSkill({ fromDir: captureDir, name, toDir: curatorSkillsDir }, lattice);
+					const { message, severity } = learnInstallResultMessage(installed);
+					ctx.ui.notify(message, severity);
+					return;
+				}
 				const { message, severity } = learnResultMessage(result);
 				ctx.ui.notify(message, severity);
 			},
+		});
+
+		// The live curator skills dir loads through the existing seam when it
+		// exists; an absent dir costs nothing (ADR-0081).
+		pi.on("resources_discover", () => {
+			if (!existsSync(curatorSkillsDir)) return {};
+			return { skillPaths: [curatorSkillsDir] };
 		});
 
 		pi.on("agent_end", async (event, ctx) => {
@@ -226,7 +307,21 @@ export function createSkillCaptureExtension(deps: SkillCaptureExtensionOptions =
 			if (!persisted.ok) return;
 			const verified = verifyCapturedSkill(captureDir, built.document.name);
 			if (!verified.ok) return;
-			ctx.ui.notify(`Captured reusable skill "${built.document.name}" → ${persisted.path}`, "info");
+			// Curator auto-install (ADR-0081): a verified capture installs into
+			// the loop's curator-skills, curator → curator, silent and audited by
+			// the notification; protected/pinned/outside targets are never
+			// touched unattended.
+			const lattice = deps.latticeConfig ?? buildLatticeConfig(ctx.cwd);
+			const installed = installCapturedSkill(
+				{ fromDir: captureDir, name: built.document.name, toDir: curatorSkillsDir },
+				lattice,
+			);
+			const tail = installed.ok
+				? `Installed into ${installed.to} (curator skills — loads next session).`
+				: `Not installed (${installed.kind}: ${
+						"reason" in installed ? installed.reason : installed.errors.join("; ")
+					}).`;
+			ctx.ui.notify(`Captured reusable skill "${built.document.name}" → ${persisted.path}. ${tail}`, "info");
 		});
 	};
 }

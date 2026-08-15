@@ -1,95 +1,92 @@
-# Handoff — 2026-08-15 (/learn: the public skill-capture front-end, issue #54)
+# Handoff — 2026-08-15 (ownership lattice: fence green, consumers wired)
 
 ## Done
 
-1. **Housekeeping for the prior session.** kernel-venv rlm/__init__.py
-   verified byte-identical to axiom-runtime/src (no restore). No orphaned
-   axiom forkserver daemons were alive (exact process inspection; the only
-   live forkserver is this session's own .prime one — untouched). 12 stale
-   /tmp/axiom-forkserver-* dirs removed. The autonomy-landing session's
-   handoff committed to main (`c12615bae`, pushed). Issue #52 got the
-   owner-decision comment: does the kernel-heavy tag stay as standing load
-   management, and is the optional merged-readiness-spawn hardening wanted
-   (both ADR-0076 proposals, still the owner's call).
-2. **/learn landed (ADR-0080, issue #54)**, merged to main at `888fd98ce`.
-   - New core module `core/skill-capture/learn.ts`: strict arg parsing
-     (nothing or `--force`), `buildLearnCapture` (provenance source "learn",
-     trigger "/learn", session id), and `runLearnCapture` (evaluate → build →
-     persist → verify; discriminated result; nothing written when unforced
-     and not flagged).
-   - The skill-capture extension registers the `/learn` command (the /cost
-     pattern): it traces the current session's branch from the session
-     manager (the persisted truth, SOUL.md), stages the skill into
-     `<AXIOM_HOME>/captured-skills`, and offers it — installs are the
-     ownership lattice's job (#55). The command stays available while the
-     ADR-0027 hook is inert, keeping ADR-0078's silent-by-default posture.
-   - CONTEXT.md "Skill capture" term names the /learn surface.
-3. **Tests, red first.** 12 core + 7 extension-command tests were red before
-   the module existed (import failure; command unregistered), now green.
-   A 2-test suite fence (agent-session-learn.test.ts) drives /learn through
-   a real AgentSession with the faux provider; it caught that the trace
-   comes from the persisted branch, and that harness tool calls need a
-   no-op tool or the turn ends with an error stopReason (fixed with a
-   probe tool + stopReason "toolUse").
+1. **Lattice core implemented, fence green** (`3a877e3de`, ADR-0081, issue
+   #55): `classifyPath` (most-specific boundary-safe root over lexical
+   segments, tie → stricter layer, unmapped → outside), `admitWrite` (pin
+   refused for every actor; learning actor curator-only via
+   `LEARNING_ACTOR_TOOLSET` = memory.apply / memory.stage / skill.capture /
+   skill.install; outside fails closed for both actors), `defaultLatticeConfig`
+   built from the loader constants (CONFIG_DIR_NAME, the shared
+   captured/curator/consolidation dir names, `consolidationAuditPath`, the
+   repo-floor signature SOUL.md + packages/ + test/), and
+   `installCapturedSkill` (curator target: recursive no-overwrite copy +
+   real-loader verify with rollback on failure; protected: manual `cp -r`
+   printed, never run; pin/outside: hard refusals). The throwing stub is
+   gone; the 29-test fence passes against the real bodies.
+2. **Consumers wired** — all four from the ADR-0081 plan:
+   - `/learn --install`: the parse contract extended to `--force`/`--install`;
+     the report states the lattice verdict (curator staging) and the install
+     path; `--install` routes a fresh or already-staged capture through
+     `installCapturedSkill` into `<AXIOM_HOME>/curator-skills`.
+   - ADR-0027 hook: after a verified capture the hook auto-installs into
+     curator-skills (curator → curator, silent, audited by the notification);
+     refused installs stage only, with "Not installed (…)" in the message.
+   - `resources_discover`: the extension emits curator-skills as a skillPath
+     when the dir exists (absent costs nothing); user/project skills win
+     name collisions via the loader's first-wins order.
+   - Consolidation write paths: the hook admits `memory.apply`
+     (harnessStateDir) and `memory.stage` (pendingDir) through the lattice
+     before writing; a refusal is audited via the witness append (the
+     sanctioned primitive — not itself lattice-routed) and nothing is
+     written. The CLI is operator-routed and unchanged.
+3. **CONTEXT.md**: "Ownership lattice" term added; the Skill capture term now
+   names the install routes.
+4. **One meaning, one house**: `CAPTURED_SKILLS_DIR_NAME`,
+   `CURATOR_SKILLS_DIR_NAME`, `CONSOLIDATION_DIR_NAME` exported from the
+   lattice module; the consolidation CLI + extension now use the constant
+   instead of the inline `"consolidation"`.
 
 ## How it was verified
 
-- Red runs captured before implementation: core suite failed on the missing
-  module import; the extension suite failed 7/7 command tests on the
-  unregistered command.
-- All four skill-capture suites green: 62 tests (12 core learn + 12
-  extension + 25 capture + 11 evaluate + 2 suite).
-- `npx biome check .`: 4 pre-existing infos, none in touched files.
-- `npx tsgo --noEmit`: exit 0 — it caught one wrong import (TaskTrace lives
-  in evaluate.ts, not types.ts) and, via the pre-commit hook, the wrong
-  stopReason value in the suite fixture.
-- **Full `./test.sh` floor, detached, on the exact merged tree** (log:
-  `/tmp/floor-learn-final.log`): agent 4, ai 49+23 skipped, coding-agent
-  main 429 files (5809 passed + 116 skipped — includes both new suites),
-  kernel 12 files, process-stress 2 files (13+8 skipped). auth.json
-  restored; the live telegram gateway survived the run.
-- An earlier detached floor (`/tmp/floor-learn.log`) ran before the suite
-  fence landed and was also fully green; the second run is the one that
-  counts, on the tree that reached main.
+- Red-first: the 6 new consumer tests + the parse-contract updates failed
+  against the pre-wiring code before the implementation landed; the fence
+  stayed green from the core commit onward.
+- 143 tests green across the seven directly-affected suites (fence,
+  skill-capture-learn, extensions/skill-capture, extensions/memory-
+  consolidation, memory-consolidation core + command, skill-capture core).
+- `npx biome check .` clean on every touched file (4 pre-existing infos in
+  unrelated test files, none touched); `npx tsgo --noEmit` clean.
+- Full floor (`./test.sh`, detached, scrubbed env, log:
+  `/tmp/floor-lattice-impl-2.log`) green twice-verified: coding-agent 430
+  files (5848 passed + 116 skipped), tui 12/60, kernel 12/60+27 skipped,
+  process-stress 2/13+8 skipped; auth.json restored. One parallel-floor
+  contention failure appeared in the first run
+  (daemon-supervisor-process "keeps client-owned workers hidden"); it passed
+  in isolation and on the full re-run, and its workers boot with
+  `noExtensions: true`, so the lattice code cannot reach it.
 
 ## Notes
 
-- The `unverified` branch of runLearnCapture is defensive (persist ok but
-  the loader says missing) and mirrors the existing CLI; it is not
-  unit-tested because the generated document always passes the real
-  loader. Noted, not hidden.
-- The gateway keeps its own command registry; /learn is an interactive
-  (TUI/daemon) surface, like /cost and /cap.
-- feat/learn-command is merged; delete it once #54 closes.
+- Issue #55 stays open per the directive: the close ritual (merge to main,
+  audit comment, close) is the next session's first step.
+- `docs/hermes-improvements.html` is still untracked — not mine, left alone.
+- Owner's calls still open from the prior handoff: #52 tag decision +
+  optional spawn-merge hardening; delete `feat/autonomy-direction-adr-0076`
+  (tip == main).
 
 ## Next
 
-1. Ownership lattice (#55, ADR-0081) — pin/protected/curator-managed,
-   which governs what the loop may auto-install (incl. /learn captures).
-2. Session recall (#56, ADR-0082) after the lattice.
-3. Owner's calls, still open: #52 tag decision + optional spawn-merge
-   hardening; delete feat/autonomy-direction-adr-0076 (tip == main).
+1. Close ritual for #55: merge `feat/ownership-lattice` to main, post the
+   audit comment (merge commit, ADR-0081, this handoff), close the issue,
+   delete the stale branch.
+2. Session recall (#56, ADR-0082) — the next ADR-0078 port-order step.
+3. Owner's calls above.
 
 ## Next-session prompt (ready to paste)
 
-> You're in /home/mustbearn/Projects/axiom-agent, branch main, pushed and
-> floor-green. /learn landed (issue #54, ADR-0080, closed; handoff above).
-> Read SOUL.md, AGENTS.md, docs/handoff.md, ADR-0078, and ADR-0080 first.
+> You're in /home/mustbearn/Projects/axiom-agent, branch feat/ownership-lattice,
+> pushed (3a877e3de) — the ADR-0081 lattice is implemented, the 29-test fence is
+> green, and all four consumers are wired (/learn --install + verdict, the
+> ADR-0027 hook auto-install, the resources_discover emission for
+> curator-skills, admitWrite on the consolidation apply/stage paths). Full floor
+> verified (log: /tmp/floor-lattice-impl-2.log; one contention-only failure on
+> the first run, green in isolation and on re-run). Issue #55 is still open.
 >
-> Start the next thread: the ownership lattice (issue #55, ADR-0081) — the
-> second restructure capability per ADR-0078's port order. It governs what
-> the learning loop may write: pin/protected/curator-managed layers with
-> code-enforced hard bounds and a whitelisted toolset. /learn's staged
-> captures (and the ADR-0027 hook's offers) are the first consumers:
-> installing a learned skill into a live skills directory must go through
-> the lattice's rules.
->
-> Under the execution rules there is no readiness-contract blocker, but
-> write the red test first and keep the floor/bundling honest: run
-> ./test.sh detached (setsid nohup ./test.sh > /tmp/floor-<name>.log 2>&1 &)
-> before anything reaches main.
->
-> Open decisions that are the owner's, not yours: #52's kernel-heavy tag
-> and the optional merged-readiness-spawn hardening (ADR-0076, proposed on
-> fix/kernel-bridge-stall). Report back when the lattice has its first red
-> test.
+> Read SOUL.md, AGENTS.md, docs/handoff.md, ADR-0081 first. Run the close
+> ritual for #55: merge feat/ownership-lattice to main, post the audit comment
+> (merge commit, ADR-0081, handoff), close the issue, delete the stale branch.
+> Then pick up session recall (#56, ADR-0082) — the next ADR-0078 port-order
+> step. Owner's calls still open: #52 tag decision, and deleting
+> feat/autonomy-direction-adr-0076 (tip == main).
