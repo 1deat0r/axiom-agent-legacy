@@ -62,15 +62,22 @@
 
 ## Next-session prompt (ready to paste)
 
-> You're in /home/mustbearn/Projects/axiom-agent, main @ f6c772d30. The
-> milestone landed: ownership lattice (#55, ADR-0081) merged, session recall
-> (#56) verified already-on-main and recorded as ADR-0082, and the baseline
-> identity corrected to PrimeIntellect-ai/prime-agent v0.7.2 (ADR-0015
-> amendment). Floor green on the merged tree
-> (/tmp/floor-milestone-2026-08-15.log).
+> You're in /home/mustbearn/Projects/axiom-agent, main @ 0df364256. The
+> 2026-08-15 milestone landed: the ownership lattice (#55, ADR-0081) merged to
+> main, session recall (#56) verified already-on-main and recorded as ADR-0082,
+> and the baseline identity corrected to PrimeIntellect-ai/prime-agent v0.7.2
+> (ADR-0015 amendment; the old axiom URL 404s, tag v0.7.2 = 83a0f9f). #55 and
+> #56 are closed; the merged branches (feat/ownership-lattice,
+> feat/autonomy-direction-adr-0076) are deleted. Floor green on the merged
+> tree: /tmp/floor-milestone-2026-08-15.log.
 >
-> Delete the merged branches feat/ownership-lattice and
-> feat/autonomy-direction-adr-0076 (local + remote). Then scope #57 (gateway
-> channels): signal/telegram/discord/slack transports and /cron all exist on
-> main — verify what is real vs. wiring gaps before defining the milestone
-> scope with the owner. #52 and #53 are owner-blocked; leave them.
+> Read SOUL.md, AGENTS.md, docs/handoff.md, ADR-0078, ADR-0081, ADR-0082 first.
+> Restructure execution rules are in force until the restructure lands on main:
+> process ceremony overridden, quality gates relaxed on WIP branches (the
+> ./test.sh floor must hold before anything reaches main), runtime safety
+> intact. Next: scope #57 (gateway channels) — signal/telegram/discord/slack
+> transports and /cron are all registered on main, so verify what is live vs.
+> wiring gaps before defining the milestone scope with the owner. #52 and #53
+> are owner-blocked; leave them (the fix/kernel-bridge-stall worktree at
+> /tmp/axiom-worktrees/kernel-bridge is active for #52).
+> docs/hermes-improvements.html is untracked — not ours.
