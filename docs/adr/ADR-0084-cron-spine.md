@@ -99,9 +99,9 @@ capability.
 - **Recorded residual:** interrupted-dispatch recovery on scheduler start is
   unfiltered, so a booting scheduler resolves any dangling dispatch in the
   shared store — a gateway boot can mark a daemon once-job interrupted. The
-  claim filter closes the hot path; recovery filtering is a follow-up (the
-  shared store file does not exist in production yet, so this is latent like
-  the fixed race was).
+  claim filter closes the hot path; recovery filtering landed as ADR-0086
+  (the shared store file does not exist in production yet, so the hazard was
+  latent like the fixed race was).
 - Verification: 14 cron tests were green at scoping (9 manager + 5 command);
   this milestone adds the claim-filter pins (gateway, core store/scheduler,
   daemon) and the command-filter pins, and grows the live-verification
