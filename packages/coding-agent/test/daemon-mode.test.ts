@@ -8189,6 +8189,63 @@ describe("daemon mode helpers", () => {
 		}
 	});
 
+	it("a gateway job's dangling dispatch survives a daemon scheduler start untouched", async () => {
+		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-cron-recover-"));
+		try {
+			const daemon = new AgentDaemon(join(tempDir, "daemon.sock"), {
+				defaultSessionConfig: {
+					agentDir: tempDir,
+					cwd: tempDir,
+				},
+				createRuntime: async () => {
+					throw new Error("unexpected runtime creation");
+				},
+			});
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					cronScheduler: { runDue(now: Date): Promise<number>; start(): void; stop(): void };
+				},
+				unknown
+			>(daemon);
+			const gatewayJob = internals.cronStore.create({
+				activeSessionId: "active-1",
+				sessionId: "cron-abc123",
+				sessionFile: join(tempDir, "sessions", "cron-abc123.jsonl"),
+				cwd: tempDir,
+				source: "cron",
+				channelId: "100",
+				scheduleText: "in 1m",
+				prompt: "channel work",
+				now: new Date("2026-01-01T12:00:00.000Z"),
+			});
+			// The gateway claimed its job, then crashed before recording the
+			// result: a dangling dispatch in the shared store.
+			internals.cronStore.claimDue(new Date("2026-01-01T12:01:00.000Z"));
+
+			internals.cronScheduler.start();
+			internals.cronScheduler.stop();
+
+			// The gateway dispatch survives the daemon boot: still claimed,
+			// no interruption error.
+			expect(internals.cronStore.getClaimedJob(gatewayJob.id)).toMatchObject({
+				id: gatewayJob.id,
+				status: "active",
+			});
+			expect(internals.cronStore.list().find((job) => job.id === gatewayJob.id)).not.toHaveProperty("lastError");
+			// The gateway's own recovery still resolves it.
+			expect(
+				internals.cronStore
+					.recoverInterruptedDispatches(new Date("2026-01-01T12:02:00.000Z"), {
+						recoveryFilter: (job) => job.source === "cron" && job.channelId !== undefined,
+					})
+					.map((job) => job.id),
+			).toEqual([gatewayJob.id]);
+		} finally {
+			rmSync(tempDir, { recursive: true, force: true });
+		}
+	});
+
 	it("a gateway cron job sharing the store survives a daemon scheduler sweep untouched", async () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-cron-claim-"));
 		try {

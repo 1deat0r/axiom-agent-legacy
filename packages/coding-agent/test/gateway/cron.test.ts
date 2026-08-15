@@ -2,7 +2,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { type AgentCronJob, AgentCronJobStore } from "../../src/core/cron-jobs.js";
+import {
+	type AgentCronJob,
+	AgentCronJobStore,
+	AgentCronScheduler,
+	isGatewayCronJob,
+} from "../../src/core/cron-jobs.js";
 import { sessionIdForChannel } from "../../src/gateway/completion.js";
 import { GatewayCron } from "../../src/gateway/cron.js";
 import { MemoryDeliveryLedger } from "../../src/gateway/delivery-ledger.js";
@@ -176,6 +181,49 @@ describe("gateway cron manager", () => {
 });
 
 describe("gateway cron claim filter (shared store)", () => {
+	it("a daemon-owned dangling dispatch survives a gateway scheduler start untouched", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-cron-recover-"));
+		try {
+			const h = harness();
+			// The daemon claimed its heartbeat, then died before recording the
+			// result: a dangling dispatch in the SAME store file the gateway
+			// scheduler recovers on start. An unfiltered start resolves the
+			// daemon's dispatch and marks the heartbeat interrupted.
+			const shared = new AgentCronJobStore(join(dir, "cron-jobs.json"));
+			const heartbeat = shared.createHeartbeat({
+				activeSessionId: "hb",
+				sessionId: "hb",
+				sessionFile: join(dir, "hb.jsonl"),
+				cwd: dir,
+				scheduleText: "every 5m",
+				prompt: "check on the session",
+				now: new Date("2026-01-01T12:00:00.000Z"),
+			});
+			shared.claimDue(new Date("2026-01-01T12:05:00.000Z"));
+
+			const cron = newCron(dir, h);
+			cron.start();
+			cron.stop();
+
+			// The heartbeat dispatch survives: still claimed, no interruption.
+			expect(shared.getClaimedJob(heartbeat.id)).toMatchObject({ id: heartbeat.id, status: "active" });
+			expect(shared.list().find((job) => job.id === heartbeat.id)).not.toHaveProperty("lastError");
+			// The daemon's own recovery still resolves it.
+			const daemonScheduler = new AgentCronScheduler(shared, {
+				claimFilter: (job) => !isGatewayCronJob(job),
+				runJob: async () => undefined,
+			});
+			daemonScheduler.start();
+			daemonScheduler.stop();
+			expect(shared.getClaimedJob(heartbeat.id)).toBeUndefined();
+			expect(shared.list().find((job) => job.id === heartbeat.id)).toMatchObject({
+				lastError: "Interrupted before scheduled operation completion",
+			});
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
 	it("a due heartbeat sharing the store survives a gateway scheduler sweep untouched", async () => {
 		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-cron-claim-"));
 		try {

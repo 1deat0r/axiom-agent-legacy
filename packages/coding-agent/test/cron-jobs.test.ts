@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fromAny, fromPartial } from "@total-typescript/shoehorn";
@@ -973,6 +973,33 @@ describe("AgentCronScheduler", () => {
 		expect(store.list()[0]).toMatchObject({ id: job.id, status: "active", runCount: 0 });
 	});
 
+	it("start recovers only the dispatches its claim filter admits", () => {
+		const store = new AgentCronJobStore(makeStorePath(tempDirs));
+		const heartbeat = store.createHeartbeat({
+			activeSessionId: "active-1",
+			sessionId: "session-1",
+			sessionFile: "/tmp/session.jsonl",
+			cwd: "/tmp/project",
+			scheduleText: "every 10s",
+			prompt: "check progress",
+			now: start,
+		});
+		store.claimDue(new Date("2026-01-01T12:35:00.000Z"));
+
+		const scheduler = new AgentCronScheduler(store, {
+			claimFilter: (job) => job.source === "cron" && job.channelId !== undefined,
+			runJob: async () => undefined,
+		});
+		scheduler.start();
+		scheduler.stop();
+
+		// The heartbeat's dangling dispatch survives a gateway-filtered start:
+		// still claimed, no interruption error. The daemon's own start
+		// resolves it later.
+		expect(store.getClaimedJob(heartbeat.id)).toMatchObject({ id: heartbeat.id, status: "active" });
+		expect(store.list().find((job) => job.id === heartbeat.id)).not.toHaveProperty("lastError");
+	});
+
 	it("sweeps only jobs its claim filter admits, leaving the rest due", async () => {
 		const store = new AgentCronJobStore(makeStorePath(tempDirs));
 		const gatewayJob = store.create({
@@ -1383,6 +1410,86 @@ describe("AgentCronScheduler", () => {
 			lastSkippedAt: "2026-01-01T12:34:17.000Z",
 			runCount: 0,
 		});
+	});
+
+	it("recoverInterruptedDispatches with a recovery filter resolves only the dispatches it admits", () => {
+		const storePath = makeStorePath(tempDirs);
+		const store = new AgentCronJobStore(storePath);
+		const heartbeat = store.createHeartbeat({
+			activeSessionId: "active-1",
+			sessionId: "session-1",
+			sessionFile: "/tmp/session.jsonl",
+			cwd: "/tmp/project",
+			scheduleText: "every 10s",
+			prompt: "check progress",
+			now: start,
+		});
+		const gatewayJob = store.create({
+			activeSessionId: "active-1",
+			sessionId: "session-1",
+			sessionFile: "/tmp/session.jsonl",
+			cwd: "/tmp/project",
+			source: "cron",
+			channelId: "100",
+			scheduleText: "in 1m",
+			prompt: "channel work",
+			now: start,
+		});
+		store.claimDue(new Date("2026-01-01T12:35:00.000Z"));
+
+		const recovered = new AgentCronJobStore(storePath);
+		const gatewayOnly = (job: AgentCronJob) => job.source === "cron" && job.channelId !== undefined;
+		const resolved = recovered.recoverInterruptedDispatches(new Date("2026-01-01T12:35:10.000Z"), {
+			recoveryFilter: gatewayOnly,
+		});
+
+		expect(resolved.map((job) => job.id)).toEqual([gatewayJob.id]);
+		// The heartbeat's dispatch survives the filtered recovery: still
+		// claimed, no interruption error.
+		expect(recovered.getClaimedJob(heartbeat.id)).toMatchObject({ id: heartbeat.id, status: "active" });
+		expect(recovered.list().find((job) => job.id === heartbeat.id)).not.toHaveProperty("lastError");
+		// The owner that does own it still resolves it afterwards.
+		expect(
+			recovered
+				.recoverInterruptedDispatches(new Date("2026-01-01T12:35:20.000Z"), {
+					recoveryFilter: (job) => !gatewayOnly(job),
+				})
+				.map((job) => job.id),
+		).toEqual([heartbeat.id]);
+		expect(recovered.getClaimedJob(heartbeat.id)).toBeUndefined();
+		expect(recovered.list().find((job) => job.id === heartbeat.id)).toMatchObject({
+			lastError: "Interrupted before scheduled operation completion",
+		});
+	});
+
+	it("filtered recovery still cleans an orphan dispatch whose job is gone", () => {
+		const storePath = makeStorePath(tempDirs);
+		const store = new AgentCronJobStore(storePath);
+		store.createHeartbeat({
+			activeSessionId: "active-1",
+			sessionId: "session-1",
+			sessionFile: "/tmp/session.jsonl",
+			cwd: "/tmp/project",
+			scheduleText: "every 10s",
+			prompt: "check progress",
+			now: start,
+		});
+		// Hand-write a dangling dispatch whose jobId matches no job: nobody
+		// owns it, so either owner's recovery may clean the record up.
+		const file = JSON.parse(readFileSync(storePath, "utf-8")) as { jobs: unknown; dispatches: unknown };
+		file.dispatches = [
+			{ id: "orphan-1", jobId: "missing-job", claimedAt: start.toISOString(), scheduledFor: start.toISOString() },
+		];
+		writeFileSync(storePath, `${JSON.stringify(file, null, 2)}\n`);
+
+		const recovered = new AgentCronJobStore(storePath);
+		const resolved = recovered.recoverInterruptedDispatches(new Date("2026-01-01T12:35:10.000Z"), {
+			recoveryFilter: (job) => job.source === "cron" && job.channelId !== undefined,
+		});
+
+		expect(resolved).toEqual([]);
+		const reloaded = JSON.parse(readFileSync(storePath, "utf-8")) as { dispatches: unknown[] };
+		expect(reloaded.dispatches).toEqual([]);
 	});
 
 	it("does not replay an uncertain claimed dispatch after recovery", () => {
