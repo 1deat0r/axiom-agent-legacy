@@ -259,6 +259,12 @@ with a "description is required" warning.
 _Avoid_: Skill audit (the security verdict, ADR-0025), Skill capture (the
 procedural-memory pipeline, ADR-0024)
 
+**Web tools**:
+The two native core tools for web access, `web_search` and `web_fetch`
+(ADR-0074). They scrape DuckDuckGo and Bing directly, fall back to the local
+Obscura MCP server, and route every fetch through the URL safety gate
+(ADR-0057, ADR-0066). The Obscura skill keeps browser automation; the Serper
+skill stays the keyed fallback.
 **Drift**:
 An agent acting outside its project's identity, context, or boundary — wrong
 files, wrong memory, wrong ledger. Prevented by the anti-drift ladder

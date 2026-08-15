@@ -1,6 +1,6 @@
 # Native web search core tool - brainstorm
 
-Status: round 2 open. Date: 2026-08-15.
+Status: settled. Ready to build (issue #50, ADR-0074). Date: 2026-08-15.
 Worktree: /tmp/axiom-worktrees/native-websearch. Branch: feat/native-websearch.
 
 ## Facts found by the agent
@@ -59,17 +59,30 @@ Round 1 (settled, user approved all recommendations):
 - Q5 search backend: (a) direct scrape of DuckDuckGo HTML and Bing. Fall
   back to Obscura when a page yields no results.
 
-Round 2 (frontier, open):
-- Q6 location and names: core tool registry vs built-in extension.
-- Q7 result schema: compact blocks, caps, date field.
-- Q8 safety: gate every fetch through checkUrlSafetyPinned plus fetchPinned.
-- Q9 config surface: settings keys and env vars, no collision with Serper.
-- Q10 cache and rate limits: in-run cache, per-engine spacing, user agent.
-- Q11 fallback chain: DuckDuckGo, Bing, Obscura MCP, error with reason.
+Round 2 (settled, user approved all recommendations):
+- Q6 core tools, factory pattern, wired in sdk.ts. enabledTools/disabledTools
+  control them.
+- Q7 compact blocks: snippet 200 chars, results 10 max default 5, fetch
+  20000 chars default, markdown only, hard truncation, no raw HTML.
+- Q8 gate every fetch (search engines included) through checkUrlSafetyPinned
+  plus fetchPinned. No domain allowlist in v1.
+- Q9 new env names with _MS and _MAX_ suffixes; Serper keeps its legacy
+  pair; defaults 8s search, 15s fetch.
+- Q10 in-run cache, one-second per-engine spacing, user agent Axiom/<version>,
+  robots.txt deferred.
+- Q11 DuckDuckGo html, then Bing, then the Obscura MCP search; fetch falls
+  back to Obscura for unparseable pages; all-fail returns an error.
 
-Round 3 (after round 2): verification. Recorded fixtures vs live tests.
-S-class threat corpus. ADR plus CONTEXT.md term plus issue with readiness
-contract.
+Round 3 (settled under the user's go-ahead):
+- Tests run offline through injected seams; one live-gated suite for real
+  engines and the Obscura fallback.
+- S-class attack corpus, 9 cases: SSRF literals, scheme and credential
+  attacks, DNS rebinding flips, pin pass-through, cap enforcement.
+- ADR-0074 plus CONTEXT.md term plus issue with readiness contract.
+
+Field finding (2026-08-15): the DuckDuckGo html endpoint serves an anomaly
+challenge from this network. Bing is live. The chain absorbs the failure:
+the DuckDuckGo parser returns zero results and Bing carries.
 
 ## Round 2 questions
 
