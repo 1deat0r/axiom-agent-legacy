@@ -27,6 +27,7 @@ export const helpCommand: GatewayCommand = {
 			"  /soul <name> <text>   set a profile's SOUL.md",
 			"  /announce <text>       send a message to every deliverTo channel (all active transports)",
 			"  /ledger [n]            show the last n delivery-ledger entries",
+			"  /cost                 show this channel's session and lifetime cost",
 			"  /search <q>           search past sessions [--all] [--limit N] [--offset N]",
 			"  /sessions             browse recent past sessions [--all] [--limit N]",
 			"  /new                  start a fresh session (archives the old one)",
