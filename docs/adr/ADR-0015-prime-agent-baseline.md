@@ -4,6 +4,12 @@
 **Supersedes:** ADR-0013 (pi v0.84.1 baseline). The from-scratch premise of
 ADR-0012 and earlier ADRs remain historical records, not current premises.
 
+**Amendment (2026-08-15):** the upstream repo was renamed
+`PrimeIntellect-ai/axiom` -> `PrimeIntellect-ai/prime-agent` (the old URL no
+longer resolves). Verified: prime-agent tag v0.7.2 is still `83a0f9f` — same
+commit, same history. The body below keeps the name as it was at decision
+time; read "axiom v0.7.2" as "prime-agent v0.7.2".
+
 ## Context
 
 ADR-0013 set pi v0.84.1 as the axiom baseline and axiom shipped four

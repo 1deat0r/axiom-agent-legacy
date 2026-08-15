@@ -1,8 +1,8 @@
 # Axiom
 
 An agent framework forked from **Prime Agent v0.7.2** (MIT, PrimeIntellect-ai;
-the successor to earendil-works/pi by the same author; renamed **axiom**
-upstream — prime-agent and axiom are the same repository, same history) and
+the successor to earendil-works/pi by the same author; first named axiom,
+renamed prime-agent — one repository, one history) and
 grown past it: the
 prime baseline (agent core, multi-provider AI layer, TUI, extensions, daemon,
 RLM, subagents) plus the capabilities it does not have — cost ledger, spend

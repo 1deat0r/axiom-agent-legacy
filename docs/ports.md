@@ -1,6 +1,6 @@
-# Port queue: pi-fork axiom capabilities onto the axiom v0.7.2 baseline
+# Port queue: pi-fork axiom capabilities onto the prime-agent v0.7.2 baseline
 
-ADR-0015 restarted axiom on axiom v0.7.2. The pi fork
+ADR-0015 restarted axiom on prime-agent v0.7.2. The pi fork
 (`archive/pi-v0.84.1`) carried four axiom capabilities pi lacked; ADR-0015's
 decision is that they remain axiom-only and their prime-baseline ports are the
 spine. Each row is its own work item (red-first on `baseline/prime-v0.7.2`).

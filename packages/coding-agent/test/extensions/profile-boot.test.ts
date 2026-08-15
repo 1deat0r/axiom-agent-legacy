@@ -1,5 +1,5 @@
 /**
- * Axiom profile boot-seam regression test (ADR-0014 on the axiom v0.7.2
+ * Axiom profile boot-seam regression test (ADR-0014 on the prime-agent v0.7.2
  * baseline). Pins the two restart-specific risks the external review called out:
  *  - the CLI pre-scan `readProfileFlag` (the `--profile` boot seam that must
  *    run before config resolution),
