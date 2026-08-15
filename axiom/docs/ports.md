@@ -35,8 +35,15 @@ plugin + CLI. The profile stays a derived view; the JSON store is canonical.
 
 | # | Capability | Spec | Hermes has / lacks | Status |
 |---|---|---|---|---|
-| 4 | Cost ledger — per-model token pricing, never-invented spend | ADR-0010 | account billing only; no per-model ledger | queued |
-| 5 | Spend cap — USD ceiling, hard pre-call guard | ADR-0011 | no USD cap | queued |
+| 4 | Cost ledger — per-model token pricing, never-invented spend | ADR-0010 | covered by baseline: `agent/usage_pricing.py` prices every call from a per-model table (`_OFFICIAL_DOCS_PRICING` + provider models API), `normalize_usage`/`estimate_usage_cost` never invent (`unknown` status), `insights.py` renders cost buckets, `aux_accounting.py` prices aux LLM spend, all accumulated into `session_estimated_cost_usd` | covered by baseline |
+| 5 | Spend cap — USD ceiling, hard pre-call guard | ADR-0011 | accumulator (`session_estimated_cost_usd`) exists; NO pre-call guard, no `--max-run-cost` flag, no `cost_limit` finish | queued |
+
+Note (2026-08-16): the port #4 premise above the fold ("account billing only; no
+per-model ledger") was stale. Hermes's `agent/usage_pricing.py`, `agent/insights.py`,
+and `agent/aux_accounting.py` already implement the ADR-0010 ledger, more completely
+than the prime-era port (cache-read/write + reasoning token buckets, per-provider
+route resolution, provider models API, honest `unknown` status). The genuine
+remaining gap on the cost spine is #5 — the hard pre-call spend cap.
 
 ## Methodology synthesis (ADR-0087)
 

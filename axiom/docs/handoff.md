@@ -1,7 +1,8 @@
-# Handoff — sovereign layer fully ported (memory + skills + bridge)
+# Handoff — sovereign layer ported; cost spine re-scoped
 
-Written 2026-08-16 (session 4). Status: memory + skills stores AND the
-native-store-bridge plugin (port #3) ported and verified. Resume here.
+Written 2026-08-16 (session 5). Status: ports #1–#3 done; cost ledger (port #4)
+found already covered by the Hermes baseline; spend cap (port #5, issue #65) is
+the active next port. Resume there.
 
 ## What was done (session 1 — re-foundation)
 
@@ -72,6 +73,33 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
     issue): `review_session.py` stays Python/3V0 — the `on_session_end` hook is
     not wired here.
 
+## What was done (session 5)
+
+19. Verified the port #4 premise against the baseline before writing any code.
+    Hermes already ships the ADR-0010 cost ledger, more completely than the
+    prime-era port: `agent/usage_pricing.py` (`_OFFICIAL_DOCS_PRICING` per-model
+    table + provider models API; `normalize_usage` → `CanonicalUsage` with
+    input/output/cache-read/cache-write/reasoning buckets; `estimate_usage_cost`
+    → `CostResult` returning `amount_usd=None` + `status="unknown"` rather than
+    inventing spend), `agent/insights.py` (cost-bucket surface),
+    `agent/aux_accounting.py` (aux-LLM spend via ContextVar), all accumulated
+    into `session_estimated_cost_usd` (run_agent.py:782, incremented in
+    conversation_loop.py:3971 / codex_runtime.py:210, folded from subagents in
+    delegate_tool.py:3303, persisted by turn_finalizer.py:689).
+20. Corrected `axiom/docs/ports.md`: port #4 → "covered by baseline" with
+    evidence; port #5 (spend cap) is the genuine remaining cost-spine gap — the
+    accumulator exists but there is NO pre-call guard, no launch flag, no
+    `cost_limit` finish (grep `max_run_cost|cost_limit|cost_cap` = 0 hits;
+    `hermes_cli/main.py`'s `--max-cost` is a `hermes sessions` filter, unrelated).
+21. Resolved the "prime-era automation stale" flag: `.github/workflows/triage.yml`
+    + `issue-hygiene.yml` do NOT exist on the Hermes baseline (27 workflows, none
+    a triage/hygiene operator). Rewrote the "Automation" sections of
+    `axiom/docs/agents/issue-tracker.md` and `axiom/docs/agents/triage-labels.md`
+    to state the discipline is agent-enforced only; left the prime-era
+    `packages/coding-agent/...` refs in the ADRs alone (port specs, not drift).
+22. Opened issue #65 (port #5, `ready-for-agent`) with the finding, acceptance
+    criteria, and red-first verification plan.
+
 ## Verified (how)
 
 - `git ls-remote origin` — main + 3 archive branches + tag all correct.
@@ -96,13 +124,15 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
 3. ~~Port #3 — re-point native-store-bridge at the TS CLI~~ — done (session 4;
    `axiom/plugin/native-store-bridge/` registers `axiom_store` + `axiom_record`
    and shells out to `node src/cli/*.ts`).
-4. **Port #4 — cost ledger** (ADR-0010): per-model token pricing,
-   never-invented spend. Hermes has Nous-account billing only. See
-   axiom/docs/ports.md.
-5. **Flag — prime-era automation stale**: `axiom/docs/agents/issue-tracker.md`
-   "Automation" section references `.github/workflows/triage.yml` +
-   `issue-hygiene.yml`, which do NOT exist on the Hermes baseline. Decide
-   whether to port that automation.
+4. ~~Port #4 — cost ledger~~ — covered by baseline, NOT required (session 5;
+   `agent/usage_pricing.py` + `agent/insights.py` + `agent/aux_accounting.py`
+   already price every call and never invent spend). No port.
+5. ~~Flag — prime-era automation stale~~ — resolved (session 5): docs now state
+   the discipline is agent-enforced; porting the CI operator is deferred.
+6. **Port #5 — spend cap** (issue #65): hard pre-call `--max-run-cost <usd>`
+   guard reading `session_estimated_cost_usd`; `cost_limit` finish; flag on CLI
+   + TUI. Spec ADR-0011 (add an "Adapted for the Hermes baseline" section at
+   merge). Red-first: `tests/run_agent/test_max_run_cost.py`.
 
 ## Environment quirks (verified)
 

@@ -104,36 +104,20 @@ skip it.
 
 ## Automation
 
-The workflow `.github/workflows/triage.yml` is the safety net. It has two jobs:
+Prime-era automation is NOT on this baseline. The `.github/workflows/triage.yml`
+and `.github/workflows/issue-hygiene.yml` workflows referenced by ADR-0050 /
+ADR-0064 were prime-era CI (they invoked `npx tsx packages/coding-agent/...`,
+which does not exist here). The Hermes baseline ships 27 workflows, none of them
+a triage/issue-hygiene operator. Verified 2026-08-16 (`ls .github/workflows`).
 
-1. Open job. Fires on `opened`, `labeled`, and `unlabeled`. Zero role labels:
-   apply `needs-triage` and post the contract (on `unlabeled`, post only; the
-   remind comment says the workflow does not re-apply). Two or more role
-   labels: post a conflict note. One role label: no action. The job never
-   comments on a closed issue and never reposts a comment the bot already
-   made. A form-created issue fires two runs (opened and labeled); the second
-   run posts nothing.
-2. Close job. Fires on `closed`. When the issue closes without an audit
-   comment, post one reminder. The audit comment must carry `Commit:`, `ADR:`,
-   and `Handoff:` in one comment. The reminder does not repeat.
+Consequence: on this baseline the role-label + audit-comment discipline is
+agent-enforced only — there is no CI safety net that applies `needs-triage` to
+zero-label issues or nags on a close without an audit comment. Set the role at
+create and post the audit comment at close yourself; nothing will catch you if
+you skip it.
 
-The close ritual applies to closes from ADR-0050 (2026-08-14) onward. Earlier
-closes predate the policy.
-
-Agents must still set the role at create and post the audit comment at close.
-Do not rely on the safety net.
-
-A third workflow, `.github/workflows/issue-hygiene.yml`, sweeps weekly
-(ADR-0064). It posts one summary comment on the issue named by the
-`HYGIENE_SUMMARY_ISSUE` repository variable when open issues drift (labels,
-stale `needs-triage`, unmerged branches). Branch cleanup follows
-[axiom/docs/agents/stale-branches.md](stale-branches.md).
-
-To test the classifier locally:
-
-```
-echo '{"labels":[]}' | npx tsx packages/coding-agent/src/core/gh-tooling/triage-cli.ts
-```
+Porting that automation is a queued decision (issue-tracker "Automation" flag,
+axiom/docs/handoff.md). Until it lands, the discipline is manual.
 
 ## Labels
 

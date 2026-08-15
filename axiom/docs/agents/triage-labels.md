@@ -44,33 +44,15 @@ The wayfinder map protocol (issue-tracker.md) uses five labels:
 
 ## Automation
 
-The workflow .github/workflows/triage.yml enforces two rules:
+Prime-era automation is NOT on this baseline. The `.github/workflows/triage.yml`
+(ADR-0050) and `.github/workflows/issue-hygiene.yml` (ADR-0064) workflows were
+prime-era CI and do not exist on the Hermes baseline (verified 2026-08-16: the
+baseline ships 27 workflows, none a triage/issue-hygiene operator).
 
-1. Open job. Fires on `opened`, `labeled`, and `unlabeled`. Zero role labels:
-   apply `needs-triage` and post the contract (on `unlabeled`, post only — no
-   re-apply, so a maintainer can switch roles without a fight; the remind
-   comment says so). Two or more role labels: post a conflict note. One role
-   label: no action. The job never comments on a closed issue, and it never
-   posts a contract or remind comment that the bot already posted. A
-   form-created issue fires two runs (opened and labeled); the second run is
-   the echo of the first and posts nothing.
-2. Close job. Fires on `closed`. When the issue closes without an audit
-   comment, post one reminder. The audit comment must carry `Commit:`, `ADR:`,
-   and `Handoff:` in one comment. The reminder does not repeat.
-
-The close ritual applies to closes from ADR-0050 (2026-08-14) onward. Earlier
-closes predate the policy and carry no audit comment by design.
-
-3. Weekly sweep. `.github/workflows/issue-hygiene.yml` (ADR-0064) runs every
-   Monday. It lists open issues with missing, conflicting, or unknown role
-   labels, `needs-triage` issues older than seven days, and open issues that
-   reference a branch with commits not on main. It posts one summary comment
-   on the `HYGIENE_SUMMARY_ISSUE` issue and nothing when the problem set is
-   unchanged. It never edits labels, never closes issues, never merges, never
-   deletes branches.
-
-Agents must still set the role at create and post the audit comment at close.
-The workflow is the safety net, not the primary path.
+Consequence: role-label + audit-comment discipline is agent-enforced only — there
+is no CI safety net. Set the role at create and post the audit comment at close;
+nothing will catch you if you skip it. Porting that automation is a queued
+decision (see axiom/docs/agents/issue-tracker.md §Automation).
 
 ## Drift checks
 
@@ -100,5 +82,5 @@ closes and are exempt. Closes from that date onward must carry an audit
 comment; each one in the list that is not legacy is a live violation. Check
 the close date with `gh issue view <number> --json closedAt`.
 
-The contract tests in packages/coding-agent/test/gh-tooling/ guard the
-templates and the workflow against the same vocabulary.
+The vocabulary contract tests (prime-era `packages/coding-agent/test/gh-tooling/`)
+are not on this baseline; the label vocabulary here is enforced by this file alone.
