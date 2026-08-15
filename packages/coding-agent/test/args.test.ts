@@ -536,7 +536,8 @@ describe("parseArgs", () => {
 			expect(result.tools).toEqual(["grep", "bash", "edit"]);
 			expect(result.diagnostics).toContainEqual({
 				type: "error",
-				message: "Unknown built-in tool(s): grep. Available built-in tools: ipython, read, write, web_search, web_fetch",
+				message:
+					"Unknown built-in tool(s): grep. Available built-in tools: ipython, read, write, web_search, web_fetch",
 			});
 		});
 	});

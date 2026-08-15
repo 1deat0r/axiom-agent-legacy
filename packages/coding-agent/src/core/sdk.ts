@@ -274,7 +274,11 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const includeGoals = options.includeGoals ?? (options.tools !== undefined || options.noTools !== "all");
 	const initialActiveToolNames: string[] =
 		options.initialActiveToolNames ??
-		(options.tools ? [...options.tools] : options.noTools ? [] : ["ipython", "read", "write", "web_search", "web_fetch"]);
+		(options.tools
+			? [...options.tools]
+			: options.noTools
+				? []
+				: ["ipython", "read", "write", "web_search", "web_fetch"]);
 
 	let agent: Agent;
 

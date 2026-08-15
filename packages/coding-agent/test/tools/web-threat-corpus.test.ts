@@ -98,7 +98,7 @@ describe("web fetch S-class threat corpus", () => {
 	});
 
 	it("S9: fetched content is hard-capped at maxChars", async () => {
-		const big = "<html><head><title>Big</title></head><body><p>" + "z".repeat(5000) + "</p></body></html>";
+		const big = `<html><head><title>Big</title></head><body><p>${"z".repeat(5000)}</p></body></html>`;
 		const fetcher: PinnedFetcher = async () => new Response(big, { status: 200 });
 		const tool = createWebFetchTool(process.cwd(), {
 			fetcher,
