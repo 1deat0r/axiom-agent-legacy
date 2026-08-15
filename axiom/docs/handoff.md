@@ -84,3 +84,7 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
   use `.ts` specifiers + `allowImportingTsExtensions` + `noEmit`.
 - The Hermes terminal guard false-positives on the literal `tsc` token; run
   `npm run typecheck` instead of `tsc` directly.
+- Sovereign CLIs resolve store/profile paths via the `AXIOM_STORE`,
+  `AXIOM_SKILL_STORE`, `AXIOM_PROFILE_MEM`, `AXIOM_SKILLS_DIR` env overrides
+  (defaults: `axiom/sovereign/data/` + the Axiom Hermes profile). Port #3's
+  plugin must set these in the subprocess env.
