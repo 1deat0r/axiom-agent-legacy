@@ -52,6 +52,26 @@ const REQUIRED_HARNESS_METHODS = [
 	"record_refinement",
 ];
 const RUNTIME_READY_CHECK = `import inspect; import rlm; import rlm.gc; from rlm import McpIntegration; from rlm.harness import HarnessEntry; _harness_methods = ${JSON.stringify(REQUIRED_HARNESS_METHODS)}; assert hasattr(rlm, 'run'); assert callable(rlm); assert hasattr(rlm, 'rlm'); assert callable(rlm.rlm); assert callable(rlm.host_request); assert callable(rlm.find_models); assert callable(rlm.rlm.find_models); assert hasattr(rlm, 'harness'); assert hasattr(rlm, 'get_harness_state'); assert hasattr(rlm.rlm, 'harness'); assert hasattr(rlm.rlm, 'get_harness_state'); assert all(callable(getattr(_harness, _method, None)) for _harness in (rlm.harness, rlm.rlm.harness) for _method in _harness_methods); assert 'reference' in HarnessEntry.__dataclass_fields__; assert 'scope' in HarnessEntry.__dataclass_fields__; assert 'reference' in inspect.signature(rlm.harness.create_skill).parameters; assert 'reference' in inspect.signature(rlm.harness.update_skill).parameters; assert 'global_' in inspect.signature(rlm.harness.create_memory).parameters; assert 'global_' in inspect.signature(rlm.get_harness_state).parameters; assert not hasattr(rlm, 'background'); assert not hasattr(rlm.rlm, 'background'); assert callable(rlm.gc.measure_pressure); assert callable(rlm.gc.collect); assert callable(rlm.gc.install_post_execute_gc); assert callable(rlm.gc.resolve_thresholds); assert callable(rlm.gc.gc_status)`;
+// One python spawn answers both readiness questions (ipykernel importable,
+// runtime API current). Probe failure in any shape (spawn error, nonzero
+// exit, unparsable output) means "not ready": the venv paths rebuild and the
+// AXIOM_KERNEL_PYTHON path reports both missing messages.
+const READINESS_PROBE_SENTINEL = "_AXIOM_KERNEL_READINESS_PROBE_";
+const KERNEL_READINESS_PROBE = `# ${READINESS_PROBE_SENTINEL}
+import json
+_result = {"ipykernel": False, "runtime": False}
+try:
+    import ipykernel
+    _result["ipykernel"] = True
+except Exception:
+    pass
+try:
+    ${RUNTIME_READY_CHECK}
+    _result["runtime"] = True
+except Exception:
+    pass
+print(json.dumps(_result))
+`;
 const BOOTSTRAP_VERSION_FILE = ".bootstrap-version";
 const BOOTSTRAP_LOCK_NAME = ".bootstrap.lock";
 const BOOTSTRAP_LOCK_RETRY_MS = 100;
@@ -398,16 +418,46 @@ async function pythonImports(python: string, moduleName: string): Promise<boolea
 	}
 }
 
-async function hasIpykernel(python: string): Promise<boolean> {
-	return pythonImports(python, "ipykernel");
+function runCapture(command: string, args: string[]): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const child = spawn(command, args, {
+			env: process.env,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		let stdout = "";
+		child.stdout?.setEncoding("utf8");
+		child.stdout?.on("data", (chunk: string) => {
+			stdout += chunk;
+		});
+		child.on("error", reject);
+		child.on("exit", (code, signal) => {
+			if (code === 0) {
+				resolve(stdout);
+				return;
+			}
+			const reason = signal ? `signal ${signal}` : `exit code ${code}`;
+			reject(new Error(`${command} ${args.join(" ")} failed with ${reason}`));
+		});
+	});
 }
 
-async function hasPrimeAgentRuntime(python: string): Promise<boolean> {
+interface KernelReadinessProbe {
+	ipykernel: boolean;
+	runtime: boolean;
+}
+
+function isKernelReadinessProbe(value: unknown): value is KernelReadinessProbe {
+	if (typeof value !== "object" || value === null) return false;
+	const record = value as Record<string, unknown>;
+	return typeof record.ipykernel === "boolean" && typeof record.runtime === "boolean";
+}
+
+async function probeKernelReadiness(python: string): Promise<KernelReadinessProbe | undefined> {
 	try {
-		await run(python, ["-c", RUNTIME_READY_CHECK], { stdio: "ignore" });
-		return true;
+		const parsed: unknown = JSON.parse(await runCapture(python, ["-c", KERNEL_READINESS_PROBE]));
+		return isKernelReadinessProbe(parsed) ? parsed : undefined;
 	} catch {
-		return false;
+		return undefined;
 	}
 }
 
@@ -823,9 +873,10 @@ async function syncPythonSkills(
 }
 
 async function kernelBaseReady(python: string, venv: string, runtimeIdentity: string): Promise<boolean> {
+	const readiness = await probeKernelReadiness(python);
 	return (
-		(await hasIpykernel(python)) &&
-		(await hasPrimeAgentRuntime(python)) &&
+		readiness?.ipykernel === true &&
+		readiness.runtime === true &&
 		bootstrapBaseVersionCurrent(await readBootstrapVersion(venv), runtimeIdentity)
 	);
 }
@@ -836,9 +887,10 @@ async function kernelReady(
 	runtimeIdentity: string,
 	pythonSkills: readonly BootstrapPythonSkill[],
 ): Promise<boolean> {
+	const readiness = await probeKernelReadiness(python);
 	return (
-		(await hasIpykernel(python)) &&
-		(await hasPrimeAgentRuntime(python)) &&
+		readiness?.ipykernel === true &&
+		readiness.runtime === true &&
 		bootstrapVersionCurrent(await readBootstrapVersion(venv), runtimeIdentity, pythonSkills)
 	);
 }
@@ -858,9 +910,10 @@ async function ensureKernelPythonUncached(
 	const override = process.env.AXIOM_KERNEL_PYTHON;
 	if (override) {
 		const python = path.resolve(expandHome(override));
+		const readiness = await probeKernelReadiness(python);
 		const missing: string[] = [];
-		if (!(await hasIpykernel(python))) missing.push("ipykernel");
-		if (!(await hasPrimeAgentRuntime(python))) {
+		if (readiness?.ipykernel !== true) missing.push("ipykernel");
+		if (readiness?.runtime !== true) {
 			missing.push(
 				"a current axiom-runtime with callable rlm.run, rlm.host_request, and explicit harness CRUD methods",
 			);
