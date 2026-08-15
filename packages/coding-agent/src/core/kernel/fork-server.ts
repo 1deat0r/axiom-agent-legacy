@@ -172,7 +172,10 @@ class ForkServer {
 			server.listen(socketPath, () => {
 				// The template only imports; its own cwd/env are irrelevant since each
 				// forked child applies the per-kernel cwd/env itself. Inherit the daemon's.
-				const proc = spawn(this.params.python, ["-c", FORK_SERVER_SCRIPT, socketPath], {
+				// Pass our pid as the host-pid so the daemon can tell a graceful dispose
+				// (host alive, will kill forked kernels itself) from an unclean host death
+				// (host gone, reap its forked kernels or they orphan).
+				const proc = spawn(this.params.python, ["-c", FORK_SERVER_SCRIPT, socketPath, String(process.pid)], {
 					env: this.launchEnv,
 					stdio: ["ignore", "ignore", "pipe"],
 				});
