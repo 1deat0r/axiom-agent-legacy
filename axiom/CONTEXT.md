@@ -3,7 +3,7 @@
 Axiom is a hardfork of Hermes Agent (NousResearch/hermes-agent, MIT) at HEAD,
 tracked upstream and grown past it with sovereign capabilities. The hardfork
 is ADR-0087. The Hermes tree is untouched; `git merge upstream/main` stays
-clean. Axiom's own layer — this file, SOUL.md, GUIDE.md, the ADR series, and
+clean. Axiom's own layer — this file, SOUL.md, AGENTS.md, the ADR series, and
 the port queue — lives under `axiom/`.
 
 ## Language

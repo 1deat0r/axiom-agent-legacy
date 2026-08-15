@@ -24,6 +24,8 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
    TS specifier convention (`.js` -> `.ts`), marked ports.md #1 in progress.
    Committed `336f9ec2d5`.
 6. Opened tracker issue #63 (port #1, `ready-for-agent`).
+7. Created `axiom/AGENTS.md` (operator-approved instruction file) from
+   `axiom/GUIDE.md`; GUIDE.md is now a redirect.
 
 ## Verified (how)
 
@@ -39,11 +41,9 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
    separate `~/Projects/axiom-sovereign/` repo vs fold into `axiom-agent/`;
    node vs bun for the CLI entrypoints (recommend bun for CLI, node for
    lib/tests).
-2. **Create `axiom/AGENTS.md`** (operator approval gate) — content already in
-   `axiom/GUIDE.md`.
-3. **Continue port #1** (issue #63): TS CLI entrypoints (ingest/query/record),
+2. **Continue port #1** (issue #63): TS CLI entrypoints (ingest/query/record),
    then skills store (port #2), then bridge re-pointing (port #3).
-4. **Flag — prime-era automation stale**: `axiom/docs/agents/issue-tracker.md`
+3. **Flag — prime-era automation stale**: `axiom/docs/agents/issue-tracker.md`
    "Automation" section references `.github/workflows/triage.yml` +
    `issue-hygiene.yml`, which do NOT exist on the Hermes baseline. Decide
    whether to port that automation.
