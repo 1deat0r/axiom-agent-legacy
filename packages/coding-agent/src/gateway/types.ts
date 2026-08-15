@@ -150,6 +150,8 @@ export interface GatewayCommandContext {
 	/** Anchored project root; /search scopes to it unless --all is given. */
 	projectRoot?: string /** The channel the inbound command arrived on (cron delivery target). */;
 	channelId?: string;
+	/** Session ids currently running on this gateway (live marks for /dashboard). */
+	liveSessionIds?: ReadonlySet<string>;
 	/** The gateway's cron manager, when wired (drives /cron). */
 	cron?: GatewayCronCommandApi;
 	/** Delivery ledger (ADR-0022) for the /ledger audit command. */

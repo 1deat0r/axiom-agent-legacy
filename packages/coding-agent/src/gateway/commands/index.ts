@@ -2,6 +2,7 @@ import type { GatewayCommand, GatewayCommandContext } from "../types.js";
 import { announceCommand } from "./announce.js";
 import { costCommand } from "./cost.js";
 import { cronCommand } from "./cron.js";
+import { dashboardCommand } from "./dashboard.js";
 import { helpCommand } from "./help.js";
 import { ledgerCommand } from "./ledger.js";
 import { modelCommand } from "./model.js";
@@ -16,6 +17,7 @@ import { updateCommand } from "./update.js";
 /** All gateway-local commands; they never reach the model. */
 export const gatewayCommands: GatewayCommand[] = [
 	helpCommand,
+	dashboardCommand,
 	searchCommand,
 	sessionsCommand,
 	cronCommand,

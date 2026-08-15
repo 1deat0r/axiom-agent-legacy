@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -77,6 +77,107 @@ describe("soul command", () => {
 		} finally {
 			await rm(dir, { recursive: true, force: true });
 		}
+	});
+});
+
+describe("dashboard command", () => {
+	it("advertises /dashboard in /help", () => {
+		expect(dispatchCommand("/help", ctx("/tmp"))).toContain("/dashboard");
+	});
+	it("renders the three-panel report from the shared home", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "axiom-gw-dash-"));
+		try {
+			const sessionsDir = join(dir, "sessions");
+			await mkdir(sessionsDir, { recursive: true });
+			await writeFile(
+				join(sessionsDir, "s-1.jsonl"),
+				[
+					JSON.stringify({ type: "session", id: "s-1", timestamp: "2026-08-15T09:00:00.000Z", cwd: dir }),
+					JSON.stringify({
+						type: "message",
+						id: "m1",
+						parentId: null,
+						timestamp: "2026-08-15T09:01:00.000Z",
+						message: { role: "user", content: [{ type: "text", text: "hello" }] },
+					}),
+					JSON.stringify({
+						type: "agent_status",
+						id: "a1",
+						parentId: null,
+						timestamp: "2026-08-15T09:01:00.000Z",
+						status: { summary: "Auditing the cron store", taskState: "needs_input" },
+					}),
+				].join("\n"),
+			);
+			// A priced assistant entry so the spend panel has recorded spend.
+			await writeFile(
+				join(sessionsDir, "s-2.jsonl"),
+				[
+					JSON.stringify({ type: "session", id: "s-2", timestamp: "2026-08-15T09:00:00.000Z", cwd: dir }),
+					JSON.stringify({
+						type: "message",
+						id: "m2",
+						parentId: null,
+						timestamp: "2026-08-15T09:02:00.000Z",
+						message: {
+							role: "assistant",
+							content: [{ type: "text", text: "done" }],
+							usage: {
+								input: 100,
+								output: 50,
+								cacheRead: 0,
+								cacheWrite: 0,
+								totalTokens: 150,
+								cost: { input: 0.25, output: 0.25, cacheRead: 0, cacheWrite: 0, total: 0.5 },
+							},
+							provider: "provider-a",
+							model: "model-a",
+						},
+					}),
+				].join("\n"),
+			);
+			await writeFile(join(dir, "ledger.json"), JSON.stringify({ overrides: {} }));
+			const cronStore = new AgentCronJobStore(join(dir, "cron-jobs.json"));
+			cronStore.create({
+				activeSessionId: "s-1",
+				sessionId: "s-1",
+				sessionFile: join(sessionsDir, "s-1.jsonl"),
+				cwd: dir,
+				source: "cron",
+				channelId: "100",
+				scheduleText: "in 1h",
+				prompt: "channel work",
+				now: new Date("2026-08-15T10:00:00.000Z"),
+			});
+
+			const c: GatewayCommandContext = {
+				...ctx(dir),
+				sessionsDir,
+				liveSessionIds: new Set(["s-1"]),
+			};
+			const out = dispatchCommand("/dashboard", c);
+
+			expect(out).toContain("sessions:");
+			expect(out).toContain("spine:");
+			expect(out).toContain("spend:");
+			expect(out).toContain("s-1");
+			expect(out).toContain("Auditing the cron store");
+			expect(out).toContain("needs input");
+			expect(out).toContain("live");
+			expect(out).toContain("in 1h");
+			expect(out).toContain("$0.50");
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+	it("degrades per panel with one-line notices when nothing is configured", () => {
+		const out = dispatchCommand("/dashboard", ctx("/tmp"));
+		expect(out).toContain("sessions: no sessions directory configured");
+		expect(out).toContain("no scheduled jobs");
+		expect(out).toContain("spend: no sessions directory configured");
+	});
+	it("explains usage on extra arguments", () => {
+		expect(dispatchCommand("/dashboard extra", ctx("/tmp"))).toContain("usage: /dashboard");
 	});
 });
 

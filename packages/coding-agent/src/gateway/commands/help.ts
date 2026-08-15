@@ -31,6 +31,7 @@ export const helpCommand: GatewayCommand = {
 			"  /search <q>           search past sessions [--all] [--limit N] [--offset N]",
 			"  /sessions             browse recent past sessions [--all] [--limit N]",
 			"  /new                  start a fresh session (archives the old one)",
+			"  /dashboard            one-glance report: sessions, automation spine, spend",
 		].join("\n");
 	},
 };

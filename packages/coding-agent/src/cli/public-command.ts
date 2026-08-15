@@ -15,6 +15,7 @@ import {
 import { handleDaemonCommand } from "./daemon-command.js";
 import { runPs, runReap, runShutdownAll } from "./daemon-ps.js";
 import { DAEMON_UPDATE_RESTART_COORDINATOR_FLAG } from "./daemon-update-restart.js";
+import { runDashboard } from "./dashboard-command.js";
 
 export interface PublicCommandResult {
 	handled: boolean;
@@ -103,6 +104,8 @@ async function runPublicCommand(args: string[]): Promise<PublicCommandResult> {
 			return runNestedAgentCommand("schedule", "cron", args.slice(1));
 		case "status":
 			return runStatus(args.slice(1));
+		case "dashboard":
+			return runDashboardCommand(args.slice(1));
 		case "doctor":
 			return runDoctor(args.slice(1));
 		case "shutdown":
@@ -242,6 +245,13 @@ async function runNestedAgentCommand(
 		return HANDLED;
 	}
 	await handleDaemonCommand(["daemon", internalCommand, ...args]);
+	return HANDLED;
+}
+
+async function runDashboardCommand(args: string[]): Promise<PublicCommandResult> {
+	const options = parseBooleanOptions(args, new Set(["--json"]), "dashboard");
+	if (!options) return HANDLED;
+	await runDashboard(options.has("--json"));
 	return HANDLED;
 }
 
