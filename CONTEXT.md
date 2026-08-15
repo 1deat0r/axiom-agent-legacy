@@ -246,7 +246,11 @@ load via the real skill loader before it is offered. The agent supplies the
 steps; capture only materializes a skill directory. Automatic flagging
 (ADR-0026) scores a completed task trace (`evaluateTaskForCapture`) and
 captures only when reusable; a builtin `agent_end` extension (ADR-0027) runs
-it unattended (inert unless AXIOM_SKILL_CAPTURE_AUTO=1). Hub/sync over
+it unattended (inert unless AXIOM_SKILL_CAPTURE_AUTO=1). The public surface is
+the `/learn` extension command (ADR-0080): on demand it traces the current
+session's branch, evaluates, and captures into `<AXIOM_HOME>/captured-skills`
+(no-overwrite, real-loader-verified, provenance source "learn"), then offers
+the result — installs are the ownership lattice's job (#55). Hub/sync over
 agentskills.io remains.
 
 **Skill audit**:

@@ -8,18 +8,36 @@
  * Deliberately inert by default: it only acts when enabled (env
  * AXIOM_SKILL_CAPTURE_AUTO=1 or injected `enabled`), so ordinary sessions are
  * unaffected. It never blocks or disrupts a run — it only records + notifies.
+ *
+ * It also registers the public /learn command (ADR-0080, issue #54): the
+ * on-demand front-end over the same pipeline. /learn is always available,
+ * even when the unattended hook is disabled — silent-by-default means the
+ * loop stays quiet, not that the user cannot ask. Captured skills are staged
+ * into the capture directory and offered; installing them into a live skills
+ * directory is the ownership lattice's job (issue #55).
  */
 
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ExtensionAPI } from "../../core/extensions/types.js";
-import type { SkillProvenance, TaskCapture, TaskStep, TaskTrace } from "../../core/skill-capture/index.js";
+import type { SessionMessageEntry } from "../../core/session-manager.js";
+import type {
+	LearnCaptureResult,
+	LearnCommandOptions,
+	SkillProvenance,
+	TaskCapture,
+	TaskStep,
+	TaskTrace,
+} from "../../core/skill-capture/index.js";
 import {
 	buildSkillDocument,
+	CAPTURE_THRESHOLD,
 	deriveName,
 	evaluateTaskForCapture,
+	parseLearnCommandOptions,
 	persistCapturedSkill,
+	runLearnCapture,
 	verifyCapturedSkill,
 } from "../../core/skill-capture/index.js";
 import { axiomHome } from "../profile/registry.js";
@@ -108,6 +126,46 @@ export function defaultBuildCapture(trace: TaskTrace): TaskCapture {
 	};
 }
 
+/**
+ * Turn a /learn result into the in-session report. Captures are info;
+ * failures are errors that name what went wrong and how to recover.
+ */
+export function learnResultMessage(result: LearnCaptureResult): { message: string; severity: "info" | "error" } {
+	switch (result.kind) {
+		case "captured":
+			return {
+				message:
+					`Captured reusable skill "${result.name}" → ${result.path}. ` +
+					`Verified: loads with ${result.diagnostics.length} loader diagnostics. ` +
+					`Install it by copying the '${result.name}' directory into a skills directory.`,
+				severity: "info",
+			};
+		case "not-flagged":
+			return {
+				message:
+					`Not captured (score ${result.score.toFixed(2)} < ${CAPTURE_THRESHOLD}): ` +
+					`${result.reasons.join("; ")}. Re-run /learn --force to capture anyway.`,
+				severity: "info",
+			};
+		case "exists":
+			return {
+				message:
+					`Refusing to overwrite existing skill at ${result.path} — ` +
+					`learned skills never clobber hand-written ones.`,
+				severity: "error",
+			};
+		case "invalid":
+			return { message: `Learn failed: skill validation failed: ${result.errors.join("; ")}`, severity: "error" };
+		case "unverified":
+			return {
+				message: `Learn failed: captured skill failed verification: ${result.errors.join("; ")}`,
+				severity: "error",
+			};
+		case "error":
+			return { message: `Learn failed: ${result.errors.join("; ")}`, severity: "error" };
+	}
+}
+
 export interface SkillCaptureExtensionOptions {
 	/** Enable unattended capture (defaults to env AXIOM_SKILL_CAPTURE_AUTO=1). */
 	enabled?: boolean;
@@ -125,6 +183,31 @@ export function createSkillCaptureExtension(deps: SkillCaptureExtensionOptions =
 	const buildCapture = deps.buildCapture ?? defaultBuildCapture;
 
 	return (pi) => {
+		pi.registerCommand("learn", {
+			description: "Capture this session as a reusable skill on demand (/learn [--force])",
+			handler: async (args, ctx) => {
+				let options: LearnCommandOptions;
+				try {
+					options = parseLearnCommandOptions(args);
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					ctx.ui.notify(message, "error");
+					return;
+				}
+				const branch = ctx.sessionManager.getBranch();
+				const messages = branch
+					.filter((entry): entry is SessionMessageEntry => entry.type === "message")
+					.map((entry) => entry.message);
+				const trace = {
+					...buildTrace(messages),
+					metadata: { sessionId: ctx.sessionManager.getSessionId() },
+				};
+				const result = runLearnCapture(trace, { captureDir, force: options.force });
+				const { message, severity } = learnResultMessage(result);
+				ctx.ui.notify(message, severity);
+			},
+		});
+
 		pi.on("agent_end", async (event, ctx) => {
 			if (!enabled) return;
 			const trace = buildTrace(event.messages);

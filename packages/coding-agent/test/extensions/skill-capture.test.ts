@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
@@ -27,6 +27,7 @@ function fakePi(): { pi: ExtensionAPI; fire(event: string, payload: unknown, ctx
 	return {
 		pi: fromAny<ExtensionAPI, unknown>({
 			on: (evt: string, h: (...a: unknown[]) => unknown) => handlers.set(evt, [...(handlers.get(evt) ?? []), h]),
+			registerCommand: () => {},
 		}),
 		fire: async (event, payload, ctx) => {
 			for (const handler of handlers.get(event) ?? []) {
@@ -114,5 +115,132 @@ describe("createSkillCaptureExtension (agent_end)", () => {
 		);
 		expect(countSkills(dir)).toBe(0);
 		expect(notifyCalls).toHaveLength(0);
+	});
+});
+
+describe("createSkillCaptureExtension (/learn command)", () => {
+	/** fakePi + a command registry so /learn's registered handler can be driven. */
+	function commandPi(): {
+		pi: ExtensionAPI;
+		fire(event: string, payload: unknown, ctx: unknown): Promise<void>;
+		command(name: string): ((args: string, ctx: unknown) => Promise<void>) | undefined;
+	} {
+		const handlers = new Map<string, Array<(...a: unknown[]) => unknown>>();
+		const commands = new Map<string, (args: string, ctx: unknown) => Promise<void>>();
+		return {
+			pi: fromAny<ExtensionAPI, unknown>({
+				on: (evt: string, h: (...a: unknown[]) => unknown) => handlers.set(evt, [...(handlers.get(evt) ?? []), h]),
+				registerCommand: (name: string, options: { handler: (args: string, ctx: unknown) => Promise<void> }) =>
+					commands.set(name, options.handler),
+			}),
+			fire: async (event, payload, ctx) => {
+				for (const handler of handlers.get(event) ?? []) {
+					await handler(payload, ctx);
+				}
+			},
+			command: (name) => commands.get(name),
+		};
+	}
+
+	/** A ctx shaped like ExtensionCommandContext, with a session branch to learn from. */
+	function learnCtx(messages: AgentMessage[], sessionId = "sess-1"): { ctx: unknown; notify: string[] } {
+		const notify: string[] = [];
+		const entries = messages.map((message, index) => ({
+			type: "message",
+			id: `entry-${index}`,
+			parentId: index === 0 ? null : `entry-${index - 1}`,
+			timestamp: "2026-08-15T00:00:00.000Z",
+			message,
+		}));
+		return {
+			notify,
+			ctx: fromAny<unknown, unknown>({
+				ui: { notify: (message: string) => notify.push(message) },
+				sessionManager: {
+					getBranch: () => entries,
+					getLeafId: () => "leaf",
+					getSessionId: () => sessionId,
+				},
+			}),
+		};
+	}
+
+	it("registers /learn even when the unattended hook is disabled (on-demand surface)", () => {
+		const dir = makeTempDir();
+		const { pi, command } = commandPi();
+		createSkillCaptureExtension({ enabled: false, captureDir: dir })(pi);
+		expect(command("learn")).toBeDefined();
+	});
+
+	it("captures the current session's branch as a verified, provenance-bearing skill on /learn", async () => {
+		const dir = makeTempDir();
+		const { pi, command } = commandPi();
+		createSkillCaptureExtension({ enabled: false, captureDir: dir })(pi);
+		const { ctx, notify } = learnCtx(reusableSession());
+		await command("learn")?.("", ctx);
+		expect(countSkills(dir)).toBe(1);
+		expect(notify.some((m) => m.includes("Captured reusable skill"))).toBe(true);
+		expect(notify.some((m) => m.includes("0 loader diagnostics"))).toBe(true);
+	});
+
+	it("/learn --force captures a session the heuristic would reject", async () => {
+		const dir = makeTempDir();
+		const { pi, command } = commandPi();
+		createSkillCaptureExtension({ enabled: false, captureDir: dir })(pi);
+		const { ctx, notify } = learnCtx(thinSession());
+		await command("learn")?.("--force", ctx);
+		expect(countSkills(dir)).toBe(1);
+		expect(notify.some((m) => m.includes("Captured reusable skill"))).toBe(true);
+	});
+
+	it("reports the heuristic reasons and writes nothing when the session is not flagged", async () => {
+		const dir = makeTempDir();
+		const { pi, command } = commandPi();
+		createSkillCaptureExtension({ enabled: false, captureDir: dir })(pi);
+		const { ctx, notify } = learnCtx(thinSession());
+		await command("learn")?.("", ctx);
+		expect(countSkills(dir)).toBe(0);
+		expect(notify.some((m) => m.includes("Not captured"))).toBe(true);
+		expect(notify.some((m) => m.includes("--force"))).toBe(true);
+	});
+
+	it("refuses to overwrite an existing skill and says so", async () => {
+		const dir = makeTempDir();
+		const { pi, command } = commandPi();
+		createSkillCaptureExtension({ enabled: false, captureDir: dir })(pi);
+		mkdirSync(join(dir, "set-up-a-reusable-ci-pipeline-for-every-new-service"), { recursive: true });
+		writeFileSync(
+			join(dir, "set-up-a-reusable-ci-pipeline-for-every-new-service", "SKILL.md"),
+			"---\nname: hand-written\n---\n",
+			{ encoding: "utf-8" },
+		);
+		const { ctx, notify } = learnCtx(reusableSession());
+		await command("learn")?.("", ctx);
+		expect(countSkills(dir)).toBe(1);
+		expect(notify.some((m) => m.includes("Refusing to overwrite"))).toBe(true);
+	});
+
+	it("rejects unknown arguments with the usage line and writes nothing", async () => {
+		const dir = makeTempDir();
+		const { pi, command } = commandPi();
+		createSkillCaptureExtension({ enabled: false, captureDir: dir })(pi);
+		const { ctx, notify } = learnCtx(reusableSession());
+		await command("learn")?.("--name foo", ctx);
+		expect(countSkills(dir)).toBe(0);
+		expect(notify.some((m) => m.includes("Usage: /learn [--force]"))).toBe(true);
+	});
+
+	it("carries the session id through provenance", async () => {
+		const dir = makeTempDir();
+		const { pi, command } = commandPi();
+		createSkillCaptureExtension({ enabled: false, captureDir: dir })(pi);
+		const { ctx } = learnCtx(reusableSession(), "sess-777");
+		await command("learn")?.("", ctx);
+		const skill = readdirSync(dir, { withFileTypes: true })
+			.filter((e) => e.isDirectory())
+			.map((e) => join(dir, e.name, "SKILL.md"))
+			.map((p) => readFileSync(p, "utf-8"));
+		expect(skill.join("\n")).toContain("sessionId: sess-777");
+		expect(skill.join("\n")).toContain("source: learn");
 	});
 });
