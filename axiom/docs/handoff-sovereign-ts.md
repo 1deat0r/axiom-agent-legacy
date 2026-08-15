@@ -135,8 +135,8 @@ Tests via `node --test` (Node 26 runs `.ts` natively).
 
 ## 8. Open questions for the operator (not blocking)
 
-- Confirm the new package home/name (`axiom-sovereign`? fold into the re-founded
-  `axiom-agent`?).
+- ~~Confirm the new package home/name~~ — resolved 2026-08-16: folded into
+  `axiom-agent/axiom/sovereign/`.
 - Node vs bun for the CLI runtime: bun starts ~10x faster, which matters for a
   subprocess-per-write; node is more portable. Recommend **bun for the CLI
   entrypoints, node for the library/tests**.

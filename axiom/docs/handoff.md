@@ -14,7 +14,7 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
 1. Unshallowed `upstream` — full Hermes history; `.git/shallow` gone.
 2. Pushed the archived eras to origin (3 branches + `archive/prime-v0.7.2` tag).
 3. Force-pushed `main` (operator-approved). origin/main = `fc0481914`.
-4. Scaffolded the TS sovereign package at `~/Projects/axiom-sovereign/`
+4. Scaffolded the TS sovereign package at `axiom/sovereign/`
    (type=module, erasable-TS tsconfig, typescript@5.9.3 + @types/node@26.2.0):
    `src/memory.ts` (MemoryStore) + `src/profile_io.ts` + `src/lock.ts`.
    7 tests green via `node --test`; `tsc --noEmit` clean; byte-compat verified
@@ -37,10 +37,9 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
 
 ## Next steps (in order)
 
-1. **Decide package home + CLI runtime** (operator, handoff-sovereign-ts.md §8):
-   separate `~/Projects/axiom-sovereign/` repo vs fold into `axiom-agent/`;
-   node vs bun for the CLI entrypoints (recommend bun for CLI, node for
-   lib/tests).
+1. **Decide CLI runtime** (node vs bun for the TS CLI entrypoints; recommend
+   bun for CLI, node for lib/tests). Package home decided this session: folded
+   into `axiom/sovereign/`.
 2. **Continue port #1** (issue #63): TS CLI entrypoints (ingest/query/record),
    then skills store (port #2), then bridge re-pointing (port #3).
 3. **Flag — prime-era automation stale**: `axiom/docs/agents/issue-tracker.md`

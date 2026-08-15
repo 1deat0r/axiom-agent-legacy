@@ -39,7 +39,7 @@ Hermes baseline:
 - Python requires `>=3.11,<3.14` — 3.14 is refused (Rust transitives have no
   cp314 wheels yet). Use a venv on 3.12/3.13.
 
-Axiom's TS sovereign layer (`~/Projects/axiom-sovereign/`): `node --test`,
+Axiom's TS sovereign layer (`axiom/sovereign/`): `node --test`,
 `tsc --noEmit`.
 
 ## Ritual (from SOUL.md, binding here)

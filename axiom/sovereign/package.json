@@ -1,0 +1,18 @@
+{
+  "name": "axiom-sovereign",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Axiom's sovereign layer (identity/memory/skills store) ported to TypeScript, running on stock Hermes.",
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "test": "node --test test/memory.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "typescript": "^5.9.3"
+  }
+}
