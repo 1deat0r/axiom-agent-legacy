@@ -7,7 +7,10 @@ import { afterAll, describe, expect, it } from "vitest";
 import { KernelManager } from "../src/core/kernel/index.js";
 import { buildRlmBootstrapCode } from "../src/core/tools/ipython.js";
 
-describe("IPython RLM bootstrap", () => {
+// This suite boots real IPython kernels. It is tagged kernel-heavy so the
+// default sharded run excludes it and test:kernel runs it serialized;
+// parallel kernel boots starve each other (issue #52 tracks the root fix).
+describe("IPython RLM bootstrap", { tags: ["kernel-heavy"], timeout: 180_000 }, () => {
 	it("pre-imports asyncio so the prompt's subagent patterns work without a manual import", () => {
 		expect(buildRlmBootstrapCode()).toMatch(/^import asyncio$/m);
 	});

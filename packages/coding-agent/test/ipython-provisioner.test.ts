@@ -72,7 +72,10 @@ function createBusyKernelContext(
 	return { ctx, setWorkingMessage };
 }
 
-describe("IpythonKernelProvisioner", () => {
+// This suite boots real IPython kernels. It is tagged kernel-heavy so the
+// default sharded run excludes it and test:kernel runs it serialized;
+// parallel kernel boots starve each other (issue #52 tracks the root fix).
+describe("IpythonKernelProvisioner", { tags: ["kernel-heavy"], timeout: 180_000 }, () => {
 	beforeEach(() => {
 		tempDir = mkdtempSync(join(tmpdir(), "axiom-provisioner-"));
 	});

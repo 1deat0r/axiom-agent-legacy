@@ -34,6 +34,13 @@ Fix each failure at its source; delete the allowlist.
    load the respawn machinery races those checks. It gets the repo's
    existing `process-stress` tag and runs serialized in the third phase
    (`test:process-stress`), alongside daemon-supervisor-process.
+5. **Untagged kernel-booters (merge-time sweep):** the heavier post-#50
+   floor exposed three more untagged real-kernel suites (ipython-bootstrap,
+   ipython-provisioner, kernel-agent-observe-skill) plus the 4428 bash-cell
+   test. All are tagged `kernel-heavy` and added to `test:kernel`. A
+   residual daemon race (services reappear within 11s of a clean
+   shutdown --force, about 1 in 4 floors) is tracked as issue #53
+   (ADR-0077) and is a product-code fix, not a test-timing one.
 4. **Host dependency:** the 4603 shutdown regression needs `lsof`; the host
    installed it (4.99.7). AGENTS.md records the requirement.
 

@@ -16,7 +16,10 @@ function bundledAgentObserveSkill(): PythonSkillRuntimeInfo {
 	};
 }
 
-describe("agent-observe skill over the kernel host bridge", () => {
+// This suite boots real IPython kernels. It is tagged kernel-heavy so the
+// default sharded run excludes it and test:kernel runs it serialized;
+// parallel kernel boots starve each other (issue #52 tracks the root fix).
+describe("agent-observe skill over the kernel host bridge", { tags: ["kernel-heavy"], timeout: 180_000 }, () => {
 	let tempDir: string;
 	let provisioner: IpythonKernelProvisioner | undefined;
 

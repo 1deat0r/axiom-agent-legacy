@@ -20,7 +20,11 @@ Issue #51, ADR-0075, branch feat/fix-sandbox-floor, 2026-08-15.
   test:process-stress (serialized).
 - 4603 suite: tagged process-stress and added to test:process-stress; its
   shutdown idempotency contract races the daemon respawn machinery under
-  parallel floor load and passes serialized.
+  parallel floor load and passes serialized. The residual race (3 services
+  reappear after shutdown in about 1 of 4 floors) is issue #53 (ADR-0077).
+- Merge-time sweep: ipython-bootstrap, ipython-provisioner,
+  kernel-agent-observe-skill, and the 4428 bash-cell test tagged
+  kernel-heavy and added to test:kernel.
 - Host provisioning: installed lsof 4.99.7 (pacman) — the 4603 shutdown
   regression needs it; recorded in AGENTS.md.
 - AGENTS.md sandbox note: the known-fail allowlist is empty; the floor is
