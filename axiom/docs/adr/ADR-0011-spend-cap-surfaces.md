@@ -36,3 +36,42 @@ now price from.
 - **`AXIOM_MAX_RUN_COST` env var.** Kept as future work; the flag matches
   the existing `--model`/`--base-url`/`--api-key` launch vocabulary and
   needs no shell setup.
+
+## Adapted for the Hermes baseline (ADR-0087, 2026-08-16)
+
+The ADR-0087 re-foundation moved Axiom onto the Hermes Agent baseline
+(port #5, issue #65). The adaptation supersedes parts of the decision text
+above; the semantics (hard pre-call guard, `0` disables calls, absent = no
+cap, recorded usage only) are unchanged from ADR-0010/0011.
+
+- **There is no prime-era `parseArgs`/`tuiOptionsFrom`/`sessionLedger`
+  surface here.** The flag and the guard land where Hermes actually lives:
+  - **The guard** is a tiny pure function (`agent/spend_cap.py::
+    spend_cap_exceeded`) called at the top of the tool loop
+    (`agent/conversation_loop.py`, before `api_call_count` is incremented).
+    When recorded spend reaches the cap it sets `_turn_exit_reason =
+    "cost_limit"`, composes a user-facing `final_response`, and `break`s —
+    no further LLM call. `finalize_turn` excludes `cost_limit` from
+    `completed` so a capped run is not recorded as a completed turn.
+  - **The flag** is `--max-run-cost <usd>` on the top-level parser
+    (`hermes_cli/_parser.py`, `_inherited_flag` so relaunch carries it),
+    forwarded through `cmd_chat` into `cli.main(max_run_cost=...)` →
+    `HermesCLI` → `AIAgent(max_run_cost_usd=...)`; and through
+    `_launch_tui(max_run_cost=...)` → `HERMES_TUI_MAX_RUN_COST` → the TUI
+    gateway's `AIAgent(max_run_cost_usd=_cfg_max_run_cost())`.
+- **`maxRunCostUsd` becomes `AIAgent(max_run_cost_usd=...)`** (`Optional[float]`,
+  `None` = no cap), threaded through the `AIAgent.__init__` →
+  `agent.agent_init.init_agent` chain. The accumulator it guards is Hermes's
+  existing `session_estimated_cost_usd` (ADR-0010 ledger).
+- **Delegated subagents inherit the parent's cap value.** `delegate_tool`
+  passes `max_run_cost_usd=getattr(parent_agent, "max_run_cost_usd", None)`
+  into each child, mirroring ADR-0061 §4's "per-run, inherited" semantics:
+  each child enforces its own cap against its own recorded spend, and the
+  parent fold of child cost is the reconciliation point — not a shared
+  budget (a persistent multi-run budget is deliberately out of scope per
+  ADR-0061).
+- **Verification**: red-first `tests/run_agent/test_max_run_cost.py`
+  (pure-guard cases: no cap / `0` disables / below / at-or-above /
+  no-usage provider / missing attribute; plus a `finalize_turn` case
+  asserting a `cost_limit` stop makes no summary LLM call).
+

@@ -574,6 +574,7 @@ def _apply_profile_override() -> None:
         "-z", "--oneshot",
         "-m", "--model",
         "--provider",
+        "--max-run-cost",
         "-t", "--toolsets",
         "-r", "--resume",
         "-s", "--skills",
@@ -2365,6 +2366,7 @@ def _launch_tui(
     tui_dev: bool = False,
     model: Optional[str] = None,
     provider: Optional[str] = None,
+    max_run_cost: Optional[float] = None,
     toolsets: object = None,
     skills: object = None,
     verbose: Optional[bool] = None,
@@ -2428,6 +2430,8 @@ def _launch_tui(
     if provider:
         env["HERMES_TUI_PROVIDER"] = provider
         env["HERMES_INFERENCE_PROVIDER"] = provider
+    if max_run_cost is not None:
+        env["HERMES_TUI_MAX_RUN_COST"] = str(max_run_cost)
     tui_toolsets = _normalize_tui_toolsets(toolsets)
     if tui_toolsets:
         env["HERMES_TUI_TOOLSETS"] = ",".join(tui_toolsets)
@@ -2843,6 +2847,7 @@ def cmd_chat(args):
             tui_dev=getattr(args, "tui_dev", False),
             model=getattr(args, "model", None),
             provider=getattr(args, "provider", None),
+            max_run_cost=getattr(args, "max_run_cost", None),
             toolsets=getattr(args, "toolsets", None),
             skills=getattr(args, "skills", None),
             verbose=getattr(args, "verbose", None),
@@ -2864,6 +2869,7 @@ def cmd_chat(args):
         "model": args.model,
         "provider": getattr(args, "provider", None),
         "reasoning": getattr(args, "reasoning", None),
+        "max_run_cost": getattr(args, "max_run_cost", None),
         "toolsets": args.toolsets,
         "skills": getattr(args, "skills", None),
         "verbose": getattr(args, "verbose", None),
@@ -11030,6 +11036,7 @@ _TOP_LEVEL_VALUE_FLAGS = frozenset(
         "-z", "--oneshot",
         "-m", "--model",
         "--provider",
+        "--max-run-cost",
         "-t", "--toolsets",
         "-r", "--resume",
         "-s", "--skills",

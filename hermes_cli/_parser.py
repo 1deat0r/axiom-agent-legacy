@@ -161,6 +161,19 @@ def build_top_level_parser():
             "(or per-model under agent.reasoning_overrides)."
         ),
     )
+    _inherited_flag(
+        parser,
+        "--max-run-cost",
+        default=None,
+        type=float,
+        metavar="USD",
+        help=(
+            "USD spend cap for this invocation (ADR-0011): stop before the next "
+            "model call once recorded estimated cost reaches the ceiling. "
+            "0 disables model calls entirely; absent means no cap. Applies to "
+            "-z/--oneshot, chat, and --tui."
+        ),
+    )
     parser.add_argument(
         "-t",
         "--toolsets",
@@ -337,6 +350,17 @@ def build_top_level_parser():
             "Reasoning effort for this session: none, minimal, low, medium, "
             "high, xhigh, max, or ultra. Overrides agent.reasoning_effort for "
             "this run only (same levels as the /reasoning slash command)."
+        ),
+    )
+    _inherited_flag(
+        chat_parser,
+        "--max-run-cost",
+        default=argparse.SUPPRESS,
+        type=float,
+        metavar="USD",
+        help=(
+            "USD spend cap for this session (ADR-0011): stop before the next "
+            "model call once recorded estimated cost reaches the ceiling."
         ),
     )
     _inherited_flag(

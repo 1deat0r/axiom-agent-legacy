@@ -4636,6 +4636,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         api_key: str = None,
         base_url: str = None,
         max_turns: int = None,
+        max_run_cost: Optional[float] = None,
         verbose: Optional[bool] = None,
         compact: bool = False,
         resume: str = None,
@@ -4882,6 +4883,10 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 self.max_turns = 500
         else:
             self.max_turns = 500
+        # Spend cap (ADR-0011): launch flag only, no config/env fallback.
+        # None = no cap; forwarded verbatim into the agent (AIAgent coerces
+        # to float for comparison via the guard's >= on session cost).
+        self.max_run_cost_usd = max_run_cost
         
         # Parse and validate toolsets
         self.enabled_toolsets = toolsets
@@ -19500,6 +19505,7 @@ def main(
     api_key: str = None,
     base_url: str = None,
     max_turns: int = None,
+    max_run_cost: Optional[float] = None,
     verbose: Optional[bool] = None,
     quiet: bool = False,
     compact: bool = False,
@@ -19688,6 +19694,7 @@ def main(
         api_key=api_key,
         base_url=base_url,
         max_turns=max_turns,
+        max_run_cost=max_run_cost,
         verbose=verbose,
         compact=compact,
         resume=resume,

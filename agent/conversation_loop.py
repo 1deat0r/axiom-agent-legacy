@@ -47,6 +47,7 @@ from agent.turn_context import (
 )
 from agent.turn_retry_state import TurnRetryState
 from agent.runtime_cwd import resolve_agent_cwd
+from agent.spend_cap import spend_cap_exceeded
 from agent.message_sanitization import (
     close_interrupted_tool_sequence,
     _repair_tool_call_arguments,
@@ -1847,7 +1848,29 @@ def run_conversation(
             if not agent.quiet_mode:
                 agent._safe_print("\n⚡ Breaking out of tool loop due to interrupt...")
             break
-        
+
+        # Hard pre-call spend cap (ADR-0011): stop before issuing the next
+        # LLM call once recorded spend reaches the ceiling. Recorded usage
+        # only (ADR-0010) — a provider that reports no usage prices to zero
+        # and can never trip the cap. ``max_run_cost_usd=0`` trips here on
+        # the first iteration, so no LLM call is ever made.
+        if spend_cap_exceeded(agent):
+            _cap = agent.max_run_cost_usd
+            _turn_exit_reason = "cost_limit"
+            final_response = (
+                f"Spend cap reached: this run has recorded "
+                f"${agent.session_estimated_cost_usd:.4f} in estimated cost, "
+                f"which is at or above the ${_cap:.4f} limit — stopping before "
+                f"the next model call."
+            )
+            if not agent.quiet_mode:
+                agent._safe_print(
+                    f"\n🛑 Spend cap reached "
+                    f"(${agent.session_estimated_cost_usd:.4f} >= ${_cap:.4f}) "
+                    f"— stopping before the next LLM call."
+                )
+            break
+
         api_call_count += 1
         agent._api_call_count = api_call_count
         agent._touch_activity(f"starting API call #{api_call_count}")

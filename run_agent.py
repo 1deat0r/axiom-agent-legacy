@@ -444,6 +444,7 @@ class AIAgent:
         args: list[str] | None = None,
         model: str = "",
         max_iterations: int = 90,  # Default tool-calling iterations (shared with subagents)
+        max_run_cost_usd: Optional[float] = None,  # USD spend cap (ADR-0011); None = no cap
         tool_delay: float = None,  # Deprecated: accepted for compatibility, ignored
         enabled_toolsets: List[str] = None,
         disabled_toolsets: List[str] = None,
@@ -533,6 +534,7 @@ class AIAgent:
             args=args,
             model=model,
             max_iterations=max_iterations,
+            max_run_cost_usd=max_run_cost_usd,
             enabled_toolsets=enabled_toolsets,
             disabled_toolsets=disabled_toolsets,
             save_trajectories=save_trajectories,

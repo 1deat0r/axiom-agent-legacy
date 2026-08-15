@@ -197,6 +197,7 @@ def finalize_turn(
     completed = (
         final_response is not None
         and not failed
+        and str(_turn_exit_reason) != "cost_limit"
         and (
             api_call_count < agent.max_iterations
             or normal_text_response

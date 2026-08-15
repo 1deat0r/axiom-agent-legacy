@@ -1,8 +1,10 @@
-# Handoff — sovereign layer ported; cost spine re-scoped
+# Handoff — sovereign layer ported; cost spine complete (all ports done)
 
-Written 2026-08-16 (session 5). Status: ports #1–#3 done; cost ledger (port #4)
-found already covered by the Hermes baseline; spend cap (port #5, issue #65) is
-the active next port. Resume there.
+Written 2026-08-16 (session 6). Status: ports #1–#5 done. The cost spine is
+complete: the ledger (port #4) is covered by the Hermes baseline, and the
+spend cap (port #5, issue #65) is implemented and merged. No open port
+remains; next work is upstream-merge hygiene and the queued tracker
+"Automation" flag (see Next steps).
 
 ## What was done (session 1 — re-foundation)
 
@@ -100,6 +102,30 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
 22. Opened issue #65 (port #5, `ready-for-agent`) with the finding, acceptance
     criteria, and red-first verification plan.
 
+## What was done (session 6)
+
+23. Implemented the spend cap (port #5, issue #65, ADR-0011) red-first:
+    - `agent/spend_cap.py` — pure `spend_cap_exceeded(agent)` guard
+      (recorded usage only; `None` = no cap; `0` trips before the first call).
+    - `agent/conversation_loop.py` — guard runs at the top of the tool loop,
+      before `api_call_count` is incremented and before any client call; sets
+      `_turn_exit_reason = "cost_limit"`, composes a user-facing notice, `break`s.
+    - `agent/turn_finalizer.py` — `cost_limit` excluded from `completed`.
+    - `AIAgent(max_run_cost_usd=...)` threaded through `run_agent.py` →
+      `agent.agent_init.init_agent` (coerced to float at the init chokepoint);
+      `None` = no cap.
+    - `tools/delegate_tool.py` — subagents inherit the parent's cap value
+      (per-run semantics per ADR-0061 §4; parent fold is the reconciliation point).
+    - Flag `--max-run-cost <usd>` on the top-level + chat parser
+      (`hermes_cli/_parser.py`, `type=float`, `_inherited_flag`), forwarded via
+      `cmd_chat` → `cli.main(max_run_cost=...)` → `HermesCLI` → `AIAgent`, and
+      via `_launch_tui(max_run_cost=...)` → `HERMES_TUI_MAX_RUN_COST` →
+      `tui_gateway`'s `_cfg_max_run_cost()`.
+24. Added `axiom/docs/adr/ADR-0011-spend-cap-surfaces.md` "Adapted for the
+    Hermes baseline" section (the prime-era `parseArgs`/`tuiOptionsFrom`/
+    `sessionLedger` surface does not exist here; guard lands in the loop,
+    flag in `hermes_cli/main.py` + TUI launch args).
+
 ## Verified (how)
 
 - `git ls-remote origin` — main + 3 archive branches + tag all correct.
@@ -122,6 +148,17 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
   read `agent/usage_pricing.py` (+ `insights.py`, `aux_accounting.py`) and the
   `session_estimated_cost_usd` accumulator sites to confirm the ledger is
   present and the cap guard is absent.
+- Session 6 (port #5): red-first `tests/run_agent/test_max_run_cost.py`
+  (8 tests — pure-guard cases incl. `0` disables / no-usage provider / missing
+  attribute; a `finalize_turn` case asserting a `cost_limit` stop makes no
+  summary LLM call; and a loop-drive case with `build_turn_context` stubbed
+  asserting cap=0 → `api_calls == 0`, `turn_exit_reason == "cost_limit"`,
+  `completed is False`). All green via `scripts/run_tests.sh
+  tests/run_agent/test_max_run_cost.py -q`. Regression sweep (canonical
+  runner): turn_finalizer (4 files), delegate/delegate_cost_footer/
+  subagent_lifecycle, argparse-flag-propagation, relaunch, turn_context,
+  cli_new_session, single_query_session_finalize — all green. Parser smoke:
+  `--max-run-cost` parses to float at top-level and chat level, default None.
 
 ## Next steps (in order)
 
@@ -135,10 +172,18 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
    already price every call and never invent spend). No port.
 5. ~~Flag — prime-era automation stale~~ — resolved (session 5): docs now state
    the discipline is agent-enforced; porting the CI operator is deferred.
-6. **Port #5 — spend cap** (issue #65): hard pre-call `--max-run-cost <usd>`
-   guard reading `session_estimated_cost_usd`; `cost_limit` finish; flag on CLI
-   + TUI. Spec ADR-0011 (add an "Adapted for the Hermes baseline" section at
-   merge). Red-first: `tests/run_agent/test_max_run_cost.py`.
+6. ~~Port #5 — spend cap~~ — done (session 6; `agent/spend_cap.py` guard in
+   `conversation_loop.py`, `AIAgent(max_run_cost_usd=...)`,
+   `--max-run-cost <usd>` on CLI + TUI, subagents inherit the cap).
+7. **Porting the tracker Automation** (queued decision): the prime-era
+   `.github/workflows/triage.yml` + `issue-hygiene.yml` operators are absent
+   on this baseline. Porting them is a CI-infrastructure decision, not a code
+   port — see `axiom/docs/agents/issue-tracker.md` ("Automation"). Not yet
+   specced as an issue.
+8. **Upstream-merge hygiene**: `git fetch upstream && git merge upstream/main`
+   routinely (ADR-0087). Run `scripts/run_tests.sh` after each merge; the
+   known environmental failures (missing optional provider packages/creds +
+   FTS5/SQLite quirks) are not regressions.
 
 ## Environment quirks (verified)
 

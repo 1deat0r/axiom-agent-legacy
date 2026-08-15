@@ -502,6 +502,7 @@ def init_agent(
     args: list[str] | None = None,
     model: str = "",
     max_iterations: int = 90,  # Default tool-calling iterations (shared with subagents)
+    max_run_cost_usd: Optional[float] = None,  # USD spend cap (ADR-0011); None = no cap
     enabled_toolsets: List[str] = None,
     disabled_toolsets: List[str] = None,
     save_trajectories: bool = False,
@@ -2776,6 +2777,17 @@ def init_agent(
     agent.session_estimated_cost_usd = 0.0
     agent.session_cost_status = "unknown"
     agent.session_cost_source = "none"
+    # Spend cap (ADR-0011): launch property, None = no cap. Distinct from the
+    # accumulator above so reset_session_state() can zero the running cost
+    # without dropping a configured cap. Coerced to float here (the CLI
+    # forwards an argparse string; the guard compares against a float).
+    if max_run_cost_usd is not None:
+        try:
+            agent.max_run_cost_usd = float(max_run_cost_usd)
+        except (TypeError, ValueError):
+            agent.max_run_cost_usd = None
+    else:
+        agent.max_run_cost_usd = None
     
     # ── Ollama num_ctx injection ──
     # Ollama defaults to 2048 context regardless of the model's capabilities.

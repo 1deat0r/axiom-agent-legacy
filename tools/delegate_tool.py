@@ -1818,6 +1818,12 @@ def _build_child_agent(
                 acp_command=effective_acp_command,
                 acp_args=effective_acp_args,
                 max_iterations=max_iterations,
+                # Spend cap (ADR-0011): inherit the parent's per-run cap so a
+                # capped parent cannot spawn uncapped children. Per-run
+                # semantics (ADR-0061 §4): each child enforces its own cap
+                # against its own recorded spend; the parent fold of child
+                # cost (below) is the reconciliation point, not a shared budget.
+                max_run_cost_usd=getattr(parent_agent, "max_run_cost_usd", None),
 
                 reasoning_config=child_reasoning,
                 prefill_messages=getattr(parent_agent, "prefill_messages", None),

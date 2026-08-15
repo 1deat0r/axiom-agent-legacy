@@ -6340,6 +6340,23 @@ def _cfg_max_turns(cfg: dict, default: int) -> int:
     return int(agent_cfg.get("max_turns") or cfg.get("max_turns") or default)
 
 
+def _cfg_max_run_cost() -> Optional[float]:
+    """Return the TUI's spend cap (ADR-0011) or None for no cap.
+
+    Launch property only, forwarded through ``HERMES_TUI_MAX_RUN_COST`` by
+    ``hermes --tui --max-run-cost <usd>``. No config fallback — the cap is a
+    launch flag, not a session knob (ADR-0011).
+    """
+    raw = os.environ.get("HERMES_TUI_MAX_RUN_COST", "").strip()
+    if not raw:
+        return None
+    try:
+        value = float(raw)
+    except ValueError:
+        return None
+    return value
+
+
 def _parse_tui_skills_env() -> list[str]:
     raw = os.environ.get("HERMES_TUI_SKILLS", "")
     skills: list[str] = []
@@ -6865,6 +6882,7 @@ def _make_agent(
     return AIAgent(
         model=model,
         max_iterations=_cfg_max_turns(cfg, 500),
+        max_run_cost_usd=_cfg_max_run_cost(),
         provider=runtime.get("provider"),
         base_url=runtime.get("base_url"),
         api_key=runtime.get("api_key"),
