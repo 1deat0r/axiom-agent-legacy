@@ -81,12 +81,18 @@ dependencies = ["${dependencyName}"]
 function writeFakePython(filePath: string, importableModules: readonly string[]): void {
 	const cases = importableModules.map((moduleName) => `    "import ${moduleName}") exit 0 ;;`).join("\n");
 	const runtimeCase = importableModules.includes("rlm") ? '    *"_harness_methods"*) exit 0 ;;' : "";
+	const probeIpykernelOk = importableModules.includes("ipykernel") ? "true" : "false";
+	const probeRuntimeOk = importableModules.includes("rlm") ? "true" : "false";
 	writeExecutable(
 		filePath,
 		[
 			"#!/bin/sh",
 			'if [ "$1" = "-c" ]; then',
+			'  if [ -n "$FAKE_PYTHON_LOG" ]; then printf "%s\\n" "$2" >> "$FAKE_PYTHON_LOG"; fi',
 			'  case "$2" in',
+			'    *"_AXIOM_KERNEL_READINESS_PROBE_"*)',
+			`      printf '{"ipykernel":${probeIpykernelOk},"runtime":${probeRuntimeOk}}\\n'`,
+			"      exit 0 ;;",
 			cases,
 			runtimeCase,
 			"    *) exit 1 ;;",
@@ -461,6 +467,9 @@ dependencies = ["httpx"]
 				"#!/bin/sh",
 				'if [ "$1" = "-c" ]; then',
 				'  case "$2" in',
+				'    *"_AXIOM_KERNEL_READINESS_PROBE_"*)',
+				"      printf '{\"ipykernel\":true,\"runtime\":false}\\n'",
+				"      exit 0 ;;",
 				'    "import ipykernel"|"import rlm") exit 0 ;;',
 				"    *) exit 1 ;;",
 				"  esac",
