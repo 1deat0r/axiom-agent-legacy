@@ -26,12 +26,15 @@ tool would be dead here; the chain below is what keeps the tool alive.
 Two core tools, registered like read and write:
 
 - `web_search` — query plus optional result count. Scrapes DuckDuckGo html
-  first, then Bing, then calls the local Obscura MCP search as the last hop.
-  Returns one compact JSON block of `{rank, title, url, snippet, date?}`.
+  first, then Bing, then drives the local Obscura MCP browser as the last
+  hop (browser_navigate + browser_evaluate per engine, duckduckgo, bing,
+  google). Returns one compact JSON block of `{rank, title, url, snippet,
+  date?}`.
 - `web_fetch` — url plus optional char cap. Gates the URL through
   `checkUrlSafetyPinned` and connects with the gate-owned `fetchPinned`
   (ADR-0057, ADR-0066). Converts HTML to markdown in-repo. Falls back to
-  Obscura when the page yields no parseable content.
+  Obscura (browser_navigate + browser_markdown) when the page yields no
+  parseable content.
 
 Caps (the token-cost win): snippet 200 chars, results 10 max (default 5),
 fetch content 20000 chars default, hard truncation, no raw HTML in output.
@@ -65,5 +68,9 @@ Serper skill stays optional for keyed users.
   timeout around it and use a small pinned fetcher that overrides headers and
   destroys the socket on abort. Follow-up: signal and header support in the
   gate itself.
+- Live verification (2026-08-15): the native DuckDuckGo scrape and the
+  Obscura MCP fallback both work from this network. The Obscura search
+  fallback composes browser primitives on one MCP session, matching the
+  python client.
 - Deferred: robots.txt handling for `web_fetch`, time and region filters,
   on-disk caching, fetch rate limiting.

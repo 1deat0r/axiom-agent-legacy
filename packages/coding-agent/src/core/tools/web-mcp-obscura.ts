@@ -1,12 +1,15 @@
 import { VERSION } from "../../config.js";
+import { SEARCH_ENGINE_URLS, unwrapDdgUrl } from "./web-shared.js";
 import type { RawSearchResult } from "./web-search.js";
 
 /**
  * Minimal streamable-HTTP MCP client for the local Obscura server
  * (http://127.0.0.1:3000/mcp). Speaks just enough of the protocol for the
- * two fallback calls: tools/call websearch and tools/call fetch. Handles
- * both JSON and SSE response bodies. Errors throw; callers treat the
- * fallback as failed.
+ * fallback hops: browser_navigate + browser_evaluate for search, and
+ * browser_navigate + browser_markdown for fetch. Handles JSON and SSE
+ * response bodies and MCP isError results. All calls share one session so
+ * the navigate/evaluate pairs land in the same browser. Errors throw;
+ * callers treat the fallback as failed.
  */
 
 export interface ObscuraClientOptions {
@@ -85,12 +88,7 @@ function resultText(result: unknown): string {
 		.join("\n");
 }
 
-async function callTool(
-	toolName: string,
-	args: Record<string, unknown>,
-	options: ObscuraClientOptions,
-): Promise<unknown> {
-	const endpoint = options.endpoint ?? process.env.OBSCURA_MCP_URL ?? "http://127.0.0.1:3000/mcp";
+async function openSession(endpoint: string, options: ObscuraClientOptions): Promise<string | undefined> {
 	const init = await mcpRequest(
 		endpoint,
 		"initialize",
@@ -100,17 +98,70 @@ async function callTool(
 	if (init.msg.error) {
 		throw new Error(`Obscura MCP initialize failed: ${init.msg.error.message}`);
 	}
-	const call = await mcpRequest(
-		endpoint,
-		"tools/call",
-		{ name: toolName, arguments: args },
-		options,
-		init.sessionId ?? undefined,
-	);
+	return init.sessionId ?? undefined;
+}
+
+async function callToolInSession(
+	endpoint: string,
+	toolName: string,
+	args: Record<string, unknown>,
+	options: ObscuraClientOptions,
+	sessionId: string | undefined,
+): Promise<unknown> {
+	const call = await mcpRequest(endpoint, "tools/call", { name: toolName, arguments: args }, options, sessionId);
 	if (call.msg.error) {
 		throw new Error(`Obscura MCP ${toolName} failed: ${call.msg.error.message}`);
 	}
-	return call.msg.result;
+	const result = call.msg.result as { isError?: boolean } | undefined;
+	if (result && result.isError === true) {
+		throw new Error(`Obscura MCP ${toolName} failed: ${resultText(result)}`);
+	}
+	return result;
+}
+
+function resolveEndpoint(options: ObscuraClientOptions): string {
+	return options.endpoint ?? process.env.OBSCURA_MCP_URL ?? "http://127.0.0.1:3000/mcp";
+}
+
+/** Per-engine extraction expressions, mirroring the Obscura python client. */
+const EXTRACT_JS: Record<string, string> = {
+	duckduckgo:
+		"(() => { const out = []; for (const r of document.querySelectorAll('.result, [data-result]')) { const a = r.querySelector('a.result__a') || r.querySelector('h2 a'); if (!a) continue; const sn = r.querySelector('.result__snippet'); out.push({ title: a.innerText.trim(), url: a.href, snippet: sn ? sn.innerText.trim() : '' }); } return out; })()",
+	bing: "(() => { const out = []; for (const li of document.querySelectorAll('li.b_algo')) { const a = li.querySelector('h2 a'); if (!a) continue; const sn = li.querySelector('.b_caption p, p'); out.push({ title: a.innerText.trim(), url: a.href, snippet: sn ? sn.innerText.trim() : '' }); } return out; })()",
+	google:
+		"(() => { const out = []; for (const g of document.querySelectorAll('div.g, div[data-hveid]')) { const a = g.querySelector('a[href^=\"http\"]'); const h3 = g.querySelector('h3'); if (!a || !h3) continue; const sn = g.querySelector('.VwiC3b, [data-sncf], [style*=\"-webkit-line-clamp\"]'); out.push({ title: h3.innerText.trim(), url: a.href, snippet: sn ? sn.innerText.trim() : '' }); } return out; })()",
+};
+
+const FALLBACK_ENGINES = ["duckduckgo", "bing", "google"] as const;
+
+const FALLBACK_URLS: Record<(typeof FALLBACK_ENGINES)[number], (query: string) => string> = {
+	duckduckgo: SEARCH_ENGINE_URLS.duckduckgo,
+	bing: SEARCH_ENGINE_URLS.bing,
+	google: (q) => `https://www.google.com/search?q=${encodeURIComponent(q)}`,
+};
+
+interface ExtractedItem {
+	title?: string;
+	url?: string;
+	snippet?: string;
+}
+
+function coerceItems(raw: unknown): ExtractedItem[] {
+	const text = resultText(raw).trim();
+	if (!text.startsWith("[")) {
+		return [];
+	}
+	try {
+		const parsed = JSON.parse(text) as unknown;
+		if (!Array.isArray(parsed)) {
+			return [];
+		}
+		return parsed.filter(
+			(x): x is ExtractedItem => typeof x === "object" && x !== null,
+		);
+	} catch {
+		return [];
+	}
 }
 
 export async function obscuraSearch(
@@ -118,19 +169,31 @@ export async function obscuraSearch(
 	numResults: number,
 	options: ObscuraClientOptions = {},
 ): Promise<RawSearchResult[]> {
-	const result = await callTool("websearch", { query, num_results: numResults }, options);
-	const text = resultText(result);
-	if (!text.trim()) {
-		throw new Error("Obscura MCP websearch returned no text.");
-	}
-	const parsed = JSON.parse(text) as Array<{ title?: string; url?: string; snippet?: string }>;
-	const out: RawSearchResult[] = [];
-	for (const r of parsed) {
-		if (r.title && r.url) {
-			out.push({ title: r.title, url: r.url, snippet: r.snippet ?? "" });
+	const endpoint = resolveEndpoint(options);
+	const sessionId = await openSession(endpoint, options);
+	for (const engine of FALLBACK_ENGINES) {
+		try {
+			await callToolInSession(endpoint, "browser_navigate", { url: FALLBACK_URLS[engine](query) }, options, sessionId);
+			const raw = await callToolInSession(endpoint, "browser_evaluate", { expression: EXTRACT_JS[engine] }, options, sessionId);
+			const out: RawSearchResult[] = [];
+			for (const item of coerceItems(raw)) {
+				const url = unwrapDdgUrl(String(item.url ?? "").trim());
+				if (!url.startsWith("http") || !item.title) {
+					continue;
+				}
+				out.push({ title: String(item.title).trim(), url, snippet: String(item.snippet ?? "").trim() });
+				if (out.length >= numResults) {
+					break;
+				}
+			}
+			if (out.length > 0) {
+				return out;
+			}
+		} catch {
+			// Next engine. The last engine's failure is reported below.
 		}
 	}
-	return out;
+	throw new Error("Obscura MCP websearch found no results for the query.");
 }
 
 export async function obscuraFetchPage(
@@ -138,10 +201,13 @@ export async function obscuraFetchPage(
 	maxChars: number,
 	options: ObscuraClientOptions = {},
 ): Promise<{ title: string; markdown: string } | null> {
-	const result = await callTool("fetch", { url, fmt: "markdown", max_chars: maxChars }, options);
-	const text = resultText(result);
-	if (!text.trim()) {
+	const endpoint = resolveEndpoint(options);
+	const sessionId = await openSession(endpoint, options);
+	await callToolInSession(endpoint, "browser_navigate", { url }, options, sessionId);
+	const raw = await callToolInSession(endpoint, "browser_markdown", {}, options, sessionId);
+	const text = resultText(raw).trim();
+	if (!text) {
 		return null;
 	}
-	return { title: "", markdown: text };
+	return { title: "", markdown: text.length > maxChars ? text.slice(0, maxChars) : text };
 }

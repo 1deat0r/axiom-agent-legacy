@@ -20,6 +20,7 @@ import {
 	SEARCH_ENGINE_HOSTS,
 	SEARCH_ENGINE_URLS,
 	stripTagsInline,
+	unwrapDdgUrl,
 	type WebSearchEngineName,
 } from "./web-shared.js";
 
@@ -50,22 +51,6 @@ export interface WebSearchToolOptions {
 	gate?: GateFn;
 	fetcher?: PinnedFetcher;
 	gateOptions?: UrlSafetyOptions;
-}
-
-/** Unwrap DuckDuckGo redirect wrappers (//duckduckgo.com/l/?uddg=<target>). */
-export function unwrapDdgUrl(url: string): string {
-	if (!url.includes("duckduckgo.com/l/?")) {
-		return url;
-	}
-	const match = url.match(/[?&]uddg=([^&]+)/);
-	if (!match) {
-		return url;
-	}
-	try {
-		return decodeURIComponent(match[1]);
-	} catch {
-		return url;
-	}
 }
 
 /** Parse DuckDuckGo html-endpoint markup. The anomaly challenge page yields nothing. */

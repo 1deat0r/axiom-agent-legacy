@@ -80,9 +80,12 @@ Round 3 (settled under the user's go-ahead):
   attacks, DNS rebinding flips, pin pass-through, cap enforcement.
 - ADR-0074 plus CONTEXT.md term plus issue with readiness contract.
 
-Field finding (2026-08-15): the DuckDuckGo html endpoint serves an anomaly
-challenge from this network. Bing is live. The chain absorbs the failure:
-the DuckDuckGo parser returns zero results and Bing carries.
+Field findings (2026-08-15): curl to the DuckDuckGo html endpoint gets an
+anomaly challenge from this network, but the tool's pinned node fetch gets
+real results. Bing is live. The parser treats the anomaly page as zero
+results, so the chain absorbs the failure either way. The Obscura fallback
+uses browser_navigate plus browser_evaluate (no websearch tool exists on the
+server); verified live.
 
 ## Round 2 questions
 

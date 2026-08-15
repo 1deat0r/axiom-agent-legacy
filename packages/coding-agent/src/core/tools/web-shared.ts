@@ -48,6 +48,22 @@ export function resolveNumberEnv(name: string, fallback: number): number {
 	return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+/** Unwrap DuckDuckGo redirect wrappers (//duckduckgo.com/l/?uddg=<target>). */
+export function unwrapDdgUrl(url: string): string {
+	if (!url.includes("duckduckgo.com/l/?")) {
+		return url;
+	}
+	const match = url.match(/[?&]uddg=([^&]+)/);
+	if (!match) {
+		return url;
+	}
+	try {
+		return decodeURIComponent(match[1]);
+	} catch {
+		return url;
+	}
+}
+
 /** Strip all tags, collapse whitespace. Used on extracted text fragments. */
 export function stripTagsInline(s: string): string {
 	return s
