@@ -23,6 +23,9 @@ fi
 export PI_NO_LOCAL_LLM=1
 
 # Unset API keys (see packages/ai/src/stream.ts getEnvApiKey)
+unset NO_COLOR FORCE_COLOR
+# Color env is neutralized so node children never print the
+# NO_COLOR/FORCE_COLOR conflict warning into stderr that tests assert empty.
 unset ANTHROPIC_API_KEY ANTHROPIC_OAUTH_TOKEN OPENAI_API_KEY GEMINI_API_KEY
 unset GROQ_API_KEY CEREBRAS_API_KEY XAI_API_KEY OPENROUTER_API_KEY
 unset ZAI_API_KEY MISTRAL_API_KEY MINIMAX_API_KEY MINIMAX_CN_API_KEY
@@ -62,3 +65,12 @@ unset AXIOM_FENCE_ALLOW AXIOM_FENCE_ALLOW_HOSTS
 
 echo "Running tests without API keys or live-agent env..."
 npm test
+
+# The kernel-heavy phase runs the tagged bridge suites serialized (parallel
+# kernel boots starve each other, see vitest.config.ts and ADR-0075).
+# The floor is the gate: both phases must be green.
+npm run test:kernel --workspace packages/coding-agent
+
+# The process-stress phase runs the wall-clock-sensitive daemon suites
+# serialized (parallel load races the respawn checks, see ADR-0075).
+npm run test:process-stress --workspace packages/coding-agent

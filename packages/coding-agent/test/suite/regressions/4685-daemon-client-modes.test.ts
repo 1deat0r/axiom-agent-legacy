@@ -72,6 +72,12 @@ async function runCli(
 	const child = spawn(process.execPath, [tsxPath, cliPath, ...args], {
 		env: {
 			...process.env,
+			// Neutral color env: when the parent carries both NO_COLOR and
+			// FORCE_COLOR, Node prints a warning to every child's stderr and
+			// the empty-stderr assertions below fail. This suite owns the
+			// child's env, so it must pin the vars it asserts against.
+			NO_COLOR: "1",
+			FORCE_COLOR: undefined,
 			TSX_TSCONFIG_PATH: repoTsconfigPath,
 			[ENV_AGENT_DIR]: options.agentDir,
 			PI_SKIP_VERSION_CHECK: "1",
@@ -116,7 +122,7 @@ async function runRpc(
 	options: { trailingNewline?: boolean } = {},
 ): Promise<{ stdout: object[]; stderr: string }> {
 	const child = spawn(process.execPath, [tsxPath, fixturePath], {
-		env: { ...process.env, TSX_TSCONFIG_PATH: repoTsconfigPath },
+		env: { ...process.env, NO_COLOR: "1", FORCE_COLOR: undefined, TSX_TSCONFIG_PATH: repoTsconfigPath },
 		stdio: ["pipe", "pipe", "pipe"],
 	});
 	children.add(child);

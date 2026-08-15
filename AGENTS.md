@@ -35,13 +35,13 @@ port per `docs/ports.md`. Both archives are seed corn, not working trunks.
 - For a single vitest file:
   `node "$(git rev-parse --show-toplevel)/node_modules/vitest/dist/cli.js" --run test/<file>.test.ts`
   from the package root. `packages/tui` uses `node:test` instead.
-- Sandbox note: daemon/worker suites that hard-link the node binary
-  (4603/4685) fail with EXDEV in this sandbox's btrfs subvolume layout and
-  pass on normal filesystems; record as known-fail with reason, never mute.
-  The daemon-serialized-refine-process suite is REAL and green: its earlier
-  failures were the fork's built-in-extension fold poisoning the daemon
-  decision (hasProcessLocalExtensionFactories always true), fixed 2026-08-15
-  to count only programmatic factories (upstream semantics).
+- Sandbox note (updated 2026-08-15, ADR-0075): the known-fail allowlist is
+  empty. The 4603 suite falls back from hard-linking the node binary to a
+  copy on EXDEV (btrfs subvolume layout), the 4685 suite pins a neutral
+  color env for its spawned children, and the kernel host-bridge suites
+  carry a documented 120s ceiling for parallel-floor contention. test.sh
+  scrubs NO_COLOR/FORCE_COLOR. The floor is the gate: any failure is real.
+  The 4603 shutdown regression needs the lsof binary on the host.
 
 ## Ritual (from SOUL.md, binding here)
 

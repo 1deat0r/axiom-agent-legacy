@@ -1,6 +1,7 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import {
 	chmodSync,
+	copyFileSync,
 	existsSync,
 	linkSync,
 	mkdirSync,
@@ -127,7 +128,14 @@ async function createPaths(): Promise<TestPaths> {
 	const harness = await createHarness();
 	harnesses.push(harness);
 	const executablePath = join(harness.tempDir, APP_NAME);
-	linkSync(process.execPath, executablePath);
+	try {
+		linkSync(process.execPath, executablePath);
+	} catch (error) {
+		// btrfs subvolume layouts make the hard link cross-device (EXDEV).
+		// A copy is functionally equivalent for spawning the worker binary.
+		if ((error as NodeJS.ErrnoException).code !== "EXDEV") throw error;
+		copyFileSync(process.execPath, executablePath);
+	}
 	const socketTmpDir = `/tmp/eng-4603-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 	mkdirSync(socketTmpDir, { recursive: true, mode: 0o700 });
 	socketTempDirs.add(socketTmpDir);
@@ -752,7 +760,11 @@ function delay(ms: number): Promise<void> {
 	return new Promise((resolveDelay) => setTimeout(resolveDelay, ms));
 }
 
-describe("ENG-4603 worker recovery convergence", () => {
+// This suite spawns real daemons and asserts wall-clock process lifecycles.
+// It is tagged process-stress so the sharded default run excludes it and
+// test:process-stress runs it serialized; under parallel floor load the
+// daemon respawn machinery races the 11s post-shutdown checks.
+describe("ENG-4603 worker recovery convergence", { tags: ["process-stress"] }, () => {
 	it("allows only the current generation to replace a crashed resident worker", async () => {
 		if (process.platform === "win32") return;
 		const paths = await createPaths();

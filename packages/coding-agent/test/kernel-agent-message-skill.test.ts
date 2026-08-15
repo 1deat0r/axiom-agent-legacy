@@ -26,7 +26,16 @@ type LateHandlerRetentionHost = {
 	) => void;
 };
 
-describe("agent-message skill over the kernel host bridge", () => {
+// The host bridge round-trips through a real IPython kernel. Under the
+// parallel load of the full ./test.sh floor, delivery can lag past the
+// default 30s window (observed once: timeout at 30s, green standalone in
+// ~4s). The generous ceiling keeps the suite honest without flaking on a
+// busy machine.
+// This suite boots real IPython kernels. It is tagged kernel-heavy so the
+// default sharded run excludes it (parallel kernel boots starve each other,
+// see vitest.config.ts) and test:kernel runs it serialized. The concurrency
+// stall itself is tracked in issue #52.
+describe("agent-message skill over the kernel host bridge", { tags: ["kernel-heavy"], timeout: 180_000 }, () => {
 	let tempDir: string;
 	let provisioner: IpythonKernelProvisioner | undefined;
 

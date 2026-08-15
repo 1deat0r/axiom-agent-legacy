@@ -19,7 +19,11 @@ function bundledAttachImageSkill(): PythonSkillRuntimeInfo {
 	};
 }
 
-describe("attach-image skill over the kernel host bridge", () => {
+// This suite boots real IPython kernels. It is tagged kernel-heavy so the
+// default sharded run excludes it (parallel kernel boots starve each other,
+// see vitest.config.ts) and test:kernel runs it serialized. The concurrency
+// stall itself is tracked in issue #52.
+describe("attach-image skill over the kernel host bridge", { tags: ["kernel-heavy"], timeout: 180_000 }, () => {
 	let tempDir: string;
 	let provisioner: IpythonKernelProvisioner | undefined;
 
