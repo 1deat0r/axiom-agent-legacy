@@ -17,6 +17,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const PROVIDER_KEY_ENV_VARS = ["DEEPSEEK_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"];
 export const GATEWAY_TOKEN_ENV_VARS = ["AXIOM_TELEGRAM_BOT_TOKEN", "AXIOM_DISCORD_BOT_TOKEN", "AXIOM_SLACK_BOT_TOKEN"];
+export const SOCKET_MODE_TOKEN_ENV_VARS = ["AXIOM_SLACK_APP_TOKEN"];
 export const KERNEL_PYTHON_ENV_VAR = "AXIOM_KERNEL_PYTHON";
 
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -319,6 +320,28 @@ async function runGatewayDelivery(ctx) {
 }
 
 /**
+ * One probe against the Socket Mode surface (ADR-0062): apps.connections.open
+ * proves the app token is live and returns the websocket url. The REST-only
+ * gateway-delivery check never touches this surface. Never throws.
+ */
+async function runSlackSocketSurface(ctx) {
+	if (!present(ctx.env, "AXIOM_SLACK_APP_TOKEN")) {
+		return { ok: false, detail: "no socket-mode app token present (plan should have skipped this check)" };
+	}
+	return probeTransport(
+		"slack socket mode",
+		"https://slack.com/api/apps.connections.open",
+		{ Authorization: `Bearer ${ctx.env.AXIOM_SLACK_APP_TOKEN}`, "Content-Type": "application/json" },
+		{},
+		(json, status, raw) =>
+			json?.ok === true && typeof json?.url === "string" && json.url.length > 0
+				? { ok: true, text: "apps.connections.open ok:true with a websocket url" }
+				: { ok: false, text: `apps.connections.open ok:false (HTTP ${status}): ${truncate(raw, 160)}` },
+		GATEWAY_PROBE_TIMEOUT_MS,
+	);
+}
+
+/**
  * The catalog. Each check names what it proves, which env vars it needs,
  * and what its output looks like when it passes.
  */
@@ -377,6 +400,16 @@ export const CHECKS = [
 		expectedOutput:
 			"Telegram: getMe ok:true with the bot username. Discord: users/@me returns the bot id. Slack: auth.test ok:true. Every configured token must pass.",
 		run: runGatewayDelivery,
+	},
+	{
+		id: "slack-socket-mode",
+		name: "Slack Socket Mode surface",
+		purpose:
+			"Proves the Socket Mode app token is live and the websocket surface reachable (apps.connections.open returns a socket url). The REST-only gateway-delivery check never touches this surface, which is the gap ADR-0062's opt-in opened. A full socket receive round-trip stays the operator's manual pass (docs/live-verification.md).",
+		envVars: { anyOf: SOCKET_MODE_TOKEN_ENV_VARS },
+		expectedOutput:
+			"Slack apps.connections.open ok:true with a websocket url. The full socket receive loop stays the operator's manual pass (docs/live-verification.md).",
+		run: runSlackSocketSurface,
 	},
 ];
 

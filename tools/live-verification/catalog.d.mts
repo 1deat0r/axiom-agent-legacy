@@ -56,6 +56,7 @@ export interface Summary {
 
 export declare const PROVIDER_KEY_ENV_VARS: string[];
 export declare const GATEWAY_TOKEN_ENV_VARS: string[];
+export declare const SOCKET_MODE_TOKEN_ENV_VARS: string[];
 export declare const KERNEL_PYTHON_ENV_VAR: string;
 export declare const CHECKS: Check[];
 

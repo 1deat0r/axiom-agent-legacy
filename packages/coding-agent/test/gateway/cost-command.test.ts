@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { handleCostCommand, newestSessionFile } from "../../src/cli/cost-command.js";
 import { MemoryActiveProjectStore } from "../../src/gateway/active-project.js";
 import { buildGatewayCostReport, costCommand } from "../../src/gateway/commands/cost.js";
+import { dispatchCommand } from "../../src/gateway/commands/index.js";
 import { sessionIdForChannel } from "../../src/gateway/completion.js";
 import type { GatewayCommandContext } from "../../src/gateway/types.js";
 
@@ -61,6 +62,14 @@ async function home(): Promise<string> {
 }
 
 describe("gateway /cost command", () => {
+	it("advertises /cost in /help", () => {
+		// Discoverability: /cost is registered and dispatchable but was never
+		// listed in the gateway help text. The cron pattern (ADR-0022 note)
+		// pins every registered command's help line with a test.
+		expect(dispatchCommand("/help", { profile: "default", axiomHomeDir: "/tmp", projectHome: "/tmp" })).toContain(
+			"/cost",
+		);
+	});
 	it("shows the channel session cost, lifetime cost, cap, and model bucket", async () => {
 		const dir = await home();
 		try {

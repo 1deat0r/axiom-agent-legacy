@@ -55,6 +55,14 @@ send-only transports to reach it.
   targets; live cross-platform verification is operator-gated (needs tokens for
   more than one platform). Websocket/Socket-Mode realtime and relay/mirror
   continuity remain separate follow-ups.
+- **Signal can never be a fan-out target (recorded 2026-08-15, channels
+  milestone).** Sibling transports are built from present tokens
+  (`buildFanOutTransports`: telegram/discord/slack only), and signal is not
+  token-based — it is an operator-side linked device (the signal-cli binary
+  with an account, and the default transport). A signal sibling would need a
+  new presence gate and send-only wiring, which the channels milestone chose
+  not to build; if fan-out to signal is ever wanted, it is a one-issue
+  follow-up.
 - **Baseline drift (recorded):** branch is merged current with the baseline tip
   (see ADR-0022); routine merges continue under AGENTS.md cadence.
 - Test suite grows: cross-transport fan-out routing + ledger labelling + CLI

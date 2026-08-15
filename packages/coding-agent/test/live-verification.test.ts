@@ -12,6 +12,7 @@ import {
 	missingRequirements,
 	PROVIDER_KEY_ENV_VARS,
 	plan,
+	SOCKET_MODE_TOKEN_ENV_VARS,
 	summarize,
 } from "../../../tools/live-verification/catalog.mjs";
 
@@ -21,7 +22,12 @@ const RUN_MJS = join(REPO_ROOT, "tools/live-verification/run.mjs");
 /** Test environment with every live credential scrubbed. */
 function keylessEnv(): CheckEnv {
 	const env: CheckEnv = { ...process.env };
-	for (const key of [...PROVIDER_KEY_ENV_VARS, ...GATEWAY_TOKEN_ENV_VARS, "AXIOM_KERNEL_PYTHON"]) {
+	for (const key of [
+		...PROVIDER_KEY_ENV_VARS,
+		...GATEWAY_TOKEN_ENV_VARS,
+		...SOCKET_MODE_TOKEN_ENV_VARS,
+		"AXIOM_KERNEL_PYTHON",
+	]) {
 		delete env[key];
 	}
 	return env;
@@ -38,8 +44,14 @@ function readyDeps(overrides: Partial<CheckDeps> = {}): CheckDeps {
 }
 
 describe("live-verification catalog", () => {
-	it("catalogs exactly the four required live checks", () => {
-		expect(CHECKS.map((check) => check.id)).toEqual(["provider-chat", "agent-run", "rlm-kernel", "gateway-delivery"]);
+	it("catalogs exactly the five required live checks", () => {
+		expect(CHECKS.map((check) => check.id)).toEqual([
+			"provider-chat",
+			"agent-run",
+			"rlm-kernel",
+			"gateway-delivery",
+			"slack-socket-mode",
+		]);
 	});
 
 	it("gives every check a name, a purpose, and an expected output", () => {
@@ -68,6 +80,11 @@ describe("live-verification catalog", () => {
 	it("gates gateway delivery on any configured transport token", () => {
 		const check = CHECKS.find((entry) => entry.id === "gateway-delivery");
 		expect(check?.envVars).toEqual({ anyOf: GATEWAY_TOKEN_ENV_VARS });
+	});
+
+	it("gates socket mode on the Slack app token", () => {
+		const check = CHECKS.find((entry) => entry.id === "slack-socket-mode");
+		expect(check?.envVars).toEqual({ anyOf: SOCKET_MODE_TOKEN_ENV_VARS });
 	});
 });
 
@@ -106,13 +123,18 @@ describe("plan", () => {
 		const env: CheckEnv = { DEEPSEEK_API_KEY: "k" };
 		const { runnable, skipped } = plan(CHECKS, env, readyDeps());
 		expect(runnable.map((check) => check.id)).toEqual(["provider-chat", "agent-run"]);
-		expect(skipped.map((entry) => entry.check.id).sort()).toEqual(["gateway-delivery", "rlm-kernel"]);
+		expect(skipped.map((entry) => entry.check.id).sort()).toEqual([
+			"gateway-delivery",
+			"rlm-kernel",
+			"slack-socket-mode",
+		]);
 	});
 
-	it("runs all four checks when keys, tokens, and a kernel python are present", () => {
+	it("runs all five checks when keys, tokens, and a kernel python are present", () => {
 		const env: CheckEnv = {
 			DEEPSEEK_API_KEY: "k",
 			AXIOM_TELEGRAM_BOT_TOKEN: "t",
+			AXIOM_SLACK_APP_TOKEN: "a",
 			AXIOM_KERNEL_PYTHON: "/usr/bin/python3",
 		};
 		const { runnable } = plan(CHECKS, env, readyDeps({ resolveKernelPython: () => "/usr/bin/python3" }));
