@@ -13,10 +13,25 @@ import {
 } from "../modes/daemon/daemon-protocol.js";
 import { defaultDaemonSocketDir, defaultDaemonSocketPath } from "../modes/daemon/daemon-socket.js";
 import { acquireDaemonShutdownAdmission } from "../modes/daemon/daemon-supervisor-ownership.js";
-import type { DaemonWorkerDescriptor } from "../modes/daemon/daemon-worker-protocol.js";
+import {
+	DAEMON_WORKER_SUPERVISOR_SOCKET_ENV,
+	type DaemonWorkerDescriptor,
+} from "../modes/daemon/daemon-worker-protocol.js";
 import { signalProcessGroupOrProcess } from "../utils/child-process.js";
 import { formatDaemonListTable } from "./daemon-ps-format.js";
 import { promptYesNo } from "./daemon-stop-confirm.js";
+
+/**
+ * When set to "1", scanListeningDaemons reports only sockets under
+ * directories this CLI invocation owns: the default socket dir (which honors
+ * TMPDIR) plus every registry-tracked supervisor socket dir. Sandboxed
+ * invocations (test harnesses that scope TMPDIR and the supervisor registry)
+ * set this so the system-wide `ss` scan cannot leak a production daemon on
+ * the machine's real default socket dir into `shutdown --force` /
+ * `doctor --fix` reach. Production invocations never set it, so custom
+ * `--daemon-socket` daemons remain discoverable for real users.
+ */
+export const DAEMON_DISCOVERY_SCOPED_ENV = "AXIOM_INTERNAL_DAEMON_DISCOVERY_SCOPED";
 
 /**
  * `daemon ps` discovers every axiom daemon on the machine, not just the
@@ -178,9 +193,13 @@ function scanListeningDaemons(): DiscoveredDaemonProcess[] {
 	if (process.platform === "win32") {
 		return [];
 	}
+	const scoped = process.env[DAEMON_DISCOVERY_SCOPED_ENV] === "1";
+	const scope = scoped ? discoveryScopeDirs() : undefined;
+	const restrict = (daemons: DiscoveredDaemonProcess[]): DiscoveredDaemonProcess[] =>
+		scope ? scopeDiscoveredDaemons(daemons, scope) : daemons;
 	const ss = spawnSync("ss", ["-lxp"], { encoding: "utf8" });
 	if (!ss.error && ss.status === 0 && typeof ss.stdout === "string") {
-		return enrichUptimes(parseSsListeners(ss.stdout, APP_NAME));
+		return enrichUptimes(restrict(parseSsListeners(ss.stdout, APP_NAME)));
 	}
 	const lsof = spawnSync("lsof", ["-nP", "-F", "pn", "-U", "-a", "-c", APP_NAME], { encoding: "utf8" });
 	const byName = !lsof.error && typeof lsof.stdout === "string" ? parseLsofListeners(lsof.stdout) : [];
@@ -197,7 +216,36 @@ function scanListeningDaemons(): DiscoveredDaemonProcess[] {
 			}
 		}
 	}
-	return enrichUptimes(mergeDiscoveredDaemonProcesses(byName, byPid));
+	return enrichUptimes(restrict(mergeDiscoveredDaemonProcesses(byName, byPid)));
+}
+
+/**
+ * Directories this CLI invocation owns. Under scoped discovery
+ * (DAEMON_DISCOVERY_SCOPED_ENV), the system-wide scan is filtered to sockets
+ * under these directories: the default socket dir (TMPDIR-honoring, so a
+ * sandboxed invocation only sees its own dir) and the directories of
+ * registry-tracked supervisor sockets (registry-honoring).
+ */
+function discoveryScopeDirs(): Set<string> {
+	const dirs = new Set<string>([normalizeSocketPath(defaultDaemonSocketDir())]);
+	// A sandboxed invocation declares its own socket path through the same env
+	// the daemon uses to bind it; keep listeners on that path visible.
+	const envSocket = process.env[DAEMON_WORKER_SUPERVISOR_SOCKET_ENV];
+	if (envSocket) {
+		dirs.add(dirname(normalizeSocketPath(envSocket)));
+	}
+	for (const worker of findAllTrackedWorkers()) {
+		dirs.add(dirname(normalizeSocketPath(worker.descriptor.supervisorSocketPath)));
+	}
+	return dirs;
+}
+
+/** Keep only discovered sockets under directories the invocation owns. */
+export function scopeDiscoveredDaemons(
+	daemons: readonly DiscoveredDaemonProcess[],
+	knownDirs: ReadonlySet<string>,
+): DiscoveredDaemonProcess[] {
+	return daemons.filter((daemon) => knownDirs.has(dirname(normalizeSocketPath(daemon.socketPath))));
 }
 
 function isDaemonProcessListening(pid: number, socketPath: string): boolean {

@@ -5,6 +5,7 @@ import {
 	existsSync,
 	linkSync,
 	mkdirSync,
+	mkdtempSync,
 	readdirSync,
 	readFileSync,
 	renameSync,
@@ -12,9 +13,11 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { createConnection, type Socket } from "node:net";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fromAny, fromPartial } from "@total-typescript/shoehorn";
 import { afterEach, describe, expect, it } from "vitest";
+import { DAEMON_DISCOVERY_SCOPED_ENV } from "../../../src/cli/daemon-ps.js";
 import { APP_NAME, ENV_AGENT_DIR } from "../../../src/config.js";
 import { getProcessStartId } from "../../../src/core/session-lease.js";
 import { DaemonAgentConnection } from "../../../src/modes/agent-connection/daemon-agent-connection.js";
@@ -75,7 +78,7 @@ interface ProcessHandle {
 interface FixtureProcessIdentity {
 	pid: number;
 	processStartId: string;
-	role: "client" | "supervisor" | "worker";
+	role: "client" | "decoy" | "supervisor" | "worker";
 }
 
 interface FixtureProcessSnapshot {
@@ -93,6 +96,7 @@ interface TestPaths {
 }
 
 const fixturePath = resolve(__dirname, "../../fixtures/eng-4600-supervisor-fixture.ts");
+const decoyFixturePath = resolve(__dirname, "../../fixtures/eng-4603-decoy-listener-fixture.ts");
 const fauxExtensionPath = resolve(__dirname, "../../fixtures/eng-4600-faux-extension.ts");
 const cliPath = resolve(__dirname, "../../../src/cli.ts");
 const tsxPath = resolve(__dirname, "../../../../../node_modules/tsx/dist/cli.mjs");
@@ -559,6 +563,19 @@ function waitForType<T extends FixtureMessage["type"]>(
 		});
 }
 
+async function waitForStdout(handle: ProcessHandle, needle: string, timeoutMs = 15_000): Promise<void> {
+	const deadline = Date.now() + timeoutMs;
+	while (!handle.stdout.includes(needle)) {
+		if (Date.now() > deadline) {
+			throw new Error(`Timed out waiting for stdout ${needle}\n${handle.stderr}`);
+		}
+		if (handle.child.exitCode !== null || handle.child.signalCode !== null) {
+			throw new Error(`Process exited before printing ${needle}\n${handle.stderr}`);
+		}
+		await delay(50);
+	}
+}
+
 function waitForExit(handle: ProcessHandle, timeoutMs = 30_000): Promise<void> {
 	if (handle.child.exitCode !== null || handle.child.signalCode !== null) {
 		return Promise.resolve();
@@ -695,6 +712,8 @@ async function runCli(
 				...extraEnv,
 				[supervisorRegistryDirEnv]: paths.registryDir,
 				[ENV_AGENT_DIR]: paths.agentDir,
+				[DAEMON_WORKER_SUPERVISOR_SOCKET_ENV]: paths.socketPath,
+				[DAEMON_DISCOVERY_SCOPED_ENV]: "1",
 				PI_OFFLINE: "1",
 				TMPDIR: paths.socketTmpDir,
 				TSX_TSCONFIG_PATH: tsconfigPath,
@@ -1083,4 +1102,39 @@ describe("ENG-4603 worker recovery convergence", { tags: ["process-stress"] }, (
 			expect(result.stdout).toBe("No background services found.\n");
 		}
 	}, 150_000);
+
+	it("scoped discovery keeps shutdown --force from reaching a daemon outside the sandbox", async () => {
+		const paths = await createPaths();
+		// A production-like daemon bound OUTSIDE the scoped socket dirs. It runs
+		// under APP_NAME, so without scoped discovery the system-wide ss scan
+		// finds it and shutdown --force would kill it (the 2026-08-15 incident:
+		// the full floor killed the live operator daemon mid-session).
+		const decoyDir = mkdtempSync(join(tmpdir(), "eng-4603-decoy-"));
+		const decoySocketPath = join(decoyDir, "daemon.sock");
+		const decoy = trackProcess(
+			spawn(paths.executablePath, [tsxPath, decoyFixturePath, decoySocketPath], {
+				cwd: paths.agentDir,
+				env: { ...process.env, PI_OFFLINE: "1" },
+				stdio: ["ignore", "pipe", "pipe"],
+			}),
+			"decoy",
+		);
+		try {
+			await waitForStdout(decoy, "decoy-listening");
+			const decoyPid = Number.parseInt(decoy.stdout.match(/decoy-listening \S+ (\d+)/)?.[1] ?? "", 10);
+			if (!Number.isSafeInteger(decoyPid) || decoyPid <= 0) {
+				throw new Error(`Could not parse decoy listener pid from: ${decoy.stdout}`);
+			}
+			const decoyStartId = getProcessStartId(decoyPid);
+			const shutdown = await runCli(paths, ["shutdown", "--force", "--json"], 60_000);
+			expect(shutdown.code).toBe(0);
+			const result = fromPartial<{ stopped: Array<{ socketPath: string }> }>(JSON.parse(shutdown.stdout));
+			expect(result.stopped.some((entry) => entry.socketPath === decoySocketPath)).toBe(false);
+			expect(exactProcessIsAlive(decoyPid, decoyStartId)).toBe(true);
+		} finally {
+			decoy.child.kill("SIGTERM");
+			await waitForExit(decoy);
+			rmSync(decoyDir, { recursive: true, force: true, maxRetries: 50, retryDelay: 50 });
+		}
+	}, 60_000);
 });

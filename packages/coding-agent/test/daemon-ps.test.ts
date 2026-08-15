@@ -12,6 +12,7 @@ import {
 	planReap,
 	planShutdownAll,
 	planShutdownConfirmation,
+	scopeDiscoveredDaemons,
 	sortDaemons,
 	verifyHelloSupervisorPid,
 } from "../src/cli/daemon-ps.js";
@@ -267,3 +268,33 @@ function makeDaemon(options: Partial<DaemonInfo> & { socketPath: string; status:
 		...options,
 	};
 }
+
+describe("scopeDiscoveredDaemons", () => {
+	it("keeps sockets under owned directories and drops foreign ones", () => {
+		const daemons = [
+			{ pid: 1, socketPath: "/tmp/scoped/axiom-1000/daemon.sock" },
+			{ pid: 2, socketPath: "/tmp/scoped/harness/daemon.sock" },
+			{ pid: 3, socketPath: "/tmp/axiom-1000/daemon.sock" },
+			{ pid: 4, socketPath: "/tmp/decoy/daemon.sock" },
+		];
+		expect(scopeDiscoveredDaemons(daemons, new Set(["/tmp/scoped/axiom-1000", "/tmp/scoped/harness"]))).toEqual([
+			{ pid: 1, socketPath: "/tmp/scoped/axiom-1000/daemon.sock" },
+			{ pid: 2, socketPath: "/tmp/scoped/harness/daemon.sock" },
+		]);
+	});
+
+	it("drops everything when no directories are owned", () => {
+		expect(scopeDiscoveredDaemons([{ pid: 1, socketPath: "/tmp/anything.sock" }], new Set())).toEqual([]);
+	});
+
+	it("matches directory names exactly, not by path prefix", () => {
+		// /tmp/decoy must not admit /tmp/decoy-other; dirname equality is exact.
+		const daemons = [
+			{ pid: 1, socketPath: "/tmp/decoy/daemon.sock" },
+			{ pid: 2, socketPath: "/tmp/decoy-other/daemon.sock" },
+		];
+		expect(scopeDiscoveredDaemons(daemons, new Set(["/tmp/decoy"]))).toEqual([
+			{ pid: 1, socketPath: "/tmp/decoy/daemon.sock" },
+		]);
+	});
+});
