@@ -200,10 +200,20 @@ describe("grep tool - errors and edges", () => {
 		await expect(execute({ pattern: "([", mode: "content" }, ops)).rejects.toThrow(/bad regex/);
 	});
 
+	it("surfaces the output-cap message when ripgrep is killed without an abort", async () => {
+		const ops = makeOps({
+			runRg: async () => ({ code: null, stdout: "", stderr: "ripgrep output exceeded the cap; narrow the search" }),
+		});
+		await expect(execute({ pattern: "x", mode: "content" }, ops)).rejects.toThrow(/narrow the search/);
+	});
+
 	it("rejects when the abort signal fires", async () => {
 		const controller = new AbortController();
 		const ops = makeOps({
-			runRg: async () => ({ code: null, stdout: "", stderr: "" }),
+			runRg: async () => {
+				controller.abort();
+				return { code: null, stdout: "", stderr: "" };
+			},
 		});
 		await expect(execute({ pattern: "x" }, ops, controller.signal)).rejects.toThrow(/aborted/i);
 	});

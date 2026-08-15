@@ -80,6 +80,7 @@ export function createDefaultGrepOperations(rgPath: string): GrepOperations {
 					stdout += chunk.toString();
 					if (stdout.length > GREP_MAX_RG_OUTPUT_BYTES && !overflow) {
 						overflow = true;
+						stderr = `ripgrep output exceeded the ${GREP_MAX_RG_OUTPUT_BYTES} byte cap; narrow the search`;
 						child.kill();
 					}
 				});
@@ -127,6 +128,13 @@ function formatFilePath(filePath: string, searchPath: string, isDirectory: boole
 
 export function effectiveLimit(limit: number | undefined): number {
 	return Math.max(1, Math.min(limit ?? GREP_DEFAULT_LIMIT, GREP_MAX_LIMIT));
+}
+
+/** Map a killed ripgrep run to the right error: abort, or the output cap. */
+function killedByResult(result: { stderr: string }, signal?: AbortSignal): Error {
+	if (signal?.aborted) return new Error("Operation aborted");
+	const message = result.stderr.trim();
+	return new Error(message || "ripgrep was interrupted");
 }
 
 /** Parse one `rg --json` stdout line into a match event, or null. */
@@ -188,7 +196,7 @@ export async function runGrepSearch(
 			args = ["--files-with-matches", ...buildCommonArgs(input.pattern, searchPath, input)];
 			result = await run(args);
 		}
-		if (result.code === null) throw new Error("Operation aborted");
+		if (result.code === null) throw killedByResult(result, signal);
 		if (result.code === 2) {
 			throw new Error(result.stderr.trim() || "ripgrep failed");
 		}
@@ -211,7 +219,7 @@ export async function runGrepSearch(
 		...buildCommonArgs(input.pattern, searchPath, input),
 	];
 	const result = await run(args);
-	if (result.code === null) throw new Error("Operation aborted");
+	if (result.code === null) throw killedByResult(result, signal);
 	if (result.code === 2) {
 		throw new Error(result.stderr.trim() || "ripgrep failed");
 	}

@@ -48,7 +48,11 @@ All commands run in a bash cell from the repo root.
 ast-grep run --pattern 'function $NAME($$$ARGS) { $$$BODY }' --lang ts --json
 ```
 
-Add `--filter NAME=parseConfig` to keep only one name.
+To keep only one name, put the name in the pattern:
+
+```bash
+ast-grep run --pattern 'function parseConfig($$$ARGS) { $$$BODY }' --lang ts --json
+```
 
 ### Find every call site of a function
 
@@ -64,8 +68,12 @@ ast-grep run --pattern 'new Handler($$$ARGS)' --lang ts --json
 
 ### Find a pattern in many languages at once
 
+Run one command per language. The ast-grep CLI accepts one `--lang` per run:
+
 ```bash
-ast-grep run --pattern '$FUNC($$$ARGS)' --lang js --lang ts --json
+for lang in js ts; do
+  ast-grep run --pattern '$FUNC($$$ARGS)' --lang "$lang" --json
+done
 ```
 
 ## Rules
@@ -73,10 +81,10 @@ ast-grep run --pattern '$FUNC($$$ARGS)' --lang js --lang ts --json
 - Use `--json` always. Parse the output in the IPython kernel when you need
   to filter or count.
 - One pattern per run. A metavariable is `$NAME` (one node) or `$$$NAME`
-  (many nodes). They bind to syntax nodes, never to text.
-- Use `--filter` to bind a metavariable to a value.
-- Scope the search with `--lang` or a file glob (`--glob`). A repo-wide run
-  without a language is slow.
+  (many nodes). They bind to syntax nodes, never to text. To pin a
+  metavariable to one value, write that value into the pattern itself.
+- Scope the search with `--lang` or file globs (`--globs 'src/**/*.ts'`).
+  A repo-wide run without a language is slow. Use one `--lang` per run.
 - When the result set is large, pipe through `head` or reduce the pattern.
   The JSON output is verbose.
 - Read the matched file with the `read` tool when you need the full context.

@@ -44,3 +44,23 @@ Issue #49, ADR-0073, branch feat/search-meta, 2026-08-15.
 - No call-graph index (deferred in ADR-0073 as future work).
 - No find/ls restore, no vector search.
 - Not merged to main; issue #49 stays open until the merge ritual.
+
+## Review pass (2026-08-15, same day)
+
+Independent reviewer sub-31bdcc59 reviewed the branch read-only against the
+rubric in-tree. Verdict advisory: eval gate green, no blocking core findings.
+One material finding (F1): the ast-grep skill documented flags that do not
+exist in the current CLI (@ast-grep/cli 0.45.1): --filter, --glob (real flag:
+--globs), and double --lang. Fixed red-first: recipes rewritten to verified
+flags (definition pattern with the name inline, one --lang per run in a loop,
+--globs), with a content-lint test (test/skills/ast-grep-skill.test.ts, 3
+tests) that pins the recipe surface. Verified live against ast-grep 0.45.1
+--help and real runs. Also fixed: an overflow-cap kill now reports the cap
+message instead of "Operation aborted" (new grep test, 16 total). Rubric
+commit eba7a0603 folded the 2026-08-15 review meta into the merge gates
+(CR-bench citation, falsifiable-findings rule, read-only by tool denial).
+Suites after fixes: grep 16/16, ast-grep-skill 3/3, args 108/108, 4428 6/6,
+3592 3/3 (136 tests). biome clean (3 pre-existing infos), tsgo clean.
+Reviewer observations left as follow-ups: agent-session.ts:8720 default
+active-tool list drift (latent), system-prompt.ts:130 activeTools filter
+excludes grep (no user effect).
