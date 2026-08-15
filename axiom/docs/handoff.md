@@ -40,15 +40,20 @@ working Hermes runtime lives at `~/.hermes/hermes-agent` (separate checkout).
 
 ## Next steps (in order)
 
-1. **Unshallow before merging upstream**: `git fetch --unshallow upstream`.
-2. **Push decision (operator)**: pushing `main` to origin requires a force
-   push (history re-rooted). Not done automatically.
-3. **Scaffold the TS sovereign layer** (handoff-sovereign-ts.md §6): package
+1. **Unshallow** — `git fetch --unshallow upstream` (full Hermes history;
+   ~10–20 min background job). Must precede the push: pushing a shallow
+   `main` would publish a truncated, rootless history on origin.
+2. **Push the archived eras** — `git push origin archive/prime-v0.7.2
+   baseline/prime-v0.7.2 archive/pi-v0.84.1`, then `git push origin
+   refs/tags/archive/prime-v0.7.2` — so the prime + pi lines are durable on
+   origin before `main` is re-rooted.
+3. **Force-push main** — `git push --force-with-lease origin main`.
+4. **Scaffold the TS sovereign layer** (handoff-sovereign-ts.md §6): package
    home, tsconfig, port `memory.py` → `memory.ts` + tests green.
-4. **Path-fix the carried process docs**: axiom/docs/agents/*.md still cite
+5. **Path-fix the carried process docs**: axiom/docs/agents/*.md still cite
    `docs/adr/` and the old `upstream` remote; update to `axiom/docs/adr/` and
    the Hermes upstream.
-5. **Create `axiom/AGENTS.md`** once the operator approves the
+6. **Create `axiom/AGENTS.md`** once the operator approves the
    protected-instruction-file write; the content currently lives in
    `axiom/GUIDE.md`.
-6. Open the tracker issue for the re-foundation + first port.
+7. Open the tracker issue for the re-foundation + first port.
