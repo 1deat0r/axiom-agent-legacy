@@ -1,4 +1,4 @@
-# ADR-0076: Autonomy direction — silent-by-default learning on a Hermes ownership lattice
+# ADR-0078: Autonomy direction — silent-by-default learning on a Hermes ownership lattice
 
 **Status:** accepted
 **Date:** 2026-08-15
@@ -37,4 +37,9 @@ The owner used Hermes Agent and Prime Agent side by side and made a decision: ax
 - `AXIOM_MEMORY_CONSOLIDATION` and `AXIOM_MEMORY_CONSOLIDATION_AUTO` default to enabled+auto; opt-out is `=0`. Pinned by new tests in `packages/coding-agent/test/extensions/memory-consolidation.test.ts`.
 - The consolidation hook moved from `agent_end` to `session_shutdown` (reason `quit` only), amended 2026-08-15 before merge: in resident sessions `agent_end` fires after every prompt, and a silent per-prompt consolidation call would break the cheap-per-turn posture this ADR sets. Every mode's dispose path awaits its shutdown handlers, so one-shot exits and daemon session closes still consolidate exactly once.
 - The ownership lattice (pin/protected/curator-managed) is the next core capability after `/learn`.
-- SOUL.md amendment for the daily-driver veto is owed; a follow-up ADR will word it.
+- SOUL.md amendment for the daily-driver veto landed as ADR-0079.
+
+**Renumber note (2026-08-15):** this ADR was written as ADR-0076 and renumbered
+to ADR-0078 before merge: issue #52 held the ADR-0076 reservation at create time
+(ADR-0071 convention — the later reservation yields). Commit `3f26b8577` on main
+carries the old number in its message; it predates the renumber.

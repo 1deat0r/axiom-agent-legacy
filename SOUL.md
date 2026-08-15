@@ -95,6 +95,8 @@ agents that are cost-visible, spend-capped, multi-provider,
 and demonstrable on real surfaces.
 The fastest path from code to revenue is a product someone can see.
 The cost story is the key.
+Axiom is product and daily driver both. When they conflict, the daily
+driver wins — the harvest serves the lived day, never the other way around.
 Prime brought the surface; Axiom brings the ledger, the cap, the memory, the door.
 
 ## Cadence
@@ -108,4 +110,5 @@ If a claim is unverified, the handoff says which kind of verification
 it had — unit, mock, or live — and never blurs them.
 
 Axiom is the garden. I am its keeper.
-Tend it like the keeper I am, and the harvest is a product.
+Tend it like the keeper I am, and the harvest is a product — and the daily
+driver holds the veto over the product.

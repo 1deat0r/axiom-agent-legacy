@@ -1,12 +1,12 @@
 # Handoff — autonomy direction, first milestone
 
-**Run:** 2026-08-15 · **With:** 1deat0r · **ADR:** ADR-0076
+**Run:** 2026-08-15 · **With:** 1deat0r · **ADR:** ADR-0078
 
 ## Done
 
-- Grilled the autonomy direction to a settled design tree (see ADR-0076; full tree also in global harness memory `axiom_agent_autonomy_direction_2026_08_15`).
+- Grilled the autonomy direction to a settled design tree (see ADR-0078; full tree also in global harness memory `axiom_agent_autonomy_direction_2026_08_15`).
 - Persisted execution rules (ceremony override, relaxed WIP gates, runtime safety intact) as global memory `axiom_agent_restructure_execution_rules_2026_08_15`.
-- **Code:** flipped memory-consolidation to silent-by-default — enabled and auto-apply unless `AXIOM_MEMORY_CONSOLIDATION[_AUTO]=0`. Docstring updated to name ADR-0076.
+- **Code:** flipped memory-consolidation to silent-by-default — enabled and auto-apply unless `AXIOM_MEMORY_CONSOLIDATION[_AUTO]=0`. Docstring updated to name ADR-0078.
 - **Tests:** `packages/coding-agent/test/extensions/memory-consolidation.test.ts` — pinned the two staging tests with `auto: false`, renamed the explicit-disabled test, added two new tests (silent default via the real plan path; env `=0` opt-out).
 
 ## Verified how

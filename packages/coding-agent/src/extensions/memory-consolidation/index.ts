@@ -8,13 +8,13 @@
  * them through the deterministic durability gate, and either:
  *
  *  - applies them immediately with a full audit trail (silent-by-default,
- *    per the autonomy direction ADR-0076), or
+ *    per the autonomy direction ADR-0078), or
  *  - stages them for operator confirmation (opt-in confirm mode,
  *    AXIOM_MEMORY_CONSOLIDATION_AUTO=0; `axiom memory-consolidation pending`
  *    to review).
  *
  * Enabled and silent by default (AXIOM_MEMORY_CONSOLIDATION=0 to disable),
- * per the autonomy direction ADR-0076 — the loop writes what it owns without
+ * per the autonomy direction ADR-0078 — the loop writes what it owns without
  * asking, every write lands in the append-only audit log, and rollback stays
  * available through the refinement history. It never blocks or crashes a
  * run: without model auth it skips silently; any failure is audited and
@@ -23,7 +23,7 @@
  * The hook is session_shutdown, NOT agent_end: in resident sessions
  * (interactive TUI, daemon workers) agent_end fires after every prompt, and
  * consolidating per prompt would add a model call to every turn — against the
- * ADR-0076 "cheap per turn" posture. Only `quit` consolidates: it is emitted
+ * ADR-0078 "cheap per turn" posture. Only `quit` consolidates: it is emitted
  * by every mode's dispose path (one-shot process exit and daemon session
  * close both await their shutdown handlers), while new/resume/fork are
  * session switches and reload is not an end.
@@ -125,7 +125,7 @@ function rejectedReasons(gate: GateResult, applied?: ApplyMemoryFactsResult): st
 export function createMemoryConsolidationExtension(
 	deps: MemoryConsolidationExtensionOptions = {},
 ): (pi: ExtensionAPI) => void {
-	// Silent by default (ADR-0076): consolidation is on and auto-applies.
+	// Silent by default (ADR-0078): consolidation is on and auto-applies.
 	// Opt out explicitly with AXIOM_MEMORY_CONSOLIDATION=0 (off) or
 	// AXIOM_MEMORY_CONSOLIDATION_AUTO=0 (stage-for-confirmation).
 	const enabled = deps.enabled ?? process.env.AXIOM_MEMORY_CONSOLIDATION !== "0";

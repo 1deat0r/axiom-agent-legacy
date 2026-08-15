@@ -257,7 +257,7 @@ describe("createMemoryConsolidationExtension (session_shutdown)", () => {
 		expect(listPendingProposals(consolidationPendingDir(root))).toHaveLength(0);
 	});
 
-	it("is enabled and auto-applies silently by default (no env, no deps) — ADR-0076", async () => {
+	it("is enabled and auto-applies silently by default (no env, no deps) — ADR-0078", async () => {
 		completeSimpleMock.mockResolvedValue({
 			stopReason: "stop",
 			content: [

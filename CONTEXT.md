@@ -218,7 +218,7 @@ tier.
 
 **Memory consolidation**:
 The declarative-memory half of "gets smarter over time" (ADR-0040, issue #19;
-silent-by-default since ADR-0076): when a session really ends — the
+silent-by-default since ADR-0078): when a session really ends — the
 `session_shutdown` event with reason `quit`, emitted by every mode's dispose
 path — a built-in extension has the model propose durable facts
 (`{title, content, path}`) from the finished session, filters them through a

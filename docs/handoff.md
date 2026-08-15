@@ -6,7 +6,7 @@
    `session_shutdown` (reason `quit` only).** In resident sessions
    (interactive TUI, daemon workers) `agent_end` fires after every
    prompt, so a silent-by-default consolidation there would add a model
-   call to every turn — against the cheap-per-turn posture ADR-0076
+   call to every turn — against the cheap-per-turn posture ADR-0078
    sets. `quit` is emitted by every mode's dispose path (one-shot
    process exit and daemon session close both await shutdown handlers),
    while `new`/`resume`/`fork` are session switches and `reload` is not
@@ -19,8 +19,8 @@
    built from finished-session entries. The `buildRequest` mock is now
    typed with `fromAny<ConsolidationRequest, unknown>`.
 3. **Docs.** CONTEXT.md "Memory consolidation" term rewritten
-   (silent-by-default since ADR-0076, `session_shutdown` + `quit`
-   rationale, opt-out flags); ADR-0076 consequence line appended
+   (silent-by-default since ADR-0078, `session_shutdown` + `quit`
+   rationale, opt-out flags); ADR-0078 consequence line appended
    (hook moved from `agent_end` to `session_shutdown`, amended
    2026-08-15 before merge, keeping cheap-per-turn).
 4. **Committed and pushed** to `feat/autonomy-direction-adr-0076`:
