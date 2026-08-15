@@ -8189,6 +8189,68 @@ describe("daemon mode helpers", () => {
 		}
 	});
 
+	it("a gateway cron job sharing the store survives a daemon scheduler sweep untouched", async () => {
+		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-cron-claim-"));
+		try {
+			const daemon = new AgentDaemon(join(tempDir, "daemon.sock"), {
+				defaultSessionConfig: {
+					agentDir: tempDir,
+					cwd: tempDir,
+				},
+				createRuntime: async () => {
+					throw new Error("unexpected runtime creation");
+				},
+			});
+			const internals = fromAny<
+				{
+					cronStore: AgentCronJobStore;
+					cronScheduler: { runDue(now: Date): Promise<number> };
+				},
+				unknown
+			>(daemon);
+			// A gateway /cron job sits in the SAME shared store the daemon sweeps
+			// (the mirror direction of the claim race: a claim-all daemon sweep
+			// claims the gateway job and runs it as a daemon turn, channel-less).
+			const gatewayJob = internals.cronStore.create({
+				activeSessionId: "active-1",
+				sessionId: "cron-abc123",
+				// Gateway jobs live in their own cron-namespaced session file,
+				// never the heartbeat's (the daemon cancels per session file).
+				sessionFile: join(tempDir, "sessions", "cron-abc123.jsonl"),
+				cwd: tempDir,
+				source: "cron",
+				channelId: "100",
+				scheduleText: "in 1m",
+				prompt: "channel work",
+				now: new Date("2026-01-01T12:00:00.000Z"),
+			});
+			const heartbeat = internals.cronStore.createHeartbeat({
+				activeSessionId: "active-1",
+				sessionId: "session-1",
+				sessionFile: join(tempDir, "session.jsonl"),
+				cwd: tempDir,
+				scheduleText: "every 5m",
+				prompt: "check on the session",
+				now: new Date("2026-01-01T12:00:00.000Z"),
+			});
+
+			await internals.cronScheduler.runDue(new Date("2026-01-01T12:05:00.000Z"));
+
+			// The gateway job survives the daemon sweep untouched — the daemon
+			// claims only jobs it owns (heartbeats and its own schedule jobs).
+			expect(internals.cronStore.list().find((job) => job.id === gatewayJob.id)).toMatchObject({
+				status: "active",
+				runCount: 0,
+				nextRunAt: "2026-01-01T12:01:00.000Z",
+			});
+			// The daemon still claims its own heartbeat in the same sweep.
+			const storedHeartbeat = internals.cronStore.list().find((job) => job.id === heartbeat.id);
+			expect(storedHeartbeat?.nextRunAt).not.toBe("2026-01-01T12:05:00.000Z");
+		} finally {
+			rmSync(tempDir, { recursive: true, force: true });
+		}
+	});
+
 	it("cancels scheduled jobs when a live session is killed", async () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "axiom-daemon-kill-cron-"));
 		try {

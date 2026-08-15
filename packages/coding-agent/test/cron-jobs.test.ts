@@ -973,6 +973,49 @@ describe("AgentCronScheduler", () => {
 		expect(store.list()[0]).toMatchObject({ id: job.id, status: "active", runCount: 0 });
 	});
 
+	it("sweeps only jobs its claim filter admits, leaving the rest due", async () => {
+		const store = new AgentCronJobStore(makeStorePath(tempDirs));
+		const gatewayJob = store.create({
+			activeSessionId: "active-1",
+			sessionId: "session-1",
+			sessionFile: "/tmp/session.jsonl",
+			cwd: "/tmp/project",
+			source: "cron",
+			channelId: "100",
+			scheduleText: "in 1m",
+			prompt: "channel work",
+			now: start,
+		});
+		const heartbeat = store.createHeartbeat({
+			activeSessionId: "active-1",
+			sessionId: "session-1",
+			sessionFile: "/tmp/session.jsonl",
+			cwd: "/tmp/project",
+			scheduleText: "every 1m",
+			prompt: "check progress",
+			now: start,
+		});
+		const prompts: string[] = [];
+		const scheduler = new AgentCronScheduler(store, {
+			now: () => new Date("2026-01-01T12:35:00.000Z"),
+			claimFilter: (job) => !(job.source === "cron" && job.channelId !== undefined),
+			runJob: async (dueJob) => {
+				prompts.push(dueJob.prompt);
+				return undefined;
+			},
+		});
+
+		await scheduler.runDue(new Date("2026-01-01T12:35:00.000Z"));
+
+		expect(prompts).toEqual(["check progress"]);
+		expect(store.list().find((job) => job.id === gatewayJob.id)).toMatchObject({
+			status: "active",
+			runCount: 0,
+			nextRunAt: "2026-01-01T12:35:00.000Z",
+		});
+		expect(store.list().find((job) => job.id === heartbeat.id)).toMatchObject({ runCount: 1 });
+	});
+
 	it("releases leases and recovers the whole claimed batch when setup fails", async () => {
 		const store = new AgentCronJobStore(makeStorePath(tempDirs));
 		const unrelated = store.create({
@@ -1276,6 +1319,42 @@ describe("AgentCronScheduler", () => {
 			lastSkippedAt: "2026-01-01T12:34:20.000Z",
 			runCount: 0,
 		});
+	});
+
+	it("claimDue with a claim filter leaves non-matching due jobs untouched", () => {
+		const store = new AgentCronJobStore(makeStorePath(tempDirs));
+		const heartbeat = store.createHeartbeat({
+			activeSessionId: "active-1",
+			sessionId: "session-1",
+			sessionFile: "/tmp/session.jsonl",
+			cwd: "/tmp/project",
+			scheduleText: "every 1m",
+			prompt: "check progress",
+			now: start,
+		});
+		const cron = store.create({
+			activeSessionId: "active-1",
+			sessionId: "session-1",
+			sessionFile: "/tmp/session.jsonl",
+			cwd: "/tmp/project",
+			source: "cron",
+			channelId: "100",
+			scheduleText: "in 1m",
+			prompt: "channel work",
+			now: start,
+		});
+		const dueAt = new Date("2026-01-01T12:35:00.000Z");
+		const dispatches = store.claimDue(dueAt, dueAt, {
+			claimFilter: (job) => job.source === "cron" && job.channelId !== undefined,
+		});
+
+		expect(dispatches.map((dispatch) => dispatch.job.id)).toEqual([cron.id]);
+		expect(store.list().find((job) => job.id === heartbeat.id)).toMatchObject({
+			status: "active",
+			runCount: 0,
+			nextRunAt: "2026-01-01T12:35:00.000Z",
+		});
+		expect(store.list().find((job) => job.id === heartbeat.id)).not.toHaveProperty("lastSkippedAt");
 	});
 
 	it("reschedules a skipped dispatch from the skip time", () => {

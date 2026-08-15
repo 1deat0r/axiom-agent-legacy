@@ -84,6 +84,14 @@ export interface AgentCronSchedulerHooks {
 	beginDispatch?: (dispatch: AgentCronDispatch) => (() => void) | undefined;
 	now?: () => Date;
 	onError?: (job: AgentCronJob, error: unknown) => void;
+	/**
+	 * Optional claim gate: only jobs passing it are claimed and run by this
+	 * scheduler (default: claim every due job, the back-compat behavior).
+	 * Jobs the filter rejects are left exactly as they are — still due,
+	 * nextRunAt untouched — so a scheduler that shares a store file with
+	 * another owner never eats the other owner's due jobs (claim race).
+	 */
+	claimFilter?: (job: AgentCronJob) => boolean;
 }
 
 export interface HeartbeatCronSessionActivity {
@@ -703,8 +711,12 @@ export class AgentCronJobStore {
 		return this.readJobs().filter((job) => isDueJob(job, now));
 	}
 
-	claimDue(dueAt = new Date(), claimedAt = dueAt): AgentCronDispatch[] {
-		return this.mutateStates((state) => claimDueInState(state, dueAt, claimedAt));
+	claimDue(
+		dueAt = new Date(),
+		claimedAt = dueAt,
+		options: { claimFilter?: (job: AgentCronJob) => boolean } = {},
+	): AgentCronDispatch[] {
+		return this.mutateStates((state) => claimDueInState(state, dueAt, claimedAt, options.claimFilter));
 	}
 
 	getClaimedJob(id: string): AgentCronJob | undefined {
@@ -979,7 +991,7 @@ export class AgentCronScheduler {
 		const dispatches: Array<{ dispatch: AgentCronDispatch; endDispatch?: () => void }> = [];
 		let claimedDispatches: AgentCronDispatch[] | undefined;
 		try {
-			claimedDispatches = this.store.claimDue(now, this.now());
+			claimedDispatches = this.store.claimDue(now, this.now(), { claimFilter: this.hooks.claimFilter });
 			for (const dispatch of claimedDispatches) {
 				dispatches.push({ dispatch, endDispatch: this.hooks.beginDispatch?.(dispatch) });
 			}
@@ -1353,6 +1365,16 @@ export function isHeartbeatCronJob(job: AgentCronJob): boolean {
 	return job.source === "heartbeat" || job.source === "rlm_heartbeat";
 }
 
+/**
+ * A gateway /cron job: cron-sourced with a creating channel. This is the only
+ * job shape the gateway scheduler and the /cron command surface own; the
+ * gateway's claim filter admits exactly these, and the daemon's filter
+ * excludes exactly these, so the two schedulers partition the shared store.
+ */
+export function isGatewayCronJob(job: AgentCronJob): boolean {
+	return job.source === "cron" && job.channelId !== undefined;
+}
+
 export function shouldDeferHeartbeatCronJob(job: AgentCronJob, activity: HeartbeatCronSessionActivity): boolean {
 	if (!isHeartbeatCronJob(job)) {
 		return false;
@@ -1576,11 +1598,16 @@ function writeJobsState(path: string, state: CronJobsState): void {
 	}
 }
 
-function claimDueInState(state: CronJobsState, dueAt: Date, claimedAt: Date): AgentCronDispatch[] {
+function claimDueInState(
+	state: CronJobsState,
+	dueAt: Date,
+	claimedAt: Date,
+	claimFilter?: (job: AgentCronJob) => boolean,
+): AgentCronDispatch[] {
 	const dispatches: AgentCronDispatch[] = [];
 	const claimedJobIds = new Set(state.dispatches.map((dispatch) => dispatch.jobId));
 	state.jobs = state.jobs.map((job) => {
-		if (!isDueJob(job, dueAt)) {
+		if (!isDueJob(job, dueAt) || (claimFilter !== undefined && !claimFilter(job))) {
 			return job;
 		}
 		const scheduledFor = job.nextRunAt!;

@@ -17,6 +17,7 @@ import {
 	type AgentCronJobRunResult,
 	AgentCronJobStore,
 	AgentCronScheduler,
+	isGatewayCronJob,
 } from "../core/cron-jobs.js";
 import { sessionIdForChannel } from "./completion.js";
 import type { DeliveryLedger } from "./delivery-ledger.js";
@@ -60,6 +61,11 @@ export class GatewayCron {
 		this.transportName = options.transportName ?? "cron";
 		this.scheduler = new AgentCronScheduler(this.store, {
 			now: options.now,
+			// Claim only gateway-owned jobs (cron-sourced with a channel): the
+			// store file is shared with the daemon, and a claim-all sweep would
+			// eat a due heartbeat and advance its nextRunAt before the runJob
+			// guard could skip it. The runJob guard stays as the backstop.
+			claimFilter: (job) => isGatewayCronJob(job),
 			runJob: (job) => this.runJob(job),
 			onError: (job, error) => {
 				const message = error instanceof Error ? error.message : String(error);
