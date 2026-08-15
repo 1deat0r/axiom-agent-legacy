@@ -7,6 +7,8 @@ export interface CheckDeps {
 	cliJsExists(path: string): boolean;
 	/** Reports whether the built kernel module exists (rlm-kernel prerequisite). */
 	kernelModuleExists(path: string): boolean;
+	/** Reports whether the built gateway cron module exists (cron-spine prerequisite). */
+	gatewayCronModuleExists(path: string): boolean;
 	/** Finds a python with ipykernel, or null (rlm-kernel prerequisite). */
 	resolveKernelPython(env: CheckEnv): string | null;
 }
@@ -64,6 +66,7 @@ export declare function resolveKernelPython(
 	env: CheckEnv,
 	spawnImpl?: typeof import("node:child_process").spawnSync,
 ): string | null;
+export declare function resolveGatewayCronModule(env: CheckEnv): string;
 export declare function missingRequirements(check: Check, env: CheckEnv, deps: CheckDeps): string[];
 export declare function plan(checks: Check[], env: CheckEnv, deps: CheckDeps): PlanOutcome;
 export declare function summarize(results: ResultEntry[]): Summary;
