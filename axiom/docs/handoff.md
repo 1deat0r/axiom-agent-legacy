@@ -26,6 +26,8 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
 6. Opened tracker issue #63 (port #1, `ready-for-agent`).
 7. Created `axiom/AGENTS.md` (operator-approved instruction file) from
    `axiom/GUIDE.md`; GUIDE.md is now a redirect.
+8. Folded the sovereign package into `axiom/sovereign/` (was a separate
+   `~/Projects/axiom-sovereign/` dir); committed `510670e158`.
 
 ## Verified (how)
 
