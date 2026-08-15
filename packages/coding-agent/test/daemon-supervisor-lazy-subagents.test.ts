@@ -251,8 +251,8 @@ describe("daemon supervisor passive subagent topology", () => {
 			}),
 		);
 		Object.assign(supervisor, {
+			rlmLedgerSiblings: vi.fn(async () => [target]),
 			catalog: {
-				siblings: vi.fn(async () => [target]),
 				list: vi.fn(async () => [target, duplicate]),
 			},
 		});
@@ -589,8 +589,9 @@ describe("daemon supervisor passive subagent topology", () => {
 			}),
 		);
 		Object.assign(supervisor, {
+			rlmLedgerSiblings: vi.fn(async () => saved),
+			rlmSpawnLedger: vi.fn(() => ({ appendRenameByChildPath: vi.fn(async () => {}) })),
 			catalog: {
-				siblings: vi.fn(async () => saved),
 				rename,
 			},
 		});
@@ -647,9 +648,9 @@ describe("daemon supervisor passive subagent topology", () => {
 			}),
 		);
 		Object.assign(supervisor, {
+			rlmLedgerSiblings: vi.fn(async (path: string) => [path === firstChild.path ? firstChild : secondChild]),
 			catalog: {
 				resolve: vi.fn(async (path: string) => path),
-				siblings: vi.fn(async (path: string) => [path === firstChild.path ? firstChild : secondChild]),
 			},
 			launchWorker,
 		});
