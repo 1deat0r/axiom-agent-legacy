@@ -896,6 +896,9 @@ export class DaemonSupervisor {
 	}
 
 	private async assertRecoveryAllowed(): Promise<void> {
+		if (this.shuttingDown) {
+			throw new SupervisorRecoveryCancelledError("Daemon supervisor is shutting down");
+		}
 		await this.assertCurrentOwnership();
 		if (await isDaemonShutdownAdmissionActive()) {
 			throw new SupervisorRecoveryCancelledError("Daemon shutdown admission cancelled worker recovery");
@@ -5170,6 +5173,19 @@ export class DaemonSupervisor {
 		for (const cleanup of this.signalCleanupHandlers) {
 			cleanup();
 		}
+		// Issue #53 / ADR-0077: in-flight worker re-admission work must settle
+		// before the workers snapshot. shuttingDown is set above, so every
+		// pending recovery, deferred recheck, or create launch either completes
+		// (and lands in the snapshot below) or self-cancels at its next
+		// admission checkpoint. Without this wait, work that passed its last
+		// checkpoint could re-persist a descriptor and spawn a detached worker
+		// after shutdown deleted it, leaving ghosts that status --json reports
+		// after a clean shutdown.
+		const pendingWorkerWork = [
+			...[...this.workers.values()].flatMap((worker) => [worker.recovery, worker.deferredRecovery]),
+			...this.openingWorkers.values(),
+		].filter((promise): promise is Promise<void> | Promise<ResidentWorker> => promise !== undefined);
+		await Promise.allSettled(pendingWorkerWork);
 		if (stopWorkers) {
 			await Promise.all(
 				[...this.workers.values()].map(async (worker) => {
