@@ -1,9 +1,10 @@
 # ADR-0076: Kernel host-bridge stall under concurrent boots — root cause is worker starvation, not a bridge defect
 
-**Status:** proposed (owner confirmation needed — contradicts issue #52's premise that the kernel-heavy tag is interim)
+**Status:** accepted
 **Date:** 2026-08-15
 **Investigated by:** agent session (issue #52)
 **Evidence:** four full-shard reproductions (kernel-heavy included in the default parallel run), per-phase boot traces, host- and kernel-side comm traces
+**Owner rulings (2026-08-15):** keep the `kernel-heavy` tag as the standing load-management mechanism (decision 2); the merged-spawn hardening lands now, inside this issue (decision 3).
 
 ## Context
 
@@ -49,7 +50,7 @@ does not support the bridge-defect hypothesis.
    timeout (30s) plus the direct-spawn 5s port window can cascade a boot
    failure after the shard runs.
 
-## Decision (proposed)
+## Decision
 
 1. The kernel host bridge is exonerated. No comm race or lost-message fix is
    warranted by the evidence.
@@ -57,12 +58,17 @@ does not support the bridge-defect hypothesis.
    interim containment: suites that boot real kernels do not belong in the
    ~400-worker default sharded run. Issue #52's "drop the tag" acceptance is
    revised to "keep the tag, documented here".
-3. Product hardening (optional, follow-up issues): merge the two readiness
-   python spawns into one; forkserver orphan cleanup on dispose.
+3. Product hardening, landed inside this issue (owner ruling): the two
+   readiness python spawns are merged into one probe spawn — commit
+   `c02ce2958` on `fix/kernel-bridge-stall`, red-tested first (exactly one
+   spawn for a warm current venv, sentinel payload) with corruption branches
+   pinned (spawn error, nonzero exit, unparsable stdout all rebuild). The
+   payload was verified against a real python. Forkserver orphan cleanup on
+   dispose remains a follow-up issue.
 
 ## Consequences
 
 - `52-concurrent-kernel-boot-stall.test.ts` stays as the bridge-soundness
   regression (green under concurrent boots).
-- Issue #52 closes with this analysis once the owner confirms the tag
-  decision; the close audit comment links this ADR and the branch.
+- Issue #52 closes once the floor is green on the branch; the close audit
+  comment links this ADR and the branch.
