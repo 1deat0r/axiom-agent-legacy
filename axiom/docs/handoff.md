@@ -116,6 +116,12 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
   byte-compatible stores; the derived-view projection (SKILL.md) lands in the
   profile skills dir. Run via `scripts/run_tests.sh
   tests/axiom/test_native_store_bridge.py`.
+- Session 5 (read-only verification, no code changed): grep for
+  `max_run_cost|cost_limit|cost_cap` over the tree = 0 hits; `ls
+  .github/workflows` = 27 files, none named triage.yml / issue-hygiene.yml;
+  read `agent/usage_pricing.py` (+ `insights.py`, `aux_accounting.py`) and the
+  `session_estimated_cost_usd` accumulator sites to confirm the ledger is
+  present and the cap guard is absent.
 
 ## Next steps (in order)
 
