@@ -23,7 +23,8 @@ layer on top.
 
 - No `any` unless absolutely necessary. Erasable TypeScript only. No inline
   imports (`await import()`, dynamic type imports). Top-level only.
-- Relative imports use `.js` specifiers (NodeNext), never `.ts`.
+- Relative imports use `.ts` specifiers (Node 26 type-stripping does not rewrite
+  `.js` → `.ts`; `tsc --noEmit` reads `.ts` via `allowImportingTsExtensions`).
 - Never modify generated files directly; update the generator, then
   regenerate.
 - No emojis in commits. Technical prose only, direct.

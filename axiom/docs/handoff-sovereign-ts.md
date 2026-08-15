@@ -104,7 +104,8 @@ JSON on stdin and reading JSON on stdout. Therefore:
 ## 5. Conventions (axiom `AGENTS.md`, still binding)
 
 Erasable TypeScript only (no enums/namespaces/parameter-properties), no `any`,
-NodeNext with `.js` specifiers, no inline/dynamic imports, no emojis in commits.
+NodeNext with `.ts` specifiers (Node 26 type-stripping does not rewrite `.js` →
+`.ts`), no inline/dynamic imports, no emojis in commits.
 Tests via `node --test` (Node 26 runs `.ts` natively).
 
 ## 6. Plan (todo state at stop)

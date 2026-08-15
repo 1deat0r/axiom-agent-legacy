@@ -3,13 +3,13 @@
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all
 operations.
 
-> **gh repo default (2026-08-12):** this repo has an `upstream` remote
-> (PrimeIntellect-ai/prime-agent, ADR-0015). `gh` resolves the repo from the branch's
-> upstream, then falls back to remotes — a branch with no tracking upstream
-> resolves to `upstream` (the pi repo). Fixed in this checkout via
-> `gh repo set-default mustbearnold/axiom-agent` and per-branch upstream
-> tracking. If a fresh checkout misbehaves, re-run
-> `gh repo set-default mustbearnold/axiom-agent` (or pass `-R` explicitly).
+> **gh repo default (2026-08-16):** this repo tracks `upstream` =
+> NousResearch/hermes-agent (ADR-0087) and publishes to `origin` =
+> 1deat0r/axiom-agent. `gh` resolves the repo from the branch's upstream, then
+> falls back to remotes — a branch with no tracking upstream could resolve to
+> the Hermes upstream. Set the default explicitly so `gh` targets this repo:
+> `gh repo set-default 1deat0r/axiom-agent`. If a fresh checkout misbehaves,
+> re-run it (or pass `-R 1deat0r/axiom-agent` explicitly).
 
 ## TL;DR
 
@@ -71,18 +71,18 @@ gh issue comment <number> --body "$(cat <<'EOF'
 Landed.
 
 Commit: <hash>
-ADR: docs/adr/00XX-<slug>.md (or: not required)
+ADR: axiom/docs/adr/00XX-<slug>.md (or: not required)
 
 > **ADR reservation rule:** an issue that needs an ADR claims the number at
 > create time, in the title (`(ADR-00NN)`): the LOWEST number no ADR file in
-> `docs/adr/` holds and no other OPEN issue reserves. Allocation happens in
+> `axiom/docs/adr/` holds and no other OPEN issue reserves. Allocation happens in
 > the tracker, never at branch time — parallel branches cannot see each
 > other's ADR files, so first-write-wins collides (observed 0047, 0048,
 > 0067). At merge, the merging agent verifies the ADR file's number equals
 > the issue's reservation; on collision, renumber the LATER reservation
 > (rename the file, fix the title and all references) and note it on the
 > issue.
-Handoff: docs/handoff-<feature>.md
+Handoff: axiom/docs/handoff-<feature>.md
 Verified: <what you ran and what passed>
 EOF
 )"
@@ -94,7 +94,7 @@ uses the not-applicable form. State the reason. Never leave a line blank:
 
 ```
 Commit: not required (<reason>)
-ADR: docs/adr/00XX-<slug>.md (or: not required (<reason>))
+ADR: axiom/docs/adr/00XX-<slug>.md (or: not required (<reason>))
 Handoff: not required (<reason>)
 Verified: <what you checked and what you found>
 ```
@@ -127,7 +127,7 @@ A third workflow, `.github/workflows/issue-hygiene.yml`, sweeps weekly
 (ADR-0064). It posts one summary comment on the issue named by the
 `HYGIENE_SUMMARY_ISSUE` repository variable when open issues drift (labels,
 stale `needs-triage`, unmerged branches). Branch cleanup follows
-[docs/agents/stale-branches.md](stale-branches.md).
+[axiom/docs/agents/stale-branches.md](stale-branches.md).
 
 To test the classifier locally:
 
