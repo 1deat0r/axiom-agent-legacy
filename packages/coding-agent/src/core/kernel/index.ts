@@ -1161,11 +1161,6 @@ export class KernelManager {
 	}
 
 	private handleExecutionMessage(incoming: JupyterMessage): void {
-		const t52 = incoming.header.msg_type;
-		if (t52 === "status" || t52 === "execute_reply") {
-			const st = incoming.content as { execution_state?: string };
-			this.trace52(`recv ${t52} state=${st.execution_state ?? "?"}`);
-		}
 		const execution = this.activeExecution;
 		const parentMessageId = (incoming.parent_header as { msg_id?: string }).msg_id;
 		if (!execution || parentMessageId !== execution.requestMsgId) {
@@ -1389,7 +1384,6 @@ export class KernelManager {
 			return;
 		}
 
-		this.trace52(`recv ${msgType} comm=${content.comm_id ?? "?"} target=${content.target_name ?? "?"}`);
 		if (msgType === "comm_open") {
 			const targetName = content.target_name;
 			if (typeof targetName !== "string") {
@@ -1405,15 +1399,6 @@ export class KernelManager {
 		const targetName = this.commTargets.get(commId);
 		if (msgType === "comm_msg" && targetName === HOST_COMM_TARGET) {
 			this.startHostRequestFromComm(commId, content.data);
-		}
-	}
-
-	private trace52(text: string): void {
-		try {
-			const { appendFileSync } = require("node:fs");
-			appendFileSync("/tmp/52-host-trace.log", `${Date.now()} [${this.session}] ${text}\n`);
-		} catch {
-			// best-effort diagnostics
 		}
 	}
 
@@ -1470,7 +1455,6 @@ export class KernelManager {
 	}
 
 	private async sendCommMessage(commId: string, data: Record<string, unknown>): Promise<void> {
-		this.trace52(`sendCommMessage start comm=${commId} control=${this.control ? (this.control as { isConnected?: boolean }).isConnected : "none"} shell=${this.shell ? (this.shell as { isConnected?: boolean }).isConnected : "none"}`);
 		const channel = this.control ?? this.shell;
 		if (!channel || !this.connection) {
 			throw new Error("Kernel channel is not connected");

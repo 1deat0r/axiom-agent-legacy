@@ -442,16 +442,6 @@ function reportProgress(options: EnsureKernelPythonOptions, message: string): vo
 	process.stderr.write(`${message}\n`);
 }
 
-
-function trace52(text: string): void {
-	try {
-		const { appendFileSync } = require("node:fs");
-		appendFileSync("/tmp/52-boot-trace.log", `${Date.now()} [${process.pid}] ${text}\n`);
-	} catch {
-		// best-effort
-	}
-}
-
 function bootstrapLockDir(venv: string): string {
 	return path.join(path.dirname(venv), `${path.basename(venv)}${BOOTSTRAP_LOCK_NAME}`);
 }
@@ -492,7 +482,6 @@ async function acquireBootstrapLock(venv: string): Promise<() => Promise<void>> 
 		try {
 			await mkdir(lockDir);
 			await writeFile(path.join(lockDir, "pid"), `${process.pid}\n`, "utf8");
-			trace52("bootstrap lock acquired");
 			return () => rm(lockDir, { recursive: true, force: true });
 		} catch (error) {
 			if (!isNodeError(error, "EEXIST")) throw error;
@@ -503,7 +492,6 @@ async function acquireBootstrapLock(venv: string): Promise<() => Promise<void>> 
 				continue;
 			}
 
-			trace52(`bootstrap lock held by pid=${pid}; waiting`);
 			await sleep(BOOTSTRAP_LOCK_RETRY_MS);
 		}
 	}
