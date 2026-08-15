@@ -203,6 +203,12 @@ export class MemoryStore {
     return this.facts.find((f) => f.id === factId) ?? null;
   }
 
+  // All facts ever recorded (active + superseded) — the audit trail. The
+  // sync/query layers need the inactive set too, which active() alone hides.
+  allFacts(): Fact[] {
+    return [...this.facts];
+  }
+
   history(factId: string): Fact[] {
     const byId = new Map<string, Fact>(this.facts.map((f): [string, Fact] => [f.id, f]));
     let cur = byId.get(factId);
