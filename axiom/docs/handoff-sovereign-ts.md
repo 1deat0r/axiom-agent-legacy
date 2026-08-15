@@ -115,8 +115,9 @@ Tests via `node --test` (Node 26 runs `.ts` natively).
 3. [x] Scaffold the TS package (`package.json` type=module, tsconfig, typescript devDep)
 4. [x] Port `memory.py` → `memory.ts`
 5. [x] Port `test_memory_core.py` → `memory.test.ts`, run green
-6. [ ] Port the scripts (`ingest`/`query`/`record`) as TS CLI entrypoints
-       (`profile_io.py` already ported → `src/profile_io.ts`)
+6. [x] Port the scripts (`ingest`/`query`/`record`) as TS CLI entrypoints
+       (`profile_io.py` already ported → `src/profile_io.ts`); memory-axis
+       CLIs done (`src/cli/{ingest,record,sync,query}.ts`), skills CLIs remain
 7. [ ] Port the skills store (`skills.py`, `skill_io`, `skill_bridge`, `sync_skills`, `decide_skills`)
 8. [ ] Re-point the `native-store-bridge` plugin subprocess calls at the TS CLI
 9. [x] Re-found `axiom-agent` on Hermes HEAD + archive prime-agent
@@ -137,6 +138,7 @@ Tests via `node --test` (Node 26 runs `.ts` natively).
 
 - ~~Confirm the new package home/name~~ — resolved 2026-08-16: folded into
   `axiom-agent/axiom/sovereign/`.
-- Node vs bun for the CLI runtime: bun starts ~10x faster, which matters for a
-  subprocess-per-write; node is more portable. Recommend **bun for the CLI
-  entrypoints, node for the library/tests**.
+- ~~Node vs bun for the CLI runtime~~ — resolved 2026-08-16: **node for CLI +
+  lib + tests** (single runtime, already `engines >=26`; bun's cold-start win
+  is immaterial at the bridge's write frequency, and one runtime keeps the
+  bridge re-pointing to a single `node <cli>.ts` invocation pattern).
