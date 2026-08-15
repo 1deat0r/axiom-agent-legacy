@@ -1,83 +1,78 @@
-# Handoff — 2026-08-15 (milestone: lattice merged, recall recorded, baseline renamed)
+# Handoff — 2026-08-15 (session 2: #57 gateway-channels scoping)
 
 ## Done
 
-1. **Baseline rename correction** (`741315239`): the fork's upstream is
-   `PrimeIntellect-ai/prime-agent`, not axiom. Verified 2026-08-15: the axiom
-   URL 404s, and prime-agent tag v0.7.2 is still `83a0f9f` — the exact commit
-   ADR-0015 recorded. Fixed the identity statements in AGENTS.md, README,
-   SOUL.md, CONTEXT.md, docs/ports.md, the issue-tracker note, two source
-   comments; ADR-0015 carries the amendment note. Upstream-vendored docs and
-   dist artifacts left for the next upstream merge.
-2. **Milestone merge to main** (`f6c772d30`): the ADR-0081 ownership lattice
-   (issue #55) — classifyPath/admitWrite/installCapturedSkill with all four
-   consumers wired — plus the rename and the ADR-0082 record.
-3. **Session recall recorded, not re-implemented** (issue #56, ADR-0082):
-   `/search` + `/sessions` shipped on main before the spine issue was cut
-   (`bb6c7ce1c`, `996b47bfd`, `41966e660`). Verified the wiring end to end
-   (commands/index.ts registration, /help, CLI threads projectRoot /
-   sessionsDir / searchIndexPath, project guard + `--all` + labels) and wrote
-   ADR-0082 as the honest record. CONTEXT.md gains the Session recall term.
+1. **#57 scoped, not built.** Verified what is live vs. wiring gaps on main
+   (the milestone's first step), posted the scoping note and the proposed
+   milestone scope on #57, and set the role label `ready-for-human` — the
+   scope needs the owner's three decisions (comment on issue #57). No code
+   changed this session.
+2. **Local hygiene.** Deleted the fully-merged local branch
+   `verify-discord-baseline` (tip e1f071cbd, the discord-baseline + cron
+   gateway line; already in main). No remote copy existed.
 
-## How it was verified
+## What was verified (and how)
 
-- **Floor green on the exact merged tree** (`./test.sh`, detached, scrubbed
-  env, log `/tmp/floor-milestone-2026-08-15.log`): coding-agent 430 files
-  (5848 passed + 116 skipped), tui 12/60, kernel 12/60+27 skipped,
-  process-stress 2/13+8 skipped; auth.json restored. No failures — the
-  provider auth/connection stderr in the log is fixture noise from the
-  negative-path tests, as on prior green runs.
-- 21 gateway recall tests green under vitest (11 session-search,
-  10 search-command).
-- Pre-commit hook on every commit: biome (4 pre-existing infos in untouched
-  test files), tsgo, installer render, browser smoke — all clean.
+- **Five transports live, no stubs.** signal (ADR-0016, signal-cli),
+  telegram (ADR-0017, offset long-poll), discord (ADR-0020, per-channel
+  cursor), slack REST (ADR-0021) and Slack Socket Mode (ADR-0062,
+  `SLACK_SOCKET_MODE` gate, 12-case threat corpus) are all real
+  implementations wired through `axiom gateway --transport ...` in
+  `gateway-command.ts`. Verified by reading the source and the ADRs; no
+  TODO/stub markers.
+- **Cron spine live.** `GatewayCron` + `/cron add|list|rm` registered in
+  `commands/index.ts` and advertised in `/help`; scheduled deliveries
+  recorded in the ledger (ADR-0022 note).
+- **Tests green on main (unit).** Ran the full gateway suite on main this
+  session: 447 tests green across 39 files. Per-transport: telegram 46,
+  slack 43, slack-socket 23, discord 18, signal 5; fan-out + socket-mode +
+  threat 22; cron 10.
+- **Floor still green on the merged tree** (log
+  `/tmp/floor-milestone-2026-08-15.log` from the milestone; not re-run this
+  session — nothing reached main).
+- **Upstream check.** PrimeIntellect-ai/prime-agent `main` is 1 commit ahead
+  of ours: 97b994c3d (supervisor-owned RLM spawn ledger). Routine merge due.
+
+## Wiring gaps found (recorded on #57)
+
+1. `/cost` is registered and tested but missing from `/help` — not
+   discoverable (no test pins it).
+2. Slack Socket Mode has no live-verification home: the ADR-0058
+   `gateway-delivery` check probes REST endpoints only.
+3. Signal fan-out: siblings are token-built, so signal can never be a
+   `deliverTo` target; never recorded as a known limitation (ADR-0023).
+4. All live passes remain operator-deferred (six unticked boxes in
+   docs/live-verification.md) — tokens are operator-owned.
 
 ## Tracker
 
-- #55 and #56 close at this milestone with short factual comments (links:
-  merge commit, ADR, this handoff) — minimal hygiene, not the old close
-  ritual (restructure execution rules: ceremony overridden).
-- Still open, owner's calls: #52 (kernel host-bridge stall; worktree
-  `/tmp/axiom-worktrees/kernel-bridge` on `fix/kernel-bridge-stall` — do not
-  touch without the owner's tag decision), #53 (daemon respawn race).
-- Next spine milestones: #57 gateway channels, #58 cron, #59 dashboard.
-  Note for their scoping: main already carries five gateway transports
-  (signal, telegram, discord, slack, slack-socket) and the `/cron` command is
-  registered — the milestone work is verifying what is real vs. wiring gaps,
-  then the ADR-0083/0084 records.
-
-## Branches
-
-- `feat/ownership-lattice` and `feat/autonomy-direction-adr-0076` are merged;
-  delete local + remote copies (owner's call for the latter).
-- `fix/kernel-bridge-stall` stays (active worktree, issue #52).
-- `docs/hermes-improvements.html` is still untracked — not ours, left alone.
+- #57 comment posted (scoping note + proposed scope + three owner
+  questions); label moved `needs-triage` -> `ready-for-human` (the scope
+  decision is the owner's).
+- #52 / #53 untouched (owner-blocked; the kernel-bridge worktree at
+  /tmp/axiom-worktrees/kernel-bridge stays).
+- #58 (cron) and #59 (dashboard) untouched.
 
 ## Next
 
-1. Delete the two merged branches (local + remote).
-2. #57 scope: verify which gateway channels are live vs. stubbed on main,
-   then define the milestone scope with the owner before building.
-3. #52/#53 wait on the owner's decisions.
+1. Owner answers the three #57 scope questions; then the milestone runs:
+   close the small gaps red-first, write ADR-0083 (and ADR-0084 if the
+   cron record folds in), upstream merge + floor before main.
+2. `docs/hermes-improvements.html` is still untracked — not ours.
 
 ## Next-session prompt (ready to paste)
 
-> You're in /home/mustbearn/Projects/axiom-agent, main @ 0df364256. The
-> 2026-08-15 milestone landed: the ownership lattice (#55, ADR-0081) merged to
-> main, session recall (#56) verified already-on-main and recorded as ADR-0082,
-> and the baseline identity corrected to PrimeIntellect-ai/prime-agent v0.7.2
-> (ADR-0015 amendment; the old axiom URL 404s, tag v0.7.2 = 83a0f9f). #55 and
-> #56 are closed; the merged branches (feat/ownership-lattice,
-> feat/autonomy-direction-adr-0076) are deleted. Floor green on the merged
-> tree: /tmp/floor-milestone-2026-08-15.log.
->
-> Read SOUL.md, AGENTS.md, docs/handoff.md, ADR-0078, ADR-0081, ADR-0082 first.
-> Restructure execution rules are in force until the restructure lands on main:
-> process ceremony overridden, quality gates relaxed on WIP branches (the
-> ./test.sh floor must hold before anything reaches main), runtime safety
-> intact. Next: scope #57 (gateway channels) — signal/telegram/discord/slack
-> transports and /cron are all registered on main, so verify what is live vs.
-> wiring gaps before defining the milestone scope with the owner. #52 and #53
-> are owner-blocked; leave them (the fix/kernel-bridge-stall worktree at
-> /tmp/axiom-worktrees/kernel-bridge is active for #52).
-> docs/hermes-improvements.html is untracked — not ours.
+> You're in /home/mustbearn/Projects/axiom-agent, main @ 079d05d8f (==
+> origin/main). The 2026-08-15 milestone landed (#55/#56 closed, floor green,
+> log /tmp/floor-milestone-2026-08-15.log). #57 (gateway channels, ADR-0083)
+> is scoped and waiting on the owner: verification posted on the issue — five
+> transports + /cron are live on main (447 gateway tests green), four wiring
+> gaps recorded (/cost missing from /help; no socket-mode live check; signal
+> fan-out unrecorded; live passes operator-deferred), three scope questions
+> for the owner, label ready-for-human. #52/#53 are owner-blocked; leave them
+> (the fix/kernel-bridge-stall worktree at /tmp/axiom-worktrees/kernel-bridge
+> is active). Restructure execution rules in force until the restructure
+> lands on main: process ceremony overridden, WIP branches may carry red
+> tests, the ./test.sh floor must hold before anything reaches main, runtime
+> safety intact. Upstream (PrimeIntellect-ai/prime-agent) is 1 commit ahead:
+> 97b994c3d. docs/hermes-improvements.html is untracked — not ours.
