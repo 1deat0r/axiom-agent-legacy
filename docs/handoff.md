@@ -1,70 +1,71 @@
-# Handoff — 2026-08-15 (autonomy direction lands: merge, renumber, ADR-0079, restructure spine, #52 analysis)
+# Handoff — 2026-08-15 (/learn: the public skill-capture front-end, issue #54)
 
 ## Done
 
-1. **Merged the autonomy direction to main.** `feat/autonomy-direction-adr-0076`
-   fast-forwarded into main at `2a99afd8d`: the silent-by-default memory
-   consolidation (`3f26b8577`…`a808f26d1`) plus the renumber commit land
-   together.
-2. **ADR renumber 0076 → 0078.** Issue #52 holds the ADR-0076 reservation
-   (ADR-0071 convention), so the autonomy-direction ADR yields: file renamed,
-   title `(ADR-0078)`, and every live reference updated — the CONTEXT.md
-   memory-consolidation term, the two autonomy handoffs, the consolidation
-   extension's doc comments, and the test title that names the ADR. Stale
-   citations to #52's reservation in ADR-0075 and
-   docs/handoff-fix-sandbox-floor.md stay on 0076. Commit `3f26b8577`'s
-   message predates the renumber (noted in the ADR).
-3. **ADR-0079 lands the SOUL.md daily-driver veto** owed by ADR-0078 decision 1:
-   the veto sentence sits in the ledger-of-purpose stanza, and the closing
-   line carries it. SOUL.md prose is not test-pinned, so the floor is
-   unaffected by the edit.
-4. **Restructure spine created — six issues, one per port-order capability**
-   (ADR-0080…ADR-0085 reservations): #54 /learn, #55 ownership lattice,
-   #56 session recall, #57 gateway channels, #58 cron, #59 dashboard. All
-   labeled needs-triage, created via gh on 2026-08-15.
-5. **Stale-branch cleanup.** Merged feature branches deleted from origin
-   (native-websearch, search-meta, fix-sandbox-floor, delegate-watch,
-   gateway-pricing, semantic-color-integration, write-tool, read-tool).
-   Kept: `feat/autonomy-direction-adr-0076` (tip == main, no open issue —
-   delete candidate left for the owner) and `fix/kernel-bridge-stall`
-   (open issue #52 references it).
-6. **Issue #52 root-caused and proposed.** Four full-shard reproductions
-   (kernel-heavy re-included): the host bridge is exonerated — zero lost
-   messages, every session idle. The timeouts are worker-process
-   descheduling under the ~400-worker default sharded run (60–178s
-   phase gaps with probeReady succeeding afterward). ADR-0076
-   (proposed) on `fix/kernel-bridge-stall` keeps the kernel-heavy tag as
-   standing load management and lists two optional hardening follow-ups.
-   The tag decision is the owner's; the analysis comment on #52 asks for it.
+1. **Housekeeping for the prior session.** kernel-venv rlm/__init__.py
+   verified byte-identical to axiom-runtime/src (no restore). No orphaned
+   axiom forkserver daemons were alive (exact process inspection; the only
+   live forkserver is this session's own .prime one — untouched). 12 stale
+   /tmp/axiom-forkserver-* dirs removed. The autonomy-landing session's
+   handoff committed to main (`c12615bae`, pushed). Issue #52 got the
+   owner-decision comment: does the kernel-heavy tag stay as standing load
+   management, and is the optional merged-readiness-spawn hardening wanted
+   (both ADR-0076 proposals, still the owner's call).
+2. **/learn landed (ADR-0080, issue #54)**, merged to main at `888fd98ce`.
+   - New core module `core/skill-capture/learn.ts`: strict arg parsing
+     (nothing or `--force`), `buildLearnCapture` (provenance source "learn",
+     trigger "/learn", session id), and `runLearnCapture` (evaluate → build →
+     persist → verify; discriminated result; nothing written when unforced
+     and not flagged).
+   - The skill-capture extension registers the `/learn` command (the /cost
+     pattern): it traces the current session's branch from the session
+     manager (the persisted truth, SOUL.md), stages the skill into
+     `<AXIOM_HOME>/captured-skills`, and offers it — installs are the
+     ownership lattice's job (#55). The command stays available while the
+     ADR-0027 hook is inert, keeping ADR-0078's silent-by-default posture.
+   - CONTEXT.md "Skill capture" term names the /learn surface.
+3. **Tests, red first.** 12 core + 7 extension-command tests were red before
+   the module existed (import failure; command unregistered), now green.
+   A 2-test suite fence (agent-session-learn.test.ts) drives /learn through
+   a real AgentSession with the faux provider; it caught that the trace
+   comes from the persisted branch, and that harness tool calls need a
+   no-op tool or the turn ends with an error stopReason (fixed with a
+   probe tool + stopReason "toolUse").
 
 ## How it was verified
 
-- The merge was a fast-forward; the renumber edits were prepared on the
-  branch, so no conflict resolution happened on main.
-- `npx biome check .`: 4 infos, all pre-existing (telegram-transport ×2,
-  delegate-command, cost-command) — none in touched files.
-- `npx tsgo --noEmit`: exit 0.
-- Renumber sweep: grep for live ADR-0076 references on main — only
-  ADR-0075 and the sandbox-floor handoff mention it, both intentionally
-  pointing at #52's reservation.
-- Spine: `gh issue list` shows #54–#59 open, needs-triage, one role label
-  each.
-- #52: evidence in ADR-0076 on the branch (per-phase boot traces,
-  host/kernel comm receipts); the bridge-soundness repro
-  (`52-concurrent-kernel-boot-stall.test.ts`) passes under concurrent
-  boots. Branch work is proposed, not on main.
-- Floor: full `./test.sh` green on the feature branch before the merge
-  (logs: `/tmp/floor-autonomy.log`, `/tmp/floor-scoped-fix.log`). The
-  renumber commit touches no product code — doc comments and a test
-  title only; biome + tsgo above confirm main still holds.
+- Red runs captured before implementation: core suite failed on the missing
+  module import; the extension suite failed 7/7 command tests on the
+  unregistered command.
+- All four skill-capture suites green: 62 tests (12 core learn + 12
+  extension + 25 capture + 11 evaluate + 2 suite).
+- `npx biome check .`: 4 pre-existing infos, none in touched files.
+- `npx tsgo --noEmit`: exit 0 — it caught one wrong import (TaskTrace lives
+  in evaluate.ts, not types.ts) and, via the pre-commit hook, the wrong
+  stopReason value in the suite fixture.
+- **Full `./test.sh` floor, detached, on the exact merged tree** (log:
+  `/tmp/floor-learn-final.log`): agent 4, ai 49+23 skipped, coding-agent
+  main 429 files (5809 passed + 116 skipped — includes both new suites),
+  kernel 12 files, process-stress 2 files (13+8 skipped). auth.json
+  restored; the live telegram gateway survived the run.
+- An earlier detached floor (`/tmp/floor-learn.log`) ran before the suite
+  fence landed and was also fully green; the second run is the one that
+  counts, on the tree that reached main.
 
 ## Notes
 
-- ADR-0076 (kernel host-bridge stall analysis) stays **proposed** on
-  `fix/kernel-bridge-stall`; #52 stays open until the owner decides the
-  kernel-heavy tag question.
-- Optional boot-cost hardening from ADR-0076 (merge the two readiness
-  python spawns) is also an owner decision — not started.
-- `docs/hermes-improvements.html` remains untracked, untouched.
-- `origin` redirects to `github.com/1deat0r/axiom-agent`.
-- Next per ADR-0078 port order: issue #54 /learn (ADR-0080), red first.
+- The `unverified` branch of runLearnCapture is defensive (persist ok but
+  the loader says missing) and mirrors the existing CLI; it is not
+  unit-tested because the generated document always passes the real
+  loader. Noted, not hidden.
+- The gateway keeps its own command registry; /learn is an interactive
+  (TUI/daemon) surface, like /cost and /cap.
+- feat/learn-command is merged; delete it once #54 closes.
+
+## Next
+
+1. Ownership lattice (#55, ADR-0081) — pin/protected/curator-managed,
+   which governs what the loop may auto-install (incl. /learn captures).
+2. Session recall (#56, ADR-0082) after the lattice.
+3. Owner's calls, still open: #52 tag decision + optional spawn-merge
+   hardening; delete feat/autonomy-direction-adr-0076 (tip == main).
