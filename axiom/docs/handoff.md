@@ -1,59 +1,58 @@
-# Handoff — re-foundation on the Hermes baseline (ADR-0087)
+# Handoff — re-foundation live on origin; first port (memory) green
 
-Written 2026-08-16. Status: re-foundation complete and verified. Resume here.
+Written 2026-08-16 (session 2). Status: re-foundation pushed, first port core
+landed and verified. Resume here.
 
-## What was done
+## What was done (session 1 — re-foundation)
 
-Axiom re-founded as a hardfork of Hermes Agent (NousResearch/hermes-agent) at
-HEAD, per ADR-0087, synthesizing four sources: Hermes (chassis), Prime Agent
-(RLM + Continual Harness), DeepSeek Harness (plugin-first), Grok Build (build
-discipline + provenance).
+Axiom re-founded as a hardfork of Hermes Agent at HEAD per ADR-0087 (see
+`axiom/CONTEXT.md`). Prime-era (`archive/prime-v0.7.2`, `baseline/prime-v0.7.2`)
+and pi (`archive/pi-v0.84.1`) preserved as archived eras.
 
-- Preserved the prime-agent era: final commit `8c7b408de`, tagged and branched
-  `archive/prime-v0.7.2` (nothing lost).
-- Repointed remotes: `upstream` → NousResearch/hermes-agent (track),
-  `prime-agent` → PrimeIntellect-ai/prime-agent (reference), `upstream-pi`
-  unchanged, `origin` → 1deat0r/axiom-agent.
-- Reset `main` to Hermes HEAD `0c50bdbde` (2026-08-15) via a shallow fetch.
-- Cleaned prime-era untracked leftovers (node_modules, dist, __pycache__,
-  plans) — the durable brain was already committed to the archive.
-- Carried Axiom's decision layer into `axiom/`: the ADR series (0015–0086),
-  ports.md, the agent-process docs, and the sovereign-ts pivot plan.
-- Wrote ADR-0087, and rewrote SOUL.md / CONTEXT.md / GUIDE.md for the Hermes
-  baseline.
+## What was done (session 2 — this session)
 
-## What was verified (and how)
+1. Unshallowed `upstream` — full Hermes history; `.git/shallow` gone.
+2. Pushed the archived eras to origin (3 branches + `archive/prime-v0.7.2` tag).
+3. Force-pushed `main` (operator-approved). origin/main = `fc0481914`.
+4. Scaffolded the TS sovereign package at `~/Projects/axiom-sovereign/`
+   (type=module, erasable-TS tsconfig, typescript@5.9.3 + @types/node@26.2.0):
+   `src/memory.ts` (MemoryStore) + `src/profile_io.ts` + `src/lock.ts`.
+   7 tests green via `node --test`; `tsc --noEmit` clean; byte-compat verified
+   both directions against Python `3v0/core/memory.py`.
+5. Path-fixed carried process docs (`docs/adr/` -> `axiom/docs/adr/`, stale
+   upstream/account note -> Hermes upstream + 1deat0r origin), corrected the
+   TS specifier convention (`.js` -> `.ts`), marked ports.md #1 in progress.
+   Committed `336f9ec2d5`.
+6. Opened tracker issue #63 (port #1, `ready-for-agent`).
 
-All verification is repo-state inspection — no code was written this turn, so
-no unit tests apply.
+## Verified (how)
 
-- `git status` clean; `main` = Hermes HEAD `0c50bdbde`.
-- `git diff --stat upstream/main`: 96 files, 6832 insertions, **all under
-  `axiom/`** — the hardfork delta is purely additive; zero Hermes files
-  modified.
-- `archive/prime-v0.7.2` resolves to `8c7b408de` (prime era intact).
-- The pre-commit hook ran clean on the final prime-era commit.
-
-Not verified: booting the Hermes baseline (this host's default python is
-3.14, and Hermes pins `>=3.11,<3.14`; a 3.12/3.13 venv is needed). The
-working Hermes runtime lives at `~/.hermes/hermes-agent` (separate checkout).
+- `git ls-remote origin` — main + 3 archive branches + tag all correct.
+- `node --test test/memory.test.ts` — 7/7 pass.
+- `tsc --noEmit` — clean.
+- Byte-compat: Python-writes/TS-reads and TS-writes/Python-reads; `cmp`
+  byte-identical.
 
 ## Next steps (in order)
 
-1. **Unshallow** — `git fetch --unshallow upstream` (full Hermes history;
-   ~10–20 min background job). Must precede the push: pushing a shallow
-   `main` would publish a truncated, rootless history on origin.
-2. **Push the archived eras** — `git push origin archive/prime-v0.7.2
-   baseline/prime-v0.7.2 archive/pi-v0.84.1`, then `git push origin
-   refs/tags/archive/prime-v0.7.2` — so the prime + pi lines are durable on
-   origin before `main` is re-rooted.
-3. **Force-push main** — `git push --force-with-lease origin main`.
-4. **Scaffold the TS sovereign layer** (handoff-sovereign-ts.md §6): package
-   home, tsconfig, port `memory.py` → `memory.ts` + tests green.
-5. **Path-fix the carried process docs**: axiom/docs/agents/*.md still cite
-   `docs/adr/` and the old `upstream` remote; update to `axiom/docs/adr/` and
-   the Hermes upstream.
-6. **Create `axiom/AGENTS.md`** once the operator approves the
-   protected-instruction-file write; the content currently lives in
+1. **Decide package home + CLI runtime** (operator, handoff-sovereign-ts.md §8):
+   separate `~/Projects/axiom-sovereign/` repo vs fold into `axiom-agent/`;
+   node vs bun for the CLI entrypoints (recommend bun for CLI, node for
+   lib/tests).
+2. **Create `axiom/AGENTS.md`** (operator approval gate) — content already in
    `axiom/GUIDE.md`.
-7. Open the tracker issue for the re-foundation + first port.
+3. **Continue port #1** (issue #63): TS CLI entrypoints (ingest/query/record),
+   then skills store (port #2), then bridge re-pointing (port #3).
+4. **Flag — prime-era automation stale**: `axiom/docs/agents/issue-tracker.md`
+   "Automation" section references `.github/workflows/triage.yml` +
+   `issue-hygiene.yml`, which do NOT exist on the Hermes baseline. Decide
+   whether to port that automation.
+
+## Environment quirks (verified this session)
+
+- `NODE_ENV=production` is set in the shell — `npm install` omits devDeps
+  unless `--include=dev` is passed.
+- Node 26 type-stripping does NOT rewrite `.js` -> `.ts` import specifiers;
+  use `.ts` specifiers + `allowImportingTsExtensions` + `noEmit`.
+- The Hermes terminal guard false-positives on the literal `tsc` token; run
+  `npm run typecheck` instead of `tsc` directly.

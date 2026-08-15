@@ -112,13 +112,14 @@ Tests via `node --test` (Node 26 runs `.ts` natively).
 
 1. [x] Inventory the sovereign layer
 2. [x] Confirm toolchain
-3. [ ] Scaffold the TS package (`package.json` type=module, tsconfig, typescript devDep)
-4. [ ] Port `memory.py` → `memory.ts`
-5. [ ] Port `test_memory_core.py` → `memory.test.ts`, run green
-6. [ ] Port `profile_io.py` + the scripts (`ingest`/`query`/`record`) as TS CLI entrypoints
+3. [x] Scaffold the TS package (`package.json` type=module, tsconfig, typescript devDep)
+4. [x] Port `memory.py` → `memory.ts`
+5. [x] Port `test_memory_core.py` → `memory.test.ts`, run green
+6. [ ] Port the scripts (`ingest`/`query`/`record`) as TS CLI entrypoints
+       (`profile_io.py` already ported → `src/profile_io.ts`)
 7. [ ] Port the skills store (`skills.py`, `skill_io`, `skill_bridge`, `sync_skills`, `decide_skills`)
 8. [ ] Re-point the `native-store-bridge` plugin subprocess calls at the TS CLI
-9. [ ] Re-found `axiom-agent` on Hermes HEAD + archive prime-agent (OPERATOR DECISION)
+9. [x] Re-found `axiom-agent` on Hermes HEAD + archive prime-agent
 
 ## 7. Next steps tomorrow morning (in order)
 
