@@ -792,7 +792,7 @@ def resolve_toolset(name: str, visited: Set[str] = None, *, include_registry: bo
             from tools.registry import registry
 
             registry_id = id(registry)
-            generation = getattr(registry, "_generation", 0)
+            generation = registry.generation()
         except Exception:
             registry_id = 0
             generation = 0
@@ -866,7 +866,7 @@ def resolve_toolset(name: str, visited: Set[str] = None, *, include_registry: bo
             from tools.registry import registry
 
             registry_id = id(registry)
-            generation = getattr(registry, "_generation", 0)
+            generation = registry.generation()
         except Exception:
             registry_id = 0
             generation = 0

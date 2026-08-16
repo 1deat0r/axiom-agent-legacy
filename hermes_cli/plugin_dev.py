@@ -112,17 +112,17 @@ def _doctor_runtime(plugin_path: Path):
             for name in set(entries_before) | set(entries_after)
             if entries_after.get(name) is not entries_before.get(name)
         }
+        # ADR-0093: restoration crosses the registry interface — a bulk
+        # global-slot restore (the plugin-dev host's teardown semantics)
+        # instead of mutating registry._tools directly. The plugin ownership
+        # policy ledger still has no public restore API; its private fields
+        # remain the one exception (documented in ADR-0093).
+        registry.restore_global_slots(
+            {name: entries_before.get(name) for name in changed_names}
+        )
         with registry._lock:
-            for name in changed_names:
-                previous = entries_before.get(name)
-                if previous is None:
-                    registry._tools.pop(name, None)
-                else:
-                    registry._tools[name] = previous
             registry._plugin_override_policy.clear()
             registry._plugin_override_policy.update(policy_before)
-            if changed_names:
-                registry._generation += 1
         for name in list(sys.modules):
             if (
                 name not in modules_before

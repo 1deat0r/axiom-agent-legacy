@@ -2766,7 +2766,7 @@ def _estimate_tool_tokens() -> Dict[str, int]:
         # Trigger full tool discovery (imports all tool modules).
         import model_tools  # noqa: F401
         from tools.registry import registry
-        cache_key = (scope, registry._generation)
+        cache_key = (scope, registry.generation())
     except Exception:
         logger.debug("Tool registry unavailable; skipping token estimation")
         cache_key = (scope, -1)

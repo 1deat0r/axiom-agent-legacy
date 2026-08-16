@@ -254,12 +254,20 @@ except Exception as e:
 
 
 # =============================================================================
-# Backward-compat constants  (built once after discovery)
+# Backward-compat constants — live snapshots (ADR-0093)
 # =============================================================================
+# Resolved from the registry on every access (module __getattr__ below) so
+# MCP refresh / plugin (un)load cannot leave them stale. The
+# ``from model_tools import TOOL_TO_TOOLSET_MAP`` surface is unchanged.
 
-TOOL_TO_TOOLSET_MAP: Dict[str, str] = registry.get_tool_to_toolset_map()
 
-TOOLSET_REQUIREMENTS: Dict[str, dict] = registry.get_toolset_requirements()
+def __getattr__(name: str):
+    if name == "TOOL_TO_TOOLSET_MAP":
+        return registry.get_tool_to_toolset_map()
+    if name == "TOOLSET_REQUIREMENTS":
+        return registry.get_toolset_requirements()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 # Resolved tool names from the last get_tool_definitions() call.
 # Used by code_execution_tool to know which tools are available in this session.
@@ -370,7 +378,7 @@ def get_tool_definitions(
                 registry.current_scope_key(),
                 frozenset(enabled_toolsets) if enabled_toolsets is not None else None,
                 frozenset(disabled_toolsets) if disabled_toolsets else None,
-                registry._generation,
+                registry.generation(),
                 cfg_fp,
                 bool(os.environ.get("HERMES_KANBAN_TASK")),
                 bool(skip_tool_search_assembly),

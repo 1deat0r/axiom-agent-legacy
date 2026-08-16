@@ -401,6 +401,16 @@ next TUI session, or pin `HERMES_TUI_TOOLSETS`.
     tool_args. Sweeps green (76 coercion/dispatch tests; full tests/run_agent
     with the same 7 pre-existing env-gap failures).
 
+51. Implemented ADR-0093 (C9, red-first, one commit): `registry.generation()`
+    is the public read (six memo sites re-pointed), `restore_registration`
+    now bumps the generation (missing-bump bug), the plugin-dev teardown
+    crosses a new `restore_global_slots` bulk-restore seam instead of
+    mutating `_tools`, and `model_tools.TOOL_TO_TOOLSET_MAP` /
+    `TOOLSET_REQUIREMENTS` are live snapshots via module `__getattr__`.
+    Tests: `tests/tools/test_registry_generation.py` (3, red first).
+    Sweeps green (159 registry/doctor/seam tests, plugin-dev 5/5, full
+    tests/run_agent with the same 7 pre-existing env-gap failures).
+
 ## Next steps (in order)
 
 1. ~~Decide CLI runtime~~ — resolved 2026-08-16: `node` (see session 3 #9).

@@ -516,6 +516,18 @@ class ToolRegistry:
         """Return a stable snapshot of registered tool entries."""
         return self._snapshot_state()[0]
 
+    def generation(self) -> int:
+        """ADR-0093: public read of the monotonic registration counter.
+
+        Memoized callers (tool-definitions cache, toolset resolution, token
+        estimation) key on this instead of reaching into ``_generation``, so
+        registry internals stay private and every mutation — including
+        :meth:`restore_registration` — invalidates them uniformly.
+        """
+        with self._lock:
+            return self._generation
+        return self._snapshot_state()[0]
+
     def _toolset_has_exposable_tools(
         self,
         toolset: str,
@@ -1046,7 +1058,25 @@ class ToolRegistry:
                     }
             self._generation += 1
         logger.debug("Restored tool registration: %s", name)
+        # ADR-0093: restoration is a mutation — bump the generation so
+        # memoized callers keyed on it invalidate uniformly.
+        self._generation += 1
         return True
+
+    def restore_global_slots(self, previous: Dict[str, Optional[ToolEntry]]) -> None:
+        """ADR-0093: bulk-restore the global slot table to a prior snapshot.
+
+        Used by the plugin-dev host to tear a temporarily-loaded plugin back
+        out: each name returns to its prior entry (absent → removed). One
+        generation bump at the end, like every other mutation.
+        """
+        with self._lock:
+            for name, entry in previous.items():
+                if entry is None:
+                    self._tools.pop(name, None)
+                else:
+                    self._tools[name] = entry
+            self._generation += 1
 
     # ------------------------------------------------------------------
     # Agent executor seam (ADR-0090)

@@ -355,7 +355,7 @@ def _tool_search_scoped_names(agent) -> frozenset:
     disabled = getattr(agent, "disabled_toolsets", None)
     cache_key = (
         _registry.current_scope_key(),
-        getattr(_registry, "_generation", 0),
+        _registry.generation(),
         frozenset(enabled) if enabled is not None else None,
         frozenset(disabled) if disabled is not None else None,
     )

@@ -1493,7 +1493,7 @@ def init_agent(
     # whether it holds a newer or staler view (see refresh_agent_mcp_tools).
     try:
         from tools.registry import registry as _snapshot_registry
-        agent._tool_snapshot_generation = _snapshot_registry._generation
+        agent._tool_snapshot_generation = _snapshot_registry.generation()
     except Exception:
         agent._tool_snapshot_generation = 0
     agent.tools = _ra().get_tool_definitions(
