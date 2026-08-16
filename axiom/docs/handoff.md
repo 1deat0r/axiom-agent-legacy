@@ -1,12 +1,12 @@
-# Handoff — Axiom TUI identity + local vision + sovereign store live (session 11)
+# Handoff — one tool-dispatch seam (session 12)
 
-Written 2026-08-16 (session 11). Status: ports #1–#5 done; the tracker
-automation CI is ported (issue #66) and activated (#67 ledger); the Axiom TUI
-identity is shipped as a `axiom` skin (ADR-0088). Session 11 wired Axiom's
-vision to a local VLM (ADR-0089) and activated the sovereign-store plugin
-(native-store-bridge, port #3) in the live profile. The upstream merge is
-current (`upstream/main` is an ancestor of HEAD). The tracker has one open
-issue — the ledger (#67), a passive record, not a task.
+Written 2026-08-16 (session 12). Status: ADR-0090 tool-dispatch seam shipped —
+the triplicated dispatch pipelines (handle_function_call /
+execute_tool_calls_sequential forks / invoke_tool intercept chain) are unified
+behind a registry `agent_executor` contract; the dead-end stub and both name
+lists are gone. Tracker: #68 closed, #69 (ADR-0091, bridge + execute_code →
+dynamic-schema seam) open. Session-start ritual: the tree was refreshed onto
+upstream (39 commits, `e107b91d64`) before this work, so no merge was needed.
 
 ## What was done (session 1 — re-foundation)
 
@@ -314,6 +314,50 @@ next TUI session, or pin `HERMES_TUI_TOOLSETS`.
   cli_new_session, single_query_session_finalize — all green. Parser smoke:
   `--max-run-cost` parses to float at top-level and chat level, default None.
 
+## What was done (session 12)
+
+42. Ran the improve-codebase-architecture skill (mattpocock) over the tool
+    subsystem with an independent subagent walk; report at
+    /tmp/architecture-review-1786870124.html — 10 deepening candidates. The
+    operator picked C1 (one dispatch seam); the design was grilled to
+    convergence (all frontier decisions operator-approved).
+43. Implemented ADR-0090 (`axiom/docs/adr/ADR-0090-tool-dispatch-seam.md`),
+    red-first, in two commits (`c9ba1b7d22` tests, `c2990000e3` refactor):
+    - `ToolEntry` gains `agent_executor(agent, args, ctx)` and
+      `after_authorization(agent)`; `registry.dispatch_agent_executor` /
+      `get_agent_executor` / `get_after_authorization` are the public seam.
+    - The nine agent-level tools register executors beside their schemas
+      (todo, session_search, memory, clarify, read_terminal, read_preview,
+      read_window_below, setup_mcp, delegate_task); memory + skill_manage
+      register `after_authorization` for the counter resets (timing preserved:
+      post-guardrails, pre-execute, blocked never fires).
+    - Sequential executor and `invoke_tool` resolve through the registry —
+      13 name-forks + the invoke_tool intercept chain deleted; the delegate
+      branch keeps spinner display sugar only.
+    - `_AGENT_LOOP_TOOLS` + the "must be handled by the agent loop" stub
+      deleted; agent-less callers degrade uniformly through each tool's
+      registry handler (session_search returns a harmless browse-mode result,
+      the rest return their own errors).
+    - Approval-hook correlation IDs (`set/reset_current_observability_context`)
+      now wrap every dispatch, including the executor paths that previously
+      skipped them.
+    - Net −10 lines (353 insertions, 363 deletions).
+44. Verification: `tests/run_agent/test_tool_dispatch_seam.py` (13 tests, red
+    first) pins the contract. Full sweep over tests/run_agent + test_model_tools
+    + tool_search + dispatch_session_id + transform/sanitize + the two Axiom
+    port suites: 255+ green; 7 failures, all pre-existing environment gaps in
+    the shared test venv (`~/.hermes/hermes-agent/venv` has pytest but no
+    `anthropic`; 6 anthropic-provider tests + 1 nous-token test — none touch
+    the dispatch diff). The sweep caught two real regressions (session_search
+    tests patching the old call-time import mechanism) — fixed by re-patching
+    the real module attribute the registered executor calls.
+45. Tracker: #68 (ADR-0090 reservation) opened at start and closed with the
+    audit comment; #69 (ADR-0091 reservation — bridge tools + execute_code →
+    dynamic_schema_overrides) opened and stays open as the follow-up.
+    Environment note: installed the `anthropic` extra into `.venv`
+    (`uv sync --extra anthropic --locked` — safe, no recreate); the shared
+    test venv was left untouched.
+
 ## Next steps (in order)
 
 1. ~~Decide CLI runtime~~ — resolved 2026-08-16: `node` (see session 3 #9).
@@ -341,16 +385,22 @@ next TUI session, or pin `HERMES_TUI_TOOLSETS`.
 
 ## Next session (standing)
 
-Nothing queued — the port queue is empty and the tracker has only the passive
-ledger (#67). A fresh session opens with the ADR-0087 ritual (fetch upstream,
-merge if ahead, run `test_max_run_cost` + `test_native_store_bridge`, check
-the tracker is empty) and then asks the operator what's next. Two items carry
-over: (1) relaunch the TUI (`axiom`) to see the full Axiom theme (session 10);
-(2) confirm a live TUI turn actually receives `axiom_store`/`axiom_record` —
-the `axiom` toolset resolves but is enabled only for the `cli` platform, and
-the TUI surface resolves toolsets through `_load_enabled_toolsets("tui")`
-(coding posture / `HERMES_TUI_TOOLSETS`), so its inclusion in a live TUI turn
-is unverified (session 11 §40).
+The port queue is empty; the tracker has the passive ledger (#67) and the
+ADR-0091 follow-up (#69 — bridge tools + execute_code onto the
+dynamic-schema seam, per `axiom/docs/adr/ADR-0090-tool-dispatch-seam.md`
+"Consequences"). A fresh session opens with the ADR-0087 ritual (fetch
+upstream, merge if ahead, run `test_max_run_cost` +
+`test_native_store_bridge` + `test_tool_dispatch_seam`, check the tracker)
+and then asks the operator what's next. Three items carry over: (1) relaunch
+the TUI (`axiom`) to see the full Axiom theme (session 10); (2) confirm a
+live TUI turn actually receives `axiom_store`/`axiom_record` — the `axiom`
+toolset resolves but is enabled only for the `cli` platform, and the TUI
+surface resolves toolsets through `_load_enabled_toolsets("tui")` (coding
+posture / `HERMES_TUI_TOOLSETS`), so its inclusion in a live TUI turn is
+unverified (session 11 §40); (3) the remaining architecture-review
+candidates C2–C10 are documented in the session-12 report —
+`improve-codebase-architecture` candidates, pick from the report if
+hardening continues.
 
 ## Environment quirks (verified)
 
