@@ -419,6 +419,15 @@ next TUI session, or pin `HERMES_TUI_TOOLSETS`.
     (different contract, documented). Tests:
     `tests/tools/test_browser_url_guard_seam.py` (8, red first); sweep
     212 green across the full browser guard surface + seam suites.
+53. C4 (browser availability consolidation) — grilled, then DECLINED as
+    superseded: the merge already built the delegation chain
+    (dialog→cdp→check_browser_requirements; vision→browser; browser→
+    use-cli-mode gate) and the remaining probes are distinct contracts
+    (managed-first uvx finder vs validated extended-PATH/npx finder;
+    camofox HTTP health; CDP-URL gate). ADR-0095 records the evidence and
+    the decline; the injectable-probe-registry idea stays deferred.
+    No code change — the deletion test said consolidating would move
+    complexity, not concentrate it.
 
 ## Next steps (in order)
 
