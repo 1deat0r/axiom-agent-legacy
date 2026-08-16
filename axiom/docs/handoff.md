@@ -305,6 +305,16 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
    upstream/main` and re-runs the sweep before doing anything else. Session
    8 start: no-op (zero new upstream commits).
 
+## Next session (standing)
+
+Nothing queued — the port queue is empty and the tracker has only the passive
+ledger (#67). A fresh session opens with the ADR-0087 ritual (fetch upstream,
+merge if ahead, run `test_max_run_cost` + `test_native_store_bridge`, check
+the tracker is empty) and then asks the operator what's next. One operator
+action pending from session 10: relaunch the TUI (`axiom`) to see the full
+Axiom theme — the rebuilt `ui-tui/dist/entry.js` only takes effect on a fresh
+process.
+
 ## Environment quirks (verified)
 
 - `uv run --with <pkg>` against the project recreates `.venv` and drops the
