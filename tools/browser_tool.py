@@ -5383,6 +5383,25 @@ from tools.registry import registry, tool_error
 
 _BROWSER_SCHEMA_MAP = {s["name"]: s for s in BROWSER_TOOL_SCHEMAS}
 
+_WEB_CROSSREF_SENTENCE = (
+    " For simple information retrieval, prefer web_search or web_extract "
+    "(faster, cheaper)."
+)
+
+
+def _browser_navigate_dynamic_overrides(available_tool_names=None):
+    """ADR-0091: strip the web-tool cross-reference when neither web_search
+    nor web_extract is available this session — the static sentence makes
+    the model hallucinate tools it does not have (previously a name-case in
+    _compute_tool_definitions)."""
+    if available_tool_names is not None and not (
+        {"web_search", "web_extract"} & available_tool_names
+    ):
+        desc = _BROWSER_SCHEMA_MAP["browser_navigate"]["description"]
+        return {"description": desc.replace(_WEB_CROSSREF_SENTENCE, "")}
+    return {}
+
+
 registry.register(
     name="browser_navigate",
     toolset="browser",
@@ -5390,6 +5409,7 @@ registry.register(
     handler=lambda args, **kw: browser_navigate(url=args.get("url", ""), task_id=kw.get("task_id")),
     check_fn=check_browser_requirements,
     emoji="🌐",
+    dynamic_schema_overrides=_browser_navigate_dynamic_overrides,
 )
 registry.register(
     name="browser_snapshot",

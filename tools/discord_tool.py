@@ -1097,6 +1097,17 @@ _STATIC_ADMIN_SCHEMA = _build_schema(
     list(_ADMIN_ACTIONS.keys()), caps={"detected": False}, tool_name="discord_admin",
 )
 
+def _core_dynamic_overrides():
+    """ADR-0091: the privileged-intent schema (or None → the registry drops
+    the tool) — previously a name-case in _compute_tool_definitions."""
+    return get_dynamic_schema_core()
+
+
+def _admin_dynamic_overrides():
+    """ADR-0091: same contract for discord_admin."""
+    return get_dynamic_schema_admin()
+
+
 registry.register(
     name="discord",
     toolset="discord",
@@ -1104,6 +1115,7 @@ registry.register(
     handler=_make_handler(discord_core),
     check_fn=check_discord_tool_requirements,
     requires_env=["DISCORD_BOT_TOKEN"],
+    dynamic_schema_overrides=_core_dynamic_overrides,
 )
 
 registry.register(
@@ -1113,4 +1125,5 @@ registry.register(
     handler=_make_handler(discord_admin_handler),
     check_fn=check_discord_tool_requirements,
     requires_env=["DISCORD_BOT_TOKEN"],
+    dynamic_schema_overrides=_admin_dynamic_overrides,
 )

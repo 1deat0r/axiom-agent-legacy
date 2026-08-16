@@ -2194,6 +2194,16 @@ def _execute_code_handler(args: dict, **kwargs) -> str:
     )
 
 
+def _dynamic_schema_overrides(available_tool_names=None):
+    """ADR-0091: rebuild the execute_code schema to list only sandbox tools
+    that are actually available this session (previously a name-case in
+    model_tools._compute_tool_definitions)."""
+    if available_tool_names is None:
+        return {}
+    sandbox_enabled = SANDBOX_ALLOWED_TOOLS & available_tool_names
+    return build_execute_code_schema(sandbox_enabled, mode=_get_execution_mode())
+
+
 registry.register(
     name="execute_code",
     toolset="code_execution",
@@ -2202,4 +2212,5 @@ registry.register(
     check_fn=check_sandbox_requirements,
     emoji="🐍",
     max_result_size_chars=100_000,
+    dynamic_schema_overrides=_dynamic_schema_overrides,
 )

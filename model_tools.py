@@ -507,90 +507,11 @@ def _compute_tool_definitions(
     # other toolset.
 
     # Ask the registry for schemas (only returns tools whose check_fn passes)
+    # ADR-0091: the dynamic-schema seam owns every per-session schema rewrite
+    # (execute_code sandbox list, discord intents, browser_navigate web
+    # cross-ref, browser_exec terminal gate) — registered beside each tool via
+    # dynamic_schema_overrides. This assembler knows no tool names.
     filtered_tools = registry.get_definitions(tools_to_include, quiet=quiet_mode)
-
-    # The set of tool names that actually passed check_fn filtering.
-    # Use this (not tools_to_include) for any downstream schema that references
-    # other tools by name — otherwise the model sees tools mentioned in
-    # descriptions that don't actually exist, and hallucinates calls to them.
-    available_tool_names = {t["function"]["name"] for t in filtered_tools}
-
-    # Rebuild execute_code schema to only list sandbox tools that are actually
-    # available.  Without this, the model sees "web_search is available in
-    # execute_code" even when the API key isn't configured or the toolset is
-    # disabled (#560-discord).
-    if "execute_code" in available_tool_names:
-        from tools.code_execution_tool import SANDBOX_ALLOWED_TOOLS, build_execute_code_schema, _get_execution_mode
-        sandbox_enabled = SANDBOX_ALLOWED_TOOLS & available_tool_names
-        dynamic_schema = build_execute_code_schema(sandbox_enabled, mode=_get_execution_mode())
-        for i, td in enumerate(filtered_tools):
-            if td.get("function", {}).get("name") == "execute_code":
-                filtered_tools[i] = {"type": "function", "function": dynamic_schema}
-                break
-
-    # Rebuild discord / discord_admin schemas based on the bot's privileged
-    # intents (detected from GET /applications/@me) and the user's action
-    # allowlist in config.  Hides actions the bot's intents don't support so
-    # the model never attempts them, and annotates fetch_messages when the
-    # MESSAGE_CONTENT intent is missing.
-    _discord_schema_fns = {
-        "discord": "get_dynamic_schema_core",
-        "discord_admin": "get_dynamic_schema_admin",
-    }
-    for discord_tool_name in _discord_schema_fns:
-        if discord_tool_name in available_tool_names:
-            try:
-                from tools import discord_tool as _dt
-                schema_fn = getattr(_dt, _discord_schema_fns[discord_tool_name])
-                dynamic = schema_fn()
-            except Exception:
-                dynamic = None
-            if dynamic is None:
-                filtered_tools = [
-                    t for t in filtered_tools
-                    if t.get("function", {}).get("name") != discord_tool_name
-                ]
-                available_tool_names.discard(discord_tool_name)
-            else:
-                for i, td in enumerate(filtered_tools):
-                    if td.get("function", {}).get("name") == discord_tool_name:
-                        filtered_tools[i] = {"type": "function", "function": dynamic}
-                        break
-
-    # Strip web tool cross-references from browser_navigate description when
-    # web_search / web_extract are not available.  The static schema says
-    # "prefer web_search or web_extract" which causes the model to hallucinate
-    # those tools when they're missing.
-    if "browser_navigate" in available_tool_names:
-        web_tools_available = {"web_search", "web_extract"} & available_tool_names
-        if not web_tools_available:
-            for i, td in enumerate(filtered_tools):
-                if td.get("function", {}).get("name") == "browser_navigate":
-                    desc = td["function"].get("description", "")
-                    desc = desc.replace(
-                        " For simple information retrieval, prefer web_search or web_extract (faster, cheaper).",
-                        "",
-                    )
-                    filtered_tools[i] = {
-                        "type": "function",
-                        "function": {**td["function"], "description": desc},
-                    }
-                    break
-
-    # browser_exec (Browser Use mode) runs arbitrary Python on the host via
-    # the browser-use CLI subprocess.  A session whose toolset selection
-    # excludes the terminal surface (e.g. a messaging platform configured
-    # without terminal access) must not regain host code execution through
-    # the browser toolset — that would silently widen the operator's chosen
-    # security posture.  Session-level gate, NOT a check_fn: check_fn results
-    # are TTL-cached process-wide while one gateway process serves many
-    # sessions with different toolset configs.
-    if "browser_exec" in available_tool_names and "terminal" not in available_tool_names:
-        filtered_tools = [
-            td for td in filtered_tools
-            if td.get("function", {}).get("name") != "browser_exec"
-        ]
-        available_tool_names.discard("browser_exec")
 
     if not quiet_mode:
         if filtered_tools:

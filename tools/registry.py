@@ -1097,13 +1097,23 @@ class ToolRegistry:
         etc.); TTL chosen so env-var changes (``hermes tools enable foo``)
         still take effect in near-real-time without forcing a full cache
         flush on every call.
+
+        ADR-0091 (dynamic-schema seam): resolution is two-pass. Pass 1
+        applies check_fn filtering and collects the candidate name set;
+        pass 2 builds each schema and applies ``dynamic_schema_overrides``.
+        An override that accepts a parameter receives the candidate
+        ``available_tool_names`` frozenset (signature-inspected — zero-arg
+        callables keep the old contract); its dict return merges into the
+        schema, ``None`` drops the tool (session gates, probe failures).
         """
-        result = []
         # Per-call cache on top of the 30 s TTL — handles repeat probes of the
         # same check_fn within one definitions pass without re-reading the
         # TTL clock.
         check_results: Dict[Callable, bool] = {}
         entries_by_name = {entry.name: entry for entry in self._snapshot_entries()}
+
+        # Pass 1 — check_fn filtering, collecting the candidate set.
+        candidates: List[ToolEntry] = []
         for name in sorted(tool_names):
             entry = entries_by_name.get(name)
             if not entry:
@@ -1115,16 +1125,32 @@ class ToolRegistry:
                     if not quiet:
                         logger.debug("Tool %s unavailable (check failed)", name)
                     continue
+            candidates.append(entry)
+        available_tool_names = frozenset(entry.name for entry in candidates)
+
+        # Pass 2 — schema build + dynamic overrides (may drop tools).
+        result = []
+        for entry in candidates:
+            name = entry.name
             # Ensure schema always has a "name" field — use entry.name as fallback
-            schema_with_name = {**entry.schema, "name": entry.name}
+            schema_with_name = {**entry.schema, "name": name}
             # Apply runtime-dynamic overrides (e.g. delegate_task description
             # depends on current delegation.max_concurrent_children /
-            # max_spawn_depth). Caller side (model_tools.get_tool_definitions)
+            # max_spawn_depth; browser_exec's session gate depends on the
+            # terminal surface). Caller side (model_tools.get_tool_definitions)
             # already keys its memo on config.yaml mtime + size, so changes
             # to delegation.* in config invalidate the cache automatically.
             if entry.dynamic_schema_overrides is not None:
                 try:
-                    overrides = entry.dynamic_schema_overrides()
+                    overrides = self._call_dynamic_overrides(
+                        entry.dynamic_schema_overrides, available_tool_names
+                    )
+                    if overrides is None:
+                        if not quiet:
+                            logger.debug(
+                                "Tool %s dropped by dynamic_schema_overrides", name
+                            )
+                        continue
                     if isinstance(overrides, dict):
                         schema_with_name.update(overrides)
                 except Exception as exc:
@@ -1135,6 +1161,33 @@ class ToolRegistry:
                     )
             result.append({"type": "function", "function": schema_with_name})
         return result
+
+    @staticmethod
+    def _call_dynamic_overrides(override: Callable, available_tool_names: frozenset):
+        """Invoke a dynamic_schema_overrides callable per the compat policy.
+
+        Signature-inspected: a callable that accepts a positional parameter
+        receives the candidate name frozenset; a zero-arg callable keeps the
+        pre-ADR-0091 contract and is called with nothing.
+        """
+        import inspect
+
+        try:
+            sig = inspect.signature(override)
+        except (TypeError, ValueError):
+            return override()
+        accepts_positional = any(
+            p.kind
+            in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                inspect.Parameter.VAR_POSITIONAL,
+            )
+            for p in sig.parameters.values()
+        )
+        if accepts_positional:
+            return override(available_tool_names)
+        return override()
 
     # ------------------------------------------------------------------
     # Dispatch

@@ -777,7 +777,16 @@ def _cli_skill_text() -> str:
     return _skill_text_cache or ""
 
 
-def _dynamic_schema_overrides() -> dict:
+def _dynamic_schema_overrides(available_tool_names=None):
+    """ADR-0091: browser_exec runs arbitrary Python on the host via the
+    browser-use CLI subprocess. A session without the terminal surface must
+    not regain host code execution through the browser toolset — return None
+    and the registry drops the tool. Session-level gate, NOT a check_fn:
+    check_fn results are TTL-cached process-wide while one gateway process
+    serves many sessions with different toolset configs (previously a
+    name-case in _compute_tool_definitions)."""
+    if available_tool_names is not None and "terminal" not in available_tool_names:
+        return None
     return {"description": _description_header() + _HELPERS_DIGEST}
 
 

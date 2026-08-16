@@ -357,6 +357,26 @@ next TUI session, or pin `HERMES_TUI_TOOLSETS`.
     Environment note: installed the `anthropic` extra into `.venv`
     (`uv sync --extra anthropic --locked` — safe, no recreate); the shared
     test venv was left untouched.
+46. Closed the code-review loop on ADR-0090: two-axis review (Standards +
+    Spec, parallel sub-agents) → fixes landed (`87fed0dc44` production seam,
+    shared `executor_ctx` factory, `observability_context` context manager,
+    stale comment, stronger degradation pins; `a1af0c8573` debug logging on
+    the defensive degradation paths). Declines documented: `after_authorization`
+    name kept (ADR vocabulary), broad excepts now logged not silent.
+47. Implemented ADR-0091 (#69, red-first, one commit): the dynamic-schema
+    seam is now context-aware — `registry.get_definitions` is two-pass
+    (check_fn pass → candidates frozenset → overrides pass), and
+    `dynamic_schema_overrides` may accept `available_tool_names`
+    (signature-inspected; zero-arg callables unchanged). Dict → merge,
+    None → drop. The four assembler name-cases moved beside their tools:
+    execute_code (sandbox list), discord/discord_admin (intent probe, None
+    drops), browser_navigate (web cross-ref strip), browser_exec (terminal
+    gate, None drops). `_compute_tool_definitions` now knows no tool names.
+    Bridge dispatch forks stay (out of scope, documented in the ADR).
+    Tests: `tests/run_agent/test_dynamic_schema_seam.py` (8, red first) pins
+    both seams; sweeps green (329 schema/registry tests, full tests/run_agent
+    with the same 7 pre-existing env-gap failures: no `anthropic` in the
+    shared test venv + 1 nous-token test).
 
 ## Next steps (in order)
 
@@ -385,12 +405,10 @@ next TUI session, or pin `HERMES_TUI_TOOLSETS`.
 
 ## Next session (standing)
 
-The port queue is empty; the tracker has the passive ledger (#67) and the
-ADR-0091 follow-up (#69 — bridge tools + execute_code onto the
-dynamic-schema seam, per `axiom/docs/adr/ADR-0090-tool-dispatch-seam.md`
-"Consequences"). A fresh session opens with the ADR-0087 ritual (fetch
-upstream, merge if ahead, run `test_max_run_cost` +
-`test_native_store_bridge` + `test_tool_dispatch_seam`, check the tracker)
+The port queue is empty; the tracker has only the passive ledger (#67). A
+fresh session opens with the ADR-0087 ritual (fetch upstream, merge if
+ahead, run `test_max_run_cost` + `test_native_store_bridge` +
+`test_tool_dispatch_seam` + `test_dynamic_schema_seam`, check the tracker)
 and then asks the operator what's next. Three items carry over: (1) relaunch
 the TUI (`axiom`) to see the full Axiom theme (session 10); (2) confirm a
 live TUI turn actually receives `axiom_store`/`axiom_record` — the `axiom`
