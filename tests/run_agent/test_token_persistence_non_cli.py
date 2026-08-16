@@ -70,14 +70,14 @@ def test_session_search_lazily_opens_db_when_entrypoint_did_not_pass_one(monkeyp
     hermes_state.SessionDB = FakeSessionDB
     monkeypatch.setitem(sys.modules, "hermes_state", hermes_state)
 
-    session_search_mod = ModuleType("tools.session_search_tool")
-
     def fake_session_search(**kwargs):
         captured.update(kwargs)
         return json.dumps({"success": True, "results": []})
 
-    session_search_mod.session_search = fake_session_search
-    monkeypatch.setitem(sys.modules, "tools.session_search_tool", session_search_mod)
+    # ADR-0090: the registered agent executor calls the real module's
+    # session_search — patch the module attribute, not a sys.modules stand-in.
+    import tools.session_search_tool as _real_session_search_mod
+    monkeypatch.setattr(_real_session_search_mod, "session_search", fake_session_search)
 
     agent = _make_agent(None, platform="acp")
     result = json.loads(agent._invoke_tool(
@@ -97,14 +97,13 @@ def test_sequential_session_search_forwards_detail(monkeypatch):
     session_db = MagicMock()
     captured = {}
 
-    session_search_mod = ModuleType("tools.session_search_tool")
-
     def fake_session_search(**kwargs):
         captured.update(kwargs)
         return json.dumps({"success": True, "results": []})
 
-    session_search_mod.session_search = fake_session_search
-    monkeypatch.setitem(sys.modules, "tools.session_search_tool", session_search_mod)
+    # ADR-0090: patch the real module attribute the registered executor calls.
+    import tools.session_search_tool as _real_session_search_mod
+    monkeypatch.setattr(_real_session_search_mod, "session_search", fake_session_search)
 
     agent = _make_agent(session_db, platform="acp")
     tool_call = SimpleNamespace(

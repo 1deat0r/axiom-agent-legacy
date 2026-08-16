@@ -2038,10 +2038,13 @@ class TestConcurrentToolExecution:
 
 
     def test_invoke_tool_handles_agent_level_tools(self, agent):
-        """_invoke_tool should handle todo tool directly."""
+        """_invoke_tool resolves agent-level tools through their registered
+        registry executor (ADR-0090) — which calls the same handler with the
+        agent's store injected."""
         with patch("tools.todo_tool.todo_tool", return_value='{"ok":true}') as mock_todo:
             result = agent._invoke_tool("todo", {"todos": []}, "task-1")
             mock_todo.assert_called_once()
+            assert mock_todo.call_args.kwargs.get("store") is agent._todo_store
         assert "ok" in result
 
 
@@ -2297,7 +2300,7 @@ class TestAgentRuntimePostHookOwnershipSync:
         tool_name,
         tool_args,
     ):
-        from agent.agent_runtime_helpers import AGENT_RUNTIME_POST_HOOK_TOOL_NAMES
+        from tools.registry import registry
 
         hook_calls = []
         monkeypatch.setattr(
@@ -2341,7 +2344,7 @@ class TestAgentRuntimePostHookOwnershipSync:
         )
         agent._memory_manager = None
 
-        assert tool_name in AGENT_RUNTIME_POST_HOOK_TOOL_NAMES
+        assert registry.get_agent_executor(tool_name) is not None
         with patch(
             "run_agent.handle_function_call",
             side_effect=AssertionError("agent-runtime tools must stay inline"),
@@ -2375,11 +2378,12 @@ class TestAgentRuntimePostHookOwnershipSync:
         assert all(call["tool_name"] == tool_name for call in post_calls)
 
     def test_post_hook_ownership_contract_lists_exercised_tools(self):
-        from agent.agent_runtime_helpers import AGENT_RUNTIME_POST_HOOK_TOOL_NAMES
+        """ADR-0090: post-hook ownership derives from the registry seam —
+        every exercised agent-level tool has a registered executor."""
+        from tools.registry import registry
 
-        assert AGENT_RUNTIME_POST_HOOK_TOOL_NAMES == {
-            tool_name for tool_name, _ in self._CASES
-        }
+        for tool_name, _ in self._CASES:
+            assert registry.get_agent_executor(tool_name) is not None, tool_name
 
 
 class TestPathsOverlap:

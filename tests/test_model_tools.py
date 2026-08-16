@@ -8,7 +8,6 @@ from model_tools import (
     handle_function_call,
     get_all_tool_names,
     get_toolset_for_tool,
-    _AGENT_LOOP_TOOLS,
     _LEGACY_TOOLSET_MAP,
     TOOL_TO_TOOLSET_MAP,
 )
@@ -19,11 +18,13 @@ from model_tools import (
 # =========================================================================
 
 class TestHandleFunctionCall:
-    def test_agent_loop_tool_returns_error(self):
-        for tool_name in _AGENT_LOOP_TOOLS:
-            result = json.loads(handle_function_call(tool_name, {}))
-            assert "error" in result
-            assert "agent loop" in result["error"].lower()
+    def test_agent_level_tools_degrade_uniformly(self):
+        """ADR-0090: no agent-loop stub — agent-level tools degrade through
+        their registry handlers on agent-less callers (error or harmless
+        browse-mode result), never a name-list rejection."""
+        for tool_name in ("todo", "memory", "session_search", "delegate_task"):
+            result = handle_function_call(tool_name, {})
+            assert "agent loop" not in json.dumps(result).lower()
 
     def test_unknown_tool_returns_error(self):
         result = json.loads(handle_function_call("totally_fake_tool_xyz", {}))
@@ -222,19 +223,21 @@ class TestHandleFunctionCall:
 
 
 # =========================================================================
-# Agent loop tools
+# Agent-level tool executors (ADR-0090)
 # =========================================================================
 
-class TestAgentLoopTools:
-    def test_expected_tools_in_set(self):
-        assert "todo" in _AGENT_LOOP_TOOLS
-        assert "memory" in _AGENT_LOOP_TOOLS
-        assert "session_search" in _AGENT_LOOP_TOOLS
-        assert "delegate_task" in _AGENT_LOOP_TOOLS
+class TestAgentLevelToolExecutors:
+    def test_agent_level_tools_have_registry_executors(self):
+        from tools.registry import registry
 
-    def test_no_regular_tools_in_set(self):
-        assert "web_search" not in _AGENT_LOOP_TOOLS
-        assert "terminal" not in _AGENT_LOOP_TOOLS
+        for name in ("todo", "memory", "session_search", "delegate_task"):
+            assert registry.get_agent_executor(name) is not None
+
+    def test_no_regular_tools_have_executors(self):
+        from tools.registry import registry
+
+        assert registry.get_agent_executor("web_search") is None
+        assert registry.get_agent_executor("terminal") is None
 
 
 # =========================================================================
