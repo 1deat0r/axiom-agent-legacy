@@ -23,9 +23,10 @@ operator-approved.
 ## Decision
 
 1. **Adopt and wire.** `evaluate_url_safety(url, task_id=None)` becomes the
-   single URL-intake guard. `task_id` feeds the navigation session key
-   (None-safe), so the guard owns the sidecar exemption itself — "is this
-   URL allowed for THIS navigation" is guard policy.
+   single URL-intake guard. `task_id` feeds the navigation session key,
+   coerced exactly like navigation's own mechanics (falsy → "default"), so
+   the guard's sidecar decision and the backend's session key cannot drift
+   apart — "is this URL allowed for THIS navigation" is guard policy.
 2. **`browser_navigate` crosses the seam.** The 81-line inline cluster is
    deleted; navigate calls the guard, returns its verdict verbatim, then
    re-derives the session key (`nav_session_key`, `auto_local_this_nav`,

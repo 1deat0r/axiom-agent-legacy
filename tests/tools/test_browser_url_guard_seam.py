@@ -20,10 +20,31 @@ from tools.browser_tool import browser_navigate, evaluate_url_safety
 
 class TestGuardSeamContract:
     def test_evaluate_url_safety_accepts_task_id(self):
-        """ADR-0094: the seam takes the navigation context — red until the
-        signature is widened."""
-        result = evaluate_url_safety("https://example.com", task_id="task-1")
-        assert result is None or isinstance(result, dict)
+        """ADR-0094: the seam takes the navigation context — the verdict is
+        unchanged by a supplied task_id (signature was widened red-first)."""
+        result = evaluate_url_safety(
+            "http://169.254.169.254/latest/meta-data", task_id="task-1"
+        )
+        assert result is not None
+        assert "cloud metadata endpoint" in result["error"]
+
+    def test_empty_task_id_coerced_like_navigation(self, monkeypatch):
+        """An empty task_id gets the same 'default' session key navigation's
+        own mechanics derive — the guard and the backend path must never
+        disagree on the sidecar decision."""
+        monkeypatch.setattr("tools.browser_tool._is_local_backend", lambda: False)
+        monkeypatch.setattr(
+            "tools.browser_tool._get_cloud_provider", lambda: object()
+        )
+        monkeypatch.setattr(
+            "tools.browser_tool._auto_local_for_private_urls", lambda: True
+        )
+        monkeypatch.setattr(
+            "tools.browser_tool._url_is_private", lambda url: True
+        )
+
+        verdict = evaluate_url_safety("http://192.168.1.1", task_id="")
+        assert verdict is None
 
     def test_sidecar_exemption_allows_private_url(self, monkeypatch):
         """A private URL navigated through the hybrid-routing sidecar is
@@ -70,9 +91,9 @@ class TestGuardSeamCharacterization:
 
     def test_sensitive_query_param_blocked_on_cloud(self, monkeypatch):
         monkeypatch.setattr("tools.browser_tool._is_local_backend", lambda: False)
-        result = evaluate_url_safety("https://example.com?token=abc123")
-        if result is not None:
-            assert "credential-like query parameter" in result["error"]
+        result = evaluate_url_safety("https://example.com?api_key=abc123")
+        assert result is not None
+        assert "credential-like query parameter" in result["error"]
 
     def test_metadata_endpoint_blocked(self):
         result = evaluate_url_safety("http://169.254.169.254/latest/meta-data")

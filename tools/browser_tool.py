@@ -3294,7 +3294,12 @@ def evaluate_url_safety(url: str, task_id: Optional[str] = None) -> Optional[dic
         return _secret
 
     local = _is_local_backend()
-    auto_local_this_nav = _is_local_sidecar_key(_navigation_session_key(task_id, url))
+    # Coerce exactly like navigation's own mechanics (falsy -> "default") so
+    # the guard's sidecar decision and the backend's session key can never
+    # drift apart — "" and None both resolve to the default session.
+    auto_local_this_nav = _is_local_sidecar_key(
+        _navigation_session_key(task_id or "default", url)
+    )
     sensitive_query_key = _sensitive_query_param_name(url)
     if sensitive_query_key and not local and not auto_local_this_nav:
         return {"success": False, "error": (
