@@ -662,6 +662,9 @@ def _run_agent_tool_execution_middleware(
 
             _after_authorization = _hook_registry.get_after_authorization(function_name)
         except Exception:
+            logger.debug(
+                "after-authorization lookup failed for %s", function_name, exc_info=True
+            )
             _after_authorization = None
         if _after_authorization is not None:
             _after_authorization(agent)
@@ -695,6 +698,10 @@ def _run_agent_tool_execution_middleware(
                 session_id=getattr(agent, "session_id", "") or "",
             )
         except Exception:
+            logger.debug(
+                "observability-context wrap unavailable for %s", function_name,
+                exc_info=True,
+            )
             from contextlib import nullcontext
 
             _wrap_observability = nullcontext()
@@ -1977,6 +1984,9 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
 
             _agent_executor = _agent_tool_registry.get_agent_executor(function_name)
         except Exception:
+            logger.debug(
+                "agent-executor lookup failed for %s", function_name, exc_info=True
+            )
             _agent_executor = None
             _executor_ctx_factory = None
         _executor_ctx = (

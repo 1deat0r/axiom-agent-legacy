@@ -3063,6 +3063,9 @@ def invoke_tool(agent, function_name: str, function_args: dict, effective_task_i
 
         _agent_executor = _agent_tool_registry.get_agent_executor(function_name)
     except Exception:
+        logger.debug(
+            "agent-executor lookup failed for %s", function_name, exc_info=True
+        )
         _agent_executor = None
         _executor_ctx_factory = None
     _executor_ctx = (
@@ -3089,6 +3092,10 @@ def invoke_tool(agent, function_name: str, function_args: dict, effective_task_i
                     session_id=getattr(agent, "session_id", "") or "",
                 )
             except Exception:
+                logger.debug(
+                    "observability-context wrap unavailable for %s", function_name,
+                    exc_info=True,
+                )
                 from contextlib import nullcontext
 
                 _wrap_observability = nullcontext()
