@@ -378,6 +378,23 @@ next TUI session, or pin `HERMES_TUI_TOOLSETS`.
     with the same 7 pre-existing env-gap failures: no `anthropic` in the
     shared test venv + 1 nous-token test).
 
+48. Session ritual (ADR-0087) at session start: `git fetch upstream` found
+    new commits (a15de34545..f4c80e4243); merged cleanly (af472cab4d — the
+    merge touched tools/approval.py +182 and other files but no seam
+    conflicts); the ritual suites (test_max_run_cost,
+    test_native_store_bridge, test_tool_dispatch_seam,
+    test_dynamic_schema_seam) green 30/30.
+49. RESOLVED the session-11 carryover — live TUI axiom-toolset verification.
+    Simulated the real launch env (HERMES_HOME=profile, cwd=repo):
+    `_load_enabled_toolsets("tui")` resolves `axiom` via the CLI fallback
+    (no HERMES_TUI_TOOLSETS pin needed); pre-assembly definitions ship
+    `axiom_store` + `axiom_record`; with progressive disclosure active
+    (tier 1, 5 plugin tools deferred) both remain reachable in the embedded
+    bridge catalog via tool_search → tool_call. Verdict: a live TUI turn
+    receives the axiom tools as designed (plugin tools defer behind the
+    bridge — the repo's own tiered-disclosure doctrine), no code change
+    needed.
+
 ## Next steps (in order)
 
 1. ~~Decide CLI runtime~~ — resolved 2026-08-16: `node` (see session 3 #9).
@@ -409,16 +426,12 @@ The port queue is empty; the tracker has only the passive ledger (#67). A
 fresh session opens with the ADR-0087 ritual (fetch upstream, merge if
 ahead, run `test_max_run_cost` + `test_native_store_bridge` +
 `test_tool_dispatch_seam` + `test_dynamic_schema_seam`, check the tracker)
-and then asks the operator what's next. Three items carry over: (1) relaunch
-the TUI (`axiom`) to see the full Axiom theme (session 10); (2) confirm a
-live TUI turn actually receives `axiom_store`/`axiom_record` — the `axiom`
-toolset resolves but is enabled only for the `cli` platform, and the TUI
-surface resolves toolsets through `_load_enabled_toolsets("tui")` (coding
-posture / `HERMES_TUI_TOOLSETS`), so its inclusion in a live TUI turn is
-unverified (session 11 §40); (3) the remaining architecture-review
-candidates C2–C10 are documented in the session-12 report —
-`improve-codebase-architecture` candidates, pick from the report if
-hardening continues.
+and then asks the operator what's next. Two items carry over: (1) relaunch
+the TUI (`axiom`) to see the full Axiom theme (session 10); (2) the
+remaining architecture-review candidates C2–C10 are documented in the
+session-12 report — `improve-codebase-architecture` candidates, pick from
+the report if hardening continues. (The axiom-toolset TUI question is
+resolved — session 12 §49: available via the tiered-disclosure bridge.)
 
 ## Environment quirks (verified)
 
