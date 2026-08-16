@@ -208,11 +208,13 @@ class ToolEntry:
         "name", "toolset", "schema", "handler", "check_fn",
         "requires_env", "is_async", "description", "emoji",
         "max_result_size_chars", "dynamic_schema_overrides",
+        "agent_executor", "after_authorization",
     )
 
     def __init__(self, name, toolset, schema, handler, check_fn,
                  requires_env, is_async, description, emoji,
-                 max_result_size_chars=None, dynamic_schema_overrides=None):
+                 max_result_size_chars=None, dynamic_schema_overrides=None,
+                 agent_executor=None, after_authorization=None):
         self.name = name
         self.toolset = toolset
         self.schema = schema
@@ -231,6 +233,15 @@ class ToolEntry:
         # on every get_definitions() call; results are merged shallow on top
         # of the base schema before the {"type": "function", ...} wrap.
         self.dynamic_schema_overrides = dynamic_schema_overrides
+        # ADR-0090 (tool dispatch seam): agent-level tools register an
+        # executor — ``agent_executor(agent, args, ctx) -> result`` — instead
+        # of the executors special-casing tool names. ``ctx`` carries
+        # {task_id, tool_call_id, session_id, turn_id, api_request_id}.
+        # ``after_authorization(agent)`` runs post-guardrails, pre-execute
+        # (a blocked call never fires it) — e.g. the memory nudge-counter
+        # reset. Both are optional; plain tools keep ``handler`` only.
+        self.agent_executor = agent_executor
+        self.after_authorization = after_authorization
 
 
 class _PluginOverridePolicy:
@@ -749,6 +760,8 @@ class ToolRegistry:
         dynamic_schema_overrides: Callable = None,
         override: bool = False,
         scope: Optional[str] = None,
+        agent_executor: Callable = None,
+        after_authorization: Callable = None,
     ):
         """Register a tool.  Called at module-import time by each tool file.
 
@@ -844,6 +857,8 @@ class ToolRegistry:
                 emoji=emoji,
                 max_result_size_chars=max_result_size_chars,
                 dynamic_schema_overrides=dynamic_schema_overrides,
+                agent_executor=agent_executor,
+                after_authorization=after_authorization,
             )
             # Availability is now derived per-tool (_toolset_has_exposable_tools),
             # so this map no longer gates a toolset. It is still consumed by
@@ -1010,6 +1025,38 @@ class ToolRegistry:
             self._generation += 1
         logger.debug("Restored tool registration: %s", name)
         return True
+
+    # ------------------------------------------------------------------
+    # Agent executor seam (ADR-0090)
+    # ------------------------------------------------------------------
+
+    def get_agent_executor(self, name: str):
+        """Return the registered ``agent_executor`` for *name*, or None.
+
+        One seam for agent-level tool dispatch: the executors resolve this
+        instead of special-casing tool names. Mirrors :meth:`get_definitions`
+        entry resolution (current scope included).
+        """
+        entries_by_name = {entry.name: entry for entry in self._snapshot_entries()}
+        entry = entries_by_name.get(name)
+        return entry.agent_executor if entry is not None else None
+
+    def get_after_authorization(self, name: str):
+        """Return the registered ``after_authorization`` hook for *name*, or None."""
+        entries_by_name = {entry.name: entry for entry in self._snapshot_entries()}
+        entry = entries_by_name.get(name)
+        return entry.after_authorization if entry is not None else None
+
+    def dispatch_agent_executor(self, name: str, agent, args: dict, ctx: dict):
+        """Run the registered ``agent_executor`` for *name*.
+
+        Returns the executor's result, or None when no executor is
+        registered (the caller falls through to the plain handler path).
+        """
+        executor = self.get_agent_executor(name)
+        if executor is None:
+            return None
+        return executor(agent, args, ctx)
 
     # ------------------------------------------------------------------
     # Schema retrieval

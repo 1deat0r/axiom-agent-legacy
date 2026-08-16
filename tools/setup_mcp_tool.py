@@ -120,6 +120,16 @@ SETUP_MCP_SCHEMA = {
 }
 
 
+def _agent_executor(agent, args, ctx):
+    """ADR-0090: agent-level executor — injects the agent's setup-mcp callback."""
+    return setup_mcp_tool(
+        server=args.get("server", ""),
+        action=args.get("action", "install"),
+        reason=args.get("reason", ""),
+        callback=getattr(agent, "setup_mcp_callback", None),
+    )
+
+
 registry.register(
     name="setup_mcp",
     toolset="desktop_ui",
@@ -131,4 +141,5 @@ registry.register(
         callback=kw.get("callback"),
     ),
     emoji="🔌",
+    agent_executor=_agent_executor,
 )

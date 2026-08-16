@@ -1789,6 +1789,13 @@ SKILL_MANAGE_SCHEMA = {
 # --- Registry ---
 from tools.registry import registry, tool_error
 
+
+def _after_authorization(agent):
+    """ADR-0090: the skill-usage counter resets post-guardrails, pre-execute —
+    a blocked call never fires this (was an executor name-fork)."""
+    agent._iters_since_skill = 0
+
+
 registry.register(
     name="skill_manage",
     toolset="skills",
@@ -1807,4 +1814,5 @@ registry.register(
         task_id=kw.get("task_id"),
         session_id=kw.get("session_id")),
     emoji="📝",
+    after_authorization=_after_authorization,
 )

@@ -1246,6 +1246,38 @@ MEMORY_SCHEMA = {
 # --- Registry ---
 from tools.registry import registry, tool_error
 
+
+def _agent_executor(agent, args, ctx):
+    """ADR-0090: agent-level executor — injects the agent's memory store and
+    mirrors successful built-in writes to external providers (the manager
+    owns gating/op-expansion)."""
+    target = args.get("target", "memory")
+    result = memory_tool(
+        action=args.get("action"),
+        target=target,
+        content=args.get("content"),
+        old_text=args.get("old_text"),
+        operations=args.get("operations"),
+        store=agent._memory_store,
+    )
+    if agent._memory_manager:
+        agent._memory_manager.notify_memory_tool_write(
+            result,
+            args,
+            build_metadata=lambda: agent._build_memory_write_metadata(
+                task_id=ctx.get("task_id"),
+                tool_call_id=ctx.get("tool_call_id") or None,
+            ),
+        )
+    return result
+
+
+def _after_authorization(agent):
+    """ADR-0090: the nudge counter resets post-guardrails, pre-execute — a
+    blocked call never fires this (was an executor name-fork)."""
+    agent._turns_since_memory = 0
+
+
 registry.register(
     name="memory",
     toolset="memory",
@@ -1260,6 +1292,8 @@ registry.register(
         store=kw.get("store")),
     check_fn=check_memory_requirements,
     emoji="🧠",
+    agent_executor=_agent_executor,
+    after_authorization=_after_authorization,
 )
 
 

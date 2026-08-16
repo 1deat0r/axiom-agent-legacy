@@ -740,7 +740,8 @@ def _resolve_active_context_length() -> int:
 # because they need agent-level state (TodoStore, MemoryStore, etc.).
 # The registry still holds their schemas; dispatch just returns a stub error
 # so if something slips through, the LLM sees a sensible message.
-_AGENT_LOOP_TOOLS = {"todo", "memory", "session_search", "delegate_task"}
+# ADR-0090: agent-level tools register agent_executors on the registry seam
+# (tools/registry.py ToolEntry.agent_executor); there is no name list here.
 _READ_SEARCH_TOOLS = {"read_file", "search_files"}
 
 
@@ -1367,8 +1368,10 @@ def handle_function_call(
             logger.debug("tool_request middleware error: %s", _mw_err)
 
     try:
-        if function_name in _AGENT_LOOP_TOOLS:
-            return tool_error(f"{function_name} must be handled by the agent loop")
+        # ADR-0090: no agent-loop stub. Agent-level tools (todo, memory, …)
+        # register agent_executors beside their schemas; a direct caller with
+        # no agent degrades uniformly through the registry handler, exactly
+        # like every other callback-injected tool.
 
         # Check plugin hooks for a block/approve/modify directive (unless caller
         # already checked — e.g. run_agent._invoke_tool passes skip=True to

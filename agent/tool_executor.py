@@ -654,10 +654,17 @@ def _run_agent_tool_execution_middleware(
             )
             return result
 
-        if function_name == "memory":
-            agent._turns_since_memory = 0
-        elif function_name == "skill_manage":
-            agent._iters_since_skill = 0
+        # ADR-0090: the counter resets are entry-level registry hooks, not
+        # name-forks — any tool can register one; blocked calls never fire it
+        # (this site runs only after block + guardrails pass).
+        try:
+            from tools.registry import registry as _hook_registry
+
+            _after_authorization = _hook_registry.get_after_authorization(function_name)
+        except Exception:
+            _after_authorization = None
+        if _after_authorization is not None:
+            _after_authorization(agent)
 
         _advance_start_order(_begin)
 
@@ -676,9 +683,31 @@ def _run_agent_tool_execution_middleware(
             name=f"tool-activity-hb-{function_name[:24]}",
         )
         _hb_thread.start()
+        # ADR-0090: bind approval-hook correlation IDs around EVERY dispatch —
+        # the agent-executor path previously skipped this (only the
+        # handle_function_call path set it).
+        _approval_tokens = None
+        try:
+            from tools.approval import (
+                reset_current_observability_context,
+                set_current_observability_context,
+            )
+
+            _approval_tokens = set_current_observability_context(
+                turn_id=getattr(agent, "_current_turn_id", "") or "",
+                tool_call_id=tool_call_id or "",
+                session_id=getattr(agent, "session_id", "") or "",
+            )
+        except Exception:
+            _approval_tokens = None
         try:
             return execute(final_args)
         finally:
+            if _approval_tokens is not None:
+                try:
+                    reset_current_observability_context(_approval_tokens)
+                except Exception:
+                    pass
             _hb_stop.set()
             _hb_thread.join(timeout=2.0)
 
@@ -1944,204 +1973,24 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
 
         tool_start_time = time.time()
 
-        if function_name == "todo":
-            def _execute(next_args: dict) -> Any:
-                from tools.todo_tool import todo_tool as _todo_tool
-                return _todo_tool(
-                    todos=next_args.get("todos"),
-                    merge=next_args.get("merge", False),
-                    store=agent._todo_store,
-                )
-            function_result, function_args, middleware_trace, _execution_blocked, _execution_dispatched = _managed_values(_run_agent_tool_execution_middleware(
-                agent,
-                function_name=function_name,
-                function_args=function_args,
-                effective_task_id=effective_task_id,
-                tool_call_id=getattr(tool_call, "id", "") or "",
-                execute=_execute,
-                scope_block=_ts_scope_block,
-                display_index=i,
-            ))
-            tool_duration = time.time() - tool_start_time
-            if agent._should_emit_quiet_tool_messages():
-                agent._vprint(f"  {_get_cute_tool_message_impl('todo', function_args, tool_duration, result=function_result)}")
-        elif function_name == "session_search":
-            def _execute(next_args: dict) -> Any:
-                session_db = agent._get_session_db_for_recall()
-                if not session_db:
-                    from hermes_state import format_session_db_unavailable
-                    return json.dumps({"success": False, "error": format_session_db_unavailable()})
-                from tools.session_search_tool import session_search as _session_search
-                return _session_search(
-                    query=next_args.get("query", ""),
-                    role_filter=next_args.get("role_filter"),
-                    limit=next_args.get("limit", 3),
-                    session_id=next_args.get("session_id"),
-                    around_message_id=next_args.get("around_message_id"),
-                    window=next_args.get("window", 5),
-                    sort=next_args.get("sort"),
-                    detail=next_args.get("detail", "adaptive"),
-                    db=session_db,
-                    current_session_id=agent.session_id,
-                )
-            function_result, function_args, middleware_trace, _execution_blocked, _execution_dispatched = _managed_values(_run_agent_tool_execution_middleware(
-                agent,
-                function_name=function_name,
-                function_args=function_args,
-                effective_task_id=effective_task_id,
-                tool_call_id=getattr(tool_call, "id", "") or "",
-                execute=_execute,
-                scope_block=_ts_scope_block,
-                display_index=i,
-            ))
-            tool_duration = time.time() - tool_start_time
-            if agent._should_emit_quiet_tool_messages():
-                agent._vprint(f"  {_get_cute_tool_message_impl('session_search', function_args, tool_duration, result=function_result)}")
-        elif function_name == "memory":
-            def _execute(next_args: dict) -> Any:
-                target = next_args.get("target", "memory")
-                operations = next_args.get("operations")
-                from tools.memory_tool import memory_tool as _memory_tool
-                result = _memory_tool(
-                    action=next_args.get("action"),
-                    target=target,
-                    content=next_args.get("content"),
-                    old_text=next_args.get("old_text"),
-                    operations=operations,
-                    store=agent._memory_store,
-                )
-                # Mirror successful built-in memory writes to external
-                # providers. All gating/op-expansion lives behind the manager
-                # interface (MemoryManager.notify_memory_tool_write).
-                if agent._memory_manager:
-                    agent._memory_manager.notify_memory_tool_write(
-                        result,
-                        next_args,
-                        build_metadata=lambda: agent._build_memory_write_metadata(
-                            task_id=effective_task_id,
-                            tool_call_id=getattr(tool_call, "id", None),
-                        ),
-                    )
-                return result
-            function_result, function_args, middleware_trace, _execution_blocked, _execution_dispatched = _managed_values(_run_agent_tool_execution_middleware(
-                agent,
-                function_name=function_name,
-                function_args=function_args,
-                effective_task_id=effective_task_id,
-                tool_call_id=getattr(tool_call, "id", "") or "",
-                execute=_execute,
-                scope_block=_ts_scope_block,
-                display_index=i,
-            ))
-            tool_duration = time.time() - tool_start_time
-            if agent._should_emit_quiet_tool_messages():
-                agent._vprint(f"  {_get_cute_tool_message_impl('memory', function_args, tool_duration, result=function_result)}")
-        elif function_name == "clarify":
-            def _execute(next_args: dict) -> Any:
-                from tools.clarify_tool import clarify_tool as _clarify_tool
-                return _clarify_tool(
-                    question=next_args.get("question", ""),
-                    choices=next_args.get("choices"),
-                    multi_select=next_args.get("multi_select", False),
-                    callback=agent.clarify_callback,
-                )
-            function_result, function_args, middleware_trace, _execution_blocked, _execution_dispatched = _managed_values(_run_agent_tool_execution_middleware(
-                agent,
-                function_name=function_name,
-                function_args=function_args,
-                effective_task_id=effective_task_id,
-                tool_call_id=getattr(tool_call, "id", "") or "",
-                execute=_execute,
-                scope_block=_ts_scope_block,
-                display_index=i,
-            ))
-            tool_duration = time.time() - tool_start_time
-            if agent._should_emit_quiet_tool_messages():
-                agent._vprint(f"  {_get_cute_tool_message_impl('clarify', function_args, tool_duration, result=function_result)}")
-        elif function_name == "read_terminal":
-            def _execute(next_args: dict) -> Any:
-                from tools.read_terminal_tool import read_terminal_tool as _read_terminal_tool
-                return _read_terminal_tool(
-                    start_line=next_args.get("start_line"),
-                    count=next_args.get("count"),
-                    callback=getattr(agent, "read_terminal_callback", None),
-                )
-            function_result, function_args, middleware_trace, _execution_blocked, _execution_dispatched = _managed_values(_run_agent_tool_execution_middleware(
-                agent,
-                function_name=function_name,
-                function_args=function_args,
-                effective_task_id=effective_task_id,
-                tool_call_id=getattr(tool_call, "id", "") or "",
-                execute=_execute,
-                scope_block=_ts_scope_block,
-                display_index=i,
-            ))
-            tool_duration = time.time() - tool_start_time
-            if agent._should_emit_quiet_tool_messages():
-                agent._vprint(f"  {_get_cute_tool_message_impl('read_terminal', function_args, tool_duration, result=function_result)}")
-        elif function_name == "read_preview":
-            def _execute(next_args: dict) -> Any:
-                from tools.read_preview_tool import read_preview_tool as _read_preview_tool
-                return _read_preview_tool(
-                    start=next_args.get("start"),
-                    count=next_args.get("count"),
-                    callback=getattr(agent, "read_preview_callback", None),
-                )
-            function_result, function_args, middleware_trace, _execution_blocked, _execution_dispatched = _managed_values(_run_agent_tool_execution_middleware(
-                agent,
-                function_name=function_name,
-                function_args=function_args,
-                effective_task_id=effective_task_id,
-                tool_call_id=getattr(tool_call, "id", "") or "",
-                execute=_execute,
-                scope_block=_ts_scope_block,
-                display_index=i,
-            ))
-            tool_duration = time.time() - tool_start_time
-            if agent._should_emit_quiet_tool_messages():
-                agent._vprint(f"  {_get_cute_tool_message_impl('read_preview', function_args, tool_duration, result=function_result)}")
-        elif function_name == "read_window_below":
-            def _execute(next_args: dict) -> Any:
-                from tools.read_window_tool import read_window_below_tool as _read_window_below_tool
-                return _read_window_below_tool(
-                    callback=getattr(agent, "read_window_below_callback", None),
-                )
-            function_result, function_args, middleware_trace, _execution_blocked, _execution_dispatched = _managed_values(_run_agent_tool_execution_middleware(
-                agent,
-                function_name=function_name,
-                function_args=function_args,
-                effective_task_id=effective_task_id,
-                tool_call_id=getattr(tool_call, "id", "") or "",
-                execute=_execute,
-                scope_block=_ts_scope_block,
-                display_index=i,
-            ))
-            tool_duration = time.time() - tool_start_time
-            if agent._should_emit_quiet_tool_messages():
-                agent._vprint(f"  {_get_cute_tool_message_impl('read_window_below', function_args, tool_duration, result=function_result)}")
-        elif function_name == "setup_mcp":
-            def _execute(next_args: dict) -> Any:
-                from tools.setup_mcp_tool import setup_mcp_tool as _setup_mcp_tool
-                return _setup_mcp_tool(
-                    server=next_args.get("server", ""),
-                    action=next_args.get("action", "install"),
-                    reason=next_args.get("reason", ""),
-                    callback=getattr(agent, "setup_mcp_callback", None),
-                )
-            function_result, function_args, middleware_trace, _execution_blocked, _execution_dispatched = _managed_values(_run_agent_tool_execution_middleware(
-                agent,
-                function_name=function_name,
-                function_args=function_args,
-                effective_task_id=effective_task_id,
-                tool_call_id=getattr(tool_call, "id", "") or "",
-                execute=_execute,
-                scope_block=_ts_scope_block,
-                display_index=i,
-            ))
-            tool_duration = time.time() - tool_start_time
-            if agent._should_emit_quiet_tool_messages():
-                agent._vprint(f"  {_get_cute_tool_message_impl('setup_mcp', function_args, tool_duration, result=function_result)}")
-        elif function_name == "delegate_task":
+        # ADR-0090: one dispatch seam. Agent-level tools register an
+        # agent_executor beside their schema; the executor resolves it here
+        # instead of name-forking. The delegate_task branch keeps only its
+        # spinner display sugar — execution crosses the registry either way.
+        try:
+            from tools.registry import registry as _agent_tool_registry
+
+            _agent_executor = _agent_tool_registry.get_agent_executor(function_name)
+        except Exception:
+            _agent_executor = None
+        _executor_ctx = {
+            "task_id": effective_task_id or "",
+            "tool_call_id": getattr(tool_call, "id", "") or "",
+            "session_id": getattr(agent, "session_id", "") or "",
+            "turn_id": getattr(agent, "_current_turn_id", "") or "",
+            "api_request_id": getattr(agent, "_current_api_request_id", "") or "",
+        }
+        if _agent_executor is not None and function_name == "delegate_task":
             _action_arg = str(function_args.get("action") or "").strip().lower()
             tasks_arg = function_args.get("tasks")
             if _action_arg in ("list", "steer", "stop"):
@@ -2164,7 +2013,7 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
             _delegate_result = None
             try:
                 def _execute(next_args: dict) -> Any:
-                    return agent._dispatch_delegate_task(next_args)
+                    return _agent_executor(agent, next_args, _executor_ctx)
                 function_result, function_args, middleware_trace, _execution_blocked, _execution_dispatched = _managed_values(_run_agent_tool_execution_middleware(
                     agent,
                     function_name=function_name,
@@ -2184,6 +2033,22 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                     spinner.stop(cute_msg)
                 elif agent._should_emit_quiet_tool_messages():
                     agent._vprint(f"  {cute_msg}")
+        elif _agent_executor is not None:
+            def _execute(next_args: dict) -> Any:
+                return _agent_executor(agent, next_args, _executor_ctx)
+            function_result, function_args, middleware_trace, _execution_blocked, _execution_dispatched = _managed_values(_run_agent_tool_execution_middleware(
+                agent,
+                function_name=function_name,
+                function_args=function_args,
+                effective_task_id=effective_task_id,
+                tool_call_id=getattr(tool_call, "id", "") or "",
+                execute=_execute,
+                scope_block=_ts_scope_block,
+                display_index=i,
+            ))
+            tool_duration = time.time() - tool_start_time
+            if agent._should_emit_quiet_tool_messages():
+                agent._vprint(f"  {_get_cute_tool_message_impl(function_name, function_args, tool_duration, result=function_result)}")
         elif agent._context_engine_tool_names and function_name in agent._context_engine_tool_names:
             # Context engine tools (lcm_grep, lcm_describe, lcm_expand, etc.)
             spinner = None
@@ -2434,10 +2299,10 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
         # Log tool errors to the persistent error log so [error] tags
         # in the UI always have a corresponding detailed entry on disk.
         _is_error_result, _ = _detect_tool_failure(function_name, function_result)
-        # The agent-runtime tools above (todo, session_search, memory,
-        # context-engine, memory-manager, clarify, delegate_task) are
-        # dispatched inline — they never reach handle_function_call, so the
-        # executor is the one that has to fire post_tool_call. For
+        # ADR-0090: agent-level tools (registry agent_executor), context-engine
+        # and memory-manager tools are dispatched inline — they never reach
+        # handle_function_call, so the executor is the one that has to fire
+        # post_tool_call.
         # Every dispatch suppresses the inner handle_function_call observer so
         # the executor owns one terminal event for this tool_call_id. This also
         # prevents an abandoned timeout worker from reporting late success.

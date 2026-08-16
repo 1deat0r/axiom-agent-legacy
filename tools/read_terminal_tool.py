@@ -76,6 +76,15 @@ READ_TERMINAL_SCHEMA = {
 }
 
 
+def _agent_executor(agent, args, ctx):
+    """ADR-0090: agent-level executor — injects the agent's terminal callback."""
+    return read_terminal_tool(
+        start_line=args.get("start_line"),
+        count=args.get("count"),
+        callback=getattr(agent, "read_terminal_callback", None),
+    )
+
+
 registry.register(
     name="read_terminal",
     toolset="desktop_ui",
@@ -86,4 +95,5 @@ registry.register(
         callback=kw.get("callback"),
     ),
     emoji="🖥️",
+    agent_executor=_agent_executor,
 )

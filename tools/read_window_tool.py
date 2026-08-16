@@ -62,10 +62,18 @@ READ_WINDOW_BELOW_SCHEMA = {
 }
 
 
+def _agent_executor(agent, args, ctx):
+    """ADR-0090: agent-level executor — injects the agent's window callback."""
+    return read_window_below_tool(
+        callback=getattr(agent, "read_window_below_callback", None),
+    )
+
+
 registry.register(
     name="read_window_below",
     toolset="desktop_ui",
     schema=READ_WINDOW_BELOW_SCHEMA,
     handler=lambda args, **kw: read_window_below_tool(callback=kw.get("callback")),
     emoji="🪟",
+    agent_executor=_agent_executor,
 )

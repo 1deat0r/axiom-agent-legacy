@@ -4717,6 +4717,13 @@ def _strip_model_hidden_task_fields(tasks: Any) -> Any:
     return stripped_tasks if changed else tasks
 
 
+def _agent_executor(agent, args, ctx):
+    """ADR-0090: agent-level executor — delegation needs the parent agent
+    (spinner, background decision, subagent wiring) which only the agent
+    runtime holds."""
+    return agent._dispatch_delegate_task(args)
+
+
 registry.register(
     name="delegate_task",
     toolset="delegation",
@@ -4737,4 +4744,5 @@ registry.register(
     check_fn=check_delegate_requirements,
     emoji="🔀",
     dynamic_schema_overrides=_build_dynamic_schema_overrides,
+    agent_executor=_agent_executor,
 )

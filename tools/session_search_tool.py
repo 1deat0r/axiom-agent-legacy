@@ -1299,6 +1299,28 @@ SESSION_SEARCH_SCHEMA = {
 # --- Registry ---
 from tools.registry import registry, tool_error
 
+
+def _agent_executor(agent, args, ctx):
+    """ADR-0090: agent-level executor — resolves the agent's recall DB and
+    current session id instead of the executors reaching in by name."""
+    session_db = agent._get_session_db_for_recall()
+    if not session_db:
+        from hermes_state import format_session_db_unavailable
+        return json.dumps({"success": False, "error": format_session_db_unavailable()})
+    return session_search(
+        query=args.get("query", ""),
+        role_filter=args.get("role_filter"),
+        limit=args.get("limit", 3),
+        session_id=args.get("session_id"),
+        around_message_id=args.get("around_message_id"),
+        window=args.get("window", 5),
+        sort=args.get("sort"),
+        detail=args.get("detail", "adaptive"),
+        db=session_db,
+        current_session_id=agent.session_id,
+    )
+
+
 registry.register(
     name="session_search",
     toolset="session_search",
@@ -1318,4 +1340,5 @@ registry.register(
     ),
     check_fn=check_session_search_requirements,
     emoji="🔍",
+    agent_executor=_agent_executor,
 )

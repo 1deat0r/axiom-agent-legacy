@@ -305,6 +305,17 @@ CLARIFY_SCHEMA = {
 # --- Registry ---
 from tools.registry import registry, tool_error
 
+
+def _agent_executor(agent, args, ctx):
+    """ADR-0090: agent-level executor — injects the agent's clarify callback."""
+    return clarify_tool(
+        question=args.get("question", ""),
+        choices=args.get("choices"),
+        multi_select=args.get("multi_select", False),
+        callback=agent.clarify_callback,
+    )
+
+
 registry.register(
     name="clarify",
     toolset="clarify",
@@ -316,4 +327,5 @@ registry.register(
         callback=kw.get("callback")),
     check_fn=check_clarify_requirements,
     emoji="❓",
+    agent_executor=_agent_executor,
 )

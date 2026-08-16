@@ -351,6 +351,17 @@ TODO_SCHEMA = {
 # --- Registry ---
 from tools.registry import registry, tool_error
 
+
+def _agent_executor(agent, args, ctx):
+    """ADR-0090: agent-level executor — the agent's todo store is injected
+    here, so the executors never name-fork or reach into this module."""
+    return todo_tool(
+        todos=args.get("todos"),
+        merge=args.get("merge", False),
+        store=agent._todo_store,
+    )
+
+
 registry.register(
     name="todo",
     toolset="todo",
@@ -359,4 +370,5 @@ registry.register(
         todos=args.get("todos"), merge=args.get("merge", False), store=kw.get("store")),
     check_fn=check_todo_requirements,
     emoji="📋",
+    agent_executor=_agent_executor,
 )

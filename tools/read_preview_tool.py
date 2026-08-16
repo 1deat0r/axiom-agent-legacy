@@ -81,6 +81,15 @@ READ_PREVIEW_SCHEMA = {
 }
 
 
+def _agent_executor(agent, args, ctx):
+    """ADR-0090: agent-level executor — injects the agent's preview callback."""
+    return read_preview_tool(
+        start=args.get("start"),
+        count=args.get("count"),
+        callback=getattr(agent, "read_preview_callback", None),
+    )
+
+
 registry.register(
     name="read_preview",
     toolset="desktop_ui",
@@ -91,4 +100,5 @@ registry.register(
         callback=kw.get("callback"),
     ),
     emoji="🔍",
+    agent_executor=_agent_executor,
 )
