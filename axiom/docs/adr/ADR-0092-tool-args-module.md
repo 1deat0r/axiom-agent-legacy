@@ -7,7 +7,7 @@ Date: 2026-08-16
 
 `model_tools.py` mixed three jobs: toolset resolution, single-tool dispatch
 (`handle_function_call`), and the argument-coercion cluster — `coerce_tool_args`
-plus six helpers (`_coerce_value`, `_coerce_number`, `_coerce_boolean`,
+plus seven helpers (`_coerce_value`, `_coerce_number`, `_coerce_boolean`,
 `_coerce_json`, `_schema_allows_null`, `_schema_accepts_kind`,
 `_normalize_json_strings_for_schema`) — a pure, registry-backed ~300-line
 block with no production consumer other than `handle_function_call` itself.
