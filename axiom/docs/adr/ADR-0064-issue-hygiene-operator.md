@@ -75,3 +75,30 @@ on every finding.
 
 - Report orphan branches (ahead of main, unreferenced) as a softer finding.
 - Track per-problem age so a finding can escalate after two silent weeks.
+
+## Adapted for the Hermes baseline (ADR-0087, 2026-08-16)
+
+The ADR-0087 re-foundation moved Axiom onto the Hermes Agent baseline
+(port, issue #66). The prime-era `.github/workflows/issue-hygiene.yml`
+invoked `npx tsx packages/coding-agent/...`; the port re-points it at
+`axiom/gh-tooling/src/hygiene-cli.ts` and adapts the decision logic. The
+semantics are unchanged: the weekly (Mon 03:23) + `workflow_dispatch` sweep
+reports missing-role, role-conflict, unknown-label, stale-`needs-triage`,
+and unmerged-branch findings, deduplicated by the sweep fingerprint and
+posted to the `HYGIENE_SUMMARY_ISSUE` repo var when set.
+
+- **Decision logic re-anchored.** `axiom/gh-tooling/src/hygiene.ts` is the
+  prime-era `packages/coding-agent/src/core/gh-tooling/hygiene.ts` with the
+  missing-role detail text pointing at
+  `axiom/docs/agents/triage-labels.md`. Problem types, the
+  djb2-style fingerprint, the stale threshold (7 days), and the
+  ahead-count-only branch check are unchanged.
+- **Workflow adapted.** `actions/checkout` is SHA-pinned per the repo
+  dependency-pinning policy; the `git fetch` branch-heads collection, the
+  `gh` JSON assembly via `jq`, and the summary/step-summary posts are
+  preserved from the prime-era file.
+- **Inert until activated.** The scheduled run only fires once GitHub
+  Actions is enabled on the fork (operator step). The ported unit tests
+  (`axiom/gh-tooling/test/hygiene.test.ts`, node --test) lock the sweep
+  decision table and the re-anchored text; written first, sourced from the
+  prime-era vitest suite.

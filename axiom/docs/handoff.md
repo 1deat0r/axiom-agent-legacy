@@ -1,13 +1,12 @@
-# Handoff — ports done, tracker clean, upstream merged (session 7)
+# Handoff — tracker automation ported, all ports done (session 8)
 
-Written 2026-08-16 (session 7). Status: ports #1–#5 done; the cost spine is
-complete (ledger covered by the Hermes baseline; spend cap = port #5, issue
-#65, merged). The upstream merge is current (22 commits, merge `6c3c724cf7`,
-pushed). The tracker has no open issues — the two prime-era leftovers (#61
-forkserver orphans, #62 telemetry-notice stderr leak) are closed as
-superseded by the re-foundation (ADR-0087 bookkeeping closes). The only
-queued item left is the operator decision on porting the tracker Automation
-CI (see Next steps).
+Written 2026-08-16 (session 8). Status: ports #1–#5 done; the tracker
+automation CI (triage + issue-hygiene) is ported and landed (issue #66,
+session 8) — the last queued item is resolved. The upstream merge is current
+(session 8: zero new upstream commits; `upstream/main` is an ancestor of
+HEAD). The tracker has no open issues. Two operator activation steps remain
+for the CI to actually fire (enable Actions; optionally set
+`HYGIENE_SUMMARY_ISSUE`).
 
 ## What was done (session 1 — re-foundation)
 
@@ -171,6 +170,34 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
       the Hermes baseline (grep verified). Same disposition.
     Both closes carry audit comments with the evidence; the tracker is empty.
 
+## What was done (session 8)
+
+29. Session-start ritual (ADR-0087): `git fetch upstream && git merge
+    upstream/main` was a no-op — zero commits on upstream since session 7
+    (`upstream/main` = `460d345642`, an ancestor of HEAD). Baseline health
+    re-confirmed with the two Axiom port suites
+    (`test_max_run_cost` + `test_native_store_bridge`, 16/16 green);
+    tracker confirmed empty.
+30. Ported the tracker automation CI (issue #66, the queued decision from
+    session 7) to `axiom/gh-tooling/`: `src/triage.ts`, `src/hygiene.ts`,
+    and the three stdin→JSON CLIs copied from the prime-era
+    `packages/coding-agent/src/core/gh-tooling/` with three surgical
+    adaptations (`.ts` import specifiers; docs pointers →
+    `axiom/docs/agents/*`; verification mention → `scripts/run_tests.sh`
+    (Python) + `node --test` + `npm run typecheck` (TS)). Zero runtime deps
+    beyond `tsx`. Tests ported first, red-first — 62/62 green via
+    `node --test`; `npm run typecheck` clean.
+31. Re-pointed `.github/workflows/triage.yml` +
+    `.github/workflows/issue-hygiene.yml` at `axiom/gh-tooling/src/*.ts`
+    (prime-era files verbatim otherwise, except `actions/checkout`
+    SHA-pinned per the dependency-pinning policy). Verified the workflow's
+    exact Decide/Check invocations against live `gh` output for #66.
+32. Re-anchored docs: issue-tracker.md + triage-labels.md Automation
+    sections now state the CI is ported and name the two operator
+    activation steps; ADR-0050 + ADR-0064 gained "Adapted for the Hermes
+    baseline" sections (ADR-0011 precedent).
+    Full details: `axiom/docs/handoff-tracker-automation.md`.
+
 ## Verified (how)
 
 
@@ -221,16 +248,15 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
 6. ~~Port #5 — spend cap~~ — done (session 6; `agent/spend_cap.py` guard in
    `conversation_loop.py`, `AIAgent(max_run_cost_usd=...)`,
    `--max-run-cost <usd>` on CLI + TUI, subagents inherit the cap).
-7. **Porting the tracker Automation** (queued decision): the prime-era
-   `.github/workflows/triage.yml` + `issue-hygiene.yml` operators are absent
-   on this baseline. Porting them is a CI-infrastructure decision, not a code
-   port — see `axiom/docs/agents/issue-tracker.md` ("Automation"). Not yet
-   specced as an issue.
-8. ~~Upstream-merge hygiene~~ — done this session (session 7; 22 commits
-   merged as `6c3c724cf7`, regression sweep green, pushed). This is a
-   standing routine per ADR-0087, not a one-time item: every future session
-   starts with `git fetch upstream && git merge upstream/main` and re-runs
-   the sweep before doing anything else.
+7. ~~Porting the tracker Automation~~ — done (session 8, issue #66;
+   `axiom/gh-tooling/` + the two re-pointed workflows, see
+   `axiom/docs/handoff-tracker-automation.md`). The only remaining piece is
+   operator activation: enable GitHub Actions on the fork and optionally set
+   the `HYGIENE_SUMMARY_ISSUE` repo var.
+8. ~~Upstream-merge hygiene~~ — standing routine per ADR-0087, not a
+   one-time item: every session starts with `git fetch upstream && git merge
+   upstream/main` and re-runs the sweep before doing anything else. Session
+   8 start: no-op (zero new upstream commits).
 
 ## Environment quirks (verified)
 

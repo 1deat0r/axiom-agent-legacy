@@ -1,0 +1,54 @@
+name: Issue hygiene sweep
+
+on:
+  schedule:
+    - cron: "23 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      HYGIENE_SUMMARY_ISSUE: ${{ vars.HYGIENE_SUMMARY_ISSUE }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+      - name: Fetch branch heads
+        run: |
+          git fetch --quiet origin "+refs/heads/*:refs/remotes/origin/*"
+          git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin/ | while read -r name; do
+            case "$name" in HEAD) continue ;; esac
+            ahead=$(git rev-list --count "HEAD..refs/remotes/origin/$name" 2>/dev/null || echo 0)
+            behind=$(git rev-list --count "refs/remotes/origin/$name..HEAD" 2>/dev/null || echo 0)
+            jq -nc --arg name "$name" --argjson ahead "$ahead" --argjson behind "$behind" \
+              '{name: $name, ahead: $ahead, behind: $behind}'
+          done | jq -s . > /tmp/branches.json
+      - name: Sweep
+        id: sweep
+        run: |
+          gh issue list --state open --limit 1000 --json number,title,labels,createdAt,body > /tmp/issues.json
+          if [ -n "${HYGIENE_SUMMARY_ISSUE:-}" ]; then
+            gh issue view "${HYGIENE_SUMMARY_ISSUE}" --json comments --jq '[.comments[].body // ""]' > /tmp/prev.json || echo '[]' > /tmp/prev.json
+          else
+            echo '[]' > /tmp/prev.json
+          fi
+          jq -n --slurpfile issues /tmp/issues.json --slurpfile branches /tmp/branches.json --slurpfile comments /tmp/prev.json \
+            '{issues: $issues[0], branches: $branches[0], comments: $comments[0]}' \
+            | npx --yes tsx@4.23.1 axiom/gh-tooling/src/hygiene-cli.ts \
+            > /tmp/sweep.json
+          echo "action=$(jq -r .action /tmp/sweep.json)" >> "$GITHUB_OUTPUT"
+      - name: Post summary comment
+        if: steps.sweep.outputs.action == 'post' && env.HYGIENE_SUMMARY_ISSUE != ''
+        run: |
+          jq -r .comment /tmp/sweep.json \
+            | gh issue comment "${HYGIENE_SUMMARY_ISSUE}" --body-file -
+      - name: Show sweep summary
+        if: steps.sweep.outputs.action != ''
+        run: |
+          jq -r '.comment // ("Sweep clean. Action: " + .action)' /tmp/sweep.json >> "$GITHUB_STEP_SUMMARY"

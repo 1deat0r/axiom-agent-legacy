@@ -89,3 +89,34 @@ documentation-only note. The close job nudged it. The audit comment then
 landed with the not-applicable form (Commit: not required). The close-ritual
 template now defines that form, so human practice and the marker check
 converge.
+
+## Adapted for the Hermes baseline (ADR-0087, 2026-08-16)
+
+The ADR-0087 re-foundation moved Axiom onto the Hermes Agent baseline
+(port, issue #66). The prime-era `.github/workflows/triage.yml` invoked
+`npx tsx packages/coding-agent/...`, which does not exist here; the port
+re-points the workflow at `axiom/gh-tooling/src/*.ts` and adapts the
+decision logic's comment text. The semantics are unchanged: zero-role-label
+opens get `needs-triage` + the readiness contract, role conflicts get a
+note, label-removal gets a single no-reapply reminder, and a close without
+an audit comment gets one nudge.
+
+- **Decision logic re-anchored.** `axiom/gh-tooling/src/triage.ts` is the
+  prime-era `packages/coding-agent/src/core/gh-tooling/triage.ts` with three
+  text edits: the docs pointer (`axiom/docs/agents/triage-labels.md`,
+  `axiom/docs/agents/issue-tracker.md`) and the verification mention
+  (`scripts/run_tests.sh` (Python) + `node --test` + `npm run typecheck`
+  (TS) instead of `./test.sh, biome, tsgo`). The ten-label vocabulary
+  constants are byte-identical to the prime-era ones and match the live
+  label set.
+- **Workflow adapted.** `actions/checkout` is SHA-pinned
+  (`de0fac2e4500dabe0009e67214ff5f5447ce83dd`, v6.0.2) per the repo
+  dependency-pinning policy; triggers, permissions
+  (`contents: read, issues: write`), and the `npx --yes tsx@4.23.1`
+  invocation are preserved from the prime-era file.
+- **Inert until activated.** The workflow only runs once GitHub Actions is
+  enabled on the fork (operator step, documented in
+  `axiom/docs/agents/issue-tracker.md` §Automation). The ported unit tests
+  (`axiom/gh-tooling/test/triage.test.ts`, node --test) lock the decision
+  table and the re-anchored text; the tests were written first and the
+  prime-era vitest suite was the source.

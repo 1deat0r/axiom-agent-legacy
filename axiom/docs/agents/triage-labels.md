@@ -44,15 +44,14 @@ The wayfinder map protocol (issue-tracker.md) uses five labels:
 
 ## Automation
 
-Prime-era automation is NOT on this baseline. The `.github/workflows/triage.yml`
-(ADR-0050) and `.github/workflows/issue-hygiene.yml` (ADR-0064) workflows were
-prime-era CI and do not exist on the Hermes baseline (verified 2026-08-16: the
-baseline ships 27 workflows, none a triage/issue-hygiene operator).
+Ported 2026-08-16 (session 8, issue #66). The `.github/workflows/triage.yml`
+(ADR-0050) and `.github/workflows/issue-hygiene.yml` (ADR-0064) operators run
+on this baseline, re-pointed at `axiom/gh-tooling/src/*.ts` — see
+`axiom/docs/agents/issue-tracker.md` §Automation for the two operator
+activation steps (enable Actions; optionally set `HYGIENE_SUMMARY_ISSUE`).
 
-Consequence: role-label + audit-comment discipline is agent-enforced only — there
-is no CI safety net. Set the role at create and post the audit comment at close;
-nothing will catch you if you skip it. Porting that automation is a queued
-decision (see axiom/docs/agents/issue-tracker.md §Automation).
+Until activated, role-label + audit-comment discipline is agent-enforced:
+set the role at create and post the audit comment at close.
 
 ## Drift checks
 

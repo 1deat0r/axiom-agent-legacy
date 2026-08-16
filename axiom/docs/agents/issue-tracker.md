@@ -104,20 +104,30 @@ skip it.
 
 ## Automation
 
-Prime-era automation is NOT on this baseline. The `.github/workflows/triage.yml`
-and `.github/workflows/issue-hygiene.yml` workflows referenced by ADR-0050 /
-ADR-0064 were prime-era CI (they invoked `npx tsx packages/coding-agent/...`,
-which does not exist here). The Hermes baseline ships 27 workflows, none of them
-a triage/issue-hygiene operator. Verified 2026-08-16 (`ls .github/workflows`).
+Ported 2026-08-16 (session 8, issue #66). The `.github/workflows/triage.yml`
+and `.github/workflows/issue-hygiene.yml` operators run on this baseline,
+re-pointed at `axiom/gh-tooling/src/*.ts` (ported from the prime-era
+`packages/coding-agent/src/core/gh-tooling/`, zero runtime deps beyond `tsx`).
+They sit alongside the 27 upstream Hermes workflows.
 
-Consequence: on this baseline the role-label + audit-comment discipline is
-agent-enforced only — there is no CI safety net that applies `needs-triage` to
-zero-label issues or nags on a close without an audit comment. Set the role at
-create and post the audit comment at close yourself; nothing will catch you if
-you skip it.
+- `triage.yml` — on issue open/close/label/unlabel: applies `needs-triage`
+  and posts the readiness contract on zero-role-label opens, flags role
+  conflicts, and posts one close-ritual nudge when an issue closes without
+  an audit comment.
+- `issue-hygiene.yml` — weekly (Mon 03:23) + `workflow_dispatch`: sweeps
+  open issues for missing/conflicting/unknown labels, stale `needs-triage`,
+  and unmerged branches referenced by open issues; posts a summary to the
+  `HYGIENE_SUMMARY_ISSUE` repo var when set, deduplicated by fingerprint.
 
-Porting that automation is a queued decision (issue-tracker "Automation" flag,
-axiom/docs/handoff.md). Until it lands, the discipline is manual.
+Activation is operator-gated — the workflows are inert until then:
+
+1. Enable GitHub Actions on the fork (Settings → Actions → Allow all).
+2. Optional: set the `HYGIENE_SUMMARY_ISSUE` repo variable to the issue
+   number that should receive the weekly summary comment.
+
+Until activated, the role-label + audit-comment discipline remains
+agent-enforced: set the role at create and post the audit comment at close
+yourself.
 
 ## Labels
 
