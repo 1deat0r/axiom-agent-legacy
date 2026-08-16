@@ -1,10 +1,13 @@
-# Handoff — sovereign layer ported; cost spine complete (all ports done)
+# Handoff — ports done, tracker clean, upstream merged (session 7)
 
-Written 2026-08-16 (session 6). Status: ports #1–#5 done. The cost spine is
-complete: the ledger (port #4) is covered by the Hermes baseline, and the
-spend cap (port #5, issue #65) is implemented and merged. No open port
-remains; next work is upstream-merge hygiene and the queued tracker
-"Automation" flag (see Next steps).
+Written 2026-08-16 (session 7). Status: ports #1–#5 done; the cost spine is
+complete (ledger covered by the Hermes baseline; spend cap = port #5, issue
+#65, merged). The upstream merge is current (22 commits, merge `6c3c724cf7`,
+pushed). The tracker has no open issues — the two prime-era leftovers (#61
+forkserver orphans, #62 telemetry-notice stderr leak) are closed as
+superseded by the re-foundation (ADR-0087 bookkeeping closes). The only
+queued item left is the operator decision on porting the tracker Automation
+CI (see Next steps).
 
 ## What was done (session 1 — re-foundation)
 
@@ -126,7 +129,50 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
     `sessionLedger` surface does not exist here; guard lands in the loop,
     flag in `hermes_cli/main.py` + TUI launch args).
 
+## What was done (session 7)
+
+25. Upstream-merge hygiene (ADR-0087): `git fetch upstream && git merge
+    upstream/main` — 22 commits (computer-use fixes, session picker
+    lifecycle, terminal breadcrumbs + per-terminal `--continue`, Claude
+    Code/Codex session import, desktop Skills tab hub, nemo_relay bounded
+    marks, gateway session-finalize off-loop, Windows shim quarantine
+    restore, durable row_id stamps). Clean merge, no conflicts, no `axiom/`
+    changes, and none of the 22 commits touched the spend-cap surfaces
+    (`agent/conversation_loop.py`, `turn_finalizer.py`, `init_agent.py`,
+    `delegate_tool.py`, `_parser.py`, `toolsets.py`).
+26. Regression sweep after the merge, all green via `scripts/run_tests.sh`
+    (0 failures, 258 tests): the port suites (test_max_run_cost 8/8,
+    test_native_store_bridge 8/8); the upstream-touched suites (session
+    lifecycle status, terminal breadcrumbs, foreign sessions, quarantine
+    no-op restore, finalize off-loop, nemo_relay bounded marks, computer-use
+    authorization/display-guard/empty-discovery/placeholder-ids); the
+    canonical session-6 sweep (turn_finalizer ×3, turn_context ×2,
+    cli_new_session, single_query_session_finalize, cli_delegate_background,
+    relaunch, argparse_flag_propagation, gateway turn_context, delegate,
+    delegate_cost_footer, delegate_subagent_timeout — 158 green, 4 skipped).
+27. Pushed `main` to origin (`9e00aec9ac..6c3c724cf7`) — a routine
+    fast-forward of merged work; origin/main is now at the merge commit.
+    This also carried session 6's unpushed `b33c53aac2` (launch procedure
+    docs) to origin.
+28. Closed the two open prime-era tracker issues as superseded by the
+    re-foundation, bookkeeping form (no code):
+    - #61 (forkserver orphans) — target `packages/coding-agent/src/core/
+      kernel/` exists only on `archive/prime-v0.7.2`; the Hermes baseline has
+      no kernel manager/forkserver code (tree-grep verified), so there is no
+      port target. The live hygiene it named was already cleared (the #52
+      housekeeping comment: no orphan daemons, all 12 tmp dirs removed). The
+      harness axiom sessions run on is the external npm package
+      `prime-agent@0.7.2` (PrimeIntellect upstream) — a fix there would be an
+      upstream contribution, not this repo's work. Reopening is one click if
+      the operator wants it redirected.
+    - #62 (telemetry-notice stderr leak) — targets
+      `packages/coding-agent/.../agent-session-services.ts` + the archived
+      `4685-daemon-client-modes.test.ts`; no Axiom telemetry notice exists on
+      the Hermes baseline (grep verified). Same disposition.
+    Both closes carry audit comments with the evidence; the tracker is empty.
+
 ## Verified (how)
+
 
 - `git ls-remote origin` — main + 3 archive branches + tag all correct.
 - `node --test` — 109/109 pass (memory + record + sync + bridge + decide +
@@ -180,10 +226,11 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
    on this baseline. Porting them is a CI-infrastructure decision, not a code
    port — see `axiom/docs/agents/issue-tracker.md` ("Automation"). Not yet
    specced as an issue.
-8. **Upstream-merge hygiene**: `git fetch upstream && git merge upstream/main`
-   routinely (ADR-0087). Run `scripts/run_tests.sh` after each merge; the
-   known environmental failures (missing optional provider packages/creds +
-   FTS5/SQLite quirks) are not regressions.
+8. ~~Upstream-merge hygiene~~ — done this session (session 7; 22 commits
+   merged as `6c3c724cf7`, regression sweep green, pushed). This is a
+   standing routine per ADR-0087, not a one-time item: every future session
+   starts with `git fetch upstream && git merge upstream/main` and re-runs
+   the sweep before doing anything else.
 
 ## Environment quirks (verified)
 
