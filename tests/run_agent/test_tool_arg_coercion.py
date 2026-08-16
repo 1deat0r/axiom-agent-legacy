@@ -8,7 +8,8 @@ against the tool's JSON Schema before dispatch.
 
 from unittest.mock import patch
 
-from model_tools import (
+# ADR-0092: the coercion cluster lives in its own root-level module now.
+from tool_args import (
     coerce_tool_args,
     _coerce_value,
     _coerce_number,

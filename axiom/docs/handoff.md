@@ -394,6 +394,12 @@ next TUI session, or pin `HERMES_TUI_TOOLSETS`.
     receives the axiom tools as designed (plugin tools defer behind the
     bridge — the repo's own tiered-disclosure doctrine), no code change
     needed.
+50. Implemented ADR-0092 (C2, red-first, one commit): the argument-coercion
+    cluster extracted from model_tools.py into a new root-level
+    `tool_args.py` (interface unchanged — coerce_tool_args + the six helpers;
+    no shims). model_tools.py shrank 322 lines; test imports moved to
+    tool_args. Sweeps green (76 coercion/dispatch tests; full tests/run_agent
+    with the same 7 pre-existing env-gap failures).
 
 ## Next steps (in order)
 
