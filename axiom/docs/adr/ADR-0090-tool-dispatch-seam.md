@@ -77,5 +77,8 @@ architecture run, candidate C1; tracker #68).
   seam, not in `handle_function_call` — including a session-aware extension
   for cross-tool conditions (the `browser_exec` gate, whose TTL-cache
   rationale stays documented in `model_tools.py`).
-- Upstream risk accepted: the four dispatch files are upstream-hot; each step
-  landed as its own commit between merges so conflicts stay isolated.
+- Upstream risk accepted: the four dispatch files are upstream-hot; the
+  change landed as three green commits (tests / refactor / docs) between
+  merges — the implementation steps interleaved in shared files, so the
+  planned per-step split folded into one refactor commit (recorded in the
+  #68 audit comment) — keeping each revertible unit isolated.

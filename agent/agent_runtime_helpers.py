@@ -3058,47 +3058,47 @@ def invoke_tool(agent, function_name: str, function_args: dict, effective_task_i
     # memory-manager branch below is a plugin seam with its own contract
     # (has_tool membership), not a name fork.
     try:
+        from tools.registry import executor_ctx as _executor_ctx_factory
         from tools.registry import registry as _agent_tool_registry
 
         _agent_executor = _agent_tool_registry.get_agent_executor(function_name)
     except Exception:
         _agent_executor = None
-    _executor_ctx = {
-        "task_id": effective_task_id or "",
-        "tool_call_id": tool_call_id or "",
-        "session_id": getattr(agent, "session_id", "") or "",
-        "turn_id": getattr(agent, "_current_turn_id", "") or "",
-        "api_request_id": getattr(agent, "_current_api_request_id", "") or "",
-    }
+        _executor_ctx_factory = None
+    _executor_ctx = (
+        _executor_ctx_factory(
+            task_id=effective_task_id,
+            tool_call_id=tool_call_id,
+            session_id=getattr(agent, "session_id", ""),
+            turn_id=getattr(agent, "_current_turn_id", ""),
+            api_request_id=getattr(agent, "_current_api_request_id", ""),
+        )
+        if _executor_ctx_factory is not None
+        else {}
+    )
     if _agent_executor is not None:
         def _execute(next_args: dict) -> Any:
             # ADR-0090: approval-hook correlation IDs wrap EVERY dispatch,
             # including the executor path (previously skipped here).
-            _obs_tokens = None
             try:
-                from tools.approval import (
-                    reset_current_observability_context,
-                    set_current_observability_context,
-                )
+                from tools.approval import observability_context
 
-                _obs_tokens = set_current_observability_context(
+                _wrap_observability = observability_context(
                     turn_id=getattr(agent, "_current_turn_id", "") or "",
                     tool_call_id=tool_call_id or "",
                     session_id=getattr(agent, "session_id", "") or "",
                 )
             except Exception:
-                _obs_tokens = None
-            try:
+                from contextlib import nullcontext
+
+                _wrap_observability = nullcontext()
+            with _wrap_observability:
                 return _finish_agent_tool(
-                    _agent_executor(agent, next_args, _executor_ctx),
+                    _agent_tool_registry.dispatch_agent_executor(
+                        function_name, agent, next_args, _executor_ctx
+                    ),
                     next_args,
                 )
-            finally:
-                if _obs_tokens is not None:
-                    try:
-                        reset_current_observability_context(_obs_tokens)
-                    except Exception:
-                        pass
     elif agent._memory_manager and agent._memory_manager.has_tool(function_name):
         def _execute(next_args: dict) -> Any:
             return _finish_agent_tool(agent._memory_manager.handle_tool_call(function_name, next_args), next_args)

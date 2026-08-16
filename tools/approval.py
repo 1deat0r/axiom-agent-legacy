@@ -224,6 +224,34 @@ def reset_current_observability_context(
     _approval_turn_id.reset(turn_token)
 
 
+@contextlib.contextmanager
+def observability_context(*, turn_id: str = "", tool_call_id: str = "", session_id: str = ""):
+    """ADR-0090: bind approval-hook correlation IDs for one dispatch.
+
+    One context manager for the set/reset pair so every dispatch site —
+    handler path or agent-executor path — gets identical semantics. Mirrors
+    the defensive behaviour of the call sites it replaces: a set failure
+    degrades to no wrap rather than raising.
+    """
+    tokens = None
+    try:
+        tokens = set_current_observability_context(
+            turn_id=turn_id,
+            tool_call_id=tool_call_id,
+            session_id=session_id,
+        )
+    except Exception:
+        tokens = None
+    try:
+        yield
+    finally:
+        if tokens is not None:
+            try:
+                reset_current_observability_context(tokens)
+            except Exception:
+                pass
+
+
 def get_current_session_key(default: str = "default") -> str:
     """Return the active session key, preferring context-local state.
 

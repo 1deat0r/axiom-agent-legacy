@@ -163,6 +163,8 @@ class TestRegistryExecutorContract:
 
 class TestExecutorPathsCrossRegistry:
     def test_sequential_path_runs_registry_executor(self, agent, seam_tool, monkeypatch):
+        from tools.registry import registry
+
         monkeypatch.setattr(
             "hermes_cli.plugins._dispatch_pre_tool_call_hooks",
             lambda *args, **kwargs: (None, None),
@@ -171,7 +173,12 @@ class TestExecutorPathsCrossRegistry:
             name="seam_fake_tool", arguments='{"a": 1}', call_id="seq-1"
         )
         messages = []
-        with patch(
+        # ADR-0090 Decision #3: the executor path resolves through
+        # registry.dispatch_agent_executor — pin the production seam, not a
+        # direct executor invocation.
+        with patch.object(
+            registry, "dispatch_agent_executor", wraps=registry.dispatch_agent_executor
+        ) as _spy, patch(
             "run_agent.handle_function_call",
             side_effect=AssertionError("executor tools must not reach handle_function_call"),
         ):
@@ -179,6 +186,7 @@ class TestExecutorPathsCrossRegistry:
                 _mock_assistant_msg(tool_calls=[tool_call]), messages, "task-seq"
             )
 
+        assert _spy.called, "executor path must cross registry.dispatch_agent_executor"
         assert seam_tool["calls"], "executor was not invoked"
         called_agent, args, ctx = seam_tool["calls"][0]
         assert called_agent is agent
@@ -192,11 +200,15 @@ class TestExecutorPathsCrossRegistry:
         )
 
     def test_invoke_tool_runs_registry_executor(self, agent, seam_tool, monkeypatch):
+        from tools.registry import registry
+
         monkeypatch.setattr(
             "hermes_cli.plugins._dispatch_pre_tool_call_hooks",
             lambda *args, **kwargs: (None, None),
         )
-        with patch(
+        with patch.object(
+            registry, "dispatch_agent_executor", wraps=registry.dispatch_agent_executor
+        ) as _spy, patch(
             "run_agent.handle_function_call",
             side_effect=AssertionError("executor tools must not reach handle_function_call"),
         ):
@@ -204,6 +216,7 @@ class TestExecutorPathsCrossRegistry:
                 "seam_fake_tool", {"a": 1}, "task-concurrent", tool_call_id="conc-1"
             )
 
+        assert _spy.called, "executor path must cross registry.dispatch_agent_executor"
         assert json.loads(result) == {"executor": True}
         assert seam_tool["calls"][0][2]["task_id"] == "task-concurrent"
         assert seam_tool["calls"][0][2]["tool_call_id"] == "conc-1"
@@ -233,7 +246,6 @@ class TestExecutorPathsCrossRegistry:
             result = agent._invoke_tool("seam_fake_tool", {"a": 1}, "task-1")
         finally:
             registry.deregister("seam_fake_tool")
-            from tools.registry import registry as _r
 
         assert json.loads(result) == {"error": "Blocked by policy"}
 

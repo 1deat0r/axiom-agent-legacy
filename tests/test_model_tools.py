@@ -19,12 +19,25 @@ from model_tools import (
 
 class TestHandleFunctionCall:
     def test_agent_level_tools_degrade_uniformly(self):
-        """ADR-0090: no agent-loop stub — agent-level tools degrade through
-        their registry handlers on agent-less callers (error or harmless
-        browse-mode result), never a name-list rejection."""
+        """ADR-0090: no agent-loop stub — each agent-level tool degrades
+        through its own registry handler on agent-less callers, with a
+        defined outcome (error or browse-mode result), never a name-list
+        rejection."""
+        expected = {
+            "todo": "TodoStore not initialized",
+            "memory": "Memory is not available",
+            "session_search": None,  # browse-mode success, asserted below
+            "delegate_task": "requires a parent agent context",
+        }
         for tool_name in ("todo", "memory", "session_search", "delegate_task"):
-            result = handle_function_call(tool_name, {})
+            result = json.loads(handle_function_call(tool_name, {}))
             assert "agent loop" not in json.dumps(result).lower()
+            if tool_name == "session_search":
+                assert result.get("success") is True
+                assert result.get("mode") == "browse"
+            else:
+                assert "error" in result, tool_name
+                assert expected[tool_name] in result["error"]
 
     def test_unknown_tool_returns_error(self):
         result = json.loads(handle_function_call("totally_fake_tool_xyz", {}))

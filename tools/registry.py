@@ -244,6 +244,28 @@ class ToolEntry:
         self.after_authorization = after_authorization
 
 
+def executor_ctx(
+    *,
+    task_id: str = "",
+    tool_call_id: str = "",
+    session_id: str = "",
+    turn_id: str = "",
+    api_request_id: str = "",
+) -> dict:
+    """ADR-0090: the normalized context passed to agent executors.
+
+    One factory for the 5-key shape so the two executor call sites cannot
+    drift on key names or ``""`` normalization.
+    """
+    return {
+        "task_id": task_id or "",
+        "tool_call_id": tool_call_id or "",
+        "session_id": session_id or "",
+        "turn_id": turn_id or "",
+        "api_request_id": api_request_id or "",
+    }
+
+
 class _PluginOverridePolicy:
     """Identity-bearing authorization record for one plugin generation."""
 
@@ -1030,6 +1052,11 @@ class ToolRegistry:
     # Agent executor seam (ADR-0090)
     # ------------------------------------------------------------------
 
+    def _entry_for_name(self, name: str) -> Optional[ToolEntry]:
+        """Return the ToolEntry for *name* under the current scope, or None."""
+        entries_by_name = {entry.name: entry for entry in self._snapshot_entries()}
+        return entries_by_name.get(name)
+
     def get_agent_executor(self, name: str):
         """Return the registered ``agent_executor`` for *name*, or None.
 
@@ -1037,14 +1064,12 @@ class ToolRegistry:
         instead of special-casing tool names. Mirrors :meth:`get_definitions`
         entry resolution (current scope included).
         """
-        entries_by_name = {entry.name: entry for entry in self._snapshot_entries()}
-        entry = entries_by_name.get(name)
+        entry = self._entry_for_name(name)
         return entry.agent_executor if entry is not None else None
 
     def get_after_authorization(self, name: str):
         """Return the registered ``after_authorization`` hook for *name*, or None."""
-        entries_by_name = {entry.name: entry for entry in self._snapshot_entries()}
-        entry = entries_by_name.get(name)
+        entry = self._entry_for_name(name)
         return entry.after_authorization if entry is not None else None
 
     def dispatch_agent_executor(self, name: str, agent, args: dict, ctx: dict):

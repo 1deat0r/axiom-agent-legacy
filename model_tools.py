@@ -736,12 +736,10 @@ def _resolve_active_context_length() -> int:
 # handle_function_call  (the main dispatcher)
 # =============================================================================
 
-# Tools whose execution is intercepted by the agent loop (run_agent.py)
-# because they need agent-level state (TodoStore, MemoryStore, etc.).
-# The registry still holds their schemas; dispatch just returns a stub error
-# so if something slips through, the LLM sees a sensible message.
 # ADR-0090: agent-level tools register agent_executors on the registry seam
 # (tools/registry.py ToolEntry.agent_executor); there is no name list here.
+# The registry still holds their schemas; an agent-less caller degrades
+# through each tool's own handler (defined errors or browse-mode results).
 _READ_SEARCH_TOOLS = {"read_file", "search_files"}
 
 

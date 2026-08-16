@@ -686,28 +686,22 @@ def _run_agent_tool_execution_middleware(
         # ADR-0090: bind approval-hook correlation IDs around EVERY dispatch —
         # the agent-executor path previously skipped this (only the
         # handle_function_call path set it).
-        _approval_tokens = None
         try:
-            from tools.approval import (
-                reset_current_observability_context,
-                set_current_observability_context,
-            )
+            from tools.approval import observability_context
 
-            _approval_tokens = set_current_observability_context(
+            _wrap_observability = observability_context(
                 turn_id=getattr(agent, "_current_turn_id", "") or "",
                 tool_call_id=tool_call_id or "",
                 session_id=getattr(agent, "session_id", "") or "",
             )
         except Exception:
-            _approval_tokens = None
+            from contextlib import nullcontext
+
+            _wrap_observability = nullcontext()
         try:
-            return execute(final_args)
+            with _wrap_observability:
+                return execute(final_args)
         finally:
-            if _approval_tokens is not None:
-                try:
-                    reset_current_observability_context(_approval_tokens)
-                except Exception:
-                    pass
             _hb_stop.set()
             _hb_thread.join(timeout=2.0)
 
@@ -1978,18 +1972,24 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
         # instead of name-forking. The delegate_task branch keeps only its
         # spinner display sugar — execution crosses the registry either way.
         try:
+            from tools.registry import executor_ctx as _executor_ctx_factory
             from tools.registry import registry as _agent_tool_registry
 
             _agent_executor = _agent_tool_registry.get_agent_executor(function_name)
         except Exception:
             _agent_executor = None
-        _executor_ctx = {
-            "task_id": effective_task_id or "",
-            "tool_call_id": getattr(tool_call, "id", "") or "",
-            "session_id": getattr(agent, "session_id", "") or "",
-            "turn_id": getattr(agent, "_current_turn_id", "") or "",
-            "api_request_id": getattr(agent, "_current_api_request_id", "") or "",
-        }
+            _executor_ctx_factory = None
+        _executor_ctx = (
+            _executor_ctx_factory(
+                task_id=effective_task_id,
+                tool_call_id=getattr(tool_call, "id", ""),
+                session_id=getattr(agent, "session_id", ""),
+                turn_id=getattr(agent, "_current_turn_id", ""),
+                api_request_id=getattr(agent, "_current_api_request_id", ""),
+            )
+            if _executor_ctx_factory is not None
+            else {}
+        )
         if _agent_executor is not None and function_name == "delegate_task":
             _action_arg = str(function_args.get("action") or "").strip().lower()
             tasks_arg = function_args.get("tasks")
@@ -2013,7 +2013,9 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
             _delegate_result = None
             try:
                 def _execute(next_args: dict) -> Any:
-                    return _agent_executor(agent, next_args, _executor_ctx)
+                    return _agent_tool_registry.dispatch_agent_executor(
+                        function_name, agent, next_args, _executor_ctx
+                    )
                 function_result, function_args, middleware_trace, _execution_blocked, _execution_dispatched = _managed_values(_run_agent_tool_execution_middleware(
                     agent,
                     function_name=function_name,
@@ -2035,7 +2037,9 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                     agent._vprint(f"  {cute_msg}")
         elif _agent_executor is not None:
             def _execute(next_args: dict) -> Any:
-                return _agent_executor(agent, next_args, _executor_ctx)
+                return _agent_tool_registry.dispatch_agent_executor(
+                    function_name, agent, next_args, _executor_ctx
+                )
             function_result, function_args, middleware_trace, _execution_blocked, _execution_dispatched = _managed_values(_run_agent_tool_execution_middleware(
                 agent,
                 function_name=function_name,
