@@ -119,15 +119,18 @@ They sit alongside the 27 upstream Hermes workflows.
   and unmerged branches referenced by open issues; posts a summary to the
   `HYGIENE_SUMMARY_ISSUE` repo var when set, deduplicated by fingerprint.
 
-Activation is operator-gated — the workflows are inert until then:
+Activation was operator-gated and is now COMPLETE (session 9):
 
-1. Enable GitHub Actions on the fork (Settings → Actions → Allow all).
-2. Optional: set the `HYGIENE_SUMMARY_ISSUE` repo variable to the issue
-   number that should receive the weekly summary comment.
+1. GitHub Actions is enabled on the fork (`actions/permissions` →
+   `enabled: true`).
+2. `HYGIENE_SUMMARY_ISSUE` is set to `67` — the open ledger issue that
+   receives the weekly summary comment (a passive record, not a ticket).
 
-Until activated, the role-label + audit-comment discipline remains
-agent-enforced: set the role at create and post the audit comment at close
-yourself.
+Both operators are live: `Issue triage` (on open/close/label/unlabel) and
+`Issue hygiene sweep` (weekly Mon 03:23 + `workflow_dispatch`). The
+role-label + audit-comment discipline is now CI-enforced in addition to the
+agent-enforced practice: set the role at create and post the audit comment at
+close.
 
 ## Labels
 

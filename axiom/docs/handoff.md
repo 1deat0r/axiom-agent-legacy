@@ -1,12 +1,12 @@
-# Handoff — tracker automation ported, all ports done (session 8)
+# Handoff — tracker automation ported and activated, all ports done (session 9)
 
-Written 2026-08-16 (session 8). Status: ports #1–#5 done; the tracker
-automation CI (triage + issue-hygiene) is ported and landed (issue #66,
-session 8) — the last queued item is resolved. The upstream merge is current
-(session 8: zero new upstream commits; `upstream/main` is an ancestor of
-HEAD). The tracker has no open issues. Two operator activation steps remain
-for the CI to actually fire (enable Actions; optionally set
-`HYGIENE_SUMMARY_ISSUE`).
+Written 2026-08-16 (session 9). Status: ports #1–#5 done; the tracker
+automation CI (triage + issue-hygiene) is ported (issue #66, session 8) and
+now ACTIVATED (session 9): Actions is enabled, both workflows are live, and
+`HYGIENE_SUMMARY_ISSUE` points at a fresh open ledger issue (#67). The
+upstream merge is current (session 9: zero new upstream commits;
+`upstream/main` is an ancestor of HEAD). The tracker has one open issue —
+the ledger (#67), a passive record, not a task.
 
 ## What was done (session 1 — re-foundation)
 
@@ -198,6 +198,27 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
     baseline" sections (ADR-0011 precedent).
     Full details: `axiom/docs/handoff-tracker-automation.md`.
 
+## What was done (session 9)
+
+33. Session-start ritual (ADR-0087): `git fetch upstream && git merge
+    upstream/main` was a no-op — zero commits on upstream since session 8
+    (`upstream/main` = `460d345642`, an ancestor of HEAD). Baseline health
+    re-confirmed with the two Axiom port suites
+    (`test_max_run_cost` + `test_native_store_bridge`, 16/16 green).
+34. Confirmed both operator activation steps from the session-8 handoff are
+    in fact DONE: Actions is enabled on the fork (`actions/permissions`
+    → `enabled: true`), and both ported workflows are live (`Issue triage`,
+    `Issue hygiene sweep`).
+35. Found `HYGIENE_SUMMARY_ISSUE` was set to `42` — a CLOSED prime-era
+    issue. The sweep still posts there (GitHub allows commenting on closed
+    issues), but the weekly summary would accumulate on a buried issue.
+    Per the operator, opened a fresh open ledger issue (#67, label
+    `wontfix` = "no work to do", body states it is a passive record not a
+    ticket) and repointed the repo var `HYGIENE_SUMMARY_ISSUE` → `67`.
+    Verified the `opened` + `labeled` triage runs skipped #67 cleanly
+    (0 comments, no label change), so the ledger will not be swept or
+    nagged.
+
 ## Verified (how)
 
 
@@ -250,9 +271,9 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
    `--max-run-cost <usd>` on CLI + TUI, subagents inherit the cap).
 7. ~~Porting the tracker Automation~~ — done (session 8, issue #66;
    `axiom/gh-tooling/` + the two re-pointed workflows, see
-   `axiom/docs/handoff-tracker-automation.md`). The only remaining piece is
-   operator activation: enable GitHub Actions on the fork and optionally set
-   the `HYGIENE_SUMMARY_ISSUE` repo var.
+   `axiom/docs/handoff-tracker-automation.md`) and ACTIVATED (session 9):
+   Actions enabled, both workflows live, `HYGIENE_SUMMARY_ISSUE` repointed
+   from closed #42 to the open ledger #67.
 8. ~~Upstream-merge hygiene~~ — standing routine per ADR-0087, not a
    one-time item: every session starts with `git fetch upstream && git merge
    upstream/main` and re-runs the sweep before doing anything else. Session
