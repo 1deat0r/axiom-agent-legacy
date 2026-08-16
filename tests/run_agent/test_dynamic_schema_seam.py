@@ -81,6 +81,25 @@ class TestRegistryDynamicSchemaSeam:
         defs = registry.get_definitions({"dyn_drop"})
         assert defs == []
 
+    def test_drops_propagate_to_later_overrides(self, _seam_tools):
+        """A tool dropped by its own override disappears from the set later
+        overrides see — cross-tool conditions observe what actually ships."""
+        captured = []
+        # "dyn_drop_a" sorts before "dyn_see" — the drop applies first.
+        _seam_tools(
+            "dyn_drop_a",
+            dynamic_schema_overrides=lambda available_tool_names: None,
+        )
+        _seam_tools(
+            "dyn_see",
+            dynamic_schema_overrides=lambda available_tool_names: (
+                captured.append(available_tool_names) or {}
+            ),
+        )
+        defs = registry.get_definitions({"dyn_drop_a", "dyn_see"})
+        assert {d["function"]["name"] for d in defs} == {"dyn_see"}
+        assert captured[0] == frozenset({"dyn_see"})
+
     def test_zero_arg_override_still_works(self, _seam_tools):
         """Zero-arg callables (delegate, image-gen, video-gen) keep the old
         contract — the registry must not pass them the context."""

@@ -526,7 +526,6 @@ class ToolRegistry:
         """
         with self._lock:
             return self._generation
-        return self._snapshot_state()[0]
 
     def _toolset_has_exposable_tools(
         self,
@@ -1058,9 +1057,6 @@ class ToolRegistry:
                     }
             self._generation += 1
         logger.debug("Restored tool registration: %s", name)
-        # ADR-0093: restoration is a mutation — bump the generation so
-        # memoized callers keyed on it invalidate uniformly.
-        self._generation += 1
         return True
 
     def restore_global_slots(self, previous: Dict[str, Optional[ToolEntry]]) -> None:
@@ -1159,6 +1155,10 @@ class ToolRegistry:
         available_tool_names = frozenset(entry.name for entry in candidates)
 
         # Pass 2 — schema build + dynamic overrides (may drop tools).
+        # Drops propagate: a tool removed by its own override disappears from
+        # the set later overrides see, so cross-tool conditions observe the
+        # set that actually ships.
+        remaining_names = set(available_tool_names)
         result = []
         for entry in candidates:
             name = entry.name
@@ -1173,9 +1173,11 @@ class ToolRegistry:
             if entry.dynamic_schema_overrides is not None:
                 try:
                     overrides = self._call_dynamic_overrides(
-                        entry.dynamic_schema_overrides, available_tool_names
+                        entry.dynamic_schema_overrides,
+                        frozenset(remaining_names),
                     )
                     if overrides is None:
+                        remaining_names.discard(name)
                         if not quiet:
                             logger.debug(
                                 "Tool %s dropped by dynamic_schema_overrides", name

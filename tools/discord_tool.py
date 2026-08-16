@@ -1098,14 +1098,22 @@ _STATIC_ADMIN_SCHEMA = _build_schema(
 )
 
 def _core_dynamic_overrides():
-    """ADR-0091: the privileged-intent schema (or None → the registry drops
-    the tool) — previously a name-case in _compute_tool_definitions."""
-    return get_dynamic_schema_core()
+    """ADR-0091: the privileged-intent schema, or None on probe failure so
+    the registry drops the tool — matching the old assembler's semantics
+    (``except Exception: dynamic = None``), which a bare registry call with
+    its keep-static fallback would not reproduce."""
+    try:
+        return get_dynamic_schema_core()
+    except Exception:
+        return None
 
 
 def _admin_dynamic_overrides():
     """ADR-0091: same contract for discord_admin."""
-    return get_dynamic_schema_admin()
+    try:
+        return get_dynamic_schema_admin()
+    except Exception:
+        return None
 
 
 registry.register(

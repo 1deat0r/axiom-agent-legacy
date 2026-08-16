@@ -7334,7 +7334,7 @@ def refresh_agent_mcp_tools(
     # and the between-turns prologue around turn 1), a slower caller that
     # computed an OLDER set must not clobber a newer set another caller already
     # published. ``registry._generation`` bumps on every (de)register.
-    snapshot_generation = registry._generation
+    snapshot_generation = registry.generation()
 
     # Registry-derived tools (built-ins + MCP), filtered to the agent's toolsets.
     # Computed OUTSIDE the lock (get_tool_definitions can be slow); the diff and

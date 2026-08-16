@@ -39,8 +39,9 @@ operator-approved.
    the candidate name set; pass 2 applies each override, passing the
    `available_tool_names` frozenset to any callable that accepts a parameter
    (signature-inspected per the plugin compat policy — zero-arg callables
-   keep the old contract). A dict return merges into the schema; `None`
-   drops the tool.
+   keep the old contract). The set propagates drops: a tool removed by its
+   own override disappears from the set later overrides see. A dict return
+   merges into the schema; `None` drops the tool.
 2. **The four rewrites register beside their tools.** execute_code
    (`code_execution_tool.py`), discord/discord_admin (`discord_tool.py`,
    zero-arg callables returning the dynamic schema or None), browser_navigate
@@ -52,7 +53,8 @@ operator-approved.
 4. **Bridge dispatch is out of scope.** The `tool_search`/`tool_describe`/
    `tool_call` branches in `handle_function_call` are dispatch forks, not
    schema logic; they stay as-is until a dispatch-seam decision justifies
-   touching them.
+   touching them. The tracker issue's title mentions the bridge tools — that
+   clause is deliberately deferred by this decision, not implemented.
 
 ## Consequences
 

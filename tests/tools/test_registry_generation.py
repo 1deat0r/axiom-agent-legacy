@@ -63,8 +63,10 @@ class TestGenerationSeam:
         )
         assert restored is True
         assert reg.snapshot_registration("gen_c") is current
-        # ADR-0093: restore must invalidate memo caches like every mutation.
-        assert reg.generation() > mid
+        # ADR-0093: restore invalidates memo caches like every mutation —
+        # exactly ONE bump, inside the lock (a duplicate/unlocked bump would
+        # make this a +2 delta or race).
+        assert reg.generation() == mid + 1
 
 
 class TestLiveSnapshotShims:

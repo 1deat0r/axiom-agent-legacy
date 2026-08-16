@@ -25,11 +25,16 @@ The design was approved by the operator in the report phase.
 
 1. **`ToolRegistry.generation()` is the public read** — lock-protected,
    documented as the memo key every cache invalidates against.
-2. **All six read sites re-point to `generation()`** — inside their existing
-   defensive try/except blocks, preserving fallback semantics.
-3. **`restore_registration` bumps the generation** — restoration is a
-   mutation; the missing bump meant memoized callers could keep serving
-   stale definitions after a plugin unload.
+2. **All read sites re-point to `generation()`** — including the seventh,
+   `tools/mcp_tool.py`'s publish-generation snapshot (found by the review
+   axis after the first write) — inside their existing defensive try/except
+   blocks, preserving fallback semantics.
+3. **`restore_registration`'s bump stays exactly once, inside the lock.**
+   The first version of this ADR claimed the restore lacked a bump — the
+   premise was wrong (the upstream merge that landed just before this work
+   had already added one), and the initial fix added a duplicate bump
+   outside the lock. Corrected: the in-lock bump is the single mutation;
+   the review's exact-delta test pins one bump per restore.
 4. **`restore_global_slots(previous)` is the plugin-dev teardown seam** — the
    host's bulk restore semantics (each changed name returns to its prior
    entry; absent → removed; one bump) are a different contract from the

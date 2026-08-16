@@ -23,7 +23,7 @@ operator-approved.
 1. **Extract to a new root-level module `tool_args.py`** — a sibling of
    `model_tools.py` (root utility-module precedent), not under `agent/`.
 2. **Interface unchanged.** `coerce_tool_args` stays the public name; the
-   six helpers keep their names and stay importable — the interface is the
+   seven helpers keep their names and stay importable — the interface is the
    test surface, and `tests/run_agent/test_tool_arg_coercion.py` already
    treats them as the seam.
 3. **No back-compat shims in `model_tools`.** The cluster is underscore-
