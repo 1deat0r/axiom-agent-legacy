@@ -1,10 +1,12 @@
-# Handoff — Axiom TUI identity shipped; tracker automation active (session 10)
+# Handoff — Axiom TUI identity + local vision + sovereign store live (session 11)
 
-Written 2026-08-16 (session 10). Status: ports #1–#5 done; the tracker
+Written 2026-08-16 (session 11). Status: ports #1–#5 done; the tracker
 automation CI is ported (issue #66) and activated (#67 ledger); the Axiom TUI
-identity is shipped as a `axiom` skin (ADR-0088) on a widened skin surface.
-The upstream merge is current (`upstream/main` is an ancestor of HEAD). The
-tracker has one open issue — the ledger (#67), a passive record, not a task.
+identity is shipped as a `axiom` skin (ADR-0088). Session 11 wired Axiom's
+vision to a local VLM (ADR-0089) and activated the sovereign-store plugin
+(native-store-bridge, port #3) in the live profile. The upstream merge is
+current (`upstream/main` is an ancestor of HEAD). The tracker has one open
+issue — the ledger (#67), a passive record, not a task.
 
 ## What was done (session 1 — re-foundation)
 
@@ -245,6 +247,38 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
     (v0.20.1) and the two port suites (16/16). Lesson: use `uvx` for
     throwaway tooling, never `uv run --with` against the project venv.
 
+## What was done (session 11)
+
+39. Local vision (ADR-0089): pulled `qwen2.5vl:7b` (Qwen2.5-VL-7B @ Q4_K_M,
+    6.0 GB) into the already-installed Ollama 0.32.13 (system service,
+    `/var/lib/ollama`). Pinned `auxiliary.vision` to `provider: custom`,
+    `model: qwen2.5vl:7b`, `base_url: http://localhost:11434/v1` via
+    `hermes config set` (never hand-edited config.yaml). Local model is
+    vision-only — the text brain stays DeepSeek (`-flash`/`-pro`). Verified
+    the route is decoupled from the main model (`-flash`, `-pro`, and no
+    binding all resolve vision to the local endpoint), and E2E through
+    Hermes's own `async_call_llm(task="vision")` transcribed a test image
+    verbatim. ImageMagick-rendered test images read as tofu boxes (font /
+    16-bit artifacts); a PIL-rendered image read correctly — the failure was
+    the test image, not the model.
+40. Activated the sovereign-store plugin (completes port #3's live wiring):
+    copied `axiom/plugin/native-store-bridge/` into
+    `~/.hermes/profiles/axiom/plugins/`, enabled it
+    (`hermes plugins enable native-store-bridge`), and enabled the `axiom`
+    toolset (`hermes tools enable axiom --platform cli`). Verified live:
+    `validate_toolset("axiom")` → True, `resolve_toolset("axiom")` →
+    `['axiom_record', 'axiom_store']`; a registry-dispatched `axiom_record`
+    write + `axiom_store` read round-tripped a fact through the
+    byte-compatible TS store (then retracted it, leaving the store clean).
+41. Wrote ADR-0089 (`axiom/docs/adr/ADR-0089-local-vision-vlm.md`).
+
+Known follow-up (not fixed): the `axiom` toolset is enabled for the `cli`
+platform, but `hermes tools` has no `tui` platform and the TUI resolves its
+toolsets via `_load_enabled_toolsets("tui")` (coding posture /
+`HERMES_TUI_TOOLSETS`). The toolset resolves, but whether a live TUI turn
+actually receives `axiom_store`/`axiom_record` is unverified — confirm on the
+next TUI session, or pin `HERMES_TUI_TOOLSETS`.
+
 ## Verified (how)
 
 
@@ -310,10 +344,13 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
 Nothing queued — the port queue is empty and the tracker has only the passive
 ledger (#67). A fresh session opens with the ADR-0087 ritual (fetch upstream,
 merge if ahead, run `test_max_run_cost` + `test_native_store_bridge`, check
-the tracker is empty) and then asks the operator what's next. One operator
-action pending from session 10: relaunch the TUI (`axiom`) to see the full
-Axiom theme — the rebuilt `ui-tui/dist/entry.js` only takes effect on a fresh
-process.
+the tracker is empty) and then asks the operator what's next. Two items carry
+over: (1) relaunch the TUI (`axiom`) to see the full Axiom theme (session 10);
+(2) confirm a live TUI turn actually receives `axiom_store`/`axiom_record` —
+the `axiom` toolset resolves but is enabled only for the `cli` platform, and
+the TUI surface resolves toolsets through `_load_enabled_toolsets("tui")`
+(coding posture / `HERMES_TUI_TOOLSETS`), so its inclusion in a live TUI turn
+is unverified (session 11 §40).
 
 ## Environment quirks (verified)
 
