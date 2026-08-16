@@ -199,3 +199,27 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
   plugin sets these in its subprocess env; `AXIOM_SOVEREIGN_ROOT` points the
   plugin at the package (falls back to a marker file, the repo-relative
   `axiom/sovereign/`, then `~/Projects/axiom-agent/axiom/sovereign`).
+
+## Launch procedure (3V0 session, 2026-08-16)
+
+Axiom now launches cleanly — the `max_run_cost_usd` import-mix error is fixed.
+
+- **Launcher:** `~/.local/bin/axiom` (replaces the old dangling symlink to the
+  archived `packages/coding-agent/dist/cli.js`). It unsets the 3V0-session
+  `HERMES_*` / `PYTHONPATH` / `PYTHONHOME` / `TERMINAL_CWD` leak, `cd`s into
+  this repo, then `exec .venv/bin/hermes -p axiom "$@"`.
+- **Profile:** `~/.hermes/profiles/axiom/` — `SOUL.md` = `axiom/SOUL.md`,
+  deepseek-v4-pro config, shared `DEEPSEEK_API_KEY`, `axiom_body_path`,
+  `profile.yaml`.
+- **Root cause of the old error:** the 3V0 session exports
+  `HERMES_PYTHON_SRC_ROOT=~/.hermes/hermes-agent` (the older shared runtime,
+  pre-spend-cap). `hermes_bootstrap.harden_import_path()` read it and forced
+  `run_agent` onto that runtime, pairing a `tui_gateway` that passes
+  `max_run_cost_usd` with an `AIAgent` that doesn't accept it. Stripping the
+  var makes `run_agent` resolve here.
+- **Verified:** `axiom --version` → install dir `~/Projects/axiom-agent`;
+  `axiom chat -q "…"` → inits and self-identifies as Axiom (not 3V0);
+  `run_agent` + `tui_gateway` both import from this repo and `AIAgent.__init__`
+  accepts `max_run_cost_usd`.
+- **Explicit command (no launcher):**
+  `cd ~/Projects/axiom-agent && env -u PYTHONPATH -u HERMES_PYTHON_SRC_ROOT -u HERMES_PYTHON -u HERMES_HOME -u TERMINAL_CWD .venv/bin/hermes -p axiom --tui`
