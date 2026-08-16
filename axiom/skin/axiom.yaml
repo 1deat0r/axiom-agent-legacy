@@ -1,0 +1,89 @@
+# Axiom — the sovereign agent's theme.
+# Evergreen-and-mint: the garden the keeper tends, the ledger that never lies.
+# Applied via `display.skin: axiom`; themes the CLI, TUI, and desktop at once.
+
+name: axiom
+description: Axiom — sovereign, self-evident; evergreen and mint
+
+colors:
+  background: "#0b1210"
+  banner_border: "#1f4d3a"
+  banner_title: "#9df2c9"
+  banner_accent: "#35d694"
+  banner_dim: "#5e8272"
+  banner_text: "#d6f2e4"
+  ui_accent: "#35d694"
+  ui_primary: "#9df2c9"
+  ui_label: "#6fe3b0"
+  ui_text: "#d6f2e4"
+  ui_border: "#1f4d3a"
+  ui_ok: "#3ecf8e"
+  ui_error: "#ff7b72"
+  ui_warn: "#f0b429"
+  ui_tool: "#35d694"
+  ui_thinking: "#6fe3b0"
+  prompt: "#d6f2e4"
+  input_rule: "#1f4d3a"
+  response_border: "#35d694"
+  shell_dollar: "#35d694"
+  selection_bg: "#14332a"
+  session_label: "#6fe3b0"
+  session_border: "#5e8272"
+  status_bar_bg: "#06120e"
+  status_bar_text: "#9df2c9"
+  status_bar_strong: "#35d694"
+  status_bar_dim: "#5e8272"
+  status_bar_good: "#3ecf8e"
+  status_bar_warn: "#f0b429"
+  status_bar_bad: "#f59e0b"
+  status_bar_critical: "#ff7b72"
+  voice_status_bg: "#06120e"
+  completion_menu_bg: "#0b1210"
+  completion_menu_current_bg: "#14332a"
+  completion_menu_meta_bg: "#0b1210"
+  completion_menu_meta_current_bg: "#14332a"
+
+branding:
+  agent_name: "Axiom"
+  icon: "◈"
+  tagline: "Sovereign agent · keeper of the garden"
+  attribution: "Axiom"
+  welcome: "Axiom — sovereign agent, keeper of the garden. Type your message or /help."
+  goodbye: "Axiom stands down."
+  response_label: " ◈ Axiom "
+  prompt_symbol: "∴"
+  help_header: "∴ Commands"
+
+tool_prefix: "┆"
+
+spinner:
+  waiting_faces: ["(∴)", "(◈)", "(◇)", "(○)", "(⊕)"]
+  thinking_faces: ["(∴)", "(◈)", "(◇)", "(∀)", "(λ)"]
+  thinking_verbs:
+    - "deriving"
+    - "deducing"
+    - "proving"
+    - "tending"
+    - "cultivating"
+    - "harvesting"
+    - "verifying"
+    - "reasoning"
+  wings:
+    - ["⟪∴", "∴⟫"]
+    - ["⟪◈", "◈⟫"]
+    - ["⟪◇", "◇⟫"]
+    - ["⟪·", "·⟫"]
+
+banner_logo: |-
+  [bold #35d694] █████╗ ██╗  ██╗██╗ ██████╗ ███╗   ███╗[/]
+  [#3ecf8e]██╔══██╗╚██╗██╔╝██║██╔═══██╗████╗ ████║[/]
+  [#2bbf7f]███████║ ╚███╔╝ ██║██║   ██║██╔████╔██║[/]
+  [#35d694]██╔══██║ ██╔██╗ ██║██║   ██║██║╚██╔╝██║[/]
+  [#3ecf8e]██║  ██║██╔╝ ██╗██║╚██████╔╝██║ ╚═╝ ██║[/]
+  [dim #1f4d3a]╚═╝  ╚═╝╚═╝  ╚═╝╚═╝ ╚═════╝ ╚═╝     ╚═╝[/]
+
+banner_hero: |-
+  [#35d694]         ███[/]
+  [#35d694]         ███[/]
+  [#2bbf7f]   ███         ███[/]
+  [#2bbf7f]   ███         ███[/]

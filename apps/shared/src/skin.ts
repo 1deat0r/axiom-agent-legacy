@@ -80,7 +80,13 @@ export const SKIN_BRANDING_TOKENS = [
   'goodbye',
   'response_label',
   'prompt_symbol',
-  'help_header'
+  'help_header',
+  // Brand identity a skin may override (fall back to the surface's own
+  // default when unset): the seal/icon shown beside the name, the banner
+  // tagline, and the short attribution shown next to the model.
+  'icon',
+  'tagline',
+  'attribution'
 ] as const
 
 export type SkinBrandingToken = (typeof SKIN_BRANDING_TOKENS)[number]

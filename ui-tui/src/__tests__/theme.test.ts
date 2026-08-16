@@ -264,6 +264,20 @@ describe('fromSkin', () => {
     expect(brand.prompt).toBe('$')
   })
 
+  it('maps brand identity tokens (icon, tagline, attribution) from the skin', async () => {
+    const { DEFAULT_THEME, fromSkin } = await importThemeWithCleanEnv()
+
+    const themed = fromSkin({}, { icon: '◈', tagline: 'Sovereign agent', attribution: 'Axiom' }).brand
+    expect(themed.icon).toBe('◈')
+    expect(themed.tagline).toBe('Sovereign agent')
+    expect(themed.attribution).toBe('Axiom')
+
+    const plain = fromSkin({}, {}).brand
+    expect(plain.icon).toBe(DEFAULT_THEME.brand.icon)
+    expect(plain.tagline).toBe(DEFAULT_THEME.brand.tagline)
+    expect(plain.attribution).toBe(DEFAULT_THEME.brand.attribution)
+  })
+
   it('normalizes skin prompt symbols to trimmed single-line text', async () => {
     const { DEFAULT_THEME, fromSkin } = await importThemeWithCleanEnv()
 

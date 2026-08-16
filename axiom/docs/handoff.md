@@ -1,12 +1,10 @@
-# Handoff — tracker automation ported and activated, all ports done (session 9)
+# Handoff — Axiom TUI identity shipped; tracker automation active (session 10)
 
-Written 2026-08-16 (session 9). Status: ports #1–#5 done; the tracker
-automation CI (triage + issue-hygiene) is ported (issue #66, session 8) and
-now ACTIVATED (session 9): Actions is enabled, both workflows are live, and
-`HYGIENE_SUMMARY_ISSUE` points at a fresh open ledger issue (#67). The
-upstream merge is current (session 9: zero new upstream commits;
-`upstream/main` is an ancestor of HEAD). The tracker has one open issue —
-the ledger (#67), a passive record, not a task.
+Written 2026-08-16 (session 10). Status: ports #1–#5 done; the tracker
+automation CI is ported (issue #66) and activated (#67 ledger); the Axiom TUI
+identity is shipped as a `axiom` skin (ADR-0088) on a widened skin surface.
+The upstream merge is current (`upstream/main` is an ancestor of HEAD). The
+tracker has one open issue — the ledger (#67), a passive record, not a task.
 
 ## What was done (session 1 — re-foundation)
 
@@ -219,6 +217,34 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
     (0 comments, no label change), so the ledger will not be swept or
     nagged.
 
+## What was done (session 10)
+
+36. Authored the Axiom TUI theme as a user skin (`axiom`), per ADR-0088:
+    evergreen-and-mint palette (background `#0b1210`, accent `#35d694`),
+    name "Axiom", icon `◈`, prompt `∴`, tagline "Sovereign agent · keeper of
+    the garden", attribution "Axiom", an AXIOM ASCII `banner_logo` (ANSI
+    Shadow, exact via pyfiglet) + a `∴` `banner_hero`, and spinner faces
+    (`∴ ◈ ◇ ○ ⊕`) + verbs (deriving/deducing/tending/harvesting…). Canonical
+    copy at `axiom/skin/axiom.yaml`; installed to
+    `~/.hermes/profiles/axiom/skins/axiom.yaml` and activated via
+    `display.skin: axiom` — verified `hermes -p axiom skin list` shows
+    `* axiom` and the engine resolves icon/tagline/attribution.
+37. Widened the skin surface (ADR-0088): added `icon`/`tagline`/`attribution`
+    to `SKIN_BRANDING_TOKENS` (`apps/shared/src/skin.ts`), `ThemeBrand` +
+    `fromSkin` (`ui-tui/src/theme.ts`), and the banner renderer
+    (`ui-tui/src/components/branding.tsx`); the status-bar seal now reads the
+    theme icon (`appLayout.tsx`). Hermes defaults preserved as fallbacks.
+    Rebuilt `ui-tui/dist/entry.js`; `npm run typecheck` clean; 170/170 across
+    the theme/branding tests (incl. a new `theme.test.ts` case for the three
+    tokens). The full `npm test` run has a pre-existing `hermes-ink`
+    backpressure flake (upstream #54171) unrelated to this work.
+38. Environment incident: `uv run --with pyfiglet` recreated `.venv` (a uv
+    gotcha — running with different extras than the venv was created with
+    forces a recreate) and dropped the `[all]`+`dev` extras. Restored with
+    `uv sync --extra all --extra dev --locked`; re-verified `hermes --version`
+    (v0.20.1) and the two port suites (16/16). Lesson: use `uvx` for
+    throwaway tooling, never `uv run --with` against the project venv.
+
 ## Verified (how)
 
 
@@ -281,8 +307,9 @@ and pi (`archive/pi-v0.84.1`) preserved as archived eras.
 
 ## Environment quirks (verified)
 
-- `NODE_ENV=production` is set in the shell — `npm install` omits devDeps
-  unless `--include=dev` is passed.
+- `uv run --with <pkg>` against the project recreates `.venv` and drops the
+  extras the venv was created with (a uv gotcha). Use `uvx` for throwaway
+  tooling; restore with `uv sync --extra all --extra dev --locked`.
 - Node 26 type-stripping does NOT rewrite `.js` -> `.ts` import specifiers;
   use `.ts` specifiers + `allowImportingTsExtensions` + `noEmit`.
 - The Hermes terminal guard false-positives on the literal `tsc` token; run
