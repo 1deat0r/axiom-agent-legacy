@@ -12865,6 +12865,17 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         print(f"  Total tokens:              {total:>10,}")
         print(f"  API calls:                 {calls:>10,}")
         print(f"  Session duration:          {elapsed:>10}")
+        # Estimated spend (ADR-0010/0011): show the running session cost when
+        # the ledger has real pricing; unknown/missing renders no line, never a
+        # fabricated "$0.00".
+        try:
+            from agent.usage_pricing import format_session_cost
+
+            _cost_label = format_session_cost(agent)
+        except Exception:
+            _cost_label = None
+        if _cost_label:
+            print(f"  Estimated cost:            {_cost_label:>10}")
         print(f"  {'─' * 40}")
         print(f"  Current context:  {last_prompt:,} / {ctx_len:,} ({pct:.0f}%)")
         print(f"  Messages:         {msg_count}")

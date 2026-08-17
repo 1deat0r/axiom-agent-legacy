@@ -234,7 +234,11 @@ class TestCLIStatusBar:
 
 
 class TestCLIUsageReport:
-    def test_show_usage_omits_cost_reporting(self, capsys):
+    def test_show_usage_omits_legacy_cost_and_cache_fields(self, capsys):
+        """#52717 removed the unreliable cache-hit + legacy cost readouts; the
+        provider-agnostic token counts and session metadata stay. The honest
+        per-session cost line (ADR-0097) is separate and gated on known
+        pricing — see the two tests below."""
         cli_obj = _attach_agent(
             _make_cli(),
             prompt_tokens=10_230,
@@ -257,12 +261,53 @@ class TestCLIUsageReport:
         assert "Total tokens:" in output
         assert "Session duration:" in output
         assert "Compressions:" in output
-        # Cost and cache-hit reporting is removed everywhere.
+        # Legacy cost + cache-hit readouts stay removed everywhere.
         assert "Total cost:" not in output
         assert "Cost status:" not in output
         assert "Cost source:" not in output
         assert "Cache read tokens:" not in output
         assert "Cache write tokens:" not in output
+
+    def test_show_usage_shows_estimated_cost_when_priced(self, capsys):
+        cli_obj = _attach_agent(
+            _make_cli(),
+            prompt_tokens=10_230,
+            completion_tokens=2_220,
+            total_tokens=12_450,
+            api_calls=7,
+            context_tokens=12_450,
+            context_length=200_000,
+            compressions=1,
+        )
+        cli_obj.agent.session_estimated_cost_usd = 1.23
+        cli_obj.agent.session_cost_status = "estimated"
+        cli_obj.verbose = False
+
+        cli_obj._show_usage()
+        output = capsys.readouterr().out
+
+        assert "Estimated cost:" in output
+        assert "~$1.23" in output
+
+    def test_show_usage_omits_estimated_cost_when_unknown(self, capsys):
+        cli_obj = _attach_agent(
+            _make_cli(),
+            prompt_tokens=10_230,
+            completion_tokens=2_220,
+            total_tokens=12_450,
+            api_calls=7,
+            context_tokens=12_450,
+            context_length=200_000,
+            compressions=1,
+        )
+        # _attach_agent leaves session_cost_status unset, so format_session_cost
+        # treats it as "unknown" and renders no cost line.
+        cli_obj.verbose = False
+
+        cli_obj._show_usage()
+        output = capsys.readouterr().out
+
+        assert "Estimated cost:" not in output
 
 
 class TestStatusBarWidthSource:
