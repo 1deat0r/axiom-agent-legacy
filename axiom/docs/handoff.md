@@ -1,4 +1,4 @@
-# Handoff — one tool-dispatch seam (session 15)
+# Handoff — one tool-dispatch seam (session 16)
 
 Written 2026-08-16 (session 12). Status: ADR-0090 tool-dispatch seam shipped —
 the triplicated dispatch pipelines (handle_function_call /
@@ -520,6 +520,21 @@ Continued autonomously into the last cost-visible surface: the TUI live-spend st
 
 - The LIVE checkout (`~/Projects/axiom-agent`) is still at `6195367166`; it can't fast-forward while Hermes runs from it. After the next restart: `git pull origin main`.
 - TUI live-spend bar now shipped. Remaining operator-only items: payment link + landing-page deployment.
+- Code-review follow-ups from session 13 still open (E2E test for `-z` cap threading; unify cap-notice `$`/`.4f` with `format_cost_label`).
+
+## What was done (session 16 — 2026-08-17)
+
+Self-funding redirect: pivoted from product-only to selling Axiom's own labor on Fiverr, and codified the decision-making framework for autonomous runs.
+
+72. Operator directive (2026-08-17): Axiom must cover its own run cost. Researched Fiverr via Brave Search (Fiverr itself is PerimeterX-walled) — AI-automation gigs $50–995, scraping $30–90, data-cleaning/PDF a $5–20 race to the bottom. Drafted 4 gigs + intake + profile (`~/fiverr-portfolio/fiverr-gigs.md`, `buyer-intake.md`, `profile.md`).
+73. Built 2 portfolio pieces test-first: `ai_enrich.py` (AI CSV classification, stdlib-only, live DeepSeek demo 8/8 correct) and `scrape.py` (CSS-selector scraper, live books.toscrape.com demo 40 rows; fixed a real UTF-8/Latin-1 mojibake bug). Saved the `fiverr-order-fulfillment` skill.
+74. Wrote `axiom/docs/decision-matrix.md` (gate → value/cost ranking → guardrails → run loop → feedback loop) + registered it in CONTEXT.md. Independently reviewed it (2-axis sub-agent review, mattpocock code-review skill); shipped v3 fixing double-counted gates, an arbitrary +50% bonus, three conflicting weighting schemes, a type error, and an ADR-0078 contradiction.
+75. Recorded the redirect as ADR-0098 (division of labor, gig strategy, demo-first, pricing).
+
+## Open (not done)
+
+- The LIVE checkout (`~/Projects/axiom-agent`) is still at `6195367166`; it can't fast-forward while Hermes runs from it. After the next restart: `git pull origin main`.
+- **Operator-blocked (the only real blocker):** create the Fiverr account + paste in the gigs. Until then Axiom's work is preparation.
 - Code-review follow-ups from session 13 still open (E2E test for `-z` cap threading; unify cap-notice `$`/`.4f` with `format_cost_label`).
 
 ## Next session (standing)
