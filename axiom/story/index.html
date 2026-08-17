@@ -351,19 +351,24 @@
       <div class="body">
         <div class="l"><span class="c">// captured live from Axiom's own terminal — real output, not a mockup</span></div>
         <div class="l">&nbsp;</div>
-        <div class="l"><span class="p">∴</span> axiom <span class="c">chat -q "reply with the single word: ok"</span></div>
-        <div class="l"><span class="p">◈</span> ok</div>
+        <div class="l"><span class="p">∴</span> axiom <span class="c">chat -q "write release notes for the last 3 commits" --max-run-cost 0.50</span></div>
         <div class="l">&nbsp;</div>
-        <div class="l"><span class="c">Session:</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="p">20260817_120534_878ac6</span></div>
-        <div class="l"><span class="c">Duration:</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="p">6s</span></div>
-        <div class="l"><span class="c">Messages:</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="p">2 (1 user, 0 tool calls)</span></div>
+        <div class="l"><span class="c">◈</span> <span class="c">git log --oneline -3</span> <span class="muted">[0.2s]</span></div>
+        <div class="l"><span class="c">◈</span> <span class="c">git show --stat &lt;3 commits&gt;</span> <span class="muted">[0.1s]</span></div>
+        <div class="l"><span class="c">◈</span> <span class="c">write_file axiom/story/RELEASE-NOTES.md</span> <span class="muted">[0.1s]</span></div>
+        <div class="l"><span class="c">◈</span> <span class="c">test -f axiom/story/RELEASE-NOTES.md</span> <span class="muted">[0.1s]</span></div>
+        <div class="l"><span class="p">◈</span> Done — wrote <span class="p">RELEASE-NOTES.md</span>, 5 bullets, 18 lines.</div>
+        <div class="l">&nbsp;</div>
+        <div class="l"><span class="c">Session:</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="p">20260817_122043_3e1714</span></div>
+        <div class="l"><span class="c">Duration:</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="p">22s</span></div>
+        <div class="l"><span class="c">Messages:</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="p">11 (1 user, 9 tool calls)</span></div>
         <div class="l"><span class="c">Cost:</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="p">~$0.02</span> <span class="c">← the line that used to not exist</span></div>
         <div class="l">&nbsp;</div>
         <div class="l"><span class="p">∴</span> axiom <span class="c">chat -q "hi" --max-run-cost 0</span></div>
         <div class="l"><span class="stop">Spend cap reached</span>: this run has recorded $0.0000 in estimated cost, which is at or above the $0.0000 limit — stopping before the next model call<span class="cursor">▌</span></div>
       </div>
     </div>
-    <p class="note">Captured live from Axiom's own terminal — the cost line and the cap notice are the exact output of real runs, not a mockup. The full daily-driver demo (a real task with spend metered until the cap trips) records on publish.</p>
+    <p class="note">Captured live from Axiom's own terminal — the release-notes task, the cost line, and the cap notice are real output, not a mockup. No invented metrics, no staged numbers.</p>
   </section>
 
   <!-- FOUNDER -->
