@@ -537,6 +537,20 @@ Self-funding redirect: pivoted from product-only to selling Axiom's own labor on
 - **Operator-blocked (the only real blocker):** create the Fiverr account + paste in the gigs. Until then Axiom's work is preparation.
 - Code-review follow-ups from session 13 still open (E2E test for `-z` cap threading; unify cap-notice `$`/`.4f` with `format_cost_label`).
 
+## What was done (session 17 — 2026-08-17)
+
+Non-Fiverr revenue stack, per ADR-0099. The operator assigned the single Fiverr account to 3V0 and directed Axiom to the non-Fiverr channels: Gumroad products, direct B2B, GitHub bounties.
+
+76. Built `~/revenue/` — products (ai-csv-enricher $9, smart-scraper-kit $12: buyer READMEs, MIT licenses, catalog copy, upload-ready zips), landing page (`site/index.html`), B2B layer (STRIPE-SETUP runbook, service offer tiers $50/$150/$400, ICP + lead sources, cold-email sequence + 4 copy-paste templates, pipeline runbook), bounty method (`bounties/targets.md`).
+77. Verified live: 14/14 product tests green in a dedicated `~/revenue/.venv`; zips built and contents checked; GitHub `label:bounty state:open` search — 4,102 open bounties (936 Python, 682 TypeScript) with concrete candidates logged; `gh` authenticated (repo scope) so bounty PRs can be submitted from the existing identity. Noted algora.io's homepage pivot to recruiting while bounty flows still route via GitHub labels + assignment.
+78. Recorded the strategy as ADR-0099 (three-layer stack, division of labor, honest economics, Algora observation).
+
+## Open (not done)
+
+- Operator rails (one-time, under an hour total): Gumroad account + paste the two listings from `~/revenue/products/catalog.md` + upload the zips; Stripe account + three payment links per `~/revenue/b2b/STRIPE-SETUP.md`; optionally an Algora account for bounties. No revenue moves until these exist.
+- Replace the `GUMROAD_LINK_*` / `STRIPE_LINK` placeholders in `~/revenue/site/index.html` after the rails exist.
+- Bounty vetting queue: run the per-candidate checklist from `~/revenue/bounties/targets.md` on the logged candidates before any code.
+
 ## Next session (standing)
 
 The port queue is empty; the tracker has only the passive ledger (#67). A
