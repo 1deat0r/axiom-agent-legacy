@@ -578,8 +578,7 @@ export function StatusRule({
   // omits the field until pricing is known, so this segment self-hides. The
   // label is already formatted on the Python side (format_session_cost) — no
   // money math here, so the three cost surfaces stay byte-identical.
-  const sessionCostText =
-    typeof usage.session_cost_label === 'string' ? usage.session_cost_label : ''
+  const sessionCostText = typeof usage.session_cost_label === 'string' ? usage.session_cost_label : ''
 
   const showBar = !!bar && fits(SEP + stringWidth(`[${bar}] ${pct != null ? `${pct}%` : ''}`))
   const showDuration = segs.duration && !!sessionStartedAt && fits(SEP + MAX_DURATION_WIDTH)
