@@ -429,6 +429,33 @@ next TUI session, or pin `HERMES_TUI_TOOLSETS`.
     No code change — the deletion test said consolidating would move
     complexity, not concentrate it.
 
+## What was done (session 13 — 2026-08-17)
+
+Opened as a `/grilling` run (mattpocock router) on "what to ship next", converged on a sharpened brief, then closed the engine gaps the brief exposed.
+
+53. Grilled to convergence: **ship the story, not more hardening** — hook = cost-visible + spend-capped (sovereign as second pillar), buyer = solo operators, surface = demo-first, motion = founder's-tier pre-sell by month-end.
+54. Fact-checked the money thesis live before building (background subagent): cap works on `chat -q` but `-z` ignored it; per-session cost was machine-only (no human-facing readout beyond the cap notice); a spurious "Unknown toolsets: axiom" warning printed every chat init; the sovereign store round-trips.
+55. Three red-first fixes, committed + live-verified:
+    - `f8046c2cee` `-z` cap-bypass: thread `max_run_cost` → `AIAgent(max_run_cost_usd=…)` (3 call sites). 3 tests; live `-z --max-run-cost 0` stops pre-call.
+    - `6264ea9901` cost-visible: `format_session_cost` (never invents spend) + `Cost:` line in `_print_exit_summary`. 5 tests; live `chat -q` prints `Cost: ~$0.02`.
+    - `814cfbfe6f` toolset warning: `discover_plugins()` re-check on an unresolved toolset. Live-verified warning gone.
+56. `bbbafc6152` landing at `axiom/story/index.html` (on-brand, verified copy, live-captured demo transcript, founder's-tier CTA).
+57. Pushed `1158368e1b..bbbafc6152`.
+
+## Verified (how)
+
+- Unit: `test_oneshot_max_run_cost.py` 3/3; `test_usage_pricing.py` 45/45.
+- Live: `-z --max-run-cost 0` stops pre-call; `chat -q` shows `Cost: ~$0.02`; "Unknown toolsets" gone.
+- Sweep (`tests/run_agent/ tests/cli/ test_usage_pricing test_insights`): 257 passed, 7 failed — all pre-existing env gaps (no `anthropic` in the shared test venv: 6 anthropic + 1 nous-token), none touch these changes.
+
+## Open (not done)
+
+- Record the ~2-min daily-driver demo (real task, spend metered to the cap).
+- `/usage` USD line + TUI live-spend status-bar (accumulator already computed).
+- Founder's-tier price still a recommendation (landing uses $29/mo / $199 lifetime).
+- Upstream-merge ritual (ADR-0087) not run this session.
+- Pre-existing dirty tree (NOT this session): `plugins/platforms/telegram/adapter.py` (modified) + `tests/gateway/test_telegram_lazy_reimport.py` (untracked).
+
 ## Next steps (in order)
 
 1. ~~Decide CLI runtime~~ — resolved 2026-08-16: `node` (see session 3 #9).
