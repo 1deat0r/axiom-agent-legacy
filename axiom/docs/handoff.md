@@ -444,6 +444,8 @@ Opened as a `/grilling` run (mattpocock router) on "what to ship next", converge
 58. Wrote ADR-0096 — the go-to-market decision: ship the story (not more hardening), cost-visible + spend-capped hook, solo operators, founder's tier at $29/mo / $199 lifetime, 25 seats.
 59. Tracker: opened + closed #70 (`-z` cap-bypass) and #71 (cost-visible gap) with audit comments referencing the fix commits.
 60. Recorded the demo: a real spend-capped `chat -q` run wrote `axiom/story/RELEASE-NOTES.md` (9 tool calls, `Cost: ~$0.02`, 22s); the landing demo section now carries that real capture.
+61. Added the `/usage` "Estimated cost" line (ADR-0097) — re-surfaced cost-visible on `/usage`, gated on known pricing, diverging from upstream #52717. Red-first: 2 new tests pin shown-when-priced / omitted-when-unknown; the legacy-cost test renamed.
+62. Upstream-merge ritual (ADR-0087) attempted but **blocked**: upstream moved 82 commits ahead, and `git merge` is refused by Hermes's live-checkout guard (this session runs *from* the repo). Deferred to a non-running session.
 
 ## Verified (how)
 
@@ -453,9 +455,9 @@ Opened as a `/grilling` run (mattpocock router) on "what to ship next", converge
 
 ## Open (not done)
 
-- `/usage` USD line + TUI live-spend status-bar (accumulator already computed).
+- **Upstream merge (ADR-0087) — 82 commits behind, blocked.** `git merge` is refused from this running checkout (Hermes live-source guard). Do it in a non-running session: `git fetch upstream && git merge upstream/main`, then re-run the ritual suites (`test_max_run_cost`, `test_native_store_bridge`, `test_tool_dispatch_seam`, `test_dynamic_schema_seam`, `test_oneshot_max_run_cost`, `test_usage_pricing`, `test_cli_status_bar`).
+- TUI live-spend status-bar (accumulator already computed) — defer until after the upstream merge (upstream's 82 commits are TUI/desktop-heavy).
 - Founder's-tier price decided in ADR-0096 ($29/mo / $199 lifetime, 25 seats); the landing page CTA still needs a real payment link.
-- Upstream-merge ritual (ADR-0087) not run this session.
 - Pre-existing dirty tree (NOT this session): `plugins/platforms/telegram/adapter.py` (modified) + `tests/gateway/test_telegram_lazy_reimport.py` (untracked).
 
 ## Next steps (in order)
