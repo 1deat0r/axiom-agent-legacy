@@ -4,7 +4,7 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Literal, Optional
 
 from agent.model_metadata import fetch_endpoint_model_metadata, fetch_model_metadata
@@ -73,7 +73,9 @@ def format_session_cost(agent: Any) -> Optional[str]:
         return None
     try:
         amount = Decimal(str(cost_usd))
-    except Exception:
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+    if not amount.is_finite():
         return None
     return format_cost_label(amount)
 

@@ -12865,7 +12865,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         print(f"  Total tokens:              {total:>10,}")
         print(f"  API calls:                 {calls:>10,}")
         print(f"  Session duration:          {elapsed:>10}")
-        # Estimated spend (ADR-0010/0011): show the running session cost when
+        # Estimated spend (ADR-0097): show the running session cost when
         # the ledger has real pricing; unknown/missing renders no line, never a
         # fabricated "$0.00".
         try:
@@ -16214,7 +16214,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 print(f"Title:          {session_title}")
             print(f"Duration:       {duration_str}")
             print(f"Messages:       {msg_count} ({user_msgs} user, {tool_calls} tool calls)")
-            # Estimated session spend (ADR-0010/0011). Only shown when the
+            # Estimated session spend (ADR-0097). Only shown when the
             # ledger has real pricing — an unknown or missing cost renders no
             # line, never a fabricated "$0.00".
             try:

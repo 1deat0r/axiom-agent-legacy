@@ -464,6 +464,19 @@ class TestFormatSessionCost:
         )
         assert format_session_cost(agent) == "~$0.0046"
 
+    def test_nan_cost_returns_none(self):
+        # A non-finite accumulator must never render "~$nan".
+        agent = SimpleNamespace(
+            session_estimated_cost_usd=float("nan"), session_cost_status="estimated"
+        )
+        assert format_session_cost(agent) is None
+
+    def test_non_numeric_cost_returns_none(self):
+        agent = SimpleNamespace(
+            session_estimated_cost_usd={"bad": "value"}, session_cost_status="estimated"
+        )
+        assert format_session_cost(agent) is None
+
 
 # ---------------------------------------------------------------------------
 # Subscription-included cost notes
