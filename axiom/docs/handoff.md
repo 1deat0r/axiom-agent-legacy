@@ -459,6 +459,7 @@ Opened as a `/grilling` run (mattpocock router) on "what to ship next", converge
 - TUI live-spend status-bar (accumulator already computed) — defer until after the upstream merge (upstream's 82 commits are TUI/desktop-heavy).
 - Founder's-tier price decided in ADR-0096 ($29/mo / $199 lifetime, 25 seats); the landing page CTA still needs a real payment link.
 - Pre-existing dirty tree (NOT this session): `plugins/platforms/telegram/adapter.py` (modified) + `tests/gateway/test_telegram_lazy_reimport.py` (untracked).
+- Code-review follow-ups (judgement calls, not fixed): (1) automated E2E test for the `-z` cap threading (currently unit + live-verified only); (2) the cap-trip notice in `conversation_loop.py` formats cost inline (`$`/`.4f`) — unify with `format_cost_label`; (3) minor DRY of the footer/`/usage` display blocks.
 
 ## Next steps (in order)
 
