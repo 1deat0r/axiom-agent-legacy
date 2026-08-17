@@ -1,4 +1,4 @@
-# Handoff — one tool-dispatch seam (session 14)
+# Handoff — one tool-dispatch seam (session 15)
 
 Written 2026-08-16 (session 12). Status: ADR-0090 tool-dispatch seam shipped —
 the triplicated dispatch pipelines (handle_function_call /
@@ -505,6 +505,22 @@ Continued autonomously: unblocked the upstream merge (session 13's blocker) and 
 
 - The LIVE checkout (`~/Projects/axiom-agent`) is still at `6195367166`; it can't fast-forward while Hermes runs from it. After the next restart: `git pull origin main` (or `git merge --ff-only origin/main`).
 - Session 13's "Open" items otherwise stand (TUI live-spend bar after the merge lands locally; payment link; code-review follow-ups).
+
+## What was done (session 15 — 2026-08-17)
+
+Continued autonomously into the last cost-visible surface: the TUI live-spend status bar.
+
+67. Promoted the TUI spend readout from dev scaffolding to a user feature. The live-spend accumulator already existed (`agent.session_estimated_cost_usd` + `session_cost_status`) and `format_session_cost` already returned an honest label or `None` — but the TUI only surfaced Nous-portal *credits* behind a `HERMES_DEV_CREDITS` flag. Wired the real token-estimated session cost into the status bar for normal users.
+68. Python: `tui_gateway/server.py::_get_usage` now emits `usage["session_cost_label"] = format_session_cost(agent)` (omitted when `None`, so the bar self-hides on unpriced providers). Red-first: 4 tests (known / unknown / unpriced / raises).
+69. TS: `Usage.session_cost_label?: string` + a tail-budgeted status segment in `appChrome.tsx::StatusRule` that renders the label verbatim (no money math in TS). Red-first: 2 tests.
+70. Verified: Python 10/10 `_get_usage` + 47/47 `usage_pricing`; TS 1659 passed / 0 failed (156 files), `tsc --noEmit` clean.
+71. Updated ADR-0097 to record the third surface (exit footer + `/usage` + TUI status bar), one formatter, byte-identical.
+
+## Open (not done)
+
+- The LIVE checkout (`~/Projects/axiom-agent`) is still at `6195367166`; it can't fast-forward while Hermes runs from it. After the next restart: `git pull origin main`.
+- TUI live-spend bar now shipped. Remaining operator-only items: payment link + landing-page deployment.
+- Code-review follow-ups from session 13 still open (E2E test for `-z` cap threading; unify cap-notice `$`/`.4f` with `format_cost_label`).
 
 ## Next session (standing)
 

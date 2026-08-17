@@ -17454,6 +17454,60 @@ def test_get_usage_safe_when_active_count_raises(monkeypatch):
     assert usage["model"] == "x"
 
 
+# ── _get_usage session_cost_label (TUI live-spend readout) ─────────────────
+# Surfaces the running session's estimated spend in the status bar for normal
+# users (cost-visible, ADR-0097). Reuses format_session_cost so the three cost
+# surfaces (CLI footer, /usage, TUI bar) agree; the field is omitted when
+# pricing is unknown, so the bar self-hides instead of showing a fabricated
+# $0.00.
+
+
+class _CostAgent:
+    """Agent stub carrying the session cost accumulator fields."""
+
+    model = "x"
+    session_estimated_cost_usd: float | None = None
+    session_cost_status: str = "unknown"
+
+
+def test_get_usage_includes_session_cost_label_when_known():
+    a = _CostAgent()
+    a.session_estimated_cost_usd = 0.023
+    a.session_cost_status = "estimated"
+    usage = server._get_usage(a)
+    assert isinstance(usage["session_cost_label"], str)
+    assert "$" in usage["session_cost_label"]
+
+
+def test_get_usage_omits_session_cost_label_when_status_unknown():
+    a = _CostAgent()
+    a.session_estimated_cost_usd = 0.023
+    a.session_cost_status = "unknown"
+    usage = server._get_usage(a)
+    assert "session_cost_label" not in usage
+
+
+def test_get_usage_omits_session_cost_label_when_unpriced():
+    a = _CostAgent()
+    a.session_estimated_cost_usd = None
+    a.session_cost_status = "estimated"
+    usage = server._get_usage(a)
+    assert "session_cost_label" not in usage
+
+
+def test_get_usage_safe_when_session_cost_label_raises(monkeypatch):
+    """A raising format_session_cost must not break the usage payload."""
+    import agent.usage_pricing as up
+
+    def _boom(_agent):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(up, "format_session_cost", _boom)
+    usage = server._get_usage(_BareAgent())
+    assert "session_cost_label" not in usage
+    assert usage["model"] == "x"
+
+
 def test_persist_model_switch_preserves_sibling_model_keys(tmp_path, monkeypatch):
     """#48305: switching models from the TUI must NOT destroy sibling keys under
     `model:` (model_slots, model_fallback, etc.). _persist_model_switch now uses

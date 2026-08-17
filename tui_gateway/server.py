@@ -5319,6 +5319,18 @@ def _get_usage(agent) -> dict:
                 usage["dev_credits_spent_micros"] = int(spent)
         except Exception:
             pass
+    # Live session spend for normal users (cost-visible, ADR-0097). Reuses the
+    # same formatter as the CLI `Cost:` footer and `/usage`, so all three cost
+    # surfaces agree. format_session_cost returns None when the accumulator is
+    # unpriced or status is "unknown" — the field is then omitted and the TUI
+    # segment self-hides instead of showing a fabricated $0.00.
+    try:
+        from agent.usage_pricing import format_session_cost
+        label = format_session_cost(agent)
+        if label is not None:
+            usage["session_cost_label"] = label
+    except Exception:
+        pass
     return usage
 
 

@@ -423,6 +423,23 @@ describe('StatusRule battery indicator', () => {
   })
 })
 
+describe('StatusRule live session spend', () => {
+  it('renders the session spend label when the gateway provides one', () => {
+    const element = StatusRule({
+      ...baseProps,
+      usage: { ...baseProps.usage, session_cost_label: '~$0.02' }
+    })
+
+    expect(textContent(element)).toContain('~$0.02')
+  })
+
+  it('omits the segment when the gateway provides no label (unknown pricing)', () => {
+    const element = StatusRule({ ...baseProps })
+
+    expect(textContent(element)).not.toContain('~$0.02')
+  })
+})
+
 describe('StatusRule idle-since read-out', () => {
   // The IdleSince component uses hooks, so it can't be invoked outside a
   // renderer — assert on the element tree instead (same reason the duration

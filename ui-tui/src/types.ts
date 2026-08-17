@@ -204,6 +204,7 @@ export interface Usage {
   input: number
   output: number
   reasoning?: number
+  session_cost_label?: string
   total: number
 }
 

@@ -574,6 +574,13 @@ export function StatusRule({
       ? `Δ ${(usage.dev_credits_spent_micros / 10000).toFixed(1)}¢`
       : ''
 
+  // Live session spend for normal users (cost-visible, ADR-0097). The gateway
+  // omits the field until pricing is known, so this segment self-hides. The
+  // label is already formatted on the Python side (format_session_cost) — no
+  // money math here, so the three cost surfaces stay byte-identical.
+  const sessionCostText =
+    typeof usage.session_cost_label === 'string' ? usage.session_cost_label : ''
+
   const showBar = !!bar && fits(SEP + stringWidth(`[${bar}] ${pct != null ? `${pct}%` : ''}`))
   const showDuration = segs.duration && !!sessionStartedAt && fits(SEP + MAX_DURATION_WIDTH)
 
@@ -600,6 +607,9 @@ export function StatusRule({
     subagentCount === 1 ? '↩ resumes when subagent finishes' : `↩ resumes when ${subagentCount} subagents finish`
 
   const showResumeHint = !busy && subagentCount > 0 && fits(SEP + stringWidth(resumeHintText))
+  // Live session spend (cost-visible, ADR-0097) — tail-budgeted and evaluated
+  // above the dev-only credits readout, so it wins on a tight terminal.
+  const showSessionCost = !!sessionCostText && fits(SEP + stringWidth(sessionCostText))
   // Dev-gated readout (HERMES_DEV_CREDITS), lowest priority,
   // so it consumes tail budget LAST and drops first on a narrow terminal.
   const showDevCredits = !!devCreditsText && fits(SEP + stringWidth(devCreditsText))
@@ -732,6 +742,12 @@ export function StatusRule({
           <Text color={t.color.muted} dim wrap="truncate-end">
             {' │ '}
             {resumeHintText}
+          </Text>
+        ) : null}
+        {showSessionCost ? (
+          <Text color={t.color.muted} wrap="truncate-end">
+            {' │ '}
+            {sessionCostText}
           </Text>
         ) : null}
         {showDevCredits ? (
