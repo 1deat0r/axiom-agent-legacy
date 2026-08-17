@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from agent.usage_pricing import (
     CanonicalUsage,
     format_cost_label,
+    format_session_cost,
     estimate_usage_cost,
     get_pricing_entry,
     normalize_usage,
@@ -429,6 +430,39 @@ class TestFormatCostLabel:
         assert "0.0046" in label
         assert label != "$0.00"
         assert label != "~$0.00"
+
+
+class TestFormatSessionCost:
+    """format_session_cost: only show a number when the ledger has one.
+
+    The session-cost display must never invent a spend: an unknown or missing
+    cost renders as None (no line), never as "$0.00".
+    """
+
+    def test_unknown_status_returns_none(self):
+        agent = SimpleNamespace(
+            session_estimated_cost_usd=0.0, session_cost_status="unknown"
+        )
+        assert format_session_cost(agent) is None
+
+    def test_missing_cost_returns_none(self):
+        agent = SimpleNamespace(session_cost_status="estimated")
+        assert format_session_cost(agent) is None
+
+    def test_missing_attrs_returns_none(self):
+        assert format_session_cost(SimpleNamespace()) is None
+
+    def test_estimated_renders_label(self):
+        agent = SimpleNamespace(
+            session_estimated_cost_usd=1.23, session_cost_status="estimated"
+        )
+        assert format_session_cost(agent) == "~$1.23"
+
+    def test_sub_cent_estimated_renders_non_zero(self):
+        agent = SimpleNamespace(
+            session_estimated_cost_usd=0.004640, session_cost_status="estimated"
+        )
+        assert format_session_cost(agent) == "~$0.0046"
 
 
 # ---------------------------------------------------------------------------

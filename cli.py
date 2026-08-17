@@ -16191,6 +16191,17 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 print(f"Title:          {session_title}")
             print(f"Duration:       {duration_str}")
             print(f"Messages:       {msg_count} ({user_msgs} user, {tool_calls} tool calls)")
+            # Estimated session spend (ADR-0010/0011). Only shown when the
+            # ledger has real pricing — an unknown or missing cost renders no
+            # line, never a fabricated "$0.00".
+            try:
+                from agent.usage_pricing import format_session_cost
+
+                _cost_label = format_session_cost(getattr(self, "agent", None))
+            except Exception:
+                _cost_label = None
+            if _cost_label:
+                print(f"Cost:           {_cost_label}")
         else:
             try:
                 from hermes_cli.skin_engine import get_active_goodbye

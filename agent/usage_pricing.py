@@ -58,6 +58,26 @@ def format_cost_label(amount: Decimal) -> str:
         return label if label != "~$0.0000" else "~$<0.0001"
     return f"~${amount:.2f}"
 
+def format_session_cost(agent: Any) -> Optional[str]:
+    """Display label for a session's estimated cost, or ``None`` when there
+    is no honest number to show.
+
+    Returns ``None`` (no display) when usage was never priced — the
+    accumulator is ``None`` or the status is ``unknown`` — so a missing or
+    unknown cost is never rendered as ``$0.00``. Otherwise reuses
+    :func:`format_cost_label` so sub-cent honesty holds on this surface too.
+    """
+    cost_usd = getattr(agent, "session_estimated_cost_usd", None)
+    status = getattr(agent, "session_cost_status", "unknown")
+    if cost_usd is None or status == "unknown":
+        return None
+    try:
+        amount = Decimal(str(cost_usd))
+    except Exception:
+        return None
+    return format_cost_label(amount)
+
+
 CostStatus = Literal["actual", "estimated", "included", "unknown"]
 CostSource = Literal[
     "provider_cost_api",
