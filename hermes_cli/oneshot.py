@@ -173,6 +173,7 @@ def run_oneshot(
     provider: Optional[str] = None,
     toolsets: object = None,
     usage_file: Optional[str] = None,
+    max_run_cost: Optional[float] = None,
 ) -> int:
     """Execute a single prompt and print only the final content block.
 
@@ -248,6 +249,7 @@ def run_oneshot(
                     provider=provider,
                     toolsets=explicit_toolsets,
                     use_config_toolsets=use_config_toolsets,
+                    max_run_cost=max_run_cost,
                 )
             except BaseException as exc:  # noqa: BLE001
                 # Capture anything that escapes the agent (including OSError
@@ -325,6 +327,7 @@ def _run_agent(
     provider: Optional[str] = None,
     toolsets: object = None,
     use_config_toolsets: bool = True,
+    max_run_cost: Optional[float] = None,
 ) -> tuple[str, dict]:
     """Build an AIAgent exactly like a normal CLI chat turn would, then
     run a single conversation.  Returns ``(final_response, run_result)``."""
@@ -442,6 +445,7 @@ def _run_agent(
             requested_provider=runtime.get("requested_provider"),
             api_mode=runtime.get("api_mode"),
             model=effective_model,
+            max_run_cost_usd=max_run_cost,
             enabled_toolsets=toolsets_list,
             quiet_mode=True,
             platform="cli",
